@@ -19,10 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-This licence covers the source code in this repository. It does NOT cover the
-bundled font: fonts/PretendardVariable.woff2 is distributed under the SIL Open
-Font License 1.1, whose full text is in fonts/OFL.txt.
-Copyright (c) 2021 Kil Hyung-jin, with Reserved Font Name Pretendard.
