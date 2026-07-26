@@ -1,0 +1,69 @@
+/* 페이지 뼈대 — 원본: frontend/src/styles.css:165, 237-241, 251-257, 261-264, 464, 960-963, 1038-1043
+ *
+ * 데스크톱 세로 순서는 고정입니다:
+ *   eyebrow → 페이지 제목 → 설명 → (탭) → 섹션 제목·설명 → 콘텐츠 카드
+ * 각 줄이 최소 높이를 예약하므로 페이지를 옮겨 다녀도 제목이 흔들리지 않습니다.
+ */
+.workspace { position: relative; min-width: 0; padding: 42px clamp(22px, 5vw, 72px) 80px; }
+
+/* 작업 영역 오른쪽 위 아이콘 줄 — 화면 모드 전환, 설정처럼 페이지와 무관하게
+ * 항상 닿아야 하는 액션. 모바일에서는 탭 카드가 이 줄 바로 아래로 내려갑니다. */
+.page-actions { position: absolute; top: 34px; right: clamp(22px, 5vw, 72px); z-index: 54; display: flex; gap: 6px; }
+.page-action-button { width: 38px; height: 38px; min-width: 0; display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); background: var(--surface); transition: color var(--motion-fast) ease, border-color var(--motion-fast) ease, background-color var(--motion-fast) ease; }
+.page-action-button:hover, .page-action-button:focus-visible { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft); outline: none; }
+.page-action-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+/* 아이콘 줄과 겹치지 않게 제목 오른쪽을 비워 둡니다 */
+.page-header :is(.eyebrow, h1) { padding-right: 96px; }
+
+.eyebrow { color: var(--accent); font-size: var(--font-size-sm); font-weight: 800; letter-spacing: .16em; }
+.page-header { display: grid; grid-template-rows: 14px minmax(39px, auto) minmax(22px, auto); row-gap: 6px; margin: 0 0 28px; }
+.page-header .eyebrow { display: block; height: 14px; overflow: hidden; line-height: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.page-header h1 { min-height: 39px; margin: 0; font-size: var(--font-size-page-title); line-height: 1.25; letter-spacing: -.035em; }
+.page-header p { min-height: 22px; margin: 0; color: var(--muted); line-height: 22px; }
+
+.summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; margin-bottom: 22px; }
+.summary-card { min-height: 118px; display: flex; flex-direction: column; justify-content: space-between; padding: 20px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); }
+.summary-card span { color: var(--muted); font-size: 13px; }
+.summary-card strong { font-size: clamp(20px, 2vw, 29px); letter-spacing: -.04em; }
+.summary-card.teal { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 25%, var(--line)); }
+.summary-card.green { color: var(--green); background: var(--green-soft); border-color: color-mix(in srgb, var(--green) 27%, var(--line)); }
+.summary-card.orange { color: #975129; background: #fff2e8; border-color: #f0d5c2; }
+[data-theme="dark"] .summary-card.orange { color: #f0ad7d; background: #3a2924; border-color: #654133; }
+
+/* 콘텐츠는 작업 영역 전체 폭의 .panel에서 시작합니다.
+ * 반응형 그리드는 이 부모 폭을 나눠 쓰고, 더 좁은 컨테이너를 새로 만들지 않습니다. */
+.panel { margin-bottom: 20px; padding: 22px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); }
+.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.panel-heading h2, .panel h2 { margin: 3px 0 0; font-size: var(--font-size-section-title); }
+.panel-heading small, .panel > small { color: var(--accent); font-weight: 800; letter-spacing: .1em; }
+.empty { padding: 26px 0; color: var(--muted); text-align: center; }
+
+@media (max-width: 760px), (hover: none) and (pointer: coarse) {
+  /* 위쪽 74px은 떠 있는 컨트롤 줄(28~66px) 자리, 아래는 고정 바(60px + 여백) 자리 */
+  .workspace { padding: 74px 16px calc(102px + env(safe-area-inset-bottom)); }
+  .page-header { grid-template-rows: 14px minmax(39px, auto) minmax(44px, auto); }
+  /* 모바일에서는 떠 있는 컨트롤이 한 줄을 통째로 차지하고 헤더는 그 아래에서
+   * 시작하므로 제목 오른쪽을 비울 필요가 없습니다. 폭을 깎으면 제목이 감겨
+   * 첫 콘텐츠 카드 위치가 페이지마다 달라집니다. */
+  .page-header :is(.eyebrow, h1, p) { padding-right: 0; }
+  .page-header p { min-height: 44px; line-height: 22px; }
+  .page-actions { top: 28px; right: 16px; }
+  .page-action-button {
+    border: 1px solid color-mix(in srgb, var(--line) 62%, transparent);
+    border-radius: 11px;
+    background: color-mix(in srgb, var(--surface) 22%, transparent);
+    box-shadow: 0 14px 34px rgba(8, 9, 24, .16);
+    backdrop-filter: blur(12px) saturate(130%);
+    -webkit-backdrop-filter: blur(12px) saturate(130%);
+  }
+  .summary-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 320px) {
+  .workspace { padding-right: 12px; padding-left: 12px; }
+  .page-actions { right: 12px; }
+  .page-header h1 { font-size: 27px; }
+  .summary-card, .panel { padding: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-action-button { transition: none; }
+}

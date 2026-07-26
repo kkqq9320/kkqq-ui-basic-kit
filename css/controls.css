@@ -1,0 +1,34 @@
+/* 기본 폼 컨트롤과 액션 버튼 — 원본: frontend/src/styles.css:86-88, 160-163, 174-180, 187-188, 207
+ *
+ * 높이 계층 (이 시스템의 핵심 규칙):
+ *   41px  입력·드롭다운·날짜 필드
+ *   38px  표준 액션 버튼 (--action-height)
+ *   32px  조밀한 목록 액션 (--compact-action-height)
+ * 같은 문맥의 저장·수정·취소·삭제는 반드시 같은 높이와 글자 크기를 씁니다.
+ */
+button, input, select, textarea, option, optgroup { font-family: var(--font-family-base); font-size: inherit; }
+button { cursor: pointer; }
+input, select, textarea { width: 100%; border: 1px solid var(--line); border-radius: 7px; background: var(--input); padding: 10px 11px; color: var(--text); }
+input:focus, select:focus, textarea:focus { outline: 3px solid color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); }
+textarea { resize: vertical; line-height: 1.45; }
+label { display: grid; gap: 6px; color: var(--muted); font-size: var(--font-size-body); font-weight: 600; }
+
+/* 3줄에서 시작해 내부 스크롤바 없이 늘어나는 메모 입력 */
+.auto-grow-textarea { min-height: calc(1.45em * 3 + 22px); overflow-y: hidden; resize: none; white-space: pre-wrap; }
+
+.primary, .secondary-button, .danger-button, .button-row button, .file-button { min-width: var(--action-min-width); height: var(--action-height); display: inline-flex; align-items: center; justify-content: center; padding: 0 14px; border-radius: 7px; font-size: var(--action-font-size); font-weight: 700; line-height: 1; white-space: nowrap; }
+.primary { border: 1px solid var(--accent); background: var(--accent); color: #fff; }
+.primary:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
+.primary:disabled, .secondary-button:disabled, .danger-button:disabled { opacity: .55; cursor: not-allowed; }
+.secondary-button { border: 1px solid var(--line); color: var(--text); background: var(--surface); }
+.danger-button { border: 1px solid color-mix(in srgb, var(--red) 45%, var(--line)); color: var(--red); background: var(--surface); }
+.button-row { display: flex; justify-content: flex-end; gap: 8px; }
+.button-row button:not(.primary) { border: 1px solid var(--line); color: var(--text); background: var(--surface); }
+.text-button { padding: 8px 0 0; color: #aaaaf2; border: 0; background: transparent; font-size: 13px; }
+.link-button { text-decoration: none; }
+
+.error { padding: 11px 13px; border-radius: 7px; color: #9f3f2d; background: #fff0ed; font-size: 13px; }
+.success { margin-top: 12px; padding: 11px 13px; border-radius: 7px; color: #17665e; background: #e8f6f2; font-size: 13px; }
+.muted-copy { color: var(--muted); font-size: 13px; }
+[data-theme="dark"] .error { color: #ffb5a7; background: #472a2a; }
+[data-theme="dark"] .success { color: #a8e3d2; background: #203b35; }

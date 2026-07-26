@@ -1,0 +1,8 @@
+/* 데모 페이지 전용 스타일. 디자인 시스템의 일부가 아닙니다. */
+.demo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.demo-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.demo-swatches > div { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 9px; }
+.demo-swatches i { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 7px; }
+.demo-swatches code { min-width: 0; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; }
+/* ?debug=1 진단 기록판 */
+.demo-log { max-height: 260px; margin: 12px 0 0; padding: 12px; overflow: auto; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); color: var(--text); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; user-select: text; }

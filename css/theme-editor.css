@@ -1,0 +1,47 @@
+/* 색상 토큰 편집기 — src/ThemeColorEditor.tsx
+ *
+ * 카드는 2열로 깔리고, 카드 안은 [색 견본][이름·RGB][Undo·Reset] + 아랫줄 헥스 입력입니다.
+ * controls.css와 page.css 뒤에 와야 액션 버튼·패널 스타일 위에 얹힙니다.
+ */
+.theme-color-group { margin-top: 20px; }
+.theme-color-group > h3 { margin: 0 0 10px; color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: .1em; }
+.theme-color-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: start; }
+
+/* 카드에는 클릭 핸들러가 없습니다 — 목록을 훑다가 스치듯 눌러 색이 바뀌지 않도록,
+ * 조작 지점은 견본과 입력칸으로 한정합니다. */
+.theme-color-card { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 8px 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); color: var(--text); }
+
+/* 브라우저 기본 색상 입력의 테두리·여백을 걷어내 순수한 견본처럼 보이게 합니다. */
+.theme-color-swatch { width: 34px; height: 34px; min-width: 0; padding: 0; border: 1px solid var(--line); border-radius: 7px; background: none; cursor: pointer; }
+.theme-color-swatch::-webkit-color-swatch-wrapper { padding: 2px; }
+.theme-color-swatch::-webkit-color-swatch { border: 0; border-radius: 5px; }
+.theme-color-swatch:hover, .theme-color-swatch:focus-visible { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); outline: none; }
+
+.theme-color-copy { min-width: 0; display: grid; gap: 2px; }
+.theme-color-copy strong { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; }
+.theme-color-copy strong > :first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theme-color-copy small { overflow: hidden; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.theme-color-changed { flex: 0 0 auto; padding: 1px 6px; border-radius: 999px; color: var(--accent); background: var(--accent-soft); font-family: var(--font-family-base); font-size: 10px; font-style: normal; font-weight: 800; }
+
+/* 아이콘 전용 버튼. 카드마다 Undo·Reset 둘, 패널 머리에 모두 초기화 하나.
+ * 글자 없이 아이콘만 떠 있으면 눌러야 할 것으로 안 보이므로, 카드와 같은
+ * 테두리·면을 줘서 작은 카드처럼 세웁니다. 높이는 조밀 계열 32px입니다.
+ * 얹히는 면과 같은 색이면 테두리만 남으므로, 카드 위(surface-soft)에서는
+ * surface를, 패널 머리(surface) 위에서는 surface-soft를 씁니다. */
+.theme-color-actions { display: flex; gap: 4px; }
+.theme-color-icon-button { position: relative; width: 32px; min-width: 0; height: 32px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--surface); transition: color var(--motion-fast) ease, border-color var(--motion-fast) ease, background-color var(--motion-fast) ease; }
+.panel-heading > .theme-color-icon-button { background: var(--surface-soft); }
+.theme-color-icon-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.theme-color-icon-button:hover:not(:disabled), .theme-color-icon-button:focus-visible { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft); outline: none; }
+/* 누를 수 없을 때도 카드 모양은 남깁니다. 처음 화면에서는 셋 다 눌릴 게 없는데,
+ * 이때 면을 지우면 다시 맨 아이콘만 떠 있는 꼴이 됩니다. */
+.theme-color-icon-button:disabled { opacity: .45; cursor: default; }
+/* 모두 초기화 버튼의 개수 배지 */
+.theme-color-icon-button > b { position: absolute; top: -3px; right: -3px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 999px; color: #fff; background: var(--accent); font-size: 9px; font-weight: 800; line-height: 15px; }
+
+.theme-color-text { grid-column: 1 / -1; width: 100%; height: var(--compact-action-height); padding: 0 10px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+
+@media (max-width: 760px), (hover: none) and (pointer: coarse) {
+  /* 좁은 화면에서는 카드 한 줄에 하나씩 */
+  .theme-color-list { grid-template-columns: minmax(0, 1fr); }
+}

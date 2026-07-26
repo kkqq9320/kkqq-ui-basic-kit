@@ -1,0 +1,469 @@
+# kkqq-ui-basic-kit
+
+가계부 프로젝트에서 뽑아낸 React + 순수 CSS 컴포넌트 모음입니다.
+빌드 단계도, 런타임 의존성도 없습니다. 소스를 그대로 내보냅니다.
+
+- 드롭다운 (`Select`)
+- 휠 날짜 피커 (`DateWheelPicker`)
+- 접이식 사이드바 + 앱 셸 + 모바일 빠른 바 (`Sidebar`, `AppShell`, `MobileQuickBar`)
+- 모달 다이얼로그 (`Dialog`, `DialogHeading`, `DialogActions`)
+- 섹션 탭 (`SectionTabs`)
+- 페이지 뼈대 (`PageHeader`, `SummaryCard`, `Panel`)
+- 자동 확장 텍스트영역 (`AutoGrowTextarea`)
+- 색상 토큰 편집기 (`ThemeColorEditor`) — 사용자가 팔레트를 직접 바꿉니다
+- 디자인 토큰 + 라이트/다크 테마 + Pretendard Variable (SIL OFL 1.1)
+- **[PRINCIPLES.md](PRINCIPLES.md)** — 왜 그렇게 만들었는지에 대한 계약
+- **[CUSTOMIZING.md](CUSTOMIZING.md)** — 프로젝트마다 무엇을 프롭·토큰으로 갈아 끼우는지(색·연월 픽커 등)
+
+필요한 것: React 18 이상. 그 외 런타임 의존성 없음.
+
+---
+
+## 설치
+
+**1. 의존성으로 넣습니다.** 복사하지 마세요 — 복사본은 조용히 어긋납니다.
+
+```bash
+npm i github:kkqq9320/kkqq-ui-basic-kit
+```
+
+같은 PC에서 키트를 함께 고쳐 가며 쓸 거라면 로컬 경로가 낫습니다. npm이 링크를
+걸어 주므로 키트를 고치면 곧바로 반영됩니다:
+
+```bash
+npm i file:../kkqq-ui-basic-kit
+```
+
+**2. CSS를 한 번 import 합니다.** (앱 진입점)
+
+```ts
+import "kkqq-ui-basic-kit/css/index.css";
+```
+
+**3. 컴포넌트를 씁니다.**
+
+```tsx
+import { Select, DateWheelPicker, Dialog } from "kkqq-ui-basic-kit";
+```
+
+끝입니다. `fonts/`의 TTF는 `css/fonts.css`가 상대 경로로 참조하므로 번들러가
+알아서 해시·복사합니다.
+
+> **Vite 기준입니다.** 소스(`.tsx`)를 그대로 내보내므로, `node_modules` 안의
+> TypeScript를 컴파일하지 않는 번들러(기본 설정의 Next.js, CRA 등)에서는
+> 그 설정을 열어 주거나 키트에 빌드 단계를 넣어야 합니다.
+
+### ⚠️ 필수 전제: 앱이 `#root`에 마운트돼야 합니다
+
+모바일(760px 이하 또는 coarse 포인터)에서 이 시스템은 문서 스크롤을 끄고
+**`#root`를 세로 스크롤 호스트로** 씁니다. 마운트 지점 id가 다르면
+**모바일에서 콘텐츠가 스크롤되지 않습니다. 에러는 나지 않습니다.**
+
+다른 id를 쓴다면 세 곳을 함께 바꾸세요:
+
+1. `css/tokens.css` 맨 아래 미디어 쿼리의 `#root` 선택자
+2. `src/SectionTabs.tsx`의 `document.getElementById("root")`
+3. `Select`가 부르는 `captureScrollSnapshot()` — `src/positioning.ts`의
+   `scrollRootId` 기본값. `useScrollDirectionHidden(id)`도 같은 인자를 받습니다.
+
+Next.js App Router처럼 마운트 지점을 직접 정할 수 없는 환경이라면,
+`#root` 대신 실제 래퍼 선택자(예: `body > div:first-child`)로 바꾸는 편이 빠릅니다.
+
+### 골라 쓰기
+
+`css/index.css` 대신 필요한 파일만 import 해도 됩니다. 단:
+
+- `tokens.css`는 **항상 먼저** 와야 합니다.
+- `select.css`와 `date-picker.css`는 `surfaces.css`를 필요로 합니다.
+- `tabs.css`의 모바일 배치는 `page.css`의 `.workspace`(`position: relative`)를
+  부모로 가정합니다.
+
+### 폰트를 바꾸려면
+
+`css/fonts.css`를 통째로 지우고 `tokens.css`의 `--font-family-base` 첫 항목만
+바꾸면 됩니다. 나머지는 전부 이 변수를 참조합니다.
+
+번들되는 건 **Pretendard Variable** 한 벌(`fonts/PretendardVariable.woff2`,
+2.0MB)입니다. 가변 폰트라 45~920 굵기가 전부 진짜 글리프로 나옵니다 —
+`tokens.css`가 `font-synthesis: none`이라 굵기별 파일을 따로 두면 빠진 굵기가
+그냥 안 굵어집니다. 가변 한 벌이 그 문제를 없앱니다.
+
+> 라이선스는 SIL Open Font License 1.1(`fonts/OFL.txt`)입니다. 재배포·웹임베딩
+> 모두 허용되고, 조건은 그 라이선스 파일을 폰트와 함께 두는 것뿐입니다.
+> 폰트 파일을 빼실 거면 `OFL.txt`도 같이 빼세요.
+
+---
+
+## 컴포넌트
+
+### Select
+
+```tsx
+<Select
+  ariaLabel="통화"              // 필수
+  value={currency}
+  options={[{ value: "krw", label: "원화" }, { value: "usd", label: "달러", disabled: true }]}
+  onChange={setCurrency}
+  placeholder="선택하세요"        // 기본값
+  align="left"                   // "left" | "center"
+  disabled={false}
+  portal={false}                 // 아래 설명 참고
+/>
+```
+
+아래 공간이 좁으면 자동으로 위로 열립니다. 바깥 클릭·Escape·**뒤로가기**로 닫히고,
+선택하면 포커스가 트리거로 돌아가되 **화면은 움직이지 않습니다**(모바일 대응).
+
+다이얼로그 안에서 열면 뒤로가기가 **드롭다운만** 닫고 다이얼로그는 남깁니다
+(표식이 스택이라 위에서부터 닫힘). 이게 없으면 뒤로가기 한 번에 다이얼로그가
+통째로 닫혀 입력 내용이 날아갑니다.
+
+#### `portal` — 메뉴가 잘릴 때
+
+기본값에서 메뉴는 트리거 안에 `absolute`로 붙습니다. 조상 중에 **overflow를 자르는
+요소**가 있으면 메뉴가 잘립니다. `portal`을 켜면 `document.body`에 `fixed`로 나가고
+스크롤·리사이즈·가상 키보드를 따라 좌표를 다시 잡습니다(z-index 450).
+
+이런 자리에서는 **반드시** 켜세요:
+
+- `Sidebar`의 `slot` — 접기 애니메이션 때문에 `overflow: hidden`이고, 모바일에서는
+  사이드바 자체가 `overflow-y: auto`입니다
+- `overflow: auto`인 스크롤 카드·패널·테이블 래퍼 안
+- `transform`이나 `filter`가 걸린 조상 안 (새 스태킹 컨텍스트가 생깁니다)
+
+```tsx
+<Sidebar slot={<Select ariaLabel="작업 공간" value={ws} options={list} onChange={setWs} portal />} ... />
+```
+
+### DateWheelPicker
+
+```tsx
+<DateWheelPicker
+  ariaLabel="거래 날짜"
+  value={date}                   // "YYYY-MM-DD" 또는 ""
+  onChange={setDate}
+  min="2026-01-01" max="2026-12-31"
+  fields={["year", "month", "day"]}  // 기본값. 표시할 열
+  allowClear                     // "비우기" 버튼 노출
+  timeZone="Asia/Seoul"          // "오늘"의 기준
+  labels={{ placeholder: "Pick a date", /* 필요한 키만 */ }}
+/>
+```
+
+#### `fields` — 연·월 픽커
+
+`fields`로 열을 줄이면 같은 컴포넌트가 **연·월 픽커**(또는 연도만 픽커)가 됩니다.
+네이티브 `<input type="month">`를 따로 쓰지 마세요.
+
+```tsx
+<DateWheelPicker ariaLabel="예산 월" value={month} onChange={setMonth} fields={["year", "month"]} />
+```
+
+- **값 형식은 그대로 `YYYY-MM-DD`.** 빠진 열은 `01`로 정규화됩니다(일 없으면 일=01,
+  월 없으면 월=01). `onChange`는 늘 완전한 ISO 날짜를 냅니다 — `min`/`max`가 전부
+  풀 ISO 날짜인 소비 코드와 문자열 비교가 어긋나지 않게 하려는 것입니다.
+  월만 필요하면 소비 쪽에서 `value.slice(0, 7)` 하세요.
+  (직접 넘긴 값의 일(day)은 사용자가 열을 바꾸기 전까지 그대로 표시·유지되고,
+  값을 바꾸는 순간 `01`로 정규화됩니다.)
+- **`min`/`max`는 남은 최소 단위로 비교합니다.** 연·월 픽커면 "월" 단위입니다 —
+  예산이 `min="2026-07-15"`처럼 월 중간부터 시작해도 **7월 전체가 선택 가능**합니다
+  (일을 01로 고정한 채 풀 문자열로 비교하면 7월이 잘못 막힙니다).
+- 트리거 문구도 열에 맞춰 짧아집니다(`2026. 07.`). 그리드 트랙 수는 `data-fields`로
+  따라오므로 CSS를 새로 짤 필요가 없습니다.
+
+기본 라벨은 한국어입니다. 영어로 쓰려면:
+
+```tsx
+labels={{
+  placeholder: "Pick a date", hint: "Scroll or swipe",
+  today: "Today", clear: "Clear", done: "Done", setToday: "set to today",
+  previous: "previous", next: "next", select: "picker",
+  weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+  units: { year: "Year", month: "Month", day: "Day" },
+}}
+```
+
+### AppShell + Sidebar
+
+라우터·인증·API에 의존하지 않습니다. 상태는 전부 controlled입니다.
+
+```tsx
+const [collapsed, setCollapsed] = useState(() => localStorage.getItem("sidebarCollapsed") === "true");
+const [mobileOpen, setMobileOpen] = useState(false);
+const [navHidden] = useScrollDirectionHidden();      // 아래로 스크롤하면 하단 바 숨김
+const keyboardOpen = useVirtualKeyboardOpen();       // 가상 키보드 감지
+
+useEffect(() => localStorage.setItem("sidebarCollapsed", String(collapsed)), [collapsed]);
+
+<AppShell
+  collapsed={collapsed}
+  mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)}
+  navHidden={navHidden} keyboardOpen={keyboardOpen}
+  sidebar={<Sidebar
+    brand={{ icon: <Logo />, title: "내 앱" }}
+    collapsed={collapsed} onToggleCollapse={() => setCollapsed(v => !v)}
+    mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)}
+    slot={<Select ariaLabel="작업 공간" value={ws} options={workspaces} onChange={setWs} portal />}
+    sections={[
+      { items: [{ id: "home", label: "홈", icon: <HomeIcon />, active: page === "home", onSelect: () => setPage("home") }] },
+      { heading: "관리", pinToBottom: true, items: [/* ... */] },
+    ]}
+    footer={{ avatar: <Avatar />, name: "홍길동", subtitle: "관리자",
+              actions: [{ id: "logout", label: "로그아웃", icon: <LogoutIcon />, onClick: logout }] }}
+  />}
+  quickBar={<MobileQuickBar items={[/* 정확히 3개 */]} />}
+>
+  <PageHeader eyebrow="SECTION" title="제목" description="설명" />
+  <Panel title="카드">...</Panel>
+</AppShell>
+```
+
+**React Router와 함께 쓰려면** nav 항목에 `href`와 `onSelect`를 같이 주거나,
+`onSelect: () => navigate("/path")` + `active: pathname === "/path"`로 연결하세요.
+`href`를 주면 `<a>`로, 없으면 `<button>`으로 렌더합니다.
+
+`MobileQuickBar`는 CSS 그리드가 64px **3칸 고정**이라 항목 3개를 전제로 합니다.
+
+### SectionTabs
+
+```tsx
+<SectionTabs ariaLabel="설정 섹션" value={tab} tabs={TABS} onChange={setTab} />
+<SectionHeading title="기본 설정" description="설명은 3줄 자리를 예약합니다." />
+```
+
+오른쪽 아래 플로팅 페이지 카드까지 쓰려면 트리를 `MobilePageTabsContext.Provider`로
+감싸고 `AppShell`의 `pageTabs` 슬롯에 `MobilePageTabs`를 넣으세요.
+
+```tsx
+const pageTabs = useMobilePageTabs();
+
+<MobilePageTabsContext.Provider value={pageTabs.context}>
+  <AppShell
+    quickBar={<MobileQuickBar barRef={pageTabs.quickBarRef} items={[...]} />}
+    pageTabs={<MobilePageTabs registration={pageTabs.registration} open={pageTabs.open}
+                onToggle={pageTabs.setOpen} floatRef={pageTabs.floatRef} />}
+    ...
+```
+
+> ⚠️ `floatRef`와 `quickBarRef`를 **반드시 넘기세요.** 이 둘로 "바깥"을 판정하기
+> 때문에, 빠뜨리면 열린 메뉴가 아무 데를 눌러도 닫히지 않고 화면에 남습니다.
+
+전체 예시는 [demo/main.tsx](demo/main.tsx)를 참고하세요.
+
+---
+
+### Dialog
+
+```tsx
+<Dialog open={open} onClose={() => setOpen(false)} ariaLabel="분류 등록"
+        onSubmit={() => save()}        // 주면 <form>으로 렌더 + preventDefault
+        wide scroll                     // 520px / 내부 스크롤 + 액션 바닥 고정
+        closeOnBackdrop={false}         // 닫는 길 세 개를 따로 끕니다
+        closeOnEscape={false}           // 되돌릴 수 없는 확인이면 셋 다 끄세요
+        closeOnBack={false}>
+  <DialogHeading eyebrow="CATEGORY" title="분류 등록" />
+  <label>이름<input required /></label>
+  <DialogActions>
+    <button type="button" className="danger">삭제</button>
+    <button type="button" onClick={() => setOpen(false)}>취소</button>
+    <button className="primary">등록</button>
+  </DialogActions>
+</Dialog>
+```
+
+body 포털에 z-index 200으로 뜹니다. 백드롭 `mousedown`·Escape·**뒤로가기**로
+닫히고, 포커스를 안에 가두며(Tab 순환), 닫히면 열기 직전 요소로 포커스를
+되돌립니다. 액션은 32px 조밀 계열이고 `.danger`는 왼쪽 끝으로 밀려 확인 버튼과
+멀어집니다.
+
+뒤로가기는 뒤 페이지로 가지 않고 다이얼로그만 닫습니다(`useBackToClose`).
+겹쳐 열면 위에서부터 하나씩 닫히고, 버튼으로 닫았을 때는 남긴 history 표식을
+걷어내 뒤로가기 횟수가 밀리지 않습니다. **모바일에서 키보드가 떠 있으면 첫
+뒤로가기는 OS가 키보드를 닫는 데 쓰므로, 다이얼로그는 그다음 뒤로가기에 닫힙니다.**
+
+**겹쳐 열어도 Escape는 가장 안쪽 하나만 닫습니다.** 다이얼로그 안에서 드롭다운을
+Escape로 닫아도 다이얼로그는 남습니다. 직접 만든 팝업을 이 순서에 끼우려면
+`useEscapeToClose(open, onClose)`를 쓰세요 — 자기 리스너를 달면 한 번의 Escape로
+같이 닫힙니다. 순서는 등록 시점이 아니라 `PopupDepthContext`가 알려 주는
+겹친 깊이로 정해집니다.
+
+되돌릴 수 없는 확인이라면 `closeOnBackdrop`·`closeOnEscape`·`closeOnBack`을
+**셋 다** 끄세요. 뒤 둘을 남겨두면 실수로 닫히고, 반대로 앞 둘만 끄고
+`closeOnBack`을 켜두면 뒤로가기가 닫지도 못할 다이얼로그를 위해 삼켜져
+사용자가 갇힙니다.
+
+열면 **첫 입력칸에 바로 포커스**가 갑니다. 다른 요소를 잡으려면 그 요소에
+`autoFocus`를 주세요 — 이미 안쪽에 포커스가 있으면 건드리지 않습니다.
+
+위치는 **항상 "지금 보이는 영역의 가운데"** 하나로 정해집니다. 컴포넌트가
+`useVisualViewportBox()`로 백드롭의 `top/left/width/height`를 `visualViewport`에
+맞추므로, 키보드가 올라오면 그 영역이 키보드 위까지로 줄어들 뿐입니다.
+
+| 상황 | 결과 |
+|---|---|
+| 키보드 없음 | 화면 정중앙 |
+| 키보드 있음 + 다이얼로그가 들어감 | 남은 영역의 정중앙 (위아래 여백 생김) |
+| 키보드 있음 + 다이얼로그가 더 김 | 위에 붙고 안에서 스크롤, 키보드는 계속 보임 |
+
+"키보드가 열렸는지"를 판정하지 않습니다 — 주소창 접힘/펴짐이 100~140px이라
+임계값으로는 키보드와 구분되지 않고, `:has(input:focus)`는 프로그램 포커스만으로도
+참이 되기 때문입니다.
+
+> CSS만 떼어 쓰면 백드롭이 레이아웃 뷰포트를 덮습니다. 안드로이드 기본값에서
+> 키보드는 레이아웃 뷰포트를 줄이지 않으므로(`100dvh`도 마찬가지), 이 보정은
+> 컴포넌트를 함께 써야 동작합니다.
+
+> **다이얼로그 안의 드롭다운에는 `portal`을 켜세요.** 백드롭이 z-index 200이라
+> 포털 메뉴(450)만 그 위로 올라옵니다.
+
+도메인 전용이라 의도적으로 뺀 것: 계정 선택 드롭다운, 거래 테이블, 계정 칩 그리드.
+
+### ThemeColorEditor — 색상 토큰 편집기
+
+사용자가 팔레트를 직접 바꾸는 화면입니다. 지금 보고 있는 테마(라이트/다크)의 값을
+`localStorage`(`themeColors:light` / `themeColors:dark`)에 따로 저장하고 `:root`에
+인라인으로 적용합니다. **저장은 브라우저에만 — 코드도 GitHub도 안 건드립니다.**
+
+```tsx
+<ThemeColorEditor theme={theme} />           // 기본 토큰 표
+<ThemeColorEditor theme={theme} groups={myGroups} onChange={…} />
+```
+
+**문구만 바꾸기**: 토큰의 이름표·설명이 프로젝트마다 다르면 `groups`로 갈아 끼우세요
+(이름은 `tokens.css`와 같아야 합니다). 기본값은 `THEME_TOKEN_GROUPS`입니다.
+
+**새 색(토큰)을 더하기 — 키트를 안 고치고**: 편집기는 넘어온 `groups`의 토큰
+집합으로 읽기·기본값·저장·적용을 전부 처리합니다. 그래서 소비 프로젝트가:
+
+1. 자기 CSS에 커스텀 프로퍼티를 **라이트·다크 둘 다** 정의하고
+   ```css
+   :root { --brand-2: #ff8a3d; }
+   :root[data-theme="dark"] { --brand-2: #ffa866; }
+   ```
+2. 어딘가에서 그 토큰을 실제로 쓰고 (`color: var(--brand-2)`),
+3. `groups`에 항목 하나를 더하면
+   ```tsx
+   const groups = [...THEME_TOKEN_GROUPS, { title: "브랜드", tokens: [
+     { name: "--brand-2", label: "브랜드 보조", description: "보조 브랜드 색" },
+   ] }];
+   ```
+
+그 색이 편집기에 뜨고, 사용자가 값을 바꾸면 저장·적용됩니다 — **키트(GitHub) 수정
+없이** 색이 늘어납니다. (테마 적용 effect도 같은 목록을 쓰도록 `applyTokenOverrides(
+theme, undefined, tokens)`에 그 tokens를 넘기세요. 앱은 자기 `THEME_TOKENS`가 기본값이라
+저절로 됩니다.)
+
+> 참고: 색 토큰은 **누군가 `var(--x)`로 써야** 화면에 나타납니다. 어디에 쓸지는
+> 코드가 정하므로, 편집기 UI만으로 "쓰이는 새 색"을 만들 수는 없습니다.
+
+## 클래스 이름 대응
+
+CSS 클래스는 원본 프로젝트 이름을 대체로 유지했습니다. 헷갈릴 만한 것만:
+
+| 컴포넌트 | 루트 클래스 | 비고 |
+|---|---|---|
+| `Select` | `.app-select` | |
+| `SectionTabs` | `.settings-tabs` | 이름은 `settings`지만 범용 섹션 탭입니다 |
+| `Sidebar` 브랜드 | `.sidebar-brand` | 원본 `.brand`에서 개명 |
+| `Sidebar` 상단 슬롯 | `.sidebar-slot` | 원본 `.budget-picker`에서 개명 |
+| nav 배지 | `.sidebar-nav-count` | 원본 `.nav-count`에서 개명 |
+| nav 그룹 제목 | `.sidebar-nav-heading` | 원본 `.nav-heading`에서 개명 |
+
+개명한 넷은 원본 이름이 너무 일반적이라 다른 프로젝트와 충돌할 위험이 있어서 바꿨습니다.
+
+---
+
+## 개발
+
+`node_modules`가 필요합니다. 이 저장소에서는 가계부 앱의
+`frontend/node_modules`를 가리키는 정션이 걸려 있습니다. 다른 곳에서는
+`react`, `react-dom`, `vite`, `@vitejs/plugin-react`, `vitest`,
+`@testing-library/react`, `jsdom`을 설치하세요.
+
+```bash
+npm run dev         # 데모 → http://localhost:5273
+npm test            # vitest
+npm run typecheck   # tsc --noEmit
+```
+
+`vite.config.ts`, `tsconfig.json`, `index.html`, `demo/`, `tests/`는 **개발용**입니다.
+`package.json`의 `files`가 배포 대상을 `css/`, `src/`, `fonts/`와 문서로 한정합니다.
+
+---
+
+## Claude 스킬로 쓰기
+
+Claude가 모든 프로젝트에서 이 원칙을 자동으로 적용하게 하는 **트리거 스킬은
+`kkqq9320/claude-skills` 마켓플레이스**에 있습니다(`kkqq-ui-basic-kit` 스킬).
+여기 소스를 복사하지 않고, 그 스킬이 이 저장소의 `PRINCIPLES.md`를 가리키기만
+합니다 — 원칙의 단일 출처는 이 저장소입니다.
+
+> ℹ️ 그 마켓플레이스 저장소는 **비공개**라 아래 명령은 접근 권한이 있어야
+> 동작합니다. 이 키트 자체를 쓰는 데는 필요 없습니다 — 위 "설치"만 따르면 됩니다.
+
+```bash
+claude plugin marketplace add kkqq9320/claude-skills
+claude plugin install kkqq-skills@kkqq
+```
+
+원칙을 고치려면 이 저장소에서 `PRINCIPLES.md`를 고쳐 push 하고, 스킬의 트리거
+문구를 고치려면 claude-skills 저장소에서 고칩니다. 둘 다 GitHub로 관리됩니다.
+
+## 출처
+
+모든 파일 상단에 원본 파일과 줄 번호를 주석으로 남겼습니다. 가계부 앱은 이제
+이 저장소를 의존성으로 씁니다 — 색상 편집기와 토큰은 여기 것을 그대로 부르고,
+다이얼로그·드롭다운·날짜 피커는 아직 앱이 자기 클래스 이름(`.account-edit-*`,
+`.app-select-*`)으로 CSS를 쌓아 둔 탓에 앱 쪽 사본이 남아 있습니다.
+클래스 이름을 이쪽으로 모으는 것이 남은 일입니다.
+
+## 검증 상태
+
+- `vitest run` — 93/93 통과. 이 중 5개는 원본 `DateWheelPicker.test.tsx`를
+  **한 글자도 고치지 않고** 옮긴 것입니다. 접근성 이름이 원본과 같으므로,
+  통과한다는 것은 추출 과정에서 동작이 바뀌지 않았다는 증거입니다.
+- `tsc --noEmit` — 통과 (`src`, `tests`, `demo` 전부).
+- 데모 페이지에서 계산된 스타일로 확인: 셸 그리드 238px, 컨트롤 41/38/32px,
+  드롭다운 30% 틴트 + 18px 블러, 위로 열림, 셰브런 180° 회전, 피커 30/150/30 열과
+  body 포털, 모바일 오프캔버스 `translateX(-105%)`, 빠른 바 216×60,
+  탭 카드 열림/닫힘, 다크 모드 전체.
+- `portal` 드롭다운: `overflow: hidden`인 사이드바 슬롯 안에서 메뉴가 body로 나가
+  `position: fixed`(z-index 450)로 슬롯 밖까지 그려지고, 메뉴 중앙의 hit-test가
+  메뉴에 맞는 것(= 잘리지 않음)까지 확인. 본문의 일반 드롭다운은 기존대로
+  `absolute` / z-index 80을 유지합니다.
+- 사이드바 접기: `width`가 실제로 트랜지션 목록에 올라간 것을 Web Animations API로
+  확인(`width:260ms` + 패딩 4방향). 라벨·슬롯·그룹 제목도 `max-width`/`opacity`/
+  `height`로 함께 보간됩니다. 238px↔76px 왕복 후 접기 버튼이 정확히 가운데(38px)에
+  안착하는 것까지 확인했습니다.
+- `Dialog`: 백드롭 z-index 200 / 58% 틴트 / 8px 블러, 다이얼로그 440px(wide 520px),
+  액션 32×64px, `.danger`가 `margin-right: auto`로 밀리는 것, `onSubmit` 시 `<form>`
+  렌더, 백드롭 mousedown·Escape 닫기, 열 때 포커스 진입 / 닫을 때 원래 버튼으로 복원,
+  긴 다이얼로그의 내부 스크롤 + sticky 액션까지 브라우저에서 확인.
+  다이얼로그 안 포털 드롭다운은 메뉴(450)가 백드롭(200) 위에 실제로 그려지고
+  hit-test에 잡히며, 메뉴를 눌러도 다이얼로그가 닫히지 않는 것을 확인했습니다.
+- 마우스 보조 버튼: 백드롭·바깥 클릭 닫기는 주 버튼만 인정합니다. 가드를 빼면
+  전용 테스트가 실패하는 것까지 확인했습니다. 실기기 로그에서 마우스 뒤로가기
+  버튼이 백드롭 닫기를 발동시켜 표식을 소모하고, 이어진 브라우저 뒤로가기가
+  페이지를 나가버리던 회귀를 이걸로 잡았습니다.
+- 뒤로가기: 데모(StrictMode)에서 다이얼로그를 열면 history 표식이 1개 쌓이고,
+  `history.back()`에 **URL과 페이지는 그대로인 채 다이얼로그만** 닫히며 표식이
+  0으로 돌아옵니다. StrictMode 회귀(열자마자 닫힘)는 전용 테스트로 고정했고,
+  정리 단계의 `back()`을 즉시 호출로 되돌리면 그 테스트만 실패하는 것까지
+  확인했습니다.
+- 다이얼로그 모바일 정렬(375×812), 세 경우 모두 브라우저 실측:
+  키보드 없음 → 235~577 정중앙. 키보드 300px(영역 512) → 85~427로 **위아래 여백
+  85px씩**, 영역 안 정중앙. 긴 다이얼로그 + 키보드 → 12에 붙고 하단 500으로
+  **영역(512)을 넘지 않으며** 안에서 스크롤(1127→486), sticky 액션도 영역 안 유지.
+  실기기(안드로이드 Chrome)에서 ①키보드 없이 위/아래로 쏠리던 것 ②키보드와 사이가
+  벌어지거나 여백 없이 붙던 것을, 임계값 판정을 버리고 잡았습니다.
+
+---
+
+## 라이선스
+
+**소스 코드는 MIT** ([LICENSE](LICENSE)). 자유롭게 쓰고 고치고 재배포하시면 됩니다.
+
+**번들 폰트는 별개입니다.** `fonts/PretendardVariable.woff2`는 SIL Open Font
+License 1.1이고 전문은 [fonts/OFL.txt](fonts/OFL.txt)에 있습니다. 재배포·웹임베딩
+모두 허용되며, 조건은 그 라이선스 파일을 폰트와 함께 두는 것뿐입니다.
+폰트 파일을 빼실 거면 `OFL.txt`도 같이 빼세요.

@@ -1,0 +1,107 @@
+/* 디자인 토큰 + 전역 리셋 — 원본: frontend/src/styles.css:7-88, 772-776
+ *
+ * 색을 바꾸려면 여기 있는 커스텀 프로퍼티만 덮어쓰세요.
+ * 컴포넌트 CSS는 전부 이 토큰만 참조하므로 이 파일 하나로 테마가 바뀝니다.
+ * 다크 모드는 <html data-theme="dark">로 전환합니다.
+ */
+:root {
+  --font-family-base: "Pretendard Variable", "Pretendard", "Noto Sans KR", "Segoe UI", sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-control: 13px;
+  --font-size-body: 13px;
+  --font-size-nav: 14px;
+  --font-size-section-title: 18px;
+  --font-size-dialog-title: 20px;
+  --font-size-page-title: 31px;
+  font-family: var(--font-family-base);
+  color: #2d2c35;
+  background: #f6f4ef;
+  font-synthesis: none;
+  color-scheme: light;
+  --deep: #292a43;
+  --accent: #575bd4;
+  --accent-soft: #eeeefe;
+  --line: #e3e0d9;
+  --muted: #77747f;
+  --orange: #c66b55;
+  --red: #b84d4d;
+  --green: #2f8a63;
+  --green-soft: #eaf6ef;
+  --gold: #bc8a37;
+  --bg: #f6f4ef;
+  --surface: #fffdfa;
+  --surface-soft: #faf8f3;
+  --text: #2d2c35;
+  --input: #fffefa;
+  --sidebar: #292a43;
+  --action-height: 38px;
+  --action-min-width: 88px;
+  --compact-action-height: 32px;
+  --compact-action-min-width: 64px;
+  --action-font-size: 13px;
+  --dropdown-inline-padding: 12px;
+  --dropdown-icon-size: 13px;
+  --dropdown-icon-box: 18px;
+  --dropdown-option-hover-scale: 1.015;
+  --dropdown-option-hover-text: #fff;
+  --dropdown-option-hover-background: var(--accent);
+  --motion-fast: 140ms;
+  /* 사이드바 접기/펴기. width가 실제로 레이아웃을 구동하므로 이 값 하나로
+   * 폭·패딩·라벨·구분선이 모두 같은 리듬을 탑니다. */
+  --sidebar-width: 238px;
+  --sidebar-width-collapsed: 76px;
+  --sidebar-motion: 260ms;
+  --sidebar-ease: cubic-bezier(.32, .72, 0, 1);
+  --sidebar-label-max: 220px;
+  --scrollbar-size: 4px;
+  --scrollbar-thumb: color-mix(in srgb, var(--muted) 24%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--muted) 40%, transparent);
+}
+[data-theme="dark"] {
+  color: #ededf5;
+  background: #101119;
+  color-scheme: dark;
+  --deep: #11121f;
+  --accent-soft: #2a2b50;
+  --line: #323344;
+  --muted: #9a9aac;
+  --bg: #101119;
+  --surface: #1a1b27;
+  --surface-soft: #222331;
+  --text: #ededf5;
+  --input: #222331;
+  --sidebar: #11121f;
+  --orange: #e49663;
+  --red: #ff8b81;
+  --green: #67c99a;
+  --green-soft: #20382f;
+  --gold: #dfb96d;
+}
+
+/* 전역 리셋 — 스크롤바 굵기를 4px로 통일하고, 오버플로가 생겨도
+ * 문서 폭이 흔들리지 않도록 scrollbar-gutter를 예약합니다. */
+html { scrollbar-gutter: stable; }
+* { box-sizing: border-box; }
+* { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
+*::-webkit-scrollbar { width: var(--scrollbar-size); height: var(--scrollbar-size); }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { border: 1px solid transparent; border-radius: 999px; background: var(--scrollbar-thumb); background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
+/* Chromium은 scrollbar-width:thin이 남아 있으면 4px 대신 네이티브 thin 폭을
+ * 예약합니다. ::-webkit-scrollbar를 지원하는 엔진에서는 표준 속성을 되돌립니다. */
+@supports selector(::-webkit-scrollbar) {
+  * { scrollbar-width: auto; scrollbar-color: auto; }
+}
+body { margin: 0; min-width: 0; min-height: 100vh; color: var(--text); background: radial-gradient(circle at 80% 0%, color-mix(in srgb, var(--green) 7%, transparent), transparent 32%), var(--bg); font-family: var(--font-family-base); font-size: var(--font-size-body); line-height: 1.45; }
+#root { min-width: 0; }
+
+/* 모바일: 문서 대신 #root를 세로 스크롤 호스트로 쓰고 스크롤바를 숨깁니다.
+ * 고정 하단 바가 주소창 변화에 흔들리지 않게 하는 전제 조건입니다. */
+@media (max-width: 760px), (hover: none) and (pointer: coarse) {
+  html, body { height: 100%; overflow: hidden; scrollbar-gutter: auto; }
+  #root { width: 100%; height: 100vh; height: 100dvh; overflow-x: hidden; overflow-y: auto; scroll-padding-bottom: 40dvh; -webkit-overflow-scrolling: touch; }
+  * { scrollbar-width: none !important; -ms-overflow-style: none; }
+  *::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; background: transparent !important; }
+  *::-webkit-scrollbar-track, *::-webkit-scrollbar-thumb { background: transparent !important; }
+}

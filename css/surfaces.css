@@ -1,0 +1,37 @@
+/* 공용 글래스 표면 — 원본: frontend/src/styles.css:103-105, 1047-1051
+ *
+ * 열린 메뉴 / 앵커드 팝오버 / 정보 디스클로저가 전부 이 하나를 씁니다.
+ * 새 팝업을 만들 때 자체 배경·그림자를 정의하지 말고 이 클래스를 붙이세요.
+ * 30% 표면 틴트 + 18px 블러가 이 디자인 시스템의 시그니처입니다.
+ */
+.dropdown-menu-surface, .glass-popover {
+  border: 1px solid color-mix(in srgb, var(--line) 62%, transparent);
+  background: color-mix(in srgb, var(--surface) 30%, transparent);
+  box-shadow: 0 18px 46px rgba(8, 9, 24, .22);
+  backdrop-filter: blur(18px) saturate(145%);
+  -webkit-backdrop-filter: blur(18px) saturate(145%);
+}
+
+/* 모든 커스텀 드롭다운 옵션이 공유하는 호버/포커스 피드백.
+ * transform만 쓰므로 이웃 옵션을 밀어내지 않습니다.
+ * 프로젝트 고유 메뉴를 추가하면 아래 :where() 목록에 클래스만 더하세요. */
+:where(.app-select-menu) button {
+  position: relative;
+  transform: scale(1);
+  transform-origin: 50% 50%;
+  transition: transform var(--motion-fast) ease, color var(--motion-fast) ease, background-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
+}
+:where(.app-select-menu) button:is(:hover, :focus-visible):not(:disabled) {
+  z-index: 1;
+  color: var(--dropdown-option-hover-text);
+  background: var(--dropdown-option-hover-background);
+  outline: none;
+  transform: scale(var(--dropdown-option-hover-scale));
+  box-shadow: 0 5px 14px rgba(8, 9, 24, .12);
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(.app-select-menu) button { transition: none; }
+  :where(.app-select-menu) button:is(:hover, :focus-visible):not(:disabled) { transform: none; }
+}

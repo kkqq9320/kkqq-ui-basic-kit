@@ -1,0 +1,19 @@
+/* 전체 번들. 앱 진입점에서 이 파일 하나만 import 하세요.
+ *
+ *   import "design-system/css/index.css";
+ *
+ * 필요한 것만 쓰려면 이 파일 대신 개별 파일을 import 하되,
+ * tokens.css는 항상 먼저 와야 하고 select/date-picker는 surfaces.css가 필요합니다.
+ * 자체 폰트를 쓴다면 fonts.css 줄만 빼고 tokens.css의 --font-family-base를 바꾸세요.
+ */
+@import "./fonts.css";
+@import "./tokens.css";
+@import "./surfaces.css";
+@import "./controls.css";
+@import "./dialog.css";
+@import "./select.css";
+@import "./date-picker.css";
+@import "./tabs.css";
+@import "./sidebar.css";
+@import "./page.css";
+@import "./theme-editor.css";

@@ -1,0 +1,264 @@
+/* 앱 셸 + 사이드바 + 모바일 빠른 바 — 원본: frontend/src/styles.css:189-236, 781-844, 956-959
+ *
+ * 데스크톱: 238px 사이드바(접으면 76px, 아이콘만) + 콘텐츠 그리드.
+ * 모바일: 사이드바가 왼쪽에서 밀려 들어오는 오프캔버스 서랍이 되고,
+ *         하단 가운데에 떠 있는 빠른 바가 서랍을 엽니다.
+ *
+ * 접기 애니메이션의 원칙 (원본 대비 변경점):
+ *   원본은 그리드 트랙을 238px↔76px로 바꿨습니다. grid-template-columns는
+ *   즉시 스냅하는데 .sidebar에는 width/padding 트랜지션이 걸려 있어서, 폭은 한
+ *   프레임에 점프하고 패딩만 뒤늦게 따라오는 어긋남이 생겼습니다.
+ *   여기서는 그리드 트랙을 auto로 두고 .sidebar의 width가 실제로 레이아웃을
+ *   구동하게 했습니다. 라벨도 display:none 대신 max-width+opacity로 접히므로
+ *   폭·패딩·라벨·구분선이 같은 곡선을 탑니다.
+ *
+ * 원본에서 이름을 바꾼 클래스 (다른 프로젝트와 충돌하지 않도록):
+ *   .brand → .sidebar-brand, .budget-picker → .sidebar-slot,
+ *   .nav-count → .sidebar-nav-count, .nav-heading → .sidebar-nav-heading
+ */
+.app-shell { min-height: 100vh; display: grid; grid-template-columns: auto minmax(0, 1fr); }
+.sidebar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  width: var(--sidebar-width);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 18px;
+  color: #dedeee;
+  background: var(--sidebar);
+  transition: width var(--sidebar-motion) var(--sidebar-ease), padding var(--sidebar-motion) var(--sidebar-ease), transform .22s ease;
+}
+
+.sidebar-brand { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 8px 24px; transition: gap var(--sidebar-motion) var(--sidebar-ease), padding var(--sidebar-motion) var(--sidebar-ease); }
+.sidebar-brand > span { flex: 0 0 auto; display: grid; place-items: center; width: 30px; height: 30px; overflow: hidden; border-radius: 8px; transition: width var(--sidebar-motion) var(--sidebar-ease), opacity calc(var(--sidebar-motion) * .55) var(--sidebar-ease); }
+.sidebar-brand > span img, .sidebar-brand > span svg { width: 30px; height: 30px; display: block; }
+/* 제목이 남는 공간을 흡수합니다. margin-left:auto로 버튼을 밀면 접힐 때
+ * auto→0이 보간되지 않아 버튼이 한 번 튑니다. 제목의 max-width가 줄어들면
+ * 버튼이 연속적으로 왼쪽으로 미끄러지며 가운데에 안착합니다. */
+.sidebar-brand > strong { flex: 1 1 auto; max-width: var(--sidebar-label-max); overflow: hidden; white-space: nowrap; transition: max-width var(--sidebar-motion) var(--sidebar-ease), opacity calc(var(--sidebar-motion) * .55) var(--sidebar-ease); }
+.sidebar-collapse-button, .mobile-sidebar-close { flex: 0 0 auto; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; color: #aaaac3; background: transparent; transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease; }
+.sidebar-collapse-button:hover { color: #fff; background: rgba(255,255,255,.09); }
+.sidebar-collapse-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: transform var(--sidebar-motion) var(--sidebar-ease); }
+.mobile-sidebar-close { display: none; color: #fff; font-size: 24px; }
+
+/* 브랜드 아래 자유 슬롯 (작업 공간 전환기, 검색 등). 어두운 배경이라
+ * 안에 들어가는 Select 트리거는 밝은 텍스트로 덮어씁니다. */
+.sidebar-slot { max-height: 240px; margin-bottom: 24px; padding: 13px; overflow: hidden; border-radius: 9px; background: rgba(255,255,255,.07); transition: max-height var(--sidebar-motion) var(--sidebar-ease), margin-bottom var(--sidebar-motion) var(--sidebar-ease), padding var(--sidebar-motion) var(--sidebar-ease), opacity calc(var(--sidebar-motion) * .5) var(--sidebar-ease); }
+.sidebar-slot > small { display: block; margin-bottom: 7px; color: #9c9cb8; white-space: nowrap; }
+.sidebar-slot .app-select-trigger { color: #fff; border-color: rgba(255,255,255,.15); background-color: #26273e; }
+
+.sidebar nav { display: grid; gap: 4px; }
+
+/* 내비게이션 항목.
+ * 배경은 요소 자체가 아니라 ::before가 그립니다. 그래야 선택될 때 왼쪽에서
+ * 펼쳐지는 애니메이션을 줄 수 있고, 호버와 선택이 같은 레이어를 공유합니다.
+ * ::after는 왼쪽 강조 막대입니다. */
+.sidebar nav :is(a, button) {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  min-height: 40px;
+  padding: 9px 12px;
+  border: 0;
+  color: #cacade;
+  background: transparent;
+  border-radius: 7px;
+  text-decoration: none;
+  font-size: var(--font-size-nav);
+  text-align: left;
+  transition: color 170ms var(--sidebar-ease), gap var(--sidebar-motion) var(--sidebar-ease), padding var(--sidebar-motion) var(--sidebar-ease);
+}
+.sidebar nav :is(a, button)::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  opacity: 0;
+  transform: scaleX(.82);
+  transform-origin: left center;
+  transition: opacity 180ms ease, transform 280ms cubic-bezier(.2, .9, .25, 1);
+}
+.sidebar nav :is(a, button)::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  left: 0;
+  width: 3px;
+  height: 0;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+  transform: translateY(-50%);
+  transition: height 280ms cubic-bezier(.2, .9, .25, 1);
+}
+.sidebar nav :is(a, button):hover::before { opacity: .5; transform: scaleX(1); transition-duration: 120ms, 200ms; }
+.sidebar nav :is(a, button).active { color: #fff; }
+.sidebar nav :is(a, button).active::before { opacity: 1; transform: scaleX(1); }
+.sidebar nav :is(a, button).active::after { height: 18px; }
+.sidebar nav :is(a, button):hover { color: #fff; }
+/* 선택되는 순간 아이콘이 한 번 튕깁니다 */
+.sidebar nav :is(a, button).active svg { animation: sidebar-nav-pop 320ms cubic-bezier(.2, 1.12, .35, 1); }
+.sidebar nav :is(a, button) svg, .mobile-quick-bar svg { width: 20px; height: 20px; flex: 0 0 20px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
+.sidebar nav :is(a, button) > span { flex: 1 1 auto; min-width: 0; max-width: var(--sidebar-label-max); display: flex; align-items: center; overflow: hidden; white-space: nowrap; transition: max-width var(--sidebar-motion) var(--sidebar-ease), opacity calc(var(--sidebar-motion) * .5) var(--sidebar-ease); }
+
+@keyframes sidebar-nav-pop {
+  0% { transform: scale(.82); }
+  58% { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+
+.sidebar-nav-count { min-width: 20px; height: 20px; box-sizing: border-box; display: inline-grid; place-items: center; margin-left: 8px; padding: 1px 6px 0; border-radius: 10px; color: #fff; background: #d85d55; font-size: 11px; font-variant-numeric: tabular-nums; line-height: 19px; text-align: center; }
+
+/* 그룹 제목. 접히면 글자가 사라지면서 얇은 구분선으로 녹아듭니다. */
+.sidebar-nav-heading {
+  position: relative;
+  height: 15px;
+  margin: 18px 12px 4px;
+  padding: 0;
+  overflow: visible;
+  border-radius: 999px;
+  color: #8585a3;
+  background: transparent;
+  font-size: 11px;
+  line-height: 15px;
+  letter-spacing: .12em;
+  white-space: nowrap;
+  transition: height var(--sidebar-motion) var(--sidebar-ease), margin var(--sidebar-motion) var(--sidebar-ease), color calc(var(--sidebar-motion) * .45) var(--sidebar-ease), background-color var(--sidebar-motion) var(--sidebar-ease);
+}
+/* 펼쳤을 때 그룹을 나누는 구분선. 글자 위 여백에 ::before로 그려 높이 접힘
+ * 애니메이션을 건드리지 않습니다. 접히면 제목 자체가 1px 선이 되므로 숨깁니다. */
+.sidebar-nav-heading::before { content: ""; position: absolute; left: 0; right: 0; top: -10px; height: 1px; border-radius: 999px; background: rgba(255, 255, 255, .10); transition: opacity var(--sidebar-motion) var(--sidebar-ease); }
+.sidebar-collapsed .sidebar-nav-heading::before { opacity: 0; }
+/* 마지막 nav 그룹을 바닥으로 밀어 붙입니다 */
+.sidebar-management-nav { margin-top: auto; }
+
+/* 푸터는 한 줄로만(nowrap) 흐릅니다. 펼쳐진 상태는 [아바타][이름][액션] 한 줄이고,
+ * 이름칸(flex:1 1 auto)이 폭 변화를 흡수합니다. wrap이면 접었다 펼치는 도중의
+ * 중간 폭에서 액션이 아랫줄로 감겼다가(2줄) 튀어 올라와 어색했습니다.
+ * 접힘 상태는 아래에서 flex-direction:column으로 따로 세웁니다. */
+.sidebar-footer { margin-top: 10px; display: flex; flex-wrap: nowrap; align-items: center; justify-content: center; gap: 10px; padding: 12px; border: 1px solid rgba(255,255,255,.09); border-radius: 12px; background: rgba(255,255,255,.055); box-shadow: 0 10px 24px rgba(0,0,0,.09); transition: padding var(--sidebar-motion) var(--sidebar-ease), gap var(--sidebar-motion) var(--sidebar-ease); }
+.sidebar-user-avatar { flex: 0 0 auto; display: grid; place-items: center; width: 36px; height: 36px; overflow: hidden; border-radius: 50%; color: #fff; background: var(--accent); }
+.sidebar-user-avatar:is(img) { object-fit: cover; }
+.sidebar-user-avatar svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.sidebar-user-copy { flex: 1 1 auto; min-width: 0; max-width: var(--sidebar-label-max); max-height: 40px; display: grid; gap: 2px; overflow: hidden; transition: max-width var(--sidebar-motion) var(--sidebar-ease), max-height var(--sidebar-motion) var(--sidebar-ease), opacity calc(var(--sidebar-motion) * .5) var(--sidebar-ease); }
+.sidebar-user-copy strong { overflow: hidden; color: #fff; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-user-copy small { color: #9c9cb8; font-size: 11px; white-space: nowrap; }
+.sidebar-user-actions { flex: 0 0 auto; display: flex; gap: 2px; transition: gap var(--sidebar-motion) var(--sidebar-ease); }
+.sidebar-icon-button { display: grid; place-items: center; width: 28px; height: 32px; padding: 0; border: 0; border-radius: 7px; color: #a0a0b9; background: transparent; transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease; }
+.sidebar-icon-button:hover, .sidebar-icon-button:focus-visible { color: #fff; background: rgba(255,255,255,.09); outline: none; }
+.sidebar-icon-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ── 접힘 ─────────────────────────────────────────────────────────────
+ * display:none을 쓰지 않습니다. 폭이 있는 것은 max-width/width를 0으로,
+ * 보이는 것은 opacity를 0으로 보내 폭 트랜지션과 같은 곡선을 타게 합니다. */
+.sidebar-collapsed .sidebar { width: var(--sidebar-width-collapsed); padding: 20px 12px; }
+.sidebar-collapsed .sidebar-brand { gap: 0; padding: 0 0 20px; }
+.sidebar-collapsed .sidebar-brand > span { width: 0; opacity: 0; }
+.sidebar-collapsed .sidebar-brand > strong { max-width: 0; opacity: 0; }
+.sidebar-collapsed .sidebar-slot { max-height: 0; margin-bottom: 0; padding-top: 0; padding-bottom: 0; opacity: 0; }
+.sidebar-collapsed .sidebar nav :is(a, button) { gap: 0; padding: 9px; }
+.sidebar-collapsed .sidebar nav :is(a, button) > span { max-width: 0; opacity: 0; }
+/* 접힘: footer를 가운데 정렬 세로 열로. 아바타·설정·로그아웃이 한 중심축에
+ * 고른 간격으로 정렬됩니다(전에는 flex-wrap이라 아바타 36px과 액션 28px의 중심이
+ * 어긋났고, 액션이 기본 gap 2px를 물려받아 너무 붙어 있었습니다). */
+.sidebar-collapsed .sidebar-footer { flex-direction: column; flex-wrap: nowrap; align-items: center; padding: 11px 5px; gap: 4px; }
+.sidebar-collapsed .sidebar-user-copy { max-width: 0; max-height: 0; margin: 0; opacity: 0; }
+.sidebar-collapsed .sidebar-user-actions { flex-direction: column; align-items: center; gap: 8px; }
+@media (min-width: 761px) {
+  .sidebar-collapsed .sidebar-nav-heading { height: 1px; margin: 14px 8px 9px; color: transparent; background: rgba(255, 255, 255, .13); }
+}
+
+.mobile-quick-bar, .mobile-sidebar-overlay { display: none; }
+
+@media (max-width: 760px), (hover: none) and (pointer: coarse) {
+  .app-shell, .app-shell.sidebar-collapsed { display: block; }
+  /* 모바일에서는 접힘 상태를 무시하고 항상 완전한 서랍으로 엽니다 */
+  .sidebar, .sidebar-collapsed .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 60;
+    width: min(310px, 86vw);
+    height: 100dvh;
+    padding: 22px 16px calc(18px + env(safe-area-inset-bottom));
+    overflow-y: auto;
+    transform: translateX(-105%);
+    box-shadow: 18px 0 48px rgba(14, 15, 31, .28);
+  }
+  .sidebar.mobile-open { transform: translateX(0); }
+  .sidebar-collapsed .sidebar-brand { gap: 10px; padding: 0 8px 24px; }
+  .sidebar-collapsed .sidebar-brand > span { width: 30px; opacity: 1; }
+  .sidebar-collapsed .sidebar-brand > strong { max-width: var(--sidebar-label-max); opacity: 1; }
+  .sidebar-collapsed .sidebar-slot { max-height: 240px; margin-bottom: 24px; padding: 13px; opacity: 1; }
+  .sidebar-collapsed .sidebar-user-copy { max-width: var(--sidebar-label-max); max-height: 40px; opacity: 1; }
+  .sidebar-collapsed .sidebar-nav-heading { height: 15px; margin: 18px 12px 4px; color: #8585a3; background: transparent; }
+  .sidebar-collapse-button { display: none; }
+  .mobile-sidebar-close { display: grid; }
+  .sidebar nav, .sidebar-collapsed .sidebar nav { display: grid; grid-template-columns: 1fr; }
+  .sidebar nav :is(a, button), .sidebar-collapsed .sidebar nav :is(a, button) { justify-content: flex-start; gap: 11px; padding: 9px 12px; }
+  .sidebar-collapsed .sidebar nav :is(a, button) > span { max-width: var(--sidebar-label-max); opacity: 1; }
+  .sidebar-management-nav, .sidebar-collapsed .sidebar-management-nav { margin-top: auto; }
+  /* 모바일은 접힘이 아니라 전체 폭 드로어라, 데스크톱 접힘의 세로 열을 되돌린다. */
+  .sidebar-footer, .sidebar-collapsed .sidebar-footer { position: sticky; bottom: 0; z-index: 1; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 10px; margin-top: 10px; padding: 12px; background: color-mix(in srgb, #18192c 92%, transparent); backdrop-filter: blur(14px); }
+  .sidebar-collapsed .sidebar-user-actions { flex-direction: row; gap: 2px; }
+  .mobile-sidebar-overlay { position: fixed; z-index: 55; inset: 0; display: block; width: 100%; padding: 0; border: 0; background: rgba(13, 14, 28, .5); backdrop-filter: blur(3px); }
+
+  .mobile-quick-bar {
+    position: fixed;
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    left: 50%;
+    z-index: 52;
+    width: 216px;
+    height: 60px;
+    display: grid;
+    grid-template-columns: repeat(3, 64px);
+    align-items: center;
+    gap: 4px;
+    padding: 4px 7px;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--line) 62%, transparent);
+    border-radius: 32px;
+    background: color-mix(in srgb, var(--surface) 22%, transparent);
+    box-shadow: 0 14px 34px rgba(8, 9, 24, .16);
+    backdrop-filter: blur(12px) saturate(130%);
+    -webkit-backdrop-filter: blur(12px) saturate(130%);
+    transform: translateX(-50%);
+    transition: opacity 160ms ease, transform 210ms cubic-bezier(.2, .8, .2, 1);
+  }
+  .mobile-quick-bar > button { width: 64px; min-width: 0; height: 50px; display: grid; place-items: center; align-content: center; gap: 2px; padding: 3px 6px; border: 0; border-radius: 25px; color: var(--muted); background: transparent; font-size: 12px; transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease; }
+  .mobile-quick-bar > button > span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-quick-bar > button:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .mobile-quick-bar > button.active {
+    color: #fff;
+    background: color-mix(in srgb, var(--accent) 30%, transparent);
+    box-shadow: 0 7px 18px color-mix(in srgb, var(--accent) 24%, transparent);
+    backdrop-filter: blur(10px) saturate(140%);
+    -webkit-backdrop-filter: blur(10px) saturate(140%);
+  }
+  .mobile-quick-bar > button.active svg { animation: sidebar-nav-pop 320ms cubic-bezier(.2, 1.12, .35, 1); }
+
+  /* 아래로 스크롤 중이거나 가상 키보드가 열리면 떠 있는 바를 내립니다 */
+  .app-shell.mobile-nav-hidden .mobile-quick-bar { opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(calc(100% + 32px)); }
+  .app-shell.mobile-nav-hidden .mobile-page-tabs-float { opacity: 0; pointer-events: none; transform: translateY(calc(100% + 32px)); }
+  .app-shell.mobile-keyboard-open .mobile-quick-bar { opacity: 0; visibility: hidden; pointer-events: none; transform: translateX(-50%) translateY(calc(100% + 32px)); }
+  .app-shell.mobile-keyboard-open .mobile-page-tabs-float { opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(calc(100% + 32px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .sidebar-brand, .sidebar-brand > span, .sidebar-brand > strong, .sidebar-collapse-button svg,
+  .sidebar-slot, .sidebar-nav-heading,
+  .sidebar nav :is(a, button), .sidebar nav :is(a, button)::before, .sidebar nav :is(a, button)::after,
+  .sidebar nav :is(a, button) > span,
+  .sidebar-footer, .sidebar-user-copy, .sidebar-user-actions,
+  .mobile-quick-bar { transition: none; }
+  .sidebar nav :is(a, button).active svg, .mobile-quick-bar > button.active svg { animation: none; }
+  .sidebar nav :is(a, button)::before { transform: none; }
+}

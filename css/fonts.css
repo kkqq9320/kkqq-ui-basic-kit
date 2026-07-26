@@ -1,0 +1,24 @@
+/* Pretendard Variable — 가변 폰트 한 벌로 45~920 굵기를 전부 덮습니다.
+ *
+ * 경로는 이 파일 기준 상대 경로입니다. Vite/webpack이 자동으로 번들·해시 처리합니다.
+ * 폰트를 웹 루트(/fonts/)에서 직접 서빙한다면 url()을 "/fonts/..."로 바꾸세요.
+ *
+ * tokens.css가 font-synthesis: none이라 브라우저가 가짜 볼드를 만들지 않습니다.
+ * 가변 폰트라 500·600·800·900이 전부 진짜 글리프로 나옵니다 — 굵기별 파일을
+ * 따로 둘 필요가 없습니다.
+ *
+ * 라이선스: SIL Open Font License 1.1 (fonts/OFL.txt). 재배포·웹임베딩 모두
+ * 허용되고, 조건은 이 라이선스 파일을 폰트와 함께 두는 것입니다.
+ * Copyright (c) 2021 Kil Hyung-jin, with Reserved Font Name Pretendard.
+ * https://github.com/orioncactus/pretendard
+ *
+ * 다른 폰트를 쓰려면 이 파일만 교체하고 tokens.css의 --font-family-base 첫
+ * 항목을 바꾸면 됩니다.
+ */
+@font-face {
+  font-family: "Pretendard Variable";
+  src: url("../fonts/PretendardVariable.woff2") format("woff2");
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+}
