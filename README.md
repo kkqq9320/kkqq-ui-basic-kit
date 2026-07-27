@@ -21,33 +21,87 @@
 
 ## 설치
 
-**1. 의존성으로 넣습니다.** 복사하지 마세요 — 복사본은 조용히 어긋납니다.
+**이 저장소는 비공개이므로, 키트는 프로젝트 안으로 복사해서 씁니다.** 그래야
+컨테이너·CI·다른 PC 어디서든 자격증명 없이 빌드됩니다.
+
+복사본은 조용히 어긋나기 때문에 원래 권하지 않던 방식입니다. 그 위험은
+아래 **동기화 절차와 `KIT-VERSION` 표시**가 대신 막습니다 — 어긋남을 막을 수
+없다면, 최소한 **눈에 보이게** 만듭니다.
+
+덤이 하나 있습니다. 복사하면 `PRINCIPLES.md`가 프로젝트 안에 함께 들어옵니다.
+Claude를 포함해 그 저장소에서 일하는 누구든 **저장소 접근 권한 없이 디자인 계약을
+읽을 수 있습니다.** 비공개 저장소를 의존성으로 걸었을 때는 불가능한 일입니다.
+
+**1. 키트를 `vendor/`로 복사합니다.**
 
 ```bash
-npm i github:kkqq9320/kkqq-ui-basic-kit
+KIT=/c/Users/JJ/Claude/kkqq-ui-basic-kit
+DEST=vendor/kkqq-ui-basic-kit
+
+rm -rf "$DEST" && mkdir -p "$DEST"
+cp -r "$KIT"/{src,css,fonts,package.json,PRINCIPLES.md,CUSTOMIZING.md,README.md,LICENSE} "$DEST"/
+git -C "$KIT" rev-parse HEAD > "$DEST/KIT-VERSION"
 ```
 
-같은 PC에서 키트를 함께 고쳐 가며 쓸 거라면 로컬 경로가 낫습니다. npm이 링크를
-걸어 주므로 키트를 고치면 곧바로 반영됩니다:
+복사 대상은 `package.json`의 `files`가 정하는 목록 그대로입니다. `demo/`,
+`tests/`, `vite.config.ts` 같은 개발용 파일은 넣지 않습니다.
 
-```bash
-npm i file:../kkqq-ui-basic-kit
+**2. 의존성으로 걸어 줍니다.** (`package.json`)
+
+```json
+"kkqq-ui-basic-kit": "file:vendor/kkqq-ui-basic-kit"
 ```
 
-**2. CSS를 한 번 import 합니다.** (앱 진입점)
+**3. CSS를 한 번 import 합니다.** (앱 진입점)
 
 ```ts
 import "kkqq-ui-basic-kit/css/index.css";
 ```
 
-**3. 컴포넌트를 씁니다.**
+**4. 컴포넌트를 씁니다.**
 
 ```tsx
 import { Select, DateWheelPicker, Dialog } from "kkqq-ui-basic-kit";
 ```
 
-끝입니다. `fonts/`의 TTF는 `css/fonts.css`가 상대 경로로 참조하므로 번들러가
+끝입니다. `fonts/`의 폰트는 `css/fonts.css`가 상대 경로로 참조하므로 번들러가
 알아서 해시·복사합니다.
+
+### 동기화 — 사본이 어긋나지 않게
+
+`KIT-VERSION`에는 복사 시점의 키트 커밋 SHA가 들어 있습니다. 이 파일은 **사본에만
+있고 키트 저장소에는 없습니다.**
+
+뒤처졌는지 확인:
+
+```bash
+diff <(cat vendor/kkqq-ui-basic-kit/KIT-VERSION) <(git -C "$KIT" rev-parse HEAD)
+```
+
+내용이 실제로 갈라졌는지 확인 (`KIT-VERSION`은 사본에만 있으므로 제외):
+
+```bash
+diff -r --exclude=KIT-VERSION "$KIT/src" vendor/kkqq-ui-basic-kit/src
+diff -r "$KIT/css" vendor/kkqq-ui-basic-kit/css
+```
+
+갱신은 위 **1번을 다시 실행**하면 됩니다.
+
+> ⚠️ **사본을 직접 고치지 마세요.** 고칠 일이 생기면 키트 저장소에서 고쳐 push
+> 하고 다시 복사합니다. 사본을 직접 고치면 다음 동기화 때 조용히 날아갑니다.
+> 프로젝트마다 달라야 하는 것은 대부분 프롭·CSS 토큰으로 해결됩니다 —
+> [CUSTOMIZING.md](CUSTOMIZING.md)를 먼저 보세요.
+
+> **같은 PC에서 키트를 함께 고쳐 가며 쓸 때**는 복사 대신 로컬 링크가 낫습니다.
+> 자격증명이 필요 없고, 키트를 고치면 곧바로 반영됩니다:
+>
+> ```bash
+> npm i file:../kkqq-ui-basic-kit
+> ```
+>
+> `npm i github:kkqq9320/kkqq-ui-basic-kit`도 동작하지만 저장소가 비공개라
+> **설치하는 모든 환경에 GitHub 자격증명이 필요**합니다. 도커 빌드처럼
+> 자격증명이 없는 환경에서 실패하므로 기본 경로에서 뺐습니다.
 
 > **Vite 기준입니다.** 소스(`.tsx`)를 그대로 내보내므로, `node_modules` 안의
 > TypeScript를 컴파일하지 않는 번들러(기본 설정의 Next.js, CRA 등)에서는
@@ -395,8 +449,10 @@ npm run typecheck   # tsc --noEmit
 
 Claude가 모든 프로젝트에서 이 원칙을 자동으로 적용하게 하는 **트리거 스킬은
 `kkqq9320/claude-skills` 마켓플레이스**에 있습니다(`kkqq-ui-basic-kit` 스킬).
-여기 소스를 복사하지 않고, 그 스킬이 이 저장소의 `PRINCIPLES.md`를 가리키기만
-합니다 — 원칙의 단일 출처는 이 저장소입니다.
+스킬은 소스를 담지 않고 `PRINCIPLES.md`를 가리키기만 합니다 — 원칙의 단일
+출처는 이 저장소입니다. 벤더링한 프로젝트에서는 그 사본의
+`vendor/kkqq-ui-basic-kit/PRINCIPLES.md`가 읽히므로, 이 저장소에 접근하지 못하는
+환경에서도 계약은 그대로 전달됩니다.
 
 > ℹ️ 그 마켓플레이스 저장소는 **비공개**라 아래 명령은 접근 권한이 있어야
 > 동작합니다. 이 키트 자체를 쓰는 데는 필요 없습니다 — 위 "설치"만 따르면 됩니다.
@@ -412,7 +468,7 @@ claude plugin install kkqq-skills@kkqq
 ## 출처
 
 모든 파일 상단에 원본 파일과 줄 번호를 주석으로 남겼습니다. 가계부 앱은 이제
-이 저장소를 의존성으로 씁니다 — 색상 편집기와 토큰은 여기 것을 그대로 부르고,
+이 키트를 `vendor/`로 복사해 씁니다 — 색상 편집기와 토큰은 여기 것을 그대로 부르고,
 다이얼로그·드롭다운·날짜 피커는 아직 앱이 자기 클래스 이름(`.account-edit-*`,
 `.app-select-*`)으로 CSS를 쌓아 둔 탓에 앱 쪽 사본이 남아 있습니다.
 클래스 이름을 이쪽으로 모으는 것이 남은 일입니다.
