@@ -38,6 +38,27 @@ function estimateMenuHeight(optionCount: number) {
   return Math.min(optionCount * 34 + 12, 320);
 }
 
+/**
+ * 메뉴가 열릴 때 선택된 옵션이 보이도록 **메뉴 자신의 scrollTop만** 옮깁니다.
+ * `Element.scrollIntoView()`는 조상 스크롤 컨테이너까지 함께 움직여 다이얼로그
+ * 뒤 페이지가 튀므로 쓰지 않습니다 — `restoreFocusWithoutScroll`과 같은 이유입니다.
+ *
+ * 선택이 없으면(placeholder) 손대지 않습니다. 이미 첫 화면 안에 보이면 점프시키지
+ * 않습니다 — 안 움직이는 편이 낫습니다. 그 외에는 옵션이 화면 가운데 오도록 옮기되
+ * 목록 끝을 넘어가지 않게 자릅니다. 34px은 추정치라 실제 높이를 잽니다.
+ */
+function scrollSelectedOptionIntoView(menu: HTMLDivElement) {
+  const selectedOption = menu.querySelector<HTMLElement>('[aria-selected="true"]');
+  if (!selectedOption) return;
+  const menuHeight = menu.clientHeight;
+  const optionTop = selectedOption.offsetTop;
+  const optionBottom = optionTop + selectedOption.offsetHeight;
+  if (optionTop >= menu.scrollTop && optionBottom <= menu.scrollTop + menuHeight) return;
+  const maxScrollTop = Math.max(0, menu.scrollHeight - menuHeight);
+  const centered = optionTop - (menuHeight - selectedOption.offsetHeight) / 2;
+  menu.scrollTop = Math.min(Math.max(0, centered), maxScrollTop);
+}
+
 type MenuPosition = { top: number; left: number; width: number; maxHeight: number };
 
 export function Select({ value, options, onChange, ariaLabel, placeholder = "선택하세요", align = "left", className = "", disabled = false, portal = false, mobileBottomInset = 78 }: SelectProps) {
@@ -48,6 +69,7 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const selectionScrollRef = useRef<ScrollSnapshot>([]);
+  const scrolledToSelectionRef = useRef(false);
   const selected = options.find((option) => option.value === value);
   // 뒤로가기로 메뉴만 닫습니다. 표식이 스택이라, 다이얼로그 안에서 열린 메뉴는
   // 뒤로가기 한 번에 메뉴만 닫히고 다이얼로그는 남습니다. 이게 없으면 뒤로가기가
@@ -105,6 +127,20 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
       window.visualViewport?.removeEventListener("resize", placeMenu);
     };
   }, [open, options.length, portal, mobileBottomInset]);
+
+  // 메뉴가 열릴 때 딱 한 번 선택된 옵션으로 스크롤합니다. portal 모드는 position이
+  // 정해지기 전엔 메뉴가 DOM에 없으므로(위 이펙트가 커밋된 뒤에야 마운트) position도
+  // 의존성에 넣어 다시 시도합니다. scrolledToSelectionRef가 없으면, 열려 있는 동안
+  // 스크롤·리사이즈로 position이 재계산될 때마다(포털은 매번 새 객체를 만듭니다)
+  // 사용자가 메뉴 안에서 직접 스크롤한 걸 되돌려버립니다.
+  useLayoutEffect(() => {
+    if (!open) { scrolledToSelectionRef.current = false; return; }
+    if (scrolledToSelectionRef.current) return;
+    const menu = menuRef.current;
+    if (!menu) return;   // portal: position이 아직 없어 메뉴가 마운트되지 않음
+    scrolledToSelectionRef.current = true;
+    scrollSelectedOptionIntoView(menu);
+  }, [open, position]);
 
   function choose(nextValue: string) {
     const scrollSnapshot = selectionScrollRef.current.length ? selectionScrollRef.current : captureScrollSnapshot();
