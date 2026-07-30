@@ -144,7 +144,7 @@
  * 이름칸(flex:1 1 auto)이 폭 변화를 흡수합니다. wrap이면 접었다 펼치는 도중의
  * 중간 폭에서 액션이 아랫줄로 감겼다가(2줄) 튀어 올라와 어색했습니다.
  * 접힘 상태는 아래에서 flex-direction:column으로 따로 세웁니다. */
-.sidebar-footer { margin-top: 10px; display: flex; flex-wrap: nowrap; align-items: center; justify-content: center; gap: 10px; padding: 12px; border: 1px solid rgba(255,255,255,.09); border-radius: 12px; background: rgba(255,255,255,.055); box-shadow: 0 10px 24px rgba(0,0,0,.09); transition: padding var(--sidebar-motion) var(--sidebar-ease), gap var(--sidebar-motion) var(--sidebar-ease); }
+.sidebar-footer { margin-top: 10px; display: flex; flex-wrap: nowrap; align-items: center; justify-content: center; gap: 10px; height: var(--sidebar-footer-height); overflow: hidden; padding: 12px; border: 1px solid rgba(255,255,255,.09); border-radius: 12px; background: rgba(255,255,255,.055); box-shadow: 0 10px 24px rgba(0,0,0,.09); transition: height var(--sidebar-motion) var(--sidebar-ease), padding var(--sidebar-motion) var(--sidebar-ease), gap var(--sidebar-motion) var(--sidebar-ease); }
 .sidebar-user-avatar { flex: 0 0 auto; display: grid; place-items: center; width: 36px; height: 36px; overflow: hidden; border-radius: 50%; color: #fff; background: var(--accent); }
 .sidebar-user-avatar:is(img) { object-fit: cover; }
 .sidebar-user-avatar svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
@@ -169,7 +169,7 @@
 /* 접힘: footer를 가운데 정렬 세로 열로. 아바타·설정·로그아웃이 한 중심축에
  * 고른 간격으로 정렬됩니다(전에는 flex-wrap이라 아바타 36px과 액션 28px의 중심이
  * 어긋났고, 액션이 기본 gap 2px를 물려받아 너무 붙어 있었습니다). */
-.sidebar-collapsed .sidebar-footer { flex-direction: column; flex-wrap: nowrap; align-items: center; padding: 11px 5px; gap: 4px; }
+.sidebar-collapsed .sidebar-footer { flex-direction: column; flex-wrap: nowrap; align-items: center; height: var(--sidebar-footer-height-collapsed); padding: 11px 5px; gap: 4px; }
 .sidebar-collapsed .sidebar-user-copy { max-width: 0; max-height: 0; margin: 0; opacity: 0; }
 .sidebar-collapsed .sidebar-user-actions { flex-direction: column; align-items: center; gap: 8px; }
 @media (min-width: 761px) {
@@ -206,7 +206,7 @@
   .sidebar-collapsed .sidebar nav :is(a, button) > span { max-width: var(--sidebar-label-max); opacity: 1; }
   .sidebar-management-nav, .sidebar-collapsed .sidebar-management-nav { margin-top: auto; }
   /* 모바일은 접힘이 아니라 전체 폭 드로어라, 데스크톱 접힘의 세로 열을 되돌린다. */
-  .sidebar-footer, .sidebar-collapsed .sidebar-footer { position: sticky; bottom: 0; z-index: 1; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 10px; margin-top: 10px; padding: 12px; background: color-mix(in srgb, #18192c 92%, transparent); backdrop-filter: blur(14px); }
+  .sidebar-footer, .sidebar-collapsed .sidebar-footer { position: sticky; bottom: 0; z-index: 1; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 10px; height: auto; margin-top: 10px; padding: 12px; background: color-mix(in srgb, #18192c 92%, transparent); backdrop-filter: blur(14px); }
   .sidebar-collapsed .sidebar-user-actions { flex-direction: row; gap: 2px; }
   .mobile-sidebar-overlay { position: fixed; z-index: 55; inset: 0; display: block; width: 100%; padding: 0; border: 0; background: rgba(13, 14, 28, .5); backdrop-filter: blur(3px); }
 

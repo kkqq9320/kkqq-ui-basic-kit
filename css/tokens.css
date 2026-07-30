@@ -51,6 +51,8 @@
    * 폭·패딩·라벨·구분선이 모두 같은 리듬을 탑니다. */
   --sidebar-width: 238px;
   --sidebar-width-collapsed: 76px;
+  --sidebar-footer-height: 63px;
+  --sidebar-footer-height-collapsed: 140px;
   --sidebar-motion: 260ms;
   --sidebar-ease: cubic-bezier(.32, .72, 0, 1);
   --sidebar-label-max: 220px;
