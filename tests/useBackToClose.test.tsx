@@ -20,6 +20,15 @@ const STACK_KEY = "__dsPopupStack";
 // 보고서의 "Fix: scrollRestoration never released" 참고)를 이 no-op은 전혀 잡아내지
 // 못했다 — 코드가 popstate "전"에 되돌리든 "후"에 되돌리든 no-op 아래에서는 구분이
 // 안 됐기 때문이다. 실제 이벤트 순서를 흉내 내야 그 버그가 되살아나면 테스트가 잡는다.
+//
+// 주의: 이 파일의 모든 테스트는 이제 이 기본값을 통해 "진짜 내비게이션"을 겪는다 —
+// back()을 부르면 정말로 state가 바뀌고 정말로 popstate가 온다. 지금은 이 파일에서
+// history.scrollRestoration 스텁을 설치하는 건 B1 describe 블록뿐이고, 그 블록의
+// 테스트들은 이 기본 동작을 스스로 재정의해 가며 정확한 타이밍(진짜 시간차, 언마운트
+// 등)을 만든다. 앞으로 이 파일에 스텁을 설치하는 테스트를 새로 추가한다면, 이 기본
+// backSpy가 실제로 popstate를 쏜다는 것과, 그 popstate가 (스텁이 설치돼 있다면)
+// scrollRestoration의 claim/release 리스너도 건드릴 수 있다는 걸 염두에 둬야 한다 —
+// 더 이상 부작용 없는 no-op이 아니다.
 let backSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
@@ -254,6 +263,190 @@ describe("B1: 킷 팝업이 열린 동안만 scrollRestoration을 manual로 바�
     act(() => { vi.advanceTimersByTime(1); });
 
     expect(order).toEqual(["navigate", "set:auto"]);
+  });
+
+  it("back()과 popstate 사이의 진짜 시간차 동안 다른 팝업이 열리면, 그동안은 복원되지 않는다", () => {
+    // 리뷰로 잡은 회귀(Fix 2): { once: true }로 무조건 한 번 반응하는 리스너는 popstate가
+    // 오기만 하면 스택이 진짜 비었는지 안 보고 되돌려 버렸다. history.back()은 비동기라
+    // 호출과 popstate 도착 사이에 진짜 시간차가 있고, 그 사이 다른 팝업이 열리는 건
+    // 터치에서는 흔한 경우지 예외가 아니다(B2와 같은 종류의 경쟁). 이 테스트는 그
+    // 시간차를 실제로 만든다: back() 호출과 popstate 디스패치를 분리해서, 그 사이에
+    // 두 번째 팝업을 진짜로 연다.
+    vi.useFakeTimers();
+    const stub = installScrollRestorationStub("auto");
+
+    // back()을 진짜 "비동기"로 흉내 낸다: 호출 즉시 popstate를 쏘지 않고, 나중에
+    // fireQueuedPopState()를 명시적으로 불러야만 착지하도록 미룬다. 목적지(state)도
+    // 호출 시점이 아니라 착지 시점에 계산한다 — 실제 브라우저에서 back()은 "지금부터
+    // 한 칸"이 아니라 "실제로 처리될 때의 current 기준 한 칸"이기 때문에, 그 사이
+    // 우리가 pushState를 하면(바로 이 테스트가 재현하는 상황) 목적지가 달라진다.
+    let fireQueuedPopState: (() => void) | null = null;
+    backSpy.mockImplementation(() => {
+      fireQueuedPopState = () => {
+        const remaining = stack().slice(0, -1);
+        const state = remaining.length ? { [STACK_KEY]: remaining } : null;
+        window.history.replaceState(state, "");
+        window.dispatchEvent(new PopStateEvent("popstate", { state }));
+      };
+    });
+
+    function TwoDialogs() {
+      const [a, setA] = useState(true);
+      const [b, setB] = useState(false);
+      return <>
+        <Dialog open={a} onClose={() => setA(false)} ariaLabel="첫째">
+          <button type="button" onClick={() => setA(false)}>첫째닫기</button>
+        </Dialog>
+        <button type="button" onClick={() => setB(true)}>둘째열기</button>
+        <Dialog open={b} onClose={() => setB(false)} ariaLabel="둘째">
+          <button type="button" onClick={() => setB(false)}>둘째닫기</button>
+        </Dialog>
+      </>;
+    }
+
+    render(<TwoDialogs />);
+    expect(stub.value).toBe("manual");
+
+    // 첫째를 버튼으로 닫는다 — 정리 단계가 지연된 back()을 예약한다.
+    fireEvent.click(screen.getByRole("button", { name: "첫째닫기" }));
+    act(() => { vi.advanceTimersByTime(1); });   // 예약된 back()이 "불리는" 시점
+
+    expect(fireQueuedPopState).not.toBeNull();   // back()은 불렸다
+    expect(stub.value).toBe("manual");           // 하지만 popstate는 아직 안 왔다 — 진짜 시간차
+
+    // ★ 바로 이 틈에서 둘째를 연다.
+    fireEvent.click(screen.getByRole("button", { name: "둘째열기" }));
+    expect(screen.getByRole("dialog", { name: "둘째" })).toBeTruthy();
+    expect(stub.value).toBe("manual");
+
+    // 이제서야 첫째의 back()이 실제로 착지했다는 popstate가 온다. 착지한 항목의 state는
+    // (실제 브라우저처럼) 착지 시점의 스택 기준으로 계산되므로 둘째의 표식을 여전히
+    // 담고 있을 수 있다 — 어느 쪽이든 이 시점에 스택이 완전히 빈 게 아니라면 절대로
+    // 되돌리면 안 된다는 게 핵심이다.
+    act(() => { fireQueuedPopState!(); });
+
+    // 핵심 단정: 고쳐지기 전 코드({once:true}, 무조건 되돌림)는 여기서 stub.value를
+    // "auto"로 만들어 버렸다(회귀). 고쳐진 코드는 popstate의 실제 state를 다시 확인해
+    // 아직 스택이 안 비었으면 기다려야 한다.
+    expect(stub.value).toBe("manual");
+
+    // 착지한 state({stack:[A]})에 둘째의 표식이 없으므로, 둘째는 이 popstate 한 번으로
+    // (이미 존재하는 handlePopState 메커니즘을 통해) 화면에서 닫힌다 — B2와 같은 종류의
+    // 경쟁이 만드는, 이미 알려진 부수 효과다(다이얼로그가 실제로는 그대로 있어야 하는지는
+    // 이 B1 회귀와 별개 문제이고 여기서 다루지 않는다). 첫째의 표식만 "죽은 채" 남는다 —
+    // 정확히 87b58b5가 이미 문서화한 "죽은 history 항목" 트레이드오프와 같은 모양이다.
+    expect(screen.queryByRole("dialog", { name: "둘째" })).toBeNull();
+
+    // 드레인: 죽은 첫째 표식은 물리적 뒤로가기 한 번으로 소비된다(§10에 이미 문서화된
+    // 트레이드오프와 동일한 메커니즘) — 그래야 스택이 완전히 비고, 그제서야 복원된다.
+    pressBack();
+    expect(stack()).toHaveLength(0);
+    expect(stub.value).toBe("auto");
+  });
+
+  it("대기 중인 release 리스너는 묻힌 표식 제거(replaceState, popstate 없음)에 영향받지 않는다", () => {
+    // 87b58b5의 "묻힌 표식" 경로(맨 위가 아니면 back() 대신 replaceState만 한다)는
+    // popstate를 아예 쏘지 않는다. 그 사이 다른 팝업(D)이 "마지막으로 닫히는 중"이라
+    // release 리스너가 대기하고 있어도, 이 경로는 그 리스너와 아무 상호작용이 없어야
+    // 한다 — 리스너를 건드리지도, 잘못 풀리게 하지도 않는다.
+    vi.useFakeTimers();
+    const stub = installScrollRestorationStub("auto");
+
+    let fireQueuedPopState: (() => void) | null = null;
+    backSpy.mockImplementation(() => {
+      fireQueuedPopState = () => {
+        const remaining = stack().slice(0, -1);
+        const state = remaining.length ? { [STACK_KEY]: remaining } : null;
+        window.history.replaceState(state, "");
+        window.dispatchEvent(new PopStateEvent("popstate", { state }));
+      };
+    });
+
+    function Popups() {
+      const [d, setD] = useState(true);
+      const [a, setA] = useState(false);
+      const [b, setB] = useState(false);
+      return <>
+        <Dialog open={d} onClose={() => setD(false)} ariaLabel="D"><button type="button" onClick={() => setD(false)}>D닫기</button></Dialog>
+        <button type="button" onClick={() => setA(true)}>A열기</button>
+        <Dialog open={a} onClose={() => setA(false)} ariaLabel="A"><button type="button" onClick={() => setA(false)}>A닫기</button></Dialog>
+        <button type="button" onClick={() => setB(true)}>B열기</button>
+        <Dialog open={b} onClose={() => setB(false)} ariaLabel="B"><span>B내용</span></Dialog>
+      </>;
+    }
+
+    render(<Popups />);
+    expect(stub.value).toBe("manual");
+
+    // D를 닫아 "마지막 팝업 닫힘" release 리스너를 건다 — popstate는 아직 안 왔다(대기 중).
+    fireEvent.click(screen.getByRole("button", { name: "D닫기" }));
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(fireQueuedPopState).not.toBeNull();
+    expect(stub.value).toBe("manual");
+
+    // 이 대기 상태에서 A, B를 연다(스택 = [D, A, B]). A를 버튼으로 닫으면 A는 맨 위(B)가
+    // 아니므로 묻힌 표식 경로를 탄다 — replaceState만, popstate는 없다.
+    fireEvent.click(screen.getByRole("button", { name: "A열기" }));
+    fireEvent.click(screen.getByRole("button", { name: "B열기" }));
+    expect(stack()).toHaveLength(3);
+
+    fireEvent.click(screen.getByRole("button", { name: "A닫기" }));
+    act(() => { vi.advanceTimersByTime(1); });   // A의 정리 단계 — 묻힌 표식이라 replaceState만
+
+    expect(stack()).toHaveLength(2);   // A만 빠졌다
+    // 핵심 단정: popstate가 한 번도 안 왔으므로 D의 release 리스너는 아무 영향을 안 받았다.
+    expect(stub.value).toBe("manual");
+
+    // 드레인: D의 지연된 back()이 마침내 착지한다. 그 시점의 스택([D,B]) 기준으로 목적지를
+    // 계산하므로 [D]에 착지한다 — B는 이 popstate로 화면에서 닫히고(위 테스트와 같은
+    // 부수 효과), D의 표식만 죽은 채 남는다.
+    act(() => { fireQueuedPopState!(); });
+    expect(stub.value).toBe("manual");   // 아직 D 하나 남아 있다
+
+    pressBack();
+    expect(stack()).toHaveLength(0);
+    expect(stub.value).toBe("auto");
+  });
+
+  it("컴포넌트가 popstate 도착 전에 언마운트돼도 release는 정상적으로 일어난다", () => {
+    // "popstate가 영영 안 온다"는 실제 브라우저에는 없는 상황이다 — history.back()은
+    // 같은 문서 안의 항목 이동이면 반드시 popstate를 쏜다. 진짜로 있을 수 있는 상황은
+    // "그 popstate가 오기 전에 리액트 컴포넌트가 사라진다"이다. release 리스너는 리액트
+    // effect cleanup이 아니라 모듈 스코프의 순수 window 리스너(scheduleReleaseOnDrain)라
+    // 리액트 생애주기와 무관하다 — 그래서 컴포넌트가 통째로 사라진 뒤에 popstate가
+    // 뒤늦게 도착해도 정상적으로 동작해야 한다.
+    vi.useFakeTimers();
+    const stub = installScrollRestorationStub("auto");
+
+    // back()을 지연시켜(fireQueuedPopState) 그 사이에 컴포넌트를 언마운트할 시간을 번다.
+    let fireQueuedPopState: (() => void) | null = null;
+    backSpy.mockImplementation(() => {
+      fireQueuedPopState = () => {
+        const remaining = stack().slice(0, -1);
+        const state = remaining.length ? { [STACK_KEY]: remaining } : null;
+        window.history.replaceState(state, "");
+        window.dispatchEvent(new PopStateEvent("popstate", { state }));
+      };
+    });
+
+    const { unmount } = render(<Harness />);
+    expect(stub.value).toBe("manual");
+
+    fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+    act(() => { vi.advanceTimersByTime(1); });   // release 리스너가 걸린다 — popstate는 아직 안 왔다
+    expect(fireQueuedPopState).not.toBeNull();
+    expect(stub.value).toBe("manual");
+
+    unmount();   // 리액트 트리가 통째로 사라진다. release 리스너는 window에 달려 있어
+    // 리액트 생애주기와 무관하므로 그대로 살아 있다. popstate는 여전히 안 왔다.
+    expect(stub.value).toBe("manual");
+
+    // popstate가 뒤늦게 (컴포넌트가 이미 사라진 뒤에) 도착한다 — 실제 브라우저라면 이건
+    // back()을 부른 이상 반드시 일어난다. 리액트가 없어도 release는 정상 동작해야 한다.
+    act(() => { fireQueuedPopState!(); });
+
+    expect(stub.value).toBe("auto");
+    expect(stack()).toHaveLength(0);
   });
 
   it("앱이 이미 manual로 둔 경우에도 manual로 남는다 (auto로 하드코딩하지 않는다)", () => {

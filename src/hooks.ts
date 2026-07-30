@@ -72,6 +72,35 @@ function releaseScrollRestoration() {
   savedScrollRestoration = null;
 }
 
+/** 마지막 표식이 back()으로 지워지는 걸 기다리는 popstate 리스너. 한 번에 하나만
+ * 존재합니다(모듈 스코프) — 대기 중인 게 있으면 새로 걸기 전에 먼저 걷어냅니다. B2와
+ * 같은 종류의 경쟁(back() 호출과 popstate 도착 사이의 진짜 시간차 동안 다른 팝업이
+ * 열리는 것) 때문에 존재합니다. 자세한 이유는 아래 useBackToClose 문서의 B1 항목. */
+let pendingReleaseOnDrain: ((event: PopStateEvent) => void) | null = null;
+
+function cancelPendingReleaseOnDrain() {
+  if (!pendingReleaseOnDrain) return;
+  window.removeEventListener("popstate", pendingReleaseOnDrain);
+  pendingReleaseOnDrain = null;
+}
+
+/** back()이 스택을 실제로 비울 "때까지" 기다렸다가만 되돌립니다. { once: true }로 무조건
+ * 한 번 반응하면 안 됩니다 — back()과 popstate 사이에 다른 팝업이 열려 표식이 다시
+ * 쌓이면, 그 popstate는 아직 스택이 안 빈 상태로 옵니다. 그때 무조건 되돌리면 그 팝업이
+ * 열려 있는 동안 scrollRestoration이 auto로 풀려 버립니다(원래 스크롤 점프 버그가
+ * 되살아남). readStack은 호출한 쪽(stackKey를 아는 useBackToClose 인스턴스)이 넘겨줍니다. */
+function scheduleReleaseOnDrain(readStack: (state: unknown) => string[]) {
+  cancelPendingReleaseOnDrain();
+  const listener = (event: PopStateEvent) => {
+    if (readStack(event.state).length !== 0) return;   // 아직 다른 팝업이 남아 있다 — 계속 기다린다
+    window.removeEventListener("popstate", listener);
+    pendingReleaseOnDrain = null;
+    releaseScrollRestoration();
+  };
+  pendingReleaseOnDrain = listener;
+  window.addEventListener("popstate", listener);
+}
+
 /**
  * 뒤로가기로 팝업을 닫습니다. 열릴 때 history에 표식을 push 해 두고, popstate에서
  * 그 표식이 사라졌으면 닫습니다. 그래서 뒤로가기가 뒤 페이지로 가는 대신 팝업만
@@ -130,12 +159,26 @@ function releaseScrollRestoration() {
  * 증상으로 관측됩니다). `back()`이 실제로 이전 항목을 current로 만든 뒤에만 되돌려야
  * 하고, 그 완료 신호는 `popstate`뿐입니다. 그래서 스택이 비는 두 경로 모두 되돌리는
  * 지점이 "popstate 핸들러 안"이라는 하나의 규칙으로 통일됩니다: (1) 이 훅이 직접
- * back()을 부르는 경우 — 스택 길이가 1(자기 자신만 남음)일 때만, `back()`을 부르기
- * 직전에 한 번만 반응하는 `popstate` 리스너를 걸어 두고, 그 리스너 안에서 되돌립니다.
- * (2) 사용자가 물리적 뒤로가기를 눌러 popstate가 오는 경우 — handlePopState에서 그
- * 이벤트의 state가 이미 빈 스택인지 확인해서, 역시 popstate 핸들러 "안에서" 되돌립니다.
- * 묻힌 표식을 replaceState로 걷어내는 경로(위 주석)는 스택을 절대 비우지 않으므로
- * (위에 뭔가 남아 있을 때만 타는 경로) 여기서는 손대지 않습니다. history.scrollRestoration이
+ * back()을 부르는 경우 — 스택 길이가 1(자기 자신만 남음)일 때만 `scheduleReleaseOnDrain`으로
+ * popstate 리스너를 걸어 둡니다. (2) 사용자가 물리적 뒤로가기를 눌러 popstate가 오는
+ * 경우 — handlePopState에서 그 이벤트의 state가 이미 빈 스택인지 확인해서, 역시
+ * popstate 핸들러 "안에서" 되돌립니다.
+ *
+ * (1)의 리스너는 **`{ once: true }`로 무조건 한 번 반응하면 안 됩니다** — 리뷰로 잡은
+ * 두 번째 회귀입니다. `back()`은 비동기라 호출과 popstate 도착 사이에 진짜 시간차가
+ * 있고(B2와 같은 종류의 경쟁 — near-simultaneous 팝업 전환은 터치에서는 흔한 경우지
+ * 예외가 아닙니다), 그 사이 다른 팝업이 열려 표식을 다시 쌓을 수 있습니다. 그러면 이
+ * back()이 마침내 착지했을 때 오는 popstate는 아직 스택이 안 빈 채로 옵니다 — 그때
+ * 무조건 되돌리면 방금 열린 팝업이 떠 있는 동안 scrollRestoration이 풀려 스크롤 점프
+ * 버그가 되살아납니다. `scheduleReleaseOnDrain`은 popstate가 올 때마다
+ * `readStack(event.state).length === 0`을 다시 확인해, 진짜 0이 될 때까지 리스너를
+ * 유지합니다(handlePopState의 재확인과 대칭). 대기 중인 리스너는 모듈 스코프에 하나만
+ * 두고(`pendingReleaseOnDrain`), 새로 걸기 전에 이전 것을 먼저 걷어냅니다 — 컴포넌트가
+ * popstate 도착 전에 언마운트돼도(더 이상 자기 effect cleanup을 부를 기회가 없어도)
+ * 다음 "마지막 팝업이 닫히는" 사이클이 알아서 정리하고, 그때까지는 그냥 계속 기다릴
+ * 뿐이라 잘못된 시점에 풀리는 일은 없습니다. 묻힌 표식을 replaceState로 걷어내는
+ * 경로(위 주석)는 popstate를 아예 쏘지 않고 스택을 절대 비우지도 않으므로(위에 뭔가
+ * 남아 있을 때만 타는 경로) 이 리스너와 아무 상호작용이 없습니다. history.scrollRestoration이
  * 없는 환경(구형·비표준)도 있으므로 항상 존재를 확인한 뒤에만 손댑니다.
  */
 export function useBackToClose(open: boolean, onClose: () => void, stackKey = "__dsPopupStack") {
@@ -180,7 +223,15 @@ export function useBackToClose(open: boolean, onClose: () => void, stackKey = "_
           // claimScrollRestoration() 때 이미 "manual"로 얼어붙은 채였고, back()이 실제로
           // 그 항목에 착지한 뒤에도 여전히 manual로 남는다. popstate는 그 항목이 진짜
           // current가 된 뒤에만 오므로, 되돌리는 일은 그 popstate 핸들러 안에서 해야 한다.
-          if (current.length === 1) window.addEventListener("popstate", releaseScrollRestoration, { once: true });
+          //
+          // { once: true }로 무조건 한 번 반응하면 또 안 된다 — back()은 비동기라 호출과
+          // popstate 도착 사이에 진짜 시간차가 있고, 그 사이 다른 팝업이 열려 표식을 다시
+          // 쌓을 수 있다(B2와 같은 종류의 경쟁). 그러면 이 back()이 마침내 착지했을 때 오는
+          // popstate는 아직 스택이 비지 않은 채로 온다. 그때 무조건 되돌리면 방금 열린
+          // 팝업이 떠 있는 동안 scrollRestoration이 풀려 원래 스크롤 점프 버그가
+          // 되살아난다. scheduleReleaseOnDrain은 popstate가 올 때마다 실제 스택 길이를
+          // 다시 확인해, 진짜 0이 될 때까지 계속 기다린다.
+          if (current.length === 1) scheduleReleaseOnDrain(readStack);
           window.history.back();
           return;
         }
