@@ -98,6 +98,49 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
     return () => { document.removeEventListener("mousedown", closeOnOutside, true); };
   }, [open]);
 
+  // 스크롤로 트리거(앵커)가 화면에서 멀어지면 닫습니다 — DateWheelPicker와 같은
+  // 모양의 컨트롤인데 지금까지 동작이 달랐습니다(§16.4: 같은 모양은 같은 동작).
+  // DateWheelPicker의 "스크롤에 닫힌다"는 실은 바깥 닫기를 pointerdown으로 판정하는
+  // 데서 온 부수 효과였습니다 — 터치가 스크롤로 이어지더라도 반드시 pointerdown
+  // (터치 시작)이 먼저 오므로, 스크롤을 "시작하는 순간" 우연히 닫힙니다(라이브
+  // 브라우저로 확인: 데스크톱 wheel-스크롤로는 전혀 안 닫히고, 스크롤 없이
+  // pointerdown 하나만 쏴도 닫힙니다). Select는 바깥 닫기를 mousedown으로 판정하는데
+  // 스크롤로 이어지는 터치는 브라우저가 합성 mousedown/click을 만들지 않아 이
+  // 부작용이 없었습니다 — 즉 pointerdown이 정답이 아니라 우연이었고, 여기서는 실제
+  // 스크롤 판정을 명시적으로 둡니다.
+  //
+  // "아무 스크롤이나 오면 닫기"로 하지 않고 트리거의 실제 위치(rect)가 열었을 때와
+  // 달라졌는지로 판정합니다. 무조건 닫으면, 메뉴가 열리는 순간 브라우저가 트리거를
+  // 화면 안으로 스스로 스크롤시키는 경우(예: 포커스 이동에 따른 스크롤) 열리자마자
+  // 스스로 닫혀 버릴 수 있습니다 — "앵커가 화면에서 멀어졌다"를 문자 그대로 판정하면
+  // 이 문제를 피하면서 §7의 요구("앵커가 스크롤로 멀어진 앵커드 팝업은 남으면 안
+  // 된다")도 그대로 만족합니다. 기준선은 메뉴가 열린 시점에 한 번만 잽니다.
+  //
+  // scroll은 버블되지 않으므로 document에 capture로 붙입니다 — 모바일에서는 #root가
+  // 스크롤 호스트라(tokens.css:101-107) 버블 리스너로는 못 잡지만, capture 페이즈는
+  // window→document→...→#root(타깃)까지 내려가며 호출되므로 document의 capture
+  // 리스너가 #root 스크롤도, 데스크톱 document 스크롤도 모두 잡습니다 — 바로 아래
+  // placeMenu 리스너가 이미 같은 전제로 재배치를 하고 있는 것과 같습니다.
+  //
+  // menuRef 쪽 스크롤(옵션 목록을 손으로 스크롤하거나 열릴 때 선택 항목으로 맞추는
+  // 스크롤)은 트리거 rect를 바꾸지 않으므로 이 판정에서 자연히 걸러지지만, 불필요한
+  // rect 계산을 피하려고 미리 걸러 둡니다.
+  useEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const anchorRect = triggerRef.current.getBoundingClientRect();
+    const anchorTop = anchorRect.top;
+    const anchorLeft = anchorRect.left;
+    function closeIfAnchorMoved(event: Event) {
+      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      if (Math.abs(rect.top - anchorTop) > 1 || Math.abs(rect.left - anchorLeft) > 1) setOpen(false);
+    }
+    document.addEventListener("scroll", closeIfAnchorMoved, true);
+    return () => { document.removeEventListener("scroll", closeIfAnchorMoved, true); };
+  }, [open]);
+
   // 아래 공간이 모자라면 위로 엽니다. 스크롤·리사이즈마다 다시 판단하고,
   // 포털일 때는 좌표까지 다시 계산합니다.
   useLayoutEffect(() => {
