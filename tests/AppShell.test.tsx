@@ -19,6 +19,7 @@ import { AppShell } from "../src/AppShell";
 afterEach(() => {
   cleanup();
   delete (window as { visualViewport?: unknown }).visualViewport;
+  delete (window as { matchMedia?: unknown }).matchMedia;
   document.querySelectorAll("[data-test-root]").forEach((node) => node.remove());
   document.querySelectorAll("[data-test-outside]").forEach((node) => node.remove());
 });
@@ -65,8 +66,58 @@ function stubRectBottom(element: HTMLElement, bottom: number) {
   });
 }
 
+/** stubRectBottom과 달리 스크롤에 따라 움직인다 — 실제 브라우저에서는 #root가
+ * 스크롤될수록 그 안의 모든 요소가 뷰포트 기준으로 그만큼 위로 올라간다
+ * (getBoundingClientRect는 뷰포트 상대 좌표라서). 두 번째 이펙트가 애니메이션
+ * 도중에 같은 요소를 다시 측정하는 시나리오(안드로이드 다단계 리사이즈)를 검증할
+ * 때는 이 결합이 있어야 실제 산수가 맞는다 — 정적인 stubRectBottom을 쓰면 이미
+ * 적용된 스크롤 분을 또 요구하는 이중 계산이 돼 버린다. */
+function stubRectBottomFollowingScroll(element: HTMLElement, bottomAtBaseline: number, root: HTMLElement) {
+  const baseline = root.scrollTop;
+  Object.defineProperty(element, "getBoundingClientRect", {
+    configurable: true,
+    value: () => {
+      const bottom = bottomAtBaseline - (root.scrollTop - baseline);
+      return { top: bottom - 79, left: 0, right: 320, bottom, width: 320, height: 79, x: 0, y: bottom - 79, toJSON() {} };
+    },
+  });
+}
+
 function keyboardInsetOf(root: HTMLElement) {
   return (root.querySelector(".app-shell") as HTMLElement).style.getPropertyValue("--keyboard-inset");
+}
+
+/** root.scrollTop에 대한 모든 쓰기를 순서대로 기록한다. jsdom은 scrollTop을 그냥
+ * 평범한 프로퍼티로 다루므로(레이아웃이 없어 clamp도 없음) 인스턴스 프로퍼티로
+ * 가려서 매 쓰기를 가로챌 수 있다 — 한 번의 순간이동(옛 코드)과 여러 프레임에
+ * 걸친 연속 이동(새 코드)을 구분하는 유일한 방법이다. */
+function trackScrollTopWrites(root: HTMLElement) {
+  let value = root.scrollTop;
+  const writes: number[] = [];
+  Object.defineProperty(root, "scrollTop", {
+    configurable: true,
+    get() { return value; },
+    set(next: number) { value = next; writes.push(next); },
+  });
+  return writes;
+}
+
+/** prefers-reduced-motion을 흉내 낸다. jsdom은 매치미디어를 구현하지 않으므로
+ * (그래서 평소 테스트는 전부 "reduce 아님" 경로를 탄다) 이 헬퍼를 쓴 테스트만
+ * 명시적으로 설치한다. */
+function installReducedMotionPreference() {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (query: string) => ({
+      matches: query.includes("prefers-reduced-motion"),
+      media: query,
+      addEventListener() {},
+      removeEventListener() {},
+      addListener() {},
+      removeListener() {},
+      dispatchEvent() { return true; },
+    }),
+  });
 }
 
 function Page() {
@@ -312,5 +363,121 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
 
     viewport.closeKeyboard();
     await waitFor(() => expect(shellClass()).not.toContain("keyboard-inset-open"));
+  });
+
+  it("스크롤 보정이 한 번에 순간이동하지 않고 여러 프레임에 걸쳐 연속으로 움직인다", async () => {
+    // 실기기 피드백("확확 올라가서 어지럽다")의 원인: ddc316e는 overshoot를 scrollTop에
+    // 그대로 더했다 — 인스턴스 프로퍼티로 가로챈 쓰기 횟수가 정확히 1이면 그 순간이동이
+    // 그대로 남아 있다는 뜻이다. §3/§4: 논리적 목표치로 한 번에 점프하지 않고, 현재
+    // 값에서 목표까지 감쇠형 곡선(§4의 damping 1.0/response 0.4, --motion-reposition의
+    // 400ms와 --sidebar-ease를 그대로 재사용)으로 여러 프레임에 걸쳐 도착해야 한다.
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 507);
+    root.scrollTop = 1046;
+    const writes = trackScrollTopWrites(root);
+
+    textarea.focus();
+    viewport.openKeyboard(350);   // overshoot = 507 - 494 + 8 = 21
+
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));
+    expect(writes.length).toBeGreaterThan(1);          // 한 번의 대입이 아니다
+    expect(writes[writes.length - 1]).toBe(1046 + 21); // 마지막 프레임은 정확히 목표치
+  });
+
+  it("prefers-reduced-motion에서는 애니메이션 없이 즉시 옮긴다 (짧게가 아니라 제거)", async () => {
+    // §14: reduced motion은 "짧게"가 아니라 이동 자체를 없애는 것. 애니메이션 경로를
+    // 아예 안 타야 하므로 쓰기 횟수가 1이어야 한다(§3 위반이 아니다 — 애초에 이동을
+    // 만들지 않는 것과, 이동을 만들고 눈에 안 띄게 초고속으로 트는 것은 다르다).
+    installReducedMotionPreference();
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 507);
+    root.scrollTop = 1046;
+    const writes = trackScrollTopWrites(root);
+
+    textarea.focus();
+    viewport.openKeyboard(350);
+
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));
+    expect(writes.length).toBe(1);
+  });
+
+  it("애니메이션 도중 다른 필드로 포커스가 옮겨가면 처음 값으로 되돌아가지 않고 지금 진행 중이던 값에서 이어서 움직인다", async () => {
+    // §3 Interruptibility: "항상 presentation(현재) 값에서 시작하고, 논리적/목표
+    // 값에서 시작하면 안 된다." 진행 중인 애니메이션을 중간에 가로챌 때 1046(맨 처음
+    // 값)으로 되돌아가면 그 위반이다.
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(
+      <AppShell sidebar={<div />}>
+        <textarea aria-label="첫째" />
+        <textarea aria-label="둘째" />
+      </AppShell>,
+    );
+    const first = screen.getByLabelText("첫째");
+    const second = screen.getByLabelText("둘째");
+    stubRectBottom(first, 507);
+    stubRectBottom(second, 600);
+    root.scrollTop = 1046;
+    const writes = trackScrollTopWrites(root);
+
+    first.focus();
+    viewport.openKeyboard(350);   // 목표 1046+21=1067
+
+    // 애니메이션이 목표에 닿기 전, 중간값에 도달할 때까지 기다린다.
+    await waitFor(() => {
+      expect(root.scrollTop).toBeGreaterThan(1046);
+      expect(root.scrollTop).toBeLessThan(1067);
+    });
+    const interruptFrom = root.scrollTop;   // 지금 진행 중이던 값 (아직 목표 아님)
+
+    second.focus();   // focusin 리스너가 동기적으로 다시 reposition()을 부른다
+
+    // 둘째 기준 overshoot = 600 - 494 + 8 = 114, 지금 값(interruptFrom) 위에 쌓인다.
+    await waitFor(() => expect(root.scrollTop).toBe(interruptFrom + 114));
+    // 가로챈 뒤로는 그 어떤 프레임도 가로챈 시점(interruptFrom)보다 아래로 되돌아가지
+    // 않는다 — 되돌아간다면 논리적 목표가 아니라 "맨 처음" 값에서 다시 시작했다는 뜻.
+    const afterInterrupt = writes.slice(writes.indexOf(interruptFrom) + 1);
+    for (const value of afterInterrupt) expect(value).toBeGreaterThanOrEqual(interruptFrom - 0.01);
+  });
+
+  it("안드로이드 다단계 리사이즈처럼 keyboard.inset이 열린 채로 여러 번 바뀌어도 매번 처음부터 다시 끊기지 않고 지금 값에서 새 목표로 이어간다", async () => {
+    // 안드로이드는 키보드가 한 번에 최종 높이로 열리지 않고 여러 단계로 리사이즈될 수
+    // 있다 — 그때마다 keyboard.inset이 바뀐다(hooks.ts의 useVirtualKeyboard). 두 단계
+    // 모두 스크롤이 필요하게(overshoot > 0) 잡아, 1단계 애니메이션이 진행되는 도중에
+    // 2단계가 다시 겨냥하는 상황을 실제로 재현한다. 이펙트가 keyboard.inset을
+    // 의존성으로 갖고 있으므로 매 단계마다 다시 실행되는데, 그렇다고 "리스너를 통째로
+    // 뜯었다 다시 다는" 것과 "진행 중이던 애니메이션을 중간에 처음 값으로 리셋하는"
+    // 것은 여전히 없어야 한다 — 그러면 §3가 다시 깨진다("여러 단계로 끊기는" 원래
+    // 결함이 형태만 바뀌어 재발).
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    root.scrollTop = 1046;
+    stubRectBottomFollowingScroll(textarea, 700, root);   // 스크롤에 결합된 rect — 실제 브라우저와 같은 산수
+    const writes = trackScrollTopWrites(root);
+
+    textarea.focus();
+    viewport.openKeyboard(200);   // 1단계: 844 -> 644, overshoot = 700-644+8 = 64, 목표 1110
+
+    // 1단계 애니메이션이 목표에 닿기 전, 중간값에 도달할 때까지 기다린다.
+    await waitFor(() => {
+      expect(root.scrollTop).toBeGreaterThan(1046);
+      expect(root.scrollTop).toBeLessThan(1110);
+    });
+    const midStage1 = root.scrollTop;
+
+    viewport.openKeyboard(350);   // 2단계(최종): 844 -> 494, overshoot = 700-494+8 = 214, 목표 1260
+
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 214));
+    // 1단계 중간값 이후로는 그 어떤 프레임도 그 값 아래로도, 맨 처음(1046)으로도
+    // 되돌아가지 않는다 — 새 목표로 이어졌다는 뜻.
+    const afterStage1 = writes.slice(writes.indexOf(midStage1) + 1);
+    for (const value of afterStage1) expect(value).toBeGreaterThanOrEqual(midStage1 - 0.01);
+    // 전체적으로 단조 증가 — 한 번이라도 목표를 지나쳤다가 되돌아오는 오버슈트가
+    // 없다(damping 1.0, 오버슈트 없음).
+    for (let i = 1; i < writes.length; i++) expect(writes[i]).toBeGreaterThanOrEqual(writes[i - 1] - 0.01);
   });
 });
