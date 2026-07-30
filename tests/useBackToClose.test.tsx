@@ -13,11 +13,23 @@ const STACK_KEY = "__dsPopupStack";
 
 // history.back()을 파일 전체에서 가로챕니다. 안 그러면 언마운트가 예약한 진짜
 // back()이 0ms 뒤 — 즉 다음 테스트 도중 — 에 터져 그 테스트의 다이얼로그를 닫습니다.
+//
+// 기본 동작은 실제 브라우저의 history.back()을 흉내 낸다: 스택 맨 위를 하나 뽑고 그
+// state로 popstate를 쏜다(진짜 자바스크립트에서 back()이 하는 일과 같은 순서). 예전엔
+// 이게 순수 no-op이었는데, B1의 release-on-popstate 버그(실제 브라우저 검증으로 잡음 —
+// 보고서의 "Fix: scrollRestoration never released" 참고)를 이 no-op은 전혀 잡아내지
+// 못했다 — 코드가 popstate "전"에 되돌리든 "후"에 되돌리든 no-op 아래에서는 구분이
+// 안 됐기 때문이다. 실제 이벤트 순서를 흉내 내야 그 버그가 되살아나면 테스트가 잡는다.
 let backSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   window.history.replaceState(null, "");
-  backSpy = vi.spyOn(window.history, "back").mockImplementation(() => undefined);
+  backSpy = vi.spyOn(window.history, "back").mockImplementation(() => {
+    const remaining = stack().slice(0, -1);
+    const state = remaining.length ? { [STACK_KEY]: remaining } : null;
+    window.history.replaceState(state, "");
+    window.dispatchEvent(new PopStateEvent("popstate", { state }));
+  });
 });
 
 afterEach(() => { cleanup(); vi.useRealTimers(); backSpy.mockRestore(); });
@@ -207,6 +219,41 @@ describe("B1: 킷 팝업이 열린 동안만 scrollRestoration을 manual로 바�
     fireEvent.click(screen.getByRole("button", { name: "닫기" }));
     act(() => { vi.advanceTimersByTime(1); });   // 정리 단계의 지연된 back() 실행 시점
     expect(stub.value).toBe("auto");
+  });
+
+  it("복원은 back()이 실제로 이전 항목에 착지한(popstate) 뒤에만 일어난다", () => {
+    // 실 기기 검증으로 잡은 회귀: history.scrollRestoration은 전역 스위치가 아니라
+    // "지금 current인 항목"에 새겨지는 값이다. back()을 부르기 *직전*(아직 지금 항목이
+    // current인 시점)에 복원해 버리면, 값은 떠나려는 이 항목에 찍히고 실제로 착지할
+    // 이전 항목은 claim 때 새겨진 manual인 채로 영원히 남는다 — 스택은 0으로 비었는데
+    // scrollRestoration은 manual에 멈춰 있는 증상으로 나타난다. 값만 비교하면(위 테스트들)
+    // 이 버그를 못 잡는다 — 스텁은 "어느 항목에 찍혔는지" 구분할 수 없는 flat 변수라서,
+    // 복원이 실제로는 popstate 전에 일어나도 최종 값은 우연히 똑같이 "auto"로 보인다.
+    // 그래서 여기서는 값이 아니라 순서를 고정한다: back()이 실제로 항목을 옮기는 신호는
+    // popstate뿐이므로, scrollRestoration을 쓰는 시점이 그 popstate "이후"여야 한다.
+    vi.useFakeTimers();
+    const order: string[] = [];
+    let value: ScrollRestoration = "auto";
+    Object.defineProperty(window.history, "scrollRestoration", {
+      configurable: true,
+      get: () => value,
+      set: (next: ScrollRestoration) => { order.push(`set:${next}`); value = next; },
+    });
+    backSpy.mockImplementation(() => {
+      const remaining = stack().slice(0, -1);
+      const state = remaining.length ? { [STACK_KEY]: remaining } : null;
+      order.push("navigate");   // back()이 실제로 이전 항목에 착지하는 순간(popstate 직전)
+      window.history.replaceState(state, "");
+      window.dispatchEvent(new PopStateEvent("popstate", { state }));
+    });
+
+    render(<Harness />);
+    order.length = 0;   // claim 이후, 닫기부터의 순서만 본다
+
+    fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+    act(() => { vi.advanceTimersByTime(1); });
+
+    expect(order).toEqual(["navigate", "set:auto"]);
   });
 
   it("앱이 이미 manual로 둔 경우에도 manual로 남는다 (auto로 하드코딩하지 않는다)", () => {

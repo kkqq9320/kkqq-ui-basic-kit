@@ -63,7 +63,9 @@ function claimScrollRestoration() {
   window.history.scrollRestoration = "manual";
 }
 
-/** 표식 스택이 완전히 빌 때만 부릅니다. 잡고 있지 않으면 아무것도 안 합니다(멱등). */
+/** 표식 스택이 완전히 빌 때만 부릅니다. 잡고 있지 않으면 아무것도 안 합니다(멱등). 반드시
+ * 되돌릴 대상 항목이 실제로 current가 된 "뒤"에만 불러야 합니다 — 실제 브라우저 검증으로
+ * 확인된 이유는 아래 useBackToClose 문서의 B1 항목을 보세요. */
 function releaseScrollRestoration() {
   if (savedScrollRestoration === null) return;
   if (scrollRestorationSupported()) window.history.scrollRestoration = savedScrollRestoration;
@@ -114,10 +116,24 @@ function releaseScrollRestoration() {
  * 앱의 진짜 페이지 이동에서도 브라우저 스크롤 복원이 꺼져 버립니다. 그래서 첫 표식이
  * push될 때만 앱의 기존 값을 기억해 두고 "manual"로 바꾸고, 표식 스택이 완전히 빌 때만
  * 그 값으로 되돌립니다 — 킷의 팝업이 하나라도 열려 있는 동안만 manual입니다.
- * 스택이 비는 경로가 두 갈래라 되돌리는 지점도 두 곳입니다: (1) 이 훅이 직접
- * back()을 부르는 경우 — 그 직전에 스택 길이가 1(자기 자신만 남음)인지 확인해서
- * 되돌립니다. (2) 사용자가 물리적 뒤로가기를 눌러 popstate가 오는 경우 —
- * handlePopState에서 그 이벤트의 state가 이미 빈 스택인지 확인해서 되돌립니다.
+ *
+ * 되돌리는 시점이 실제 브라우저에서는 훨씬 더 까다롭습니다(실 기기 검증으로 잡은 회귀,
+ * 보고서의 "Fix: scrollRestoration never released" 참고). `history.scrollRestoration`은
+ * 전역 스위치가 아니라 **지금 current인 항목에 새겨지는 값**입니다 — 그래서 이 항목이
+ * current인 동안에만 읽고 쓸 수 있고, 쓴 값은 그 항목이 나중에 다시 current가 될 때까지
+ * 그 항목에 그대로 남습니다. `claimScrollRestoration()`을 `pushState` 직전에 부르는 건
+ * 그래서입니다 — 그 순간 아직 current인 이전 항목(예: 원래 페이지)에 "manual"을 새겨
+ * 두는 겁니다. 문제는 되돌릴 때: 이 훅이 직접 `back()`을 부르는 경우, `back()`을 부르기
+ * **직전**(아직 지금 항목이 current인 시점)에 되돌리면 가야 할 이전 항목이 아니라 지금
+ * 떠나려는 이 항목에 값이 찍히고, 정작 이전 항목은 claim 때 새겨진 "manual"인 채로
+ * 영원히 남습니다(스택은 0으로 비었는데 `scrollRestoration`은 "manual"에 멈춰 있는
+ * 증상으로 관측됩니다). `back()`이 실제로 이전 항목을 current로 만든 뒤에만 되돌려야
+ * 하고, 그 완료 신호는 `popstate`뿐입니다. 그래서 스택이 비는 두 경로 모두 되돌리는
+ * 지점이 "popstate 핸들러 안"이라는 하나의 규칙으로 통일됩니다: (1) 이 훅이 직접
+ * back()을 부르는 경우 — 스택 길이가 1(자기 자신만 남음)일 때만, `back()`을 부르기
+ * 직전에 한 번만 반응하는 `popstate` 리스너를 걸어 두고, 그 리스너 안에서 되돌립니다.
+ * (2) 사용자가 물리적 뒤로가기를 눌러 popstate가 오는 경우 — handlePopState에서 그
+ * 이벤트의 state가 이미 빈 스택인지 확인해서, 역시 popstate 핸들러 "안에서" 되돌립니다.
  * 묻힌 표식을 replaceState로 걷어내는 경로(위 주석)는 스택을 절대 비우지 않으므로
  * (위에 뭔가 남아 있을 때만 타는 경로) 여기서는 손대지 않습니다. history.scrollRestoration이
  * 없는 환경(구형·비표준)도 있으므로 항상 존재를 확인한 뒤에만 손댑니다.
@@ -158,7 +174,13 @@ export function useBackToClose(open: boolean, onClose: () => void, stackKey = "_
         // 지금 다시 스택을 읽어 자기 표식이 여전히 맨 위일 때만 back()을 부른다.
         const current = readStack(window.history.state);
         if (current[current.length - 1] === popupId) {
-          if (current.length === 1) releaseScrollRestoration();
+          // 여기서 곧바로 releaseScrollRestoration()을 부르면 안 된다 — 실제 브라우저에서
+          // 확인된 버그였다: 이 시점엔 아직 "지금 떠나려는" 이 항목이 current이므로, 값을
+          // 쓰면 그 항목에 찍히고 만다. 정작 되돌아갈 이전 항목(예: 원래 페이지)은
+          // claimScrollRestoration() 때 이미 "manual"로 얼어붙은 채였고, back()이 실제로
+          // 그 항목에 착지한 뒤에도 여전히 manual로 남는다. popstate는 그 항목이 진짜
+          // current가 된 뒤에만 오므로, 되돌리는 일은 그 popstate 핸들러 안에서 해야 한다.
+          if (current.length === 1) window.addEventListener("popstate", releaseScrollRestoration, { once: true });
           window.history.back();
           return;
         }
