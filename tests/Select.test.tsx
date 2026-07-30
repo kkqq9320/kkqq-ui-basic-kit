@@ -342,4 +342,68 @@ describe("Select", () => {
       root.remove();
     });
   });
+
+  describe("메뉴 안에서 시작한 스와이프는 체이닝돼 페이지가 스크롤돼도 닫지 않는다 (DateWheelPicker와 대비되는 owner 리포트)", () => {
+    // Owner: 긴 Select가 열린 채로 메뉴 위에 손가락을 대고 아래로 스와이프하면 닫혀
+    //버린다 — 스크롤하고 싶었을 뿐인데. 확인된 메커니즘: 메뉴(overflow-y: auto)가
+    // 스크롤 끝에 닿거나 애초에 스크롤할 여유가 없으면, 같은 터치 제스처가 조상
+    // 스크롤러(document/#root)로 체이닝된다. 그 조상이 실제로 스크롤되면 트리거
+    // rect도 움직이므로, 위 블록의 "트리거가 실제로 멀어지는 스크롤에는 닫힌다"
+    // 판정이 그대로 걸려 메뉴를 닫아 버린다 — 그 스크롤을 사용자가 "메뉴 안에서"
+    // 시작했다는 사실은 event.target(=document/#root)만 봐서는 알 수 없다.
+    //
+    // 구분 기준은 "이 스크롤의 target이 메뉴인가"가 아니라 "이 제스처가 메뉴
+    // 안에서 시작됐는가"다 — 제스처가 메뉴 안에서 시작해 포인터가 아직 떠 있는
+    // 동안에는, 그 제스처가 만든 어떤 체이닝된 조상 스크롤도 닫기 판정에서
+    // 제외해야 한다. DateWheelPicker의 "스와이프 시작하면 안 닫힌다"는 이 로직이
+    // 아니라 pointerdown이 바깥 클릭 판정 자체를 우연히 먼저 타는 부수 효과였다
+    // (Select.tsx 주석 참고) — 여기서는 그 사고를 재현하지 않고, 명시적으로
+    // "메뉴 안에서 시작된 포인터가 떠 있는 동안"만 억제한다.
+    it("포인터가 메뉴 안에서 눌린 채로 체이닝된 페이지 스크롤이 트리거를 움직여도 열려 있는다", () => {
+      render(<ControlledSelect />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      const rect = stubRect(trigger, 200);
+      fireEvent.click(trigger);
+      const option = screen.getByRole("option", { name: "첫째" });
+
+      fireEvent.pointerDown(option);   // 제스처가 메뉴 안에서 시작
+      rect.setTop(130);                // 체이닝으로 페이지가 스크롤돼 트리거가 70px 위로 이동
+      fireEvent.scroll(document);
+
+      expect(screen.getByRole("listbox")).toBeTruthy();   // 닫히지 않는다
+    });
+
+    it("포인터를 떼면 억제가 풀려, 이후의 실제 페이지 스크롤은 다시 정상적으로 닫는다", () => {
+      // 억제가 제스처 동안만이라는 걸 증명한다 — 영구 억제라면 이 테스트가 실패한다.
+      render(<ControlledSelect />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      const rect = stubRect(trigger, 200);
+      fireEvent.click(trigger);
+      const option = screen.getByRole("option", { name: "첫째" });
+
+      fireEvent.pointerDown(option);
+      rect.setTop(130);
+      fireEvent.scroll(document);
+      expect(screen.getByRole("listbox")).toBeTruthy();   // 아직 제스처 중 — 안 닫힘
+
+      fireEvent.pointerUp(option);
+      rect.setTop(60);   // 손을 뗀 뒤 별개의 진짜 페이지 스크롤이 트리거를 또 움직인다
+      fireEvent.scroll(document);
+
+      expect(screen.queryByRole("listbox")).toBeNull();   // 이번엔 정상적으로 닫힌다
+    });
+
+    it("메뉴 밖에서 시작한 포인터는 억제하지 않는다 — 손가락이 메뉴 밖이면 그대로 닫힌다", () => {
+      render(<ControlledSelect />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      const rect = stubRect(trigger, 200);
+      fireEvent.click(trigger);
+
+      fireEvent.pointerDown(document.body);   // 메뉴 밖에서 시작한 포인터
+      rect.setTop(130);
+      fireEvent.scroll(document);
+
+      expect(screen.queryByRole("listbox")).toBeNull();   // 억제되지 않아 정상적으로 닫힌다
+    });
+  });
 });

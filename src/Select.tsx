@@ -77,6 +77,9 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
   // 이미 메뉴가 닫혀 있어 :toggle이 "다시 열기"로 읽는다. 트리거 쪽에서 그 다음
   // click 한 번을 "닫는 대신 삼키기"로 처리해 재오픈을 막는다.
   const suppressReopenRef = useRef(false);
+  // 메뉴 안에서 시작된(아직 떼지 않은) 포인터 제스처 동안, 그 제스처가 만드는 체이닝된
+  // 조상 스크롤이 트리거를 움직여도 닫기 판정에서 제외합니다 — 아래 closeIfAnchorMoved 참고.
+  const pointerDownInsideMenuRef = useRef(false);
   const selected = options.find((option) => option.value === value);
   // 뒤로가기로 메뉴만 닫습니다. 표식이 스택이라, 다이얼로그 안에서 열린 메뉴는
   // 뒤로가기 한 번에 메뉴만 닫히고 다이얼로그는 남습니다. 이게 없으면 뒤로가기가
@@ -125,6 +128,39 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
   // menuRef 쪽 스크롤(옵션 목록을 손으로 스크롤하거나 열릴 때 선택 항목으로 맞추는
   // 스크롤)은 트리거 rect를 바꾸지 않으므로 이 판정에서 자연히 걸러지지만, 불필요한
   // rect 계산을 피하려고 미리 걸러 둡니다.
+  //
+  // 그래도 이것만으로는 부족합니다(실기기 피드백: 긴 메뉴 위에서 아래로 스와이프하면
+  // 스크롤 대신 메뉴가 닫힌다). 메뉴(overflow-y: auto, css/select.css)가 스크롤 끝에
+  // 닿거나 애초에 스크롤할 내용이 짧으면, 같은 터치 제스처가 조상 스크롤러
+  // (document/#root)로 체이닝됩니다 — 그 조상이 실제로 스크롤되면 트리거도 실제로
+  // 움직이므로 위 판정("트리거가 진짜 멀어졌나")이 정직하게 걸려 닫아 버립니다.
+  // event.target(체이닝된 스크롤은 document/#root가 target)만 보는 한 이 경우를
+  // "메뉴 자신의 스크롤"과 구분할 수 없습니다 — 그래서 target이 아니라 제스처의
+  // 시작점으로 판정합니다: pointerdown이 메뉴 안에서 시작해 아직 pointerup/cancel이
+  // 오지 않은 동안에는, 그 사이 일어나는 어떤 앵커 이동도 닫기 판정에서 제외합니다.
+  // DateWheelPicker의 "스와이프하면 안 닫힌다"를 그대로 베끼지 않습니다 — 거기는
+  // pointerdown이 바깥 클릭 판정 자체를 우연히 먼저 타 버린 부수 효과였고(Select.tsx
+  // 상단 주석 및 PRINCIPLES.md 참고 이력), 여기서는 "메뉴 안에서 시작된 제스처가
+  // 아직 진행 중"이라는 명시적 조건 하나만 억제 근거로 씁니다 — 바깥 클릭·Escape·
+  // 같은 트리거 재클릭·"진짜" 페이지 스크롤(메뉴 밖에서 시작한 손가락)은 전혀
+  // 건드리지 않습니다.
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(event: PointerEvent) {
+      if (event.target instanceof Node && menuRef.current?.contains(event.target)) pointerDownInsideMenuRef.current = true;
+    }
+    function handlePointerUp() { pointerDownInsideMenuRef.current = false; }
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("pointerup", handlePointerUp, true);
+    document.addEventListener("pointercancel", handlePointerUp, true);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("pointerup", handlePointerUp, true);
+      document.removeEventListener("pointercancel", handlePointerUp, true);
+      pointerDownInsideMenuRef.current = false;
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open || !triggerRef.current) return;
     const anchorRect = triggerRef.current.getBoundingClientRect();
@@ -132,6 +168,7 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
     const anchorLeft = anchorRect.left;
     function closeIfAnchorMoved(event: Event) {
       if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
+      if (pointerDownInsideMenuRef.current) return;   // 메뉴 안에서 시작된 제스처가 아직 진행 중 — 체이닝된 조상 스크롤이어도 닫지 않는다
       const trigger = triggerRef.current;
       if (!trigger) return;
       const rect = trigger.getBoundingClientRect();

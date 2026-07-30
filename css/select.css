@@ -18,7 +18,13 @@
 .open > .app-select-trigger .dropdown-chevron, .app-select.open .dropdown-chevron { transform: rotate(180deg); }
 .dropdown-chevron svg { width: var(--dropdown-icon-size); height: var(--dropdown-icon-size); display: block; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
-.app-select-menu { position: absolute; z-index: 80; top: calc(100% + 5px); right: 0; left: 0; max-height: min(320px, 55vh); overflow-y: auto; padding: 6px; border-radius: 9px; }
+/* overscroll-behavior: contain — 메뉴 스크롤이 끝(위/아래)에 닿아도 조상(페이지)으로
+ * 체이닝시키지 않습니다. rubber-band 자체는 살아 있고(none이 아니라 contain), 체이닝만
+ * 막습니다. 모션 속성이 아니라 스크롤 경계 속성이라 reduced-motion과는 무관합니다.
+ * 짧은 목록(스크롤할 내용 자체가 없는 경우)은 애초에 메뉴가 스크롤 컨테이너로 동작하지
+ * 않으므로 이 선언이 효과가 없습니다 — 그 경우의 방어는 Select.tsx의
+ * pointerDownInsideMenuRef(제스처가 메뉴 안에서 시작했는지)가 담당합니다. */
+.app-select-menu { position: absolute; z-index: 80; top: calc(100% + 5px); right: 0; left: 0; max-height: min(320px, 55vh); overflow-y: auto; overscroll-behavior: contain; padding: 6px; border-radius: 9px; }
 .app-select.drop-up .app-select-menu { top: auto; bottom: calc(100% + 5px); }
 /* portal 모드: body로 나가므로 좌표를 컴포넌트가 인라인으로 넣습니다.
  * overflow를 자르는 조상(사이드바 슬롯, 스크롤 카드) 안에서 쓰세요. */
