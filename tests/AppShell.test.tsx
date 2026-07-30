@@ -168,23 +168,41 @@ function fireResizeObserved(target: Element) {
  * 재현하려면 이 helper가 필요하다 — getter에서도 clamp해야, 우리 코드가 아무것도 쓰지
  * 않아도(--keyboard-inset만 줄여도) "다음에 읽었을 때 이미 줄어 있더라"는 실제 증상을
  * 그대로 흉내 낼 수 있다. */
+// 실측(EXPERIMENT, 아래) 이후: baseContentHeight도 clientHeight도 나중에 바뀔 수 있게 뒀다.
+// 콘텐츠 성장(AutoGrowTextarea)뿐 아니라 clientHeight 자체가 나중에 바뀌는 경우(실기기의
+// 주소창 접힘 — #root가 100dvh라 키보드와 무관하게 레이아웃 뷰포트가 바뀌면 따라 바뀐다)도
+// 재현해야 두 사이클 테스트가 성립한다.
 function installClampingScrollRoot(root: HTMLElement, baseContentHeight: number, clientHeight: number) {
-  Object.defineProperty(root, "clientHeight", { configurable: true, get: () => clientHeight });
+  let content = baseContentHeight;
+  let visibleHeight = clientHeight;
+  Object.defineProperty(root, "clientHeight", { configurable: true, get: () => visibleHeight });
   function currentInset(): number {
     const shell = root.querySelector(".app-shell") as HTMLElement | null;
     return parseFloat(shell?.style.getPropertyValue("--keyboard-inset") || "0") || 0;
   }
   function currentMax(): number {
-    return Math.max(0, baseContentHeight + currentInset() - clientHeight);
+    return Math.max(0, content + currentInset() - visibleHeight);
   }
-  Object.defineProperty(root, "scrollHeight", { configurable: true, get: () => baseContentHeight + currentInset() });
+  Object.defineProperty(root, "scrollHeight", { configurable: true, get: () => content + currentInset() });
   let raw = 0;
   Object.defineProperty(root, "scrollTop", {
     configurable: true,
-    get() { return Math.min(raw, currentMax()); },
+    // 실제 브라우저의 clamp는 레이아웃이 줄어드는 순간 scrollTop 자체를 되돌릴 수 없게
+    // 바꾼다 — "표시만 줄어들고 내부 값은 그대로"가 아니다. 그래서 읽을 때도 raw 자체를
+    // 영구히 깎아야 한다(get에서 min만 반환하고 raw를 그대로 두면, 나중에 currentMax가
+    // 다시 커졌을 때 raw의 옛 값이 "부활"해 버린다 — 실제 브라우저에는 없는 아티팩트).
+    get() {
+      const max = currentMax();
+      if (raw > max) raw = max;
+      return raw;
+    },
     set(next: number) { raw = Math.min(next, currentMax()); },
   });
-  return { currentMax };
+  return {
+    currentMax,
+    growContentBy(delta: number) { content += delta; },
+    setClientHeight(next: number) { visibleHeight = next; },
+  };
 }
 
 function Page() {
@@ -693,5 +711,56 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     viewport.closeKeyboard();
     await waitFor(() => expect(keyboardInsetOf(root)).toBe("0px"));
     expect(root.scrollTop).toBe(1046 + 21);   // 되돌리지 않는다(기존 계약) — 그저 즉시 0으로.
+  });
+
+  it("naturalMax 스냅샷이 아니라 그 순간 살아있는 지오메트리로 다시 재므로, clientHeight가 스냅샷 이후 바뀌어도(주소창 접힘 등, 키보드와 무관) 닫을 때 clamp가 생기지 않는다 — B1", async () => {
+    // 실기기 재현: 예약 여백 스냅샷(naturalMaxScrollRef, 옛 구현)은 keyboard.inset이 바뀔
+    // 때만 다시 잰다. #root는 100dvh라 키보드와 무관하게(안드로이드 resizes-visual에서도)
+    // 주소창이 스크롤 중 접히면 clientHeight 자체가 커질 수 있다 — 이 변화는 keyboard.inset과
+    // 무관하므로 옛 스냅샷은 갱신되지 않는다. naturalMax_stale(옛 clientHeight로 계산) <
+    // naturalMax_true(새 clientHeight로 계산)이 되어 floor를 실제보다 작게 계산하고,
+    // 브라우저가 그 차이만큼 scrollTop을 clamp한다 — "살짝 아래로 움찔거리며 내려오는" 증상.
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 50);   // 이미 잘 보임 — reposition()이 따로 스크롤하지 않게
+    const scrollRoot = installClampingScrollRoot(root, 60000, 750);   // 주소창이 보이는 상태(750)로 시작
+
+    textarea.focus();
+    viewport.openKeyboard(350);
+    await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));
+    const insetWhileOpen = parseFloat(keyboardInsetOf(root));
+
+    // 스크롤하는 동안 주소창이 접혀 clientHeight가 커진다 — keyboard.inset은 그대로라
+    // naturalMaxScrollRef(옛 구현)는 이 변화를 모른다.
+    scrollRoot.setClientHeight(800);
+    // 드리프트 이후의 진짜 natural max보다 200px 안쪽(예약 여백을 200만큼 써야 하는
+    // 위치)에 둔다 — 콘텐츠(60000)는 넉넉해 절대 천장에 걸리지 않는다.
+    const trueNaturalMaxAfterDrift = 60000 - 800;
+    root.scrollTop = trueNaturalMaxAfterDrift + 200;
+    const bottomScrollTop = root.scrollTop;
+
+    viewport.closeKeyboard();
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(false));
+
+    // 옳은 floor는 200(진짜 필요한 만큼) — clientHeight 드리프트를 놓치지 않아야 한다.
+    await waitFor(() => expect(parseFloat(keyboardInsetOf(root))).toBe(200));
+    expect(root.scrollTop).toBe(bottomScrollTop);   // 전혀 움직이지 않는다 — "닫을 때 뷰포트는 절대 움직이지 않는다"
+
+    // 사이클 2 — 블러 없이 같은 필드를 다시 탭해 키보드가 다시 열린다(owner 리포트의
+    // "다시 탭하면"과 같은 모양). 필드가 다시 가려지도록 rect를 바꿔 진짜 보정이
+    // 필요한 상태를 만든다 — B2: 이 보정이 여전히 정상적으로 일어나는지 본다.
+    // (콘텐츠를 더 늘려 둔다 — 페이지의 다른 곳에 콘텐츠가 더 있다는 뜻일 뿐, 메모
+    // 자신과는 무관하다. 이게 없으면 "사이클 1에서 정확히 필요한 만큼만 예약했다"는
+    // 사실 자체가 사이클 2의 여유를 깎아, 진짜 버그가 아니라 이 테스트의 합성 문서
+    // 길이가 천장이 되어 버린다.)
+    scrollRoot.growContentBy(1000);
+    const scrollTopBeforeReopen = root.scrollTop;
+    stubRectBottom(textarea, 600);
+    viewport.openKeyboard(350);
+
+    // overshoot = 600 - visibleBottom(494) + gap(8) = 114, 지금 위치(scrollTopBeforeReopen) 위에.
+    await waitFor(() => expect(root.scrollTop).toBe(scrollTopBeforeReopen + 114));
+    expect(parseFloat(keyboardInsetOf(root))).toBe(insetWhileOpen);   // 사이클 1과 똑같은 값으로 다시 예약된다 — 이전 사이클의 흔적 없음
   });
 });

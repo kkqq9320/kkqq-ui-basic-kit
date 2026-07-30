@@ -281,36 +281,54 @@ function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId =
  * 위치가 그 여백에 기대고 있는 동안은 유지합니다. `keyboard.open`이면 `keyboard.inset`을
  * 그대로 돌려주고, 닫히면 "지금 안전하게 걷어낼 수 있는 만큼"만 걷어낸 값을 돌려줍니다.
  *
- * A2의 원인 — 4c7518c는 "닫힐 때 억지로 스크롤 위치를 되돌리는 코드"를 들어냈지만
- * (위 useKeyboardScrollCompensation의 문서 참고), 그것과 별개로 남아 있던 경로가
- * 하나 있습니다: `--keyboard-inset`(css/page.css의 `.workspace` 하단 패딩)이 줄면
- * `#root`의 scrollHeight가 그만큼 줄고, 지금 scrollTop이 그 새 최댓값보다 크면
- * **브라우저가 scrollTop을 새 최댓값으로 스스로 clamp**합니다 — 우리가 스크롤을
- * 옮기는 코드가 하나도 없어도, 예약된 여백을 없앤 것 자체가 화면을 움직입니다.
- * 맨 아래로 스크롤한 채 키보드를 닫는 경우 이 clamp 폭은 정확히 그 순간의
- * --keyboard-inset과 같습니다(AppShell.test.tsx의 "맨 아래로 스크롤된 채..." 테스트가
- * 수정 전 이 정확한 폭을 재현합니다).
+ * A2의 원인(요약 — 전체는 이전 리포트 참고) — `--keyboard-inset`이 줄면 `#root`의
+ * scrollHeight가 그만큼 줄고, 지금 scrollTop이 그 새 최댓값보다 크면 **브라우저가
+ * scrollTop을 새 최댓값으로 스스로 clamp**합니다. 고침은 되돌리기가 아니라 **해제를
+ * 미루는 것**입니다(§16.2 Agency): 지금 scrollTop이 "여백이 하나도 없을 때의
+ * 최댓값"(natural max)을 넘어서는 만큼만 계속 예약해 두고, 사용자가 위로 스크롤해
+ * 그 초과분이 줄면 그만큼씩 걷어내다 결국 0으로 수렴합니다. 이 **예약 계약 자체**는
+ * 유지합니다 — AppShell.test.tsx의 "맨 아래로 스크롤된 채..."와 "...위로 스크롤해
+ * 여백이 더 이상 필요 없어지면..."이 이 계약을 못박아 둡니다.
  *
- * 고침은 되돌리기가 아니라 **해제를 미루는 것**입니다(§16.2 Agency: 사용자가 스스로
- * 벗어나기 전까지는 우리가 화면을 움직이는 원인을 만들지 않습니다): 지금 scrollTop이
- * "여백이 하나도 없을 때의 최댓값"(natural max)을 넘어서는 만큼만 --keyboard-inset으로
- * 계속 예약해 두고, 사용자가 위로 스크롤해 그 초과분이 줄면(natural max에 가까워지면)
- * 그만큼씩 걷어내다, 완전히 필요 없어지면(natural max 아래로 내려가면) 0으로
- * 수렴합니다 — "필요 없어질 때까지 기다렸다 걷어낸다"는 뜻에서 지연 해제입니다.
- * 한 번 걷어낸 만큼은 사용자가 다시 아래로 스크롤해도 되돌려 늘리지 않습니다 —
- * 이미 줄어든 여백 아래로는 평범한 스크롤 바닥과 똑같이 자연스럽게 멈추므로, 다시
- * 늘리는 쪽이 오히려 사용자가 요청하지 않은 레이아웃 변화가 됩니다.
+ * **B1(네 번째 라운드) — 계약이 아니라 계산이 문제였습니다.** 이전 구현은 natural
+ * max(scrollHeight - keyboard.inset - clientHeight)를 키보드가 열려 있는 동안
+ * `keyboard.inset`이 바뀔 때만 ref에 스냅샷해 뒀습니다. 그런데 natural max를 이루는
+ * 세 값 중 `clientHeight`는 `keyboard.inset`과 무관하게 바뀔 수 있습니다 — `#root`는
+ * 100dvh라, 스크롤하는 동안 주소창이 접히면(안드로이드 resizes-visual에서도 주소창
+ * 자체는 레이아웃 뷰포트를 바꿉니다 — 키보드와는 다른 경로) clientHeight가 커집니다.
+ * 그 변화는 `keyboard.inset`을 건드리지 않으므로 스냅샷은 갱신되지 않고, 닫힐 때
+ * 그 스테일한(더 작은) natural max로 floor를 계산하면 실제로 필요한 값보다 작게
+ * 나와 — 그 차이만큼 브라우저가 진짜로 clamp합니다. "메모가 낮고 뷰가 스크롤된
+ * 상태에서 닫으면 살짝 움찔거린다"는 정확히 이 폭(보통 수십 px, 주소창 높이 변화
+ * 폭)입니다. 이건 이 스냅샷-후-재사용 패턴의 **네 번째** residue입니다(§ "재도출"
+ * 참고 — 리포트).
  *
- * natural max(패딩이 0일 때의 scrollHeight - clientHeight)를 닫히는 바로 그 순간에
- * 새로 측정하면 안 됩니다 — React 커밋 순서상 이펙트가 도는 시점엔 이미 DOM에 새
- * 스타일(패딩이 줄어드는 쪽)이 적용된 뒤이고, `padding-bottom`은 css/page.css:55의
- * 트랜지션이 걸린 속성이라 "그 순간 동기적으로 읽으면 시작값이 나오는지 목표값이
- * 나오는지"가 엔진마다 다를 수 있습니다. 그래서 대신 **키보드가 열려 있는 동안
- * 계속**(매 keyboard.inset 변화마다) "지금 scrollHeight - 지금 keyboard.inset"을
- * ref에 스냅샷해 둡니다 — 그 시점엔 아직 트랜지션이 걸리지 않으므로(트랜지션은
- * `:not(.keyboard-inset-open)`, 즉 닫힌 쪽에만 걸립니다 — css/page.css:47-55) 이 값은
- * 항상 신뢰할 수 있는 실측치입니다. 닫히는 순간엔 이 ref에 이미 저장된 마지막 값만
- * 쓰고, scrollTop(트랜지션과 무관한 순수 스칼라)만 그 자리에서 새로 읽습니다.
+ * **고침: 스냅샷을 캐시하지 않고, 필요한 시점마다 살아있는 지오메트리에서 매번 새로
+ * 계산합니다.** natural max를 이루는 입력(scrollHeight, clientHeight)이 언제
+ * 바뀔지 미리 알 수 없으므로(주소창, 콘텐츠 성장 등 keyboard.inset과 무관한 경로가
+ * 여럿), "언제 다시 재야 하는지"를 추적하는 대신 "쓸 때마다 지금 값을 읽는다"로
+ * 바꾸면 이 클래스의 residue 자체가 원천적으로 사라집니다:
+ *
+ * 1. **닫히는 순간의 floor**: 렌더 단계에서 `scrollRoot.scrollHeight`를 그 자리에서
+ *    읽습니다. 이 렌더는 아직 커밋 전이라 DOM은 직전 커밋(키보드가 열려 있던 마지막
+ *    상태)을 그대로 보여주므로, 이 읽기는 항상 "패딩이 아직 열림 인셋만큼 있는" 값을
+ *    돌려줍니다(트랜지션 문제도 여기서 비켜갑니다 — css/page.css:55의 트랜지션은
+ *    `:not(.keyboard-inset-open)`에만 걸리므로 열려 있던 마지막 커밋에는 아직 없습니다).
+ *    거기서 "그 열림 인셋"만 빼면 콘텐츠만의 높이가 나옵니다. `keyboard.inset`
+ *    상태값은 이 렌더에서 이미 0으로 바뀌어 있으므로(useVirtualKeyboard가 open과
+ *    inset을 같은 커밋에서 함께 0으로 되돌립니다), 그 값 대신 `lastOpenInsetRef` —
+ *    열려 있는 동안 렌더 본문에서 매번(`if (keyboard.open) ref.current = keyboard.inset`)
+ *    갱신해 둔, 마지막으로 실제 열려 있었을 때의 인셋 — 을 씁니다. 이 갱신은
+ *    조건부 대입일 뿐 순수하게 현재 props에서 유도되므로(증가/토글이 아님)
+ *    StrictMode가 렌더를 두 번 돌려도 같은 결과이고 멱등합니다.
+ * 2. **닫힌 뒤 지연 해제 틱마다**: 캐시된 natural max 대신, 그 순간의
+ *    `scrollHeight - 지금 floor - clientHeight`를 매 스크롤 이벤트마다 새로 계산합니다.
+ *    지금 적용된 floor가 곧 지금 scrollHeight에 반영된 패딩과 같으므로, 이 뺄셈은
+ *    콘텐츠만의 높이를 항상 그 순간 기준으로 돌려줍니다 — 콘텐츠가 그 사이 자라거나
+ *    clientHeight가 또 바뀌어도 다음 틱은 그 변화를 자동으로 반영합니다. 캐시가
+ *    없으므로 "언제 갱신해야 하는지"를 더 이상 걱정할 필요가 없습니다.
+ *
+ * `naturalMaxScrollRef`는 완전히 삭제했습니다 — 캐시된 숫자가 하나도 남지 않습니다.
  *
  * clientHeight가 0 이하면(jsdom처럼 레이아웃이 없는 환경, 또는 스크롤 호스트를 아직
  * 못 찾음) natural max를 계산할 근거가 없으므로 이 로직을 통째로 건너뛰고 즉시
@@ -320,64 +338,68 @@ function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId =
  * 가드 자체를 이름으로 박아 둡니다).
  *
  * **닫히는 바로 그 렌더에서 floor를 렌더 "단계"(useLayoutEffect가 아니라)에서
- * 계산해야 합니다.** 처음엔 useLayoutEffect에서 계산했는데, 그러면 keyboard.open이
- * false로 바뀌는 바로 그 렌더는 releaseFloor의 "이전" 값(대개 0, 지난 사이클에서
- * 이미 다 풀렸던 값)으로 먼저 커밋되고, 그 뒤에야 레이아웃 이펙트가 옳은 값으로
- * 고칩니다. 그 사이 실제로 DOM에 `--keyboard-inset: 0px`가 한 프레임 적용되면(진짜
- * 레이아웃이 있는 브라우저에서), scrollHeight가 그 프레임에 진짜로 줄어 브라우저가
- * scrollTop을 clamp합니다 — 이 clamp는 실제 부수효과라 나중에 --keyboard-inset을
- * 다시 올려도 되돌릴 수 없습니다(AppShell.test.tsx가 installClampingScrollRoot로
- * 정확히 이 경로를 재현해 잡아냈습니다). 그래서 대신 렌더 함수 본문에서 직접
- * "방금 닫혔다"를 감지해(wasKeyboardOpenRef로 이전 렌더의 open과 비교) 필요하면
- * 그 자리에서 setState를 부릅니다 — React 공식 패턴("Adjusting state when a prop
- * changes")대로, 렌더 중의 setState는 이번 렌더를 커밋하지 않고 새 상태로 즉시
- * 다시 렌더하므로, DOM은 열림(예: 274px)에서 곧장 보정된 닫힘(274px, 안 바뀜)으로만
- * 커밋되고 위험한 중간값(0px)은 한 번도 실제로 적용되지 않습니다.
+ * 계산해야 합니다.** useLayoutEffect에서 계산하면, keyboard.open이 false로 바뀌는
+ * 바로 그 렌더는 releaseFloor의 "이전" 값(대개 0)으로 먼저 커밋되고, 그 뒤에야
+ * 레이아웃 이펙트가 옳은 값으로 고칩니다. 그 사이 실제로 DOM에 `--keyboard-inset:
+ * 0px`가 한 프레임 적용되면(진짜 레이아웃이 있는 브라우저에서), scrollHeight가 그
+ * 프레임에 진짜로 줄어 브라우저가 scrollTop을 clamp합니다 — 이 clamp는 실제
+ * 부수효과라 나중에 --keyboard-inset을 다시 올려도 되돌릴 수 없습니다
+ * (AppShell.test.tsx가 installClampingScrollRoot로 정확히 이 경로를 재현해
+ * 잡아냅니다). 그래서 대신 렌더 함수 본문에서 직접 "방금 닫혔다"를 감지해
+ * (wasKeyboardOpenRef로 이전 렌더의 open과 비교) 필요하면 그 자리에서 setState를
+ * 부릅니다 — React 공식 패턴("Adjusting state when a prop changes")대로, 렌더
+ * 중의 setState는 이번 렌더를 커밋하지 않고 새 상태로 즉시 다시 렌더하므로, DOM은
+ * 열림(예: 274px)에서 곧장 보정된 닫힘(274px, 안 바뀜)으로만 커밋되고 위험한
+ * 중간값(0px)은 한 번도 실제로 적용되지 않습니다.
  */
 function useReleasableKeyboardInset(keyboard: VirtualKeyboard, scrollRootId = "root"): number {
-  const naturalMaxScrollRef = useRef<number | null>(null);
+  const lastOpenInsetRef = useRef(0);
   const [releaseFloor, setReleaseFloor] = useState(0);
   const wasKeyboardOpenRef = useRef(keyboard.open);
 
-  // 열려 있는 동안 계속 스냅샷한다(커밋 후 이펙트에서 — 트랜지션이 없는 구간이라
-  // 언제 읽어도 신뢰할 수 있다).
-  useLayoutEffect(() => {
-    if (!keyboard.open) return;
-    const scrollRoot = document.getElementById(scrollRootId);
-    if (!scrollRoot || scrollRoot.clientHeight <= 0) {
-      naturalMaxScrollRef.current = null;
-      return;
-    }
-    naturalMaxScrollRef.current = scrollRoot.scrollHeight - keyboard.inset - scrollRoot.clientHeight;
-  }, [keyboard.open, keyboard.inset, scrollRootId]);
+  // 열려 있는 동안 렌더 본문에서 매번 갱신한다 — 현재 props에서 유도되는 순수한
+  // 조건부 대입이라(증가·토글이 아님) StrictMode의 이중 렌더에서도 멱등하다. 이
+  // 값이 "마지막으로 진짜 열려 있었을 때의 인셋"이다 — useVirtualKeyboard가
+  // keyboard.open을 false로 되돌리는 바로 그 커밋에서 keyboard.inset도 함께 0으로
+  // 되돌리므로, 닫히는 렌더 시점엔 keyboard.inset 자체로는 이 값을 더 이상 알 수 없다.
+  if (keyboard.open) lastOpenInsetRef.current = keyboard.inset;
 
   // 렌더 단계 보정 — 위 문서 참고. "방금 닫혔다"일 때만, 이번 렌더가 커밋되기 전에
-  // 안전한 floor를 계산해 곧장 반환값에 반영한다.
+  // 안전한 floor를 살아있는 지오메트리에서 그 자리에서 계산해 곧장 반환값에 반영한다
+  // (캐시된 natural max를 참조하지 않는다 — B1).
   let inset = releaseFloor;
   if (wasKeyboardOpenRef.current !== keyboard.open) {
     wasKeyboardOpenRef.current = keyboard.open;
     if (!keyboard.open) {
       const scrollRoot = document.getElementById(scrollRootId);
-      const naturalMaxScroll = naturalMaxScrollRef.current;
-      inset = scrollRoot && naturalMaxScroll !== null ? Math.max(0, Math.round(scrollRoot.scrollTop - naturalMaxScroll)) : 0;
+      if (scrollRoot && scrollRoot.clientHeight > 0) {
+        // 이 렌더는 아직 커밋 전이라 scrollRoot.scrollHeight는 직전 커밋(열려 있던
+        // 마지막 상태, 인셋 = lastOpenInsetRef.current)을 그대로 반영한다.
+        const naturalMaxScroll = scrollRoot.scrollHeight - lastOpenInsetRef.current - scrollRoot.clientHeight;
+        inset = Math.max(0, Math.round(scrollRoot.scrollTop - naturalMaxScroll));
+      } else {
+        inset = 0;
+      }
       if (inset !== releaseFloor) setReleaseFloor(inset);
     }
   }
 
   // 닫힌 뒤, 사용자가 위로 스크롤해 여백이 더 이상 필요 없어지면 그만큼씩 걷어낸다
-  // (지연 해제). 초기 floor는 위 렌더 단계 보정이 이미 정확히 세웠으므로, 여기서는
-  // 그 이후의 scroll에만 반응한다 — 절대 다시 늘리지 않는다(§16.2: 지연 "해제"이지
-  // 재예약이 아니다. 이미 줄어든 여백 아래로는 평범한 스크롤 바닥과 똑같이 자연스럽게
-  // 멈추므로, 다시 늘리는 쪽이 오히려 사용자가 요청하지 않은 레이아웃 변화가 된다).
+  // (지연 해제). 캐시된 natural max를 닫히는 스크롤 이벤트마다 다시 계산한다 — 지금
+  // 적용된 floor가 곧 지금 scrollHeight에 반영된 패딩과 같으므로 "scrollHeight - 지금
+  // floor - clientHeight"는 항상 그 순간의 콘텐츠만의 높이다(B1: 콘텐츠가 자라거나
+  // clientHeight가 또 바뀌어도 다음 틱이 자동으로 반영한다). 절대 다시 늘리지 않는다
+  // (§16.2: 지연 "해제"이지 재예약이 아니다).
   useLayoutEffect(() => {
     if (keyboard.open) return;
     const scrollRoot = document.getElementById(scrollRootId);
-    const naturalMaxScroll = naturalMaxScrollRef.current;
-    if (!scrollRoot || naturalMaxScroll === null) return;
+    if (!scrollRoot) return;
     function recompute() {
       setReleaseFloor((current) => {
         if (current === 0) return current;
-        const candidate = Math.max(0, Math.round(scrollRoot!.scrollTop - naturalMaxScroll!));
+        if (scrollRoot!.clientHeight <= 0) return current;   // 지오메트리를 믿을 수 없다 — 손대지 않는다.
+        const naturalMax = scrollRoot!.scrollHeight - current - scrollRoot!.clientHeight;
+        const candidate = Math.max(0, Math.round(scrollRoot!.scrollTop - naturalMax));
         const next = Math.min(current, candidate);
         if (next === current) return current;
         if (next === 0) scrollRoot!.removeEventListener("scroll", recompute);   // 완전히 풀렸다 — 더 들을 필요 없다.
