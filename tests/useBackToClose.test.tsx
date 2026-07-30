@@ -167,3 +167,87 @@ describe("다이얼로그 뒤로가기", () => {
     expect(screen.queryByRole("dialog", { name: "첫째" })).toBeNull();
   });
 });
+
+describe("B2: A가 닫히며 B의 표식을 뽑는 문제", () => {
+  const optionsX = [{ value: "x", label: "엑스" }];
+
+  function TwoSelects() {
+    const [a, setA] = useState("x");
+    const [b, setB] = useState("x");
+    return <>
+      <Select ariaLabel="A" value={a} options={optionsX} onChange={setA} />
+      <Select ariaLabel="B" value={b} options={optionsX} onChange={setB} />
+    </>;
+  }
+
+  it("핵심 회귀: A가 바깥클릭으로 닫히는 사이 B가 열리면, A의 지연된 back()이 B의 표식을 뽑으면 안 된다", () => {
+    vi.useFakeTimers();
+    // 실제 브라우저의 history.back()을 흉내낸다: 스택 맨 위를 하나 뽑고 그 state로 popstate를
+    // 쏜다. 고쳐진 코드라면 자기 표식이 맨 위가 아닐 때 애초에 이 함수를 부르지 않아야 한다.
+    backSpy.mockImplementation(() => {
+      const remaining = stack().slice(0, -1);
+      const state = remaining.length ? { [STACK_KEY]: remaining } : null;
+      window.history.replaceState(state, "");
+      window.dispatchEvent(new PopStateEvent("popstate", { state }));
+    });
+
+    render(<TwoSelects />);
+    fireEvent.click(screen.getByRole("button", { name: "A" }));
+    expect(screen.getByRole("listbox", { name: "A" })).toBeTruthy();
+
+    // 터치는 mousedown과 click을 거의 동시에(간격 0) 합성한다. B의 트리거를 누르면 A가
+    // 바깥클릭으로 먼저 닫히고(정리 단계에서 back()이 예약됨), 이어서 B가 열리며 자기
+    // 표식을 push한다 — A의 예약된 back()이 아직 실행되기 전이다.
+    fireEvent.mouseDown(screen.getByRole("button", { name: "B" }));
+    fireEvent.click(screen.getByRole("button", { name: "B" }));
+    expect(screen.queryByRole("listbox", { name: "A" })).toBeNull();   // A는 UI상 이미 닫힘
+    expect(screen.getByRole("listbox", { name: "B" })).toBeTruthy();   // B는 열림
+
+    act(() => { vi.advanceTimersByTime(1); });   // A의 지연된 back()이 실행되는 시점
+
+    // 핵심: B가 열린 채로 남아야 한다 (보고된 "열렸다 즉시 닫힌다" 회귀)
+    expect(screen.getByRole("listbox", { name: "B" })).toBeTruthy();
+    // 메커니즘: 자기 표식이 스택 맨 위가 아니므로 back()을 아예 부르면 안 된다
+    expect(backSpy).not.toHaveBeenCalled();
+  });
+
+  it("정상 경로 보존: 팝업 하나만 열렸다 버튼으로 닫히면 back()이 여전히 불린다", () => {
+    vi.useFakeTimers();
+    function OneSelect() {
+      const [value, setValue] = useState("x");
+      return <Select ariaLabel="단일" value={value} options={optionsX} onChange={setValue} />;
+    }
+    render(<OneSelect />);
+    fireEvent.click(screen.getByRole("button", { name: "단일" }));
+    expect(screen.getByRole("listbox")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "단일" }));   // 트리거를 다시 눌러 버튼으로 닫는다
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(backSpy).not.toHaveBeenCalled();   // 즉시가 아니라 예약된다
+
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(backSpy).toHaveBeenCalledOnce();   // 자기 표식이 유일하게 맨 위이므로 여전히 불려야 한다
+  });
+
+  it("죽은 표식 흡수: A를 다시 열고 뒤로가기를 누르면 A가 닫히고 B는 그대로여야 한다", () => {
+    vi.useFakeTimers();
+    render(<TwoSelects />);
+
+    // 핵심 회귀와 같은 시퀀스로 A를 소리 없이 닫는다.
+    fireEvent.click(screen.getByRole("button", { name: "A" }));
+    fireEvent.mouseDown(screen.getByRole("button", { name: "B" }));
+    fireEvent.click(screen.getByRole("button", { name: "B" }));
+    act(() => { vi.advanceTimersByTime(1); });   // A의 지연된 콜백 — 죽은 표식을 스택에서 지운다(또는 안 지운다)
+
+    // A를 다시 연다. Select는 언마운트되지 않으므로 popupId는 처음과 동일하다.
+    fireEvent.click(screen.getByRole("button", { name: "A" }));
+    expect(screen.getByRole("listbox", { name: "A" })).toBeTruthy();
+
+    pressBack();
+
+    // 방금 다시 연 A가 닫혀야 한다. 죽은 표식이 스택에 남아 있으면 이 뒤로가기가
+    // 엉뚱하게 B를 닫혀버린다 — A는 예전 표식이 여전히 "맨 위"인 것처럼 보여 안 닫힌다.
+    expect(screen.queryByRole("listbox", { name: "A" })).toBeNull();
+    expect(screen.getByRole("listbox", { name: "B" })).toBeTruthy();
+  });
+});

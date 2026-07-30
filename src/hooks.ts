@@ -72,6 +72,16 @@ export function useEscapeToClose(open: boolean, onClose: () => void) {
  * 팝업이 열리자마자 닫혀 버립니다. 그래서 back()을 타이머로 미루고, 곧바로 다시
  * mount되면 그 타이머를 취소합니다. 표식이 이미 스택에 있으면 다시 push 하지도
  * 않으므로 history가 중복으로 쌓이지 않습니다.
+ *
+ * 타이머가 실행될 때 자기 표식이 여전히 스택 맨 위인지 다시 확인합니다(B2). 미룬
+ * 한 틱 사이 다른 팝업이 열려 위에 쌓일 수 있고, 그때 무조건 back()을 부르면 남의
+ * 표식을 뽑아버려 그 팝업이 열리자마자 닫힙니다(모바일에서 트리거를 연타할 때
+ * 특히 잘 보임 — mousedown/click이 거의 동시에 합성됩니다). 맨 위가 아니면
+ * back()을 건너뜁니다 — 트레이드오프: 묻힌 표식은 뽑을 방법이 없으므로 실제
+ * history 항목이 하나 죽은 채 남고, 나중에 뒤로가기 한 번이 아무것도 안 닫고
+ * 소비됩니다. 그래도 엉뚱한 팝업을 닫는 것보다는 낫습니다. 표식 자체는 지금
+ * 스택 상태에서 걷어내 두어, 이 팝업이 나중에 다시 열릴 때 "이미 표식이 있다"고
+ * 착각해 push를 건너뛰지 않게 합니다.
  */
 export function useBackToClose(open: boolean, onClose: () => void, stackKey = "__dsPopupStack") {
   const closeRef = useRef(onClose);
@@ -102,7 +112,20 @@ export function useBackToClose(open: boolean, onClose: () => void, stackKey = "_
       if (!readStack(window.history.state).includes(popupId)) return;
       pendingBackRef.current = window.setTimeout(() => {
         pendingBackRef.current = null;
-        window.history.back();
+        // 예약된 사이 다른 팝업이 열려 자기 표식 위에 쌓였을 수 있다(B2). 그때 back()을
+        // 부르면 스택 맨 위, 즉 남의 표식을 뽑아버려 그 팝업이 열리자마자 닫힌다. 그러니
+        // 지금 다시 스택을 읽어 자기 표식이 여전히 맨 위일 때만 back()을 부른다.
+        const current = readStack(window.history.state);
+        if (current[current.length - 1] === popupId) {
+          window.history.back();
+          return;
+        }
+        // 묻혔다 — back()으로는 못 뽑는다(뽑으면 남의 것이 뽑힌다). 그래서 실제 history
+        // 항목은 하나 죽은 채 남는다(나중에 뒤로가기 한 번이 허공에 소비된다 — §10과의
+        // 긴장, 보고서 참고). 대신 표식은 지금 스택 상태에서 걷어내, 나중에 이 팝업이
+        // 다시 열릴 때 "이미 표식이 있다"고 착각해 push를 건너뛰지 않게 한다.
+        if (!current.includes(popupId)) return;
+        window.history.replaceState({ ...window.history.state, [stackKey]: current.filter((id) => id !== popupId) }, "");
       }, 0);
     };
   }, [open, stackKey]);
