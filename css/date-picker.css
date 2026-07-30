@@ -5,7 +5,7 @@
  * 값이 움직여도 화살표 버튼을 밀거나 가리면 안 됩니다.
  */
 .date-wheel-picker { position: relative; width: 100%; min-width: 0; }
-.date-wheel-picker.open { z-index: 90; }
+.date-wheel-picker.open { z-index: 80; }
 
 /* 트리거: 41px로 다른 입력 컨트롤과 높이를 맞춥니다. */
 .date-wheel-trigger-shell { width: 100%; height: 41px; display: grid; grid-template-columns: minmax(0, 1fr) 40px; border: 1px solid var(--line); border-radius: 7px; background: var(--input); }

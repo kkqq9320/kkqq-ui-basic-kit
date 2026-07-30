@@ -28,7 +28,7 @@
   padding: 24px 18px;
   color: #dedeee;
   background: var(--sidebar);
-  transition: width var(--sidebar-motion) var(--sidebar-ease), padding var(--sidebar-motion) var(--sidebar-ease), transform .22s ease;
+  transition: width var(--sidebar-motion) var(--sidebar-ease), padding var(--sidebar-motion) var(--sidebar-ease), transform var(--sidebar-motion) var(--sidebar-ease);
 }
 
 .sidebar-brand { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 8px 24px; transition: gap var(--sidebar-motion) var(--sidebar-ease), padding var(--sidebar-motion) var(--sidebar-ease); }
@@ -247,8 +247,8 @@
   /* 아래로 스크롤 중이거나 가상 키보드가 열리면 떠 있는 바를 내립니다 */
   .app-shell.mobile-nav-hidden .mobile-quick-bar { opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(calc(100% + 32px)); }
   .app-shell.mobile-nav-hidden .mobile-page-tabs-float { opacity: 0; pointer-events: none; transform: translateY(calc(100% + 32px)); }
-  .app-shell.mobile-keyboard-open .mobile-quick-bar { opacity: 0; visibility: hidden; pointer-events: none; transform: translateX(-50%) translateY(calc(100% + 32px)); }
-  .app-shell.mobile-keyboard-open .mobile-page-tabs-float { opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(calc(100% + 32px)); }
+  .app-shell.mobile-keyboard-open .mobile-quick-bar { opacity: 0; visibility: hidden; pointer-events: none; transform: translateX(-50%) translateY(calc(100% + 32px)); transition: opacity 160ms ease, transform 210ms cubic-bezier(.2, .8, .2, 1), visibility 0s linear 210ms; }
+  .app-shell.mobile-keyboard-open .mobile-page-tabs-float { opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(calc(100% + 32px)); transition: opacity 160ms ease, transform 210ms cubic-bezier(.2, .8, .2, 1), visibility 0s linear 210ms; }
 }
 
 @media (prefers-reduced-motion: reduce) {

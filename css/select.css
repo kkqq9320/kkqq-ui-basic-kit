@@ -26,3 +26,7 @@
 .app-select-menu button { width: 100%; min-height: 34px; padding: 7px 10px; border: 0; border-radius: 6px; color: var(--text); background: transparent; font-size: var(--font-size-control); text-align: left; white-space: normal; overflow-wrap: anywhere; }
 /* 선택됐지만 호버되지 않은 상태는 조용한 처리 — 호버는 surfaces.css가 담당 */
 .app-select-menu button.selected:not(:hover):not(:focus-visible) { color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 78%, transparent); font-weight: 700; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dropdown-chevron { transition: none; }
+}
