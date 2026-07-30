@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 
 import "../css/index.css";
 import "./demo.css";
+import { EventTracePanel } from "./EventTracePanel";
 import { clearProbeLog, historyProbeEnabled, installHistoryProbe, logProbe, readProbeLog } from "./historyProbe";
 
 // React보다 먼저 설치해야 첫 줄이 "페이지 로드"로 남습니다.
@@ -144,6 +145,9 @@ function Demo() {
   });
 
   return <MobilePageTabsContext.Provider value={pageTabs.context}>
+    {/* Select 터치 버그를 실제 휴대폰에서 진단하기 위한 임시 계측 패널. 기본은 닫혀
+        있어 평소 데모 화면에 영향이 없습니다. demo/EventTracePanel.tsx 참고. */}
+    <EventTracePanel />
     <AppShell
       collapsed={collapsed}
       mobileOpen={mobileOpen}

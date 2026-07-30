@@ -6,3 +6,41 @@
 .demo-swatches code { min-width: 0; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; }
 /* ?debug=1 진단 기록판 */
 .demo-log { max-height: 260px; margin: 12px 0 0; padding: 12px; overflow: auto; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); color: var(--text); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; user-select: text; }
+
+/* 이벤트 추적 패널 — 실제 휴대폰 Select 버그 진단용 임시 계측 UI(데모 전용).
+ * 키트 토큰에 기대지 않고 자체 색을 씁니다: 다크/라이트 어느 쪽 데모 테마 위에서도
+ * 읽혀야 하는 오버레이라서입니다. z-index는 키트가 쓰는 최고값(450)보다 한참 위로
+ * 뒀습니다. 기본은 렌더되지 않고(.trace-panel), 토글만 항상 떠 있습니다. */
+.trace-toggle {
+  position: fixed; right: 8px; bottom: 8px; z-index: 999999;
+  padding: 4px 9px; border: 1px solid rgba(255, 255, 255, .3); border-radius: 999px;
+  background: rgba(20, 20, 32, .55); color: rgba(255, 255, 255, .8);
+  font: 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .04em;
+  opacity: .55; transition: opacity .15s ease;
+}
+.trace-toggle:hover, .trace-toggle:focus-visible, .trace-toggle[aria-pressed="true"] { opacity: 1; }
+
+.trace-panel {
+  position: fixed; inset: auto 0 0 0; z-index: 999998;
+  display: flex; flex-direction: column; height: 46vh; max-height: 420px;
+  background: rgba(11, 12, 20, .97); color: #ecedf5;
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+  border-top: 1px solid rgba(255, 255, 255, .2);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, .4);
+}
+.trace-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: 0 0 auto; padding: 8px 10px; border-bottom: 1px solid rgba(255, 255, 255, .15); }
+.trace-panel-header strong { font-size: 11px; font-weight: 600; }
+.trace-panel-buttons { display: flex; gap: 6px; }
+.trace-panel-buttons button, .trace-toggle { cursor: pointer; }
+.trace-panel-buttons button {
+  padding: 4px 9px; border: 1px solid rgba(255, 255, 255, .3); border-radius: 6px;
+  background: rgba(255, 255, 255, .08); color: inherit; font: inherit;
+}
+.trace-log { flex: 1 1 auto; overflow-y: auto; padding: 8px 10px; white-space: pre-wrap; word-break: break-all; user-select: text; }
+.trace-copy-hint { flex: 0 0 auto; margin: 0; padding: 0 10px; color: rgba(236, 237, 245, .55); font-size: 10px; }
+.trace-textarea {
+  flex: 0 0 auto; height: 64px; margin: 6px 10px 10px; padding: 6px;
+  border: 1px solid rgba(255, 255, 255, .2); border-radius: 6px;
+  background: rgba(255, 255, 255, .06); color: inherit;
+  font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; resize: none;
+}
