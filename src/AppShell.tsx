@@ -13,6 +13,14 @@ import { useVirtualKeyboard, type VirtualKeyboard } from "./hooks";
  * 맞지만 반올림 오차로 1px씩 걸치는 걸 막습니다. */
 const KEYBOARD_SCROLL_GAP = 8;
 
+/** 되돌릴 때 "우리가 마지막으로 맞춘 값"과 지금 값이 이 정도(px) 안이면 아직 사용자가
+ * 직접 스크롤하지 않은 것으로 봅니다. `useScrollDirectionHidden`(hooks.ts:250)이 "의미
+ * 있는 스크롤"의 문턱으로 이미 쓰는 18px과 같은 값입니다 — iOS의 러버밴드 관성이나
+ * 기기 자체의 스크롤 보정이 되돌리는 시점 언저리에 몇 px를 얹을 수 있는데, 문턱이 1px
+ * 수준으로 좁으면 그런 흔들림만으로도 "사용자가 스크롤했다"고 오판해 정작 되돌려야 할
+ * 때 안 되돌리게 됩니다(§9 "닫히면 원래 위치로" 요구사항이 깨짐). */
+const SCROLL_DRIFT_TOLERANCE = 18;
+
 /**
  * 가상 키보드가 열리면 지금 포커스된 요소가 가려지지 않게 스크롤 호스트(`#root`)를
  * 옮기고, 닫히면 열기 전 위치로 되돌립니다.
@@ -46,8 +54,11 @@ const KEYBOARD_SCROLL_GAP = 8;
  * 논리 — hooks.ts 참고).
  *
  * 사용자가 직접 스크롤한 걸 덮어쓰지 않습니다: 되돌릴 때, 지금 `scrollTop`이 우리가
- * 마지막으로 맞춰 둔 값과 다르면(그 사이 사용자가 직접 스크롤했다는 뜻) 손대지 않고
- * 그대로 둡니다 — 긴 폼에서 타이핑하며 스크롤하는 흔한 경우를 뒤로 튕기지 않기 위해서.
+ * 마지막으로 맞춰 둔 값과 `SCROLL_DRIFT_TOLERANCE`(18px) 넘게 다르면(그 사이 사용자가
+ * 직접 스크롤했다는 뜻) 손대지 않고 그대로 둡니다 — 긴 폼에서 타이핑하며 스크롤하는
+ * 흔한 경우를 뒤로 튕기지 않기 위해서. 문턱이 있는 이유: iOS 러버밴드 관성이나 기기의
+ * 자체 스크롤 보정이 우리가 맞춘 직후에도 몇 px를 얹을 수 있는데, 1px 수준으로 좁으면
+ * 그 흔들림만으로 "사용자가 스크롤했다"고 오판해 정작 되돌려야 할 때(§9) 안 되돌립니다.
  *
  * 키보드가 열린 채로 포커스가 다른 편집 요소로 옮겨가도(탭 이동 등) 다시 맞추도록
  * 열려 있는 동안은 `focusin`도 듣습니다.
@@ -69,7 +80,7 @@ function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId =
       if (restingScrollTop.current !== null) {
         const current = scrollRoot.scrollTop;
         const applied = appliedScrollTop.current;
-        if (applied === null || Math.abs(current - applied) < 1) {
+        if (applied === null || Math.abs(current - applied) < SCROLL_DRIFT_TOLERANCE) {
           scrollRoot.scrollTop = restingScrollTop.current;
         }
         restingScrollTop.current = null;

@@ -142,6 +142,51 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     expect(root.scrollTop).toBe(1300);   // 되돌리지 않았다
   });
 
+  it("SCROLL_DRIFT_TOLERANCE(18px) 안의 흔들림은 사용자 스크롤로 오판하지 않고 되돌린다", async () => {
+    // iOS 러버밴드 관성이나 기기 자체의 스크롤 보정이 우리가 맞춘 직후에도 몇 px를
+    // 얹을 수 있다 — 문턱이 1px 수준으로 좁으면 그 흔들림만으로 "사용자가
+    // 스크롤했다"고 오판해 정작 되돌려야 할 때 안 되돌리게 된다(§9 요구사항 위반).
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 507);
+    root.scrollTop = 1046;
+
+    textarea.focus();
+    viewport.openKeyboard(350);
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));   // applied = 1067
+
+    root.scrollTop += 2;   // 문턱(18px) 안의 흔들림 — 사용자 의도가 아니다
+
+    viewport.closeKeyboard();
+    await waitFor(() => expect(keyboardInsetOf(root)).toBe("0px"));
+    expect(root.scrollTop).toBe(1046);   // 그래도 되돌렸다
+  });
+
+  it("키보드가 열린 채로 다른 편집 요소로 포커스가 옮겨가면 그 요소도 다시 맞춘다", async () => {
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(
+      <AppShell sidebar={<div />}>
+        <textarea aria-label="첫째" />
+        <textarea aria-label="둘째" />
+      </AppShell>,
+    );
+    const first = screen.getByLabelText("첫째");
+    const second = screen.getByLabelText("둘째");
+    stubRectBottom(first, 507);
+    stubRectBottom(second, 600);   // 첫째보다 더 가려짐
+    root.scrollTop = 1046;
+
+    first.focus();
+    viewport.openKeyboard(350);
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));   // 첫째 기준 보정
+
+    // 키보드가 열린 채로(탭 이동 등) 둘째로 포커스가 옮겨간다 — focusin 리스너가 다시 맞춰야 한다.
+    second.focus();
+    // overshoot = 600 - 494 + 8 = 114, 지금 scrollTop(1067) 기준으로 더한다.
+    await waitFor(() => expect(root.scrollTop).toBe(1067 + 114));
+  });
+
   it("#root 밖(다이얼로그 포털 자리)의 포커스는 건드리지 않는다", async () => {
     const viewport = installFakeVisualViewport(844);
     const root = renderIntoScrollRoot(<Page />);
