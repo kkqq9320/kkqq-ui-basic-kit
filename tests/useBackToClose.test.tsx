@@ -168,6 +168,116 @@ describe("다이얼로그 뒤로가기", () => {
   });
 });
 
+describe("B1: 킷 팝업이 열린 동안만 scrollRestoration을 manual로 바꾼다", () => {
+  // jsdom은 history.scrollRestoration을 구현하지 않는다(`'scrollRestoration' in window.history`가
+  // false). 그래서 게터/세터를 직접 흉내 내고, 세터를 스파이로 감싸 킷이 실제로 이 스텁을
+  // 통해 값을 읽고 쓰는지 단정한다. Dialog.test.tsx의 installFakeVisualViewport와 같은 패턴.
+  function installScrollRestorationStub(initial: ScrollRestoration) {
+    let value: ScrollRestoration = initial;
+    const setter = vi.fn((next: ScrollRestoration) => { value = next; });
+    Object.defineProperty(window.history, "scrollRestoration", {
+      configurable: true,
+      get: () => value,
+      set: setter,
+    });
+    return { setter, get value() { return value; } };
+  }
+
+  afterEach(() => {
+    delete (window.history as unknown as { scrollRestoration?: unknown }).scrollRestoration;
+  });
+
+  it("팝업이 열려 표식이 push되면 manual이 된다", () => {
+    const stub = installScrollRestorationStub("auto");
+    render(<Harness />);
+    expect(stub.value).toBe("manual");
+
+    // 스택을 비워서 끝낸다 — 안 그러면 unmount가 예약한 실제 back()이 이 테스트 밖에서
+    // 터지고, 모듈 스코프의 "누가 잡고 있는지" 상태가 다음 테스트로 새어 나간다.
+    pressBack();
+    expect(stack()).toHaveLength(0);
+  });
+
+  it("마지막 팝업이 버튼으로 닫히면 원래 값(auto)으로 돌아간다", () => {
+    vi.useFakeTimers();
+    const stub = installScrollRestorationStub("auto");
+    render(<Harness />);
+    expect(stub.value).toBe("manual");   // 열려 있는 동안은 manual이어야 한다
+
+    fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+    act(() => { vi.advanceTimersByTime(1); });   // 정리 단계의 지연된 back() 실행 시점
+    expect(stub.value).toBe("auto");
+  });
+
+  it("앱이 이미 manual로 둔 경우에도 manual로 남는다 (auto로 하드코딩하지 않는다)", () => {
+    vi.useFakeTimers();
+    const stub = installScrollRestorationStub("manual");
+    render(<Harness />);
+    expect(stub.value).toBe("manual");
+
+    fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(stub.value).toBe("manual");
+    // 값이 우연히 그대로인 게 아니라, 킷이 실제로 두 번(설정 + 복원) 썼는지까지 확인한다.
+    expect(stub.setter).toHaveBeenCalledTimes(2);
+    expect(stub.setter.mock.calls).toEqual([["manual"], ["manual"]]);
+  });
+
+  it("겹쳐 열리면 하나만 닫혀도 manual이고, 둘 다 닫혀야 복원된다", () => {
+    vi.useFakeTimers();
+    // 두 번째 닫기가 첫 번째 닫기 뒤의 실제로 줄어든 스택을 보게 하려면, back()이
+    // 스택에서 진짜로 한 칸을 빼고 popstate를 쏘도록 흉내 내야 한다(B2 describe의 선례).
+    backSpy.mockImplementation(() => {
+      const remaining = stack().slice(0, -1);
+      const state = remaining.length ? { [STACK_KEY]: remaining } : null;
+      window.history.replaceState(state, "");
+      window.dispatchEvent(new PopStateEvent("popstate", { state }));
+    });
+    const stub = installScrollRestorationStub("auto");
+
+    function Two() {
+      const [first, setFirst] = useState(true);
+      const [second, setSecond] = useState(true);
+      return <>
+        <Dialog open={first} onClose={() => setFirst(false)} ariaLabel="첫째">
+          <button type="button" onClick={() => setFirst(false)}>첫째닫기</button>
+        </Dialog>
+        <Dialog open={second} onClose={() => setSecond(false)} ariaLabel="둘째">
+          <button type="button" onClick={() => setSecond(false)}>둘째닫기</button>
+        </Dialog>
+      </>;
+    }
+    render(<Two />);
+    expect(stub.value).toBe("manual");
+
+    fireEvent.click(screen.getByRole("button", { name: "둘째닫기" }));
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(stub.value).toBe("manual");   // 첫째가 아직 열려 있다
+
+    fireEvent.click(screen.getByRole("button", { name: "첫째닫기" }));
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(stub.value).toBe("auto");     // 이제 둘 다 닫혔다
+  });
+
+  it("물리적 뒤로가기로 스택이 비워질 때도 복원된다", () => {
+    const stub = installScrollRestorationStub("auto");
+    render(<Harness />);
+    expect(stub.value).toBe("manual");
+
+    pressBack();
+    expect(stub.value).toBe("auto");
+  });
+
+  it("history.scrollRestoration이 없는 환경에서도 죽지 않는다", () => {
+    // 스텁을 설치하지 않는다 — jsdom 기본값 그대로(속성 자체가 없다).
+    expect("scrollRestoration" in window.history).toBe(false);
+    expect(() => render(<Harness />)).not.toThrow();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(() => fireEvent.click(screen.getByRole("button", { name: "닫기" }))).not.toThrow();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
 describe("B2: A가 닫히며 B의 표식을 뽑는 문제", () => {
   const optionsX = [{ value: "x", label: "엑스" }];
 

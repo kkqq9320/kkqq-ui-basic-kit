@@ -48,6 +48,28 @@ export function useEscapeToClose(open: boolean, onClose: () => void) {
 }
 
 
+/** 킷 팝업이 하나라도 열려 있는 동안 앱의 원래 scrollRestoration을 담아 둡니다. null이면
+ * 킷이 아직 아무것도 바꾸지 않은 상태(팝업이 없거나, 환경이 이 속성을 지원하지 않음). */
+let savedScrollRestoration: ScrollRestoration | null = null;
+
+function scrollRestorationSupported(): boolean {
+  return "scrollRestoration" in window.history;
+}
+
+/** 표식이 스택에 처음 push될 때만 실제로 바꿉니다. 이미 잡고 있으면 아무것도 안 합니다(멱등). */
+function claimScrollRestoration() {
+  if (savedScrollRestoration !== null || !scrollRestorationSupported()) return;
+  savedScrollRestoration = window.history.scrollRestoration;
+  window.history.scrollRestoration = "manual";
+}
+
+/** 표식 스택이 완전히 빌 때만 부릅니다. 잡고 있지 않으면 아무것도 안 합니다(멱등). */
+function releaseScrollRestoration() {
+  if (savedScrollRestoration === null) return;
+  if (scrollRestorationSupported()) window.history.scrollRestoration = savedScrollRestoration;
+  savedScrollRestoration = null;
+}
+
 /**
  * 뒤로가기로 팝업을 닫습니다. 열릴 때 history에 표식을 push 해 두고, popstate에서
  * 그 표식이 사라졌으면 닫습니다. 그래서 뒤로가기가 뒤 페이지로 가는 대신 팝업만
@@ -82,6 +104,23 @@ export function useEscapeToClose(open: boolean, onClose: () => void) {
  * 소비됩니다. 그래도 엉뚱한 팝업을 닫는 것보다는 낫습니다. 표식 자체는 지금
  * 스택 상태에서 걷어내 두어, 이 팝업이 나중에 다시 열릴 때 "이미 표식이 있다"고
  * 착각해 push를 건너뛰지 않게 합니다.
+ *
+ * B1 — history.scrollRestoration: 실제 back()을 부르는 대가로, 브라우저 기본값
+ * "auto"는 우리가 push한 항목에서 벗어날 때 그 직전 지점(팝업을 열기 전)의
+ * window.scrollY를 되돌립니다. 데스크톱처럼 document 자체가 스크롤되는 레이아웃에서는
+ * 사용자가 팝업을 연 채로 스크롤한 게 통째로 날아가 버립니다(모바일은 #root가 스크롤
+ * 호스트라 문서 scrollY가 0에 머물러 증상이 없습니다). 그렇다고 킷이 이 값을 영구히
+ * "manual"로 바꿔 버리면 안 됩니다 — scrollRestoration은 앱이 소유한 전역이라, 소비
+ * 앱의 진짜 페이지 이동에서도 브라우저 스크롤 복원이 꺼져 버립니다. 그래서 첫 표식이
+ * push될 때만 앱의 기존 값을 기억해 두고 "manual"로 바꾸고, 표식 스택이 완전히 빌 때만
+ * 그 값으로 되돌립니다 — 킷의 팝업이 하나라도 열려 있는 동안만 manual입니다.
+ * 스택이 비는 경로가 두 갈래라 되돌리는 지점도 두 곳입니다: (1) 이 훅이 직접
+ * back()을 부르는 경우 — 그 직전에 스택 길이가 1(자기 자신만 남음)인지 확인해서
+ * 되돌립니다. (2) 사용자가 물리적 뒤로가기를 눌러 popstate가 오는 경우 —
+ * handlePopState에서 그 이벤트의 state가 이미 빈 스택인지 확인해서 되돌립니다.
+ * 묻힌 표식을 replaceState로 걷어내는 경로(위 주석)는 스택을 절대 비우지 않으므로
+ * (위에 뭔가 남아 있을 때만 타는 경로) 여기서는 손대지 않습니다. history.scrollRestoration이
+ * 없는 환경(구형·비표준)도 있으므로 항상 존재를 확인한 뒤에만 손댑니다.
  */
 export function useBackToClose(open: boolean, onClose: () => void, stackKey = "__dsPopupStack") {
   const closeRef = useRef(onClose);
@@ -101,10 +140,12 @@ export function useBackToClose(open: boolean, onClose: () => void, stackKey = "_
       return Array.isArray(stack) ? (stack as string[]) : [];
     }
     if (!readStack(window.history.state).includes(popupId)) {
+      claimScrollRestoration();
       window.history.pushState({ ...window.history.state, [stackKey]: [...readStack(window.history.state), popupId] }, "");
     }
     function handlePopState(event: PopStateEvent) {
       if (!readStack(event.state).includes(popupId)) closeRef.current();
+      if (readStack(event.state).length === 0) releaseScrollRestoration();
     }
     window.addEventListener("popstate", handlePopState);
     return () => {
@@ -117,6 +158,7 @@ export function useBackToClose(open: boolean, onClose: () => void, stackKey = "_
         // 지금 다시 스택을 읽어 자기 표식이 여전히 맨 위일 때만 back()을 부른다.
         const current = readStack(window.history.state);
         if (current[current.length - 1] === popupId) {
+          if (current.length === 1) releaseScrollRestoration();
           window.history.back();
           return;
         }
