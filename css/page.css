@@ -44,6 +44,15 @@
    * 스크롤 가능한 여유를 더 만들어 줍니다 — 이 패딩 자체는 아무것도 움직이지
    * 않고, AppShell의 useKeyboardScrollCompensation이 실제로 스크롤을 옮깁니다. */
   .workspace { padding: 74px 16px calc(102px + env(safe-area-inset-bottom) + var(--keyboard-inset, 0px)); }
+  /* 키보드가 닫힐 때만 이 패딩을 부드럽게 줄인다(§4 배치 전환: damping 1.0, 오버슈트
+   * 없음). 열릴 때는 절대 걸면 안 된다 — AppShell.tsx의 useKeyboardScrollCompensation이
+   * 같은 프레임(useLayoutEffect) 안에서 곧장 scrollTop을 미는데, 패딩이 트랜지션
+   * 중이면 그 순간의 레이아웃은 아직 늘어나지 않은 옛 값 기준이라 scrollTop 증가분이
+   * 그대로 clamp돼 포커스 필드가 다시 가려진다. .keyboard-inset-open은 AppShell이
+   * keyboard.open과 같은 렌더에서만 붙이는 내부 전용 마커라, 키보드가 진짜 열려 있는
+   * 동안은 이 선택자가 매치되지 않아 트랜지션 자체가 없다 — 닫히는 순간(마커가
+   * 떨어지는 순간)에야 매치되어 트랜지션이 붙는다. */
+  .app-shell:not(.keyboard-inset-open) .workspace { transition: padding-bottom var(--motion-reposition) var(--sidebar-ease); }
   .page-header { grid-template-rows: 14px minmax(39px, auto) minmax(44px, auto); }
   /* 모바일에서는 떠 있는 컨트롤이 한 줄을 통째로 차지하고 헤더는 그 아래에서
    * 시작하므로 제목 오른쪽을 비울 필요가 없습니다. 폭을 깎으면 제목이 감겨
@@ -69,4 +78,11 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .page-action-button { transition: none; }
+  /* 위 .app-shell:not(.keyboard-inset-open) .workspace와 문자 그대로 같은 선택자여야
+   * 한다 — 특이도가 같아야 소스 순서(이 블록이 파일 뒤쪽)로 이긴다. 특이도가 낮은
+   * `.workspace { transition: none; }`만 써서는 안 된다: 16f528a에서 바로 이 실수로
+   * sidebar.css의 감춤 트랜지션이 reduced-motion 아래서도 계속 돌아 접근성 회귀가
+   * 났었다. 줄이는 게 아니라 아예 없애야 한다(§14) — 이 축소는 애초에 코드가 만드는
+   * 유일한 움직임이라 "짧게"가 아니라 "0"이어야 한다. */
+  .app-shell:not(.keyboard-inset-open) .workspace { transition: none; }
 }

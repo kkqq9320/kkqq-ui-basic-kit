@@ -47,6 +47,13 @@
   --dropdown-option-hover-text: #fff;
   --dropdown-option-hover-background: var(--accent);
   --motion-fast: 140ms;
+  /* "재배치" 성격의 전환(키보드가 닫히며 예약해 둔 여백이 줄거나, 다이얼로그 백드롭이
+   * 보이는 영역을 따라 다시 가운데 잡힐 때)에 씁니다. Apple이 실제로 쓰는 재배치 값인
+   * damping 1.0(오버슈트 없음) / response 0.4를 그대로 옮긴 것 — 스프링 라이브러리 없이
+   * CSS 트랜지션으로 흉내 낼 때는 이징 곡선 자체가 오버슈트하지 않아야 하므로, 이미
+   * 이 킷에서 레이아웃 치수 전환에 쓰고 있는 --sidebar-ease(감쇠형, y가 1을 넘지 않음)를
+   * 그대로 재사용합니다. */
+  --motion-reposition: 400ms;
   /* 사이드바 접기/펴기. width가 실제로 레이아웃을 구동하므로 이 값 하나로
    * 폭·패딩·라벨·구분선이 모두 같은 리듬을 탑니다. */
   --sidebar-width: 238px;
