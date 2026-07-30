@@ -105,12 +105,18 @@ html { scrollbar-gutter: stable; }
 body { margin: 0; min-width: 0; min-height: 100vh; color: var(--text); background: radial-gradient(circle at 80% 0%, color-mix(in srgb, var(--green) 7%, transparent), transparent 32%), var(--bg); font-family: var(--font-family-base); font-size: var(--font-size-body); line-height: 1.45; }
 #root { min-width: 0; }
 
-/* 모바일: 문서 대신 #root를 세로 스크롤 호스트로 쓰고 스크롤바를 숨깁니다.
- * 고정 하단 바가 주소창 변화에 흔들리지 않게 하는 전제 조건입니다. */
+/* 모바일: 문서 대신 #root를 세로 스크롤 호스트로 쓰고, "그 페이지 스크롤 호스트"의
+ * 스크롤바만 숨깁니다 — 고정 하단 바가 주소창 변화에 흔들리지 않게 하는 전제 조건은
+ * html/body/#root에만 해당합니다(§6). 이전에는 `*`로 전부(안쪽에서 스스로 스크롤하는
+ * Select 메뉴, 다이얼로그, 사이드바 서랍 등도) 숨겨서, 그 표면들이 실제로 스크롤되는데도
+ * 스크롤바가 안 보여 "더 있다"는 게 안 보이는 결함이 있었다. 대상을 좁혀도 안쪽 표면은
+ * 방치되지 않는다 — 위 전역 리셋(96-104줄)의 공용 4px thin 처리가 그대로 이어받는다
+ * (§6:138: 컴포넌트는 스크롤바 외형을 바꾸지 않는다). */
 @media (max-width: 760px), (hover: none) and (pointer: coarse) {
   html, body { height: 100%; overflow: hidden; scrollbar-gutter: auto; }
   #root { width: 100%; height: 100vh; height: 100dvh; overflow-x: hidden; overflow-y: auto; scroll-padding-bottom: 40dvh; -webkit-overflow-scrolling: touch; }
-  * { scrollbar-width: none !important; -ms-overflow-style: none; }
-  *::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; background: transparent !important; }
-  *::-webkit-scrollbar-track, *::-webkit-scrollbar-thumb { background: transparent !important; }
+  html, body, #root { scrollbar-width: none !important; -ms-overflow-style: none; }
+  html::-webkit-scrollbar, body::-webkit-scrollbar, #root::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; background: transparent !important; }
+  html::-webkit-scrollbar-track, body::-webkit-scrollbar-track, #root::-webkit-scrollbar-track,
+  html::-webkit-scrollbar-thumb, body::-webkit-scrollbar-thumb, #root::-webkit-scrollbar-thumb { background: transparent !important; }
 }
