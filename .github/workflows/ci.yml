@@ -1,0 +1,23 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        react: ["18", "19"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Pin React ${{ matrix.react }} (types included)
+        run: npm install --no-save react@${{ matrix.react }} react-dom@${{ matrix.react }} @types/react@^${{ matrix.react }} @types/react-dom@^${{ matrix.react }}
+      - run: npm run typecheck
+      - run: npm test
