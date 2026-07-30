@@ -70,6 +70,13 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
   const menuRef = useRef<HTMLDivElement>(null);
   const selectionScrollRef = useRef<ScrollSnapshot>([]);
   const scrolledToSelectionRef = useRef(false);
+  // 실기기 트레이스(온스크린 이벤트 추적 패널)로 확인된 유령 click 대응. 논-포털
+  // 메뉴에서 옵션을 탭하면, 옵션 자신의 click(menu=yes) 다음에 mousedown/mouseup
+  // 없이 트리거를 겨냥한 click이 또 온다(관측 간격 24ms, menu=no — 이미 닫힌 뒤).
+  // choose()가 예약한 rAF의 포커스 복원과 맞물려 나오는 것으로 보이며, 그 시점엔
+  // 이미 메뉴가 닫혀 있어 :toggle이 "다시 열기"로 읽는다. 트리거 쪽에서 그 다음
+  // click 한 번을 "닫는 대신 삼키기"로 처리해 재오픈을 막는다.
+  const suppressReopenRef = useRef(false);
   const selected = options.find((option) => option.value === value);
   // 뒤로가기로 메뉴만 닫습니다. 표식이 스택이라, 다이얼로그 안에서 열린 메뉴는
   // 뒤로가기 한 번에 메뉴만 닫히고 다이얼로그는 남습니다. 이게 없으면 뒤로가기가
@@ -147,7 +154,16 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
     selectionScrollRef.current = [];
     onChange(nextValue);
     setOpen(false);
-    requestAnimationFrame(() => restoreFocusWithoutScroll(triggerRef.current, scrollSnapshot));
+    // 유령 click은 아래 rAF(포커스 복원)와 같은 프레임에서 나오는 것으로 보이므로,
+    // 여기서 곧바로 풀면(같은 프레임) 아직 안 왔을 수 있다(실측 24ms). 한 프레임
+    // 더 미뤄서 푼다 — 프레임 기준이라 느린 기기에서는 같이 늘어나 여유가 준다.
+    // 유령 click이 안 오는 정상 경로(데스크톱, 포털)에서도 이 만료가 있어야
+    // suppressReopenRef가 다음 진짜 트리거 클릭까지 눌어붙지 않는다.
+    suppressReopenRef.current = true;
+    requestAnimationFrame(() => {
+      restoreFocusWithoutScroll(triggerRef.current, scrollSnapshot);
+      requestAnimationFrame(() => { suppressReopenRef.current = false; });
+    });
   }
 
   const menu = <div
@@ -162,7 +178,10 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
   </div>;
 
   return <div className={`app-select dropdown-align-${align} ${open ? "open" : ""} ${openAbove ? "drop-up" : ""} ${className}`.trim()} ref={rootRef}>
-    <button ref={triggerRef} type="button" className="app-select-trigger" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)}><span>{selected?.label || placeholder}</span><i className="dropdown-chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></i></button>
+    <button ref={triggerRef} type="button" className="app-select-trigger" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} disabled={disabled} onClick={() => {
+      if (suppressReopenRef.current) { suppressReopenRef.current = false; return; }   // 유령 click 삼키기 — 토글하지 않는다
+      setOpen((current) => !current);
+    }}><span>{selected?.label || placeholder}</span><i className="dropdown-chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></i></button>
     {open && (portal ? (position ? createPortal(menu, document.body) : null) : menu)}
   </div>;
 }

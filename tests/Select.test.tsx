@@ -48,6 +48,26 @@ describe("Select", () => {
     expect(trigger.textContent).toBe("둘째");
   });
 
+  // 실제 휴대폰 트레이스(온스크린 이벤트 추적 패널로 채집): 옵션을 한 번 탭했는데
+  // click이 두 번 온다 — 옵션 자신의 click(+120ms, menu=yes) 다음에, mousedown/mouseup
+  // 없이 트리거를 겨냥한 click이 24ms 뒤(+144ms, menu=no)에 또 온다. 이미 닫힌 뒤라
+  // :165의 무방비 토글이 그걸 "다시 열기"로 읽어 메뉴가 곧바로 재오픈됐다. 이 테스트는
+  // 그 순서(옵션 click → 트리거 click, 같은 한 번의 탭)를 그대로 재현한다.
+  it("does not let a same-tap phantom click on the trigger reopen the menu after choosing an option", () => {
+    render(<ControlledSelect />);
+    const trigger = screen.getByRole("button", { name: "항목" });
+
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("option", { name: "둘째" }));
+    expect(screen.queryByRole("listbox")).toBeNull();
+
+    // 같은 탭이 만든 두 번째(유령) click — 실기기에서 트리거를 겨냥해 온다.
+    fireEvent.click(trigger);
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(trigger.textContent).toBe("둘째");
+  });
+
   it("marks the selected option and disables the disabled one", () => {
     render(<ControlledSelect initialValue="a" />);
     fireEvent.click(screen.getByRole("button", { name: "항목" }));
