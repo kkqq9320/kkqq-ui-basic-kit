@@ -20,6 +20,8 @@ afterEach(() => {
   cleanup();
   delete (window as { visualViewport?: unknown }).visualViewport;
   delete (window as { matchMedia?: unknown }).matchMedia;
+  delete (window as { ResizeObserver?: unknown }).ResizeObserver;
+  fakeResizeObserverEntries.length = 0;
   document.querySelectorAll("[data-test-root]").forEach((node) => node.remove());
   document.querySelectorAll("[data-test-outside]").forEach((node) => node.remove());
 });
@@ -87,6 +89,15 @@ function keyboardInsetOf(root: HTMLElement) {
   return (root.querySelector(".app-shell") as HTMLElement).style.getPropertyValue("--keyboard-inset");
 }
 
+/** .keyboard-inset-open은 오직 keyboard.open에서만 파생된다(지연 해제 로직과 무관) —
+ * 그래서 "닫히는 렌더가 실제로 커밋됐는지"를 지연 해제 값과 상관없이 확인할 수 있는
+ * 동기화 지점으로 쓴다. 이게 없으면 closeKeyboard() 직후 동기적으로 읽는 값은 아직
+ * React가 커밋하기 전(옛 값)일 수도, 이미 커밋한 뒤(새 값)일 수도 있어 무엇을 재는지
+ * 알 수 없다. */
+function shellHasKeyboardInsetOpenMarker(root: HTMLElement) {
+  return ((root.querySelector(".app-shell") as HTMLElement).className).includes("keyboard-inset-open");
+}
+
 /** root.scrollTop에 대한 모든 쓰기를 순서대로 기록한다. jsdom은 scrollTop을 그냥
  * 평범한 프로퍼티로 다루므로(레이아웃이 없어 clamp도 없음) 인스턴스 프로퍼티로
  * 가려서 매 쓰기를 가로챌 수 있다 — 한 번의 순간이동(옛 코드)과 여러 프레임에
@@ -118,6 +129,62 @@ function installReducedMotionPreference() {
       dispatchEvent() { return true; },
     }),
   });
+}
+
+/** jsdom은 ResizeObserver를 구현하지 않는다. AutoGrowTextarea처럼 포커스된 요소
+ * 자신의 크기가(뷰포트 리사이즈도 focusin도 아닌 경로로) 바뀔 때 AppShell이 다시
+ * 맞추는지 확인하려면, observe()를 기록해 뒀다가 테스트가 직접 콜백을 터뜨릴 수 있는
+ * 가짜가 필요하다. installFakeVisualViewport와 같은 자리의 헬퍼다. */
+type FakeResizeObserverEntry = { target: Element; callback: ResizeObserverCallback };
+const fakeResizeObserverEntries: FakeResizeObserverEntry[] = [];
+
+function installFakeResizeObserver() {
+  class FakeResizeObserver {
+    private callback: ResizeObserverCallback;
+    constructor(callback: ResizeObserverCallback) { this.callback = callback; }
+    observe(target: Element) { fakeResizeObserverEntries.push({ target, callback: this.callback }); }
+    unobserve(target: Element) {
+      const at = fakeResizeObserverEntries.findIndex((entry) => entry.target === target && entry.callback === this.callback);
+      if (at >= 0) fakeResizeObserverEntries.splice(at, 1);
+    }
+    disconnect() {
+      for (let i = fakeResizeObserverEntries.length - 1; i >= 0; i--) if (fakeResizeObserverEntries[i].callback === this.callback) fakeResizeObserverEntries.splice(i, 1);
+    }
+  }
+  Object.defineProperty(window, "ResizeObserver", { configurable: true, value: FakeResizeObserver });
+}
+
+/** 지금 target을 관찰 중인 모든 콜백을 터뜨린다 — 실제 크기 변화 없이도(rect 스텁만
+ * 바꾼 채로) "레이아웃이 바뀌었다"는 신호만 재현하면 충분하다. */
+function fireResizeObserved(target: Element) {
+  for (const entry of fakeResizeObserverEntries) if (entry.target === target) entry.callback([{ target } as ResizeObserverEntry], {} as ResizeObserver);
+}
+
+/** 실제 브라우저처럼 동작하는 가짜 스크롤 지오메트리를 설치한다: scrollHeight는
+ * "기본 콘텐츠 높이 + 지금 --keyboard-inset"에서 유도하고, scrollTop은 읽고 쓸 때마다
+ * 그 순간의 최댓값으로 clamp한다. jsdom은 레이아웃이 없어 scrollHeight/clientHeight가
+ * 항상 0이고 scrollTop을 clamp하지도 않으므로(제한 없는 평범한 프로퍼티), A2가 고치려는
+ * "패딩이 줄면 브라우저가 scrollTop을 새 최댓값으로 clamp한다"는 실제 버그 경로 자체를
+ * 재현하려면 이 helper가 필요하다 — getter에서도 clamp해야, 우리 코드가 아무것도 쓰지
+ * 않아도(--keyboard-inset만 줄여도) "다음에 읽었을 때 이미 줄어 있더라"는 실제 증상을
+ * 그대로 흉내 낼 수 있다. */
+function installClampingScrollRoot(root: HTMLElement, baseContentHeight: number, clientHeight: number) {
+  Object.defineProperty(root, "clientHeight", { configurable: true, get: () => clientHeight });
+  function currentInset(): number {
+    const shell = root.querySelector(".app-shell") as HTMLElement | null;
+    return parseFloat(shell?.style.getPropertyValue("--keyboard-inset") || "0") || 0;
+  }
+  function currentMax(): number {
+    return Math.max(0, baseContentHeight + currentInset() - clientHeight);
+  }
+  Object.defineProperty(root, "scrollHeight", { configurable: true, get: () => baseContentHeight + currentInset() });
+  let raw = 0;
+  Object.defineProperty(root, "scrollTop", {
+    configurable: true,
+    get() { return Math.min(raw, currentMax()); },
+    set(next: number) { raw = Math.min(next, currentMax()); },
+  });
+  return { currentMax };
 }
 
 function Page() {
@@ -479,5 +546,152 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     // 전체적으로 단조 증가 — 한 번이라도 목표를 지나쳤다가 되돌아오는 오버슈트가
     // 없다(damping 1.0, 오버슈트 없음).
     for (let i = 1; i < writes.length; i++) expect(writes[i]).toBeGreaterThanOrEqual(writes[i - 1] - 0.01);
+  });
+
+  it("단일 리사이즈 이벤트로 키보드가 한 번에 열려도(iOS처럼) 가려지지 않는다 — 여러 단계 이론을 배제한다", async () => {
+    // bug-keyboard-shift 재조사 A1: "포커스에서 한 번만 측정한다"는 가설을 먼저
+    // 반증한다. 이 테스트는 안드로이드 다단계(위 테스트)와 달리 openKeyboard를 딱 한
+    // 번만 부른다 — iOS처럼 최종 높이로 한 번에 열리는 경우다. 위쪽 첫 테스트(130줄)도
+    // 이미 단일 호출이었지만 이 테스트는 그 사실을 명시적으로 이름 붙여, "여러 단계에
+    // 걸친 측정"이 원인이라는 가설이 이미 기존 통과 테스트로 반증됐다는 근거로 보고서에
+    // 인용할 수 있게 한다.
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 507);
+    root.scrollTop = 1046;
+
+    textarea.focus();
+    viewport.openKeyboard(350);   // 단 한 번 — 644 같은 중간 단계 없이 곧장 494로
+
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));
+  });
+
+  it("포커스된 요소 자신의 높이가 나중에 바뀌면(자동 확장 textarea 등, 리사이즈도 focusin도 아님) 다시 맞춘다", async () => {
+    // A1의 진짜 잔여 원인: AutoGrowTextarea.tsx:20-28의 resize()는 onInput에서 동기적으로
+    // textarea.style.height를 바꾸지만, 그건 visualViewport의 resize도 아니고 document의
+    // focusin도 아니다 — 지금 useKeyboardScrollCompensation의 두 이펙트 중 어느 쪽도 이
+    // 경로를 듣지 않는다. 그래서 첫 측정 이후 포커스된 요소 자신이 자라 그 rect.bottom이
+    // visibleBottom 아래로 내려가도 아무도 다시 재라고 하지 않는다 — 키보드 자체는 이미
+    // 다 열려 안정된 뒤에 생기는 잔여 은폐다. ResizeObserver로 "지금 포커스된 요소"를
+    // 계속 지켜보면, 원인이 무엇이든(자동 확장 textarea든 다른 컴포넌트든) 다시 잰다.
+    installFakeResizeObserver();
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    let bottom = 400;   // 처음엔 잘 보임(최종 visibleBottom 494 안)
+    Object.defineProperty(textarea, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({ top: bottom - 79, left: 0, right: 320, bottom, width: 320, height: 79, x: 0, y: bottom - 79, toJSON() {} }),
+    });
+    root.scrollTop = 1046;
+
+    textarea.focus();
+    viewport.openKeyboard(350);   // visibleBottom = 494, 400 < 494라 아직 스크롤 필요 없음
+    await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));
+    expect(root.scrollTop).toBe(1046);
+
+    // 사용자가 여러 줄을 입력해 textarea가 자라난다(AutoGrowTextarea.resize()와 같은 일) —
+    // rect.bottom이 visibleBottom 아래로 내려간다. 이 변화 자체는 리사이즈도 focusin도
+    // 아니므로, ResizeObserver 콜백으로만 알 수 있다.
+    bottom = 560;
+    fireResizeObserved(textarea);
+
+    // overshoot = 560 - 494 + 8 = 74
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 74));
+  });
+
+  it("맨 아래로 스크롤된 채 키보드가 닫히면, 지금 스크롤 위치가 기대고 있는 예약 여백을 그 자리에서 걷어내지 않는다", async () => {
+    // A2의 원인: css/page.css의 --keyboard-inset이 0으로 줄면 #root의 scrollHeight가
+    // 그만큼 줄고, scrollTop이 그 새 최댓값보다 크면 브라우저가 scrollTop을 새 최댓값으로
+    // clamp한다 — 우리가 스크롤을 옮기는 코드가 하나도 없어도 여백을 없앤 것 자체가
+    // 화면을 움직인다. 맨 아래로 스크롤한 채 닫으면 이 clamp 폭은 정확히 남아 있던
+    // --keyboard-inset과 같다(과거 보고서의 "-400px, 정확히 새 scroll max"). jsdom은
+    // 레이아웃이 없어(scrollHeight/clientHeight가 항상 0) 이 clamp 자체가 재현되지
+    // 않으므로 installClampingScrollRoot로 실제 브라우저의 clamp 동작을 흉내 낸다.
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 50);   // 이미 잘 보임 — reposition()이 따로 스크롤하지 않게
+    const BASE_CONTENT_HEIGHT = 2000;
+    const CLIENT_HEIGHT = 800;
+    installClampingScrollRoot(root, BASE_CONTENT_HEIGHT, CLIENT_HEIGHT);
+
+    textarea.focus();
+    viewport.openKeyboard(350);
+    await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));
+    const insetWhileOpen = parseFloat(keyboardInsetOf(root));
+
+    // 사용자가 키보드가 열린 채로 맨 아래까지 스크롤했다 — 지금 예약된 여백을 전부 쓰는 중.
+    root.scrollTop = BASE_CONTENT_HEIGHT + insetWhileOpen - CLIENT_HEIGHT;
+    const bottomScrollTop = root.scrollTop;
+
+    viewport.closeKeyboard();
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(false));   // 닫히는 렌더가 커밋됐다
+
+    // "닫힘 렌더" 자체는 keyboard.open만으로 즉시 마커를 떼지만, 지연 해제 값은 그
+    // 렌더 "안의" useLayoutEffect가 다시 계산해 별도 커밋으로 반영된다 — 그래서 최종
+    // 값에 안정될 때까지 기다린다. 예전(수정 전)이었다면 이 값이 결국 0으로 안정되고
+    // (패딩이 줄어) 새 최댓값(bottomScrollTop - insetWhileOpen)으로 clamp됐다 — 정확히
+    // -insetWhileOpen만큼 뚝 떨어진다. 지금 스크롤 위치가 이 여백에 기대고 있으므로
+    // 아직 걷어낼 수 없다 — 값이 insetWhileOpen 그대로 안정돼야 한다.
+    await waitFor(() => expect(parseFloat(keyboardInsetOf(root))).toBe(insetWhileOpen));
+    expect(root.scrollTop).toBe(bottomScrollTop);
+  });
+
+  it("키보드가 닫힌 뒤 사용자가 위로 스크롤해 여백이 더 이상 필요 없어지면, 그만큼씩 걷어내다 결국 0으로 완전히 해제한다(지연 해제)", async () => {
+    // §16.2 Agency: 사용자가 스스로 스크롤해서 여백을 벗어나기 전까지는 걷어내지 않는다.
+    // 벗어난 만큼만, 벗어난 뒤에 걷어낸다 — "지연 해제"라는 이름의 근거.
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 50);
+    const BASE_CONTENT_HEIGHT = 2000;
+    const CLIENT_HEIGHT = 800;
+    installClampingScrollRoot(root, BASE_CONTENT_HEIGHT, CLIENT_HEIGHT);
+
+    textarea.focus();
+    viewport.openKeyboard(350);
+    await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));
+    const insetWhileOpen = parseFloat(keyboardInsetOf(root));
+    root.scrollTop = BASE_CONTENT_HEIGHT + insetWhileOpen - CLIENT_HEIGHT;
+    const bottomScrollTop = root.scrollTop;
+
+    viewport.closeKeyboard();
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(false));   // 닫히는 렌더가 커밋됐다
+    await waitFor(() => expect(parseFloat(keyboardInsetOf(root))).toBe(insetWhileOpen));   // 아직 그대로(위 테스트와 같은 전제) — 안정될 때까지 기다린다
+
+    // 사용자가 위로 100px 스크롤한다 — 이제 그만큼은 걷어내도 안전하다.
+    root.scrollTop -= 100;
+    root.dispatchEvent(new Event("scroll"));
+    await waitFor(() => expect(parseFloat(keyboardInsetOf(root))).toBe(insetWhileOpen - 100));
+    expect(root.scrollTop).toBe(bottomScrollTop - 100);   // 그 사이 더 움직이지 않았다 — 걷어낸 만큼이 정확히 안전한 만큼이었다.
+
+    // 완전히 안전한 지점(natural max, 여백이 0이어도 되는 지점)까지 스크롤하면 결국
+    // 0으로 완전히 수렴한다 — "지연"이지 "영구 보류"가 아니다.
+    root.scrollTop = BASE_CONTENT_HEIGHT - CLIENT_HEIGHT;
+    root.dispatchEvent(new Event("scroll"));
+    await waitFor(() => expect(keyboardInsetOf(root)).toBe("0px"));
+  });
+
+  it("스크롤 지오메트리를 알 수 없으면(레이아웃 없는 환경 등) 예전처럼 즉시 0으로 돌아간다 — 지연 해제 가드", async () => {
+    // clientHeight <= 0(레이아웃이 없거나 스크롤 호스트를 아직 못 찾음)이면 natural max를
+    // 계산할 근거가 없으므로, 이 경로는 통째로 건너뛰고 예전 동작(닫히면 즉시 0)으로
+    // 떨어져야 한다. 이 테스트는 그 가드를 이름으로 박아 둔다 — 이 파일의 다른 모든
+    // 기존 테스트가 지오메트리를 스텁하지 않고도 "닫히면 0px" 를 계속 기대할 수 있는
+    // 이유가 바로 이 폴백이다.
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 507);
+    root.scrollTop = 1046;
+
+    textarea.focus();
+    viewport.openKeyboard(350);
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));
+
+    viewport.closeKeyboard();
+    await waitFor(() => expect(keyboardInsetOf(root)).toBe("0px"));
+    expect(root.scrollTop).toBe(1046 + 21);   // 되돌리지 않는다(기존 계약) — 그저 즉시 0으로.
   });
 });

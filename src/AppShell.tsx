@@ -5,7 +5,7 @@
  * 상태는 전부 controlled입니다. navHidden/keyboardOpen은 hooks.ts의
  * useScrollDirectionHidden / useVirtualKeyboardOpen을 그대로 넣으면 됩니다.
  */
-import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { useVirtualKeyboard, type VirtualKeyboard } from "./hooks";
 
@@ -166,12 +166,44 @@ function prefersReducedMotion() {
  */
 function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId = "root") {
   const rafIdRef = useRef<number | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   function cancelPendingScroll() {
     if (rafIdRef.current !== null) {
       cancelAnimationFrame(rafIdRef.current);
       rafIdRef.current = null;
     }
+  }
+
+  /** 지금 포커스된 요소를 계속 지켜보다가, 그 요소 "자신의" 박스가 바뀌면(예:
+   * AutoGrowTextarea.tsx:20-28의 onInput이 여러 줄 입력에 반응해 textarea.style.height를
+   * 늘릴 때) reposition()을 다시 부릅니다.
+   *
+   * 왜 필요한가 — A1의 잔여 원인: 재조사 결과 "포커스에서 딱 한 번만 잰다"는 가설은
+   * 이미 반증됐습니다(AppShell.test.tsx의 단일 리사이즈 테스트와 안드로이드 다단계
+   * 테스트가 둘 다 통과합니다 — 아래 두 이펙트가 keyboard.inset이 바뀔 때마다 이미
+   * 다시 측정합니다). 진짜 남는 구멍은 그 반대 방향입니다: 포커스된 요소 자신의
+   * 크기가 나중에 바뀌는데, 그 변화가 visualViewport의 resize도 document의 focusin도
+   * 아닌 경로(textarea 자신의 onInput)로 일어나면, 지금 이 훅의 두 리스너(focusin,
+   * keyboard.inset 변화) 중 어느 쪽도 그걸 들을 수 없습니다 — 키보드는 이미 다 열려
+   * 안정된 뒤라 아무 이벤트도 다시 안 옵니다. 특정 이벤트 이름에 거는 대신
+   * ResizeObserver로 "지금 포커스된 요소" 자체를 지켜보면, 원인이 AutoGrowTextarea든
+   * 다른 어떤 크기 변화든 상관없이 다시 잽니다.
+   *
+   * reposition()이 끝날 때마다 다시 부르므로(관찰 대상이 바뀌었을 수도, 안 바뀌었을
+   * 수도 있음) 매번 disconnect 후 지금 document.activeElement 하나만 다시 관찰합니다 —
+   * 인스턴스 하나를 재사용하는 이유는 매번 새로 만들면 이전 관찰이 새는 걸 막기 위한
+   * 관례일 뿐, disconnect가 항상 먼저 불리므로 실제로는 새로 만들어도 동작은 같습니다.
+   * ResizeObserver가 없는 환경(구형 브라우저, 이 킷의 유일한 실사용처인 jsdom 테스트가
+   * 직접 흉내 내지 않는 한)에서는 조용히 건너뜁니다 — visualViewport와 같은 선례로
+   * feature-detect만 하고 폴리필을 들이지 않습니다.
+   */
+  function observeFocusedElementSize() {
+    if (typeof ResizeObserver === "undefined") return;
+    if (!resizeObserverRef.current) resizeObserverRef.current = new ResizeObserver(() => reposition());
+    resizeObserverRef.current.disconnect();
+    const focused = document.activeElement;
+    if (focused instanceof Element) resizeObserverRef.current.observe(focused);
   }
 
   /** scrollRoot.scrollTop을 지금 값에서 delta만큼 더한 값까지 애니메이션합니다.
@@ -199,7 +231,11 @@ function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId =
     const focused = document.activeElement;
     const viewport = window.visualViewport;
     cancelPendingScroll();
-    if (!scrollRoot || !viewport || !(focused instanceof HTMLElement) || !scrollRoot.contains(focused)) return;
+    if (!scrollRoot || !viewport || !(focused instanceof HTMLElement) || !scrollRoot.contains(focused)) {
+      resizeObserverRef.current?.disconnect();   // 지켜볼 대상이 없다 — 이전 대상을 계속 지켜보지 않는다.
+      return;
+    }
+    observeFocusedElementSize();
     const rect = focused.getBoundingClientRect();
     const visibleBottom = viewport.offsetTop + viewport.height;
     const overshoot = rect.bottom - visibleBottom + KEYBOARD_SCROLL_GAP;
@@ -224,6 +260,7 @@ function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId =
     return () => {
       document.removeEventListener("focusin", reposition);
       cancelPendingScroll();
+      resizeObserverRef.current?.disconnect();
     };
   }, [keyboard.open, scrollRootId]);
 
@@ -237,6 +274,121 @@ function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId =
     if (!keyboard.open) return;
     reposition();
   }, [keyboard.open, keyboard.inset, scrollRootId]);
+}
+
+/**
+ * 키보드가 닫힐 때 예약해 둔 --keyboard-inset을 즉시 걷어내지 않고, 지금 스크롤
+ * 위치가 그 여백에 기대고 있는 동안은 유지합니다. `keyboard.open`이면 `keyboard.inset`을
+ * 그대로 돌려주고, 닫히면 "지금 안전하게 걷어낼 수 있는 만큼"만 걷어낸 값을 돌려줍니다.
+ *
+ * A2의 원인 — 4c7518c는 "닫힐 때 억지로 스크롤 위치를 되돌리는 코드"를 들어냈지만
+ * (위 useKeyboardScrollCompensation의 문서 참고), 그것과 별개로 남아 있던 경로가
+ * 하나 있습니다: `--keyboard-inset`(css/page.css의 `.workspace` 하단 패딩)이 줄면
+ * `#root`의 scrollHeight가 그만큼 줄고, 지금 scrollTop이 그 새 최댓값보다 크면
+ * **브라우저가 scrollTop을 새 최댓값으로 스스로 clamp**합니다 — 우리가 스크롤을
+ * 옮기는 코드가 하나도 없어도, 예약된 여백을 없앤 것 자체가 화면을 움직입니다.
+ * 맨 아래로 스크롤한 채 키보드를 닫는 경우 이 clamp 폭은 정확히 그 순간의
+ * --keyboard-inset과 같습니다(AppShell.test.tsx의 "맨 아래로 스크롤된 채..." 테스트가
+ * 수정 전 이 정확한 폭을 재현합니다).
+ *
+ * 고침은 되돌리기가 아니라 **해제를 미루는 것**입니다(§16.2 Agency: 사용자가 스스로
+ * 벗어나기 전까지는 우리가 화면을 움직이는 원인을 만들지 않습니다): 지금 scrollTop이
+ * "여백이 하나도 없을 때의 최댓값"(natural max)을 넘어서는 만큼만 --keyboard-inset으로
+ * 계속 예약해 두고, 사용자가 위로 스크롤해 그 초과분이 줄면(natural max에 가까워지면)
+ * 그만큼씩 걷어내다, 완전히 필요 없어지면(natural max 아래로 내려가면) 0으로
+ * 수렴합니다 — "필요 없어질 때까지 기다렸다 걷어낸다"는 뜻에서 지연 해제입니다.
+ * 한 번 걷어낸 만큼은 사용자가 다시 아래로 스크롤해도 되돌려 늘리지 않습니다 —
+ * 이미 줄어든 여백 아래로는 평범한 스크롤 바닥과 똑같이 자연스럽게 멈추므로, 다시
+ * 늘리는 쪽이 오히려 사용자가 요청하지 않은 레이아웃 변화가 됩니다.
+ *
+ * natural max(패딩이 0일 때의 scrollHeight - clientHeight)를 닫히는 바로 그 순간에
+ * 새로 측정하면 안 됩니다 — React 커밋 순서상 이펙트가 도는 시점엔 이미 DOM에 새
+ * 스타일(패딩이 줄어드는 쪽)이 적용된 뒤이고, `padding-bottom`은 css/page.css:55의
+ * 트랜지션이 걸린 속성이라 "그 순간 동기적으로 읽으면 시작값이 나오는지 목표값이
+ * 나오는지"가 엔진마다 다를 수 있습니다. 그래서 대신 **키보드가 열려 있는 동안
+ * 계속**(매 keyboard.inset 변화마다) "지금 scrollHeight - 지금 keyboard.inset"을
+ * ref에 스냅샷해 둡니다 — 그 시점엔 아직 트랜지션이 걸리지 않으므로(트랜지션은
+ * `:not(.keyboard-inset-open)`, 즉 닫힌 쪽에만 걸립니다 — css/page.css:47-55) 이 값은
+ * 항상 신뢰할 수 있는 실측치입니다. 닫히는 순간엔 이 ref에 이미 저장된 마지막 값만
+ * 쓰고, scrollTop(트랜지션과 무관한 순수 스칼라)만 그 자리에서 새로 읽습니다.
+ *
+ * clientHeight가 0 이하면(jsdom처럼 레이아웃이 없는 환경, 또는 스크롤 호스트를 아직
+ * 못 찾음) natural max를 계산할 근거가 없으므로 이 로직을 통째로 건너뛰고 즉시
+ * 0으로 돌아갑니다 — 이전 동작(닫히면 바로 0)과 같습니다. 이 가드 덕분에 이 파일의
+ * 다른 기존 테스트들은 지오메트리를 스텁하지 않고도 계속 "닫히면 0px"를 기대할 수
+ * 있습니다(AppShell.test.tsx의 "스크롤 지오메트리를 알 수 없으면..." 테스트가 이
+ * 가드 자체를 이름으로 박아 둡니다).
+ *
+ * **닫히는 바로 그 렌더에서 floor를 렌더 "단계"(useLayoutEffect가 아니라)에서
+ * 계산해야 합니다.** 처음엔 useLayoutEffect에서 계산했는데, 그러면 keyboard.open이
+ * false로 바뀌는 바로 그 렌더는 releaseFloor의 "이전" 값(대개 0, 지난 사이클에서
+ * 이미 다 풀렸던 값)으로 먼저 커밋되고, 그 뒤에야 레이아웃 이펙트가 옳은 값으로
+ * 고칩니다. 그 사이 실제로 DOM에 `--keyboard-inset: 0px`가 한 프레임 적용되면(진짜
+ * 레이아웃이 있는 브라우저에서), scrollHeight가 그 프레임에 진짜로 줄어 브라우저가
+ * scrollTop을 clamp합니다 — 이 clamp는 실제 부수효과라 나중에 --keyboard-inset을
+ * 다시 올려도 되돌릴 수 없습니다(AppShell.test.tsx가 installClampingScrollRoot로
+ * 정확히 이 경로를 재현해 잡아냈습니다). 그래서 대신 렌더 함수 본문에서 직접
+ * "방금 닫혔다"를 감지해(wasKeyboardOpenRef로 이전 렌더의 open과 비교) 필요하면
+ * 그 자리에서 setState를 부릅니다 — React 공식 패턴("Adjusting state when a prop
+ * changes")대로, 렌더 중의 setState는 이번 렌더를 커밋하지 않고 새 상태로 즉시
+ * 다시 렌더하므로, DOM은 열림(예: 274px)에서 곧장 보정된 닫힘(274px, 안 바뀜)으로만
+ * 커밋되고 위험한 중간값(0px)은 한 번도 실제로 적용되지 않습니다.
+ */
+function useReleasableKeyboardInset(keyboard: VirtualKeyboard, scrollRootId = "root"): number {
+  const naturalMaxScrollRef = useRef<number | null>(null);
+  const [releaseFloor, setReleaseFloor] = useState(0);
+  const wasKeyboardOpenRef = useRef(keyboard.open);
+
+  // 열려 있는 동안 계속 스냅샷한다(커밋 후 이펙트에서 — 트랜지션이 없는 구간이라
+  // 언제 읽어도 신뢰할 수 있다).
+  useLayoutEffect(() => {
+    if (!keyboard.open) return;
+    const scrollRoot = document.getElementById(scrollRootId);
+    if (!scrollRoot || scrollRoot.clientHeight <= 0) {
+      naturalMaxScrollRef.current = null;
+      return;
+    }
+    naturalMaxScrollRef.current = scrollRoot.scrollHeight - keyboard.inset - scrollRoot.clientHeight;
+  }, [keyboard.open, keyboard.inset, scrollRootId]);
+
+  // 렌더 단계 보정 — 위 문서 참고. "방금 닫혔다"일 때만, 이번 렌더가 커밋되기 전에
+  // 안전한 floor를 계산해 곧장 반환값에 반영한다.
+  let inset = releaseFloor;
+  if (wasKeyboardOpenRef.current !== keyboard.open) {
+    wasKeyboardOpenRef.current = keyboard.open;
+    if (!keyboard.open) {
+      const scrollRoot = document.getElementById(scrollRootId);
+      const naturalMaxScroll = naturalMaxScrollRef.current;
+      inset = scrollRoot && naturalMaxScroll !== null ? Math.max(0, Math.round(scrollRoot.scrollTop - naturalMaxScroll)) : 0;
+      if (inset !== releaseFloor) setReleaseFloor(inset);
+    }
+  }
+
+  // 닫힌 뒤, 사용자가 위로 스크롤해 여백이 더 이상 필요 없어지면 그만큼씩 걷어낸다
+  // (지연 해제). 초기 floor는 위 렌더 단계 보정이 이미 정확히 세웠으므로, 여기서는
+  // 그 이후의 scroll에만 반응한다 — 절대 다시 늘리지 않는다(§16.2: 지연 "해제"이지
+  // 재예약이 아니다. 이미 줄어든 여백 아래로는 평범한 스크롤 바닥과 똑같이 자연스럽게
+  // 멈추므로, 다시 늘리는 쪽이 오히려 사용자가 요청하지 않은 레이아웃 변화가 된다).
+  useLayoutEffect(() => {
+    if (keyboard.open) return;
+    const scrollRoot = document.getElementById(scrollRootId);
+    const naturalMaxScroll = naturalMaxScrollRef.current;
+    if (!scrollRoot || naturalMaxScroll === null) return;
+    function recompute() {
+      setReleaseFloor((current) => {
+        if (current === 0) return current;
+        const candidate = Math.max(0, Math.round(scrollRoot!.scrollTop - naturalMaxScroll!));
+        const next = Math.min(current, candidate);
+        if (next === current) return current;
+        if (next === 0) scrollRoot!.removeEventListener("scroll", recompute);   // 완전히 풀렸다 — 더 들을 필요 없다.
+        return next;
+      });
+    }
+    scrollRoot.addEventListener("scroll", recompute, { passive: true });
+    return () => scrollRoot.removeEventListener("scroll", recompute);
+  }, [keyboard.open, scrollRootId]);
+
+  return keyboard.open ? keyboard.inset : inset;
 }
 
 export type AppShellProps = {
@@ -263,6 +415,9 @@ export function AppShell({ sidebar, children, collapsed = false, mobileOpen = fa
   // useVisualViewportBox()를 prop이 아니라 직접 부르는 것과 같은 선례입니다.
   const keyboard = useVirtualKeyboard();
   useKeyboardScrollCompensation(keyboard);
+  // 닫힐 때 --keyboard-inset을 즉시 0으로 떨어뜨리지 않고, 지금 scrollTop이 그 여백에
+  // 기대고 있는 동안은 지연 해제한다(useReleasableKeyboardInset 문서 참고, A2).
+  const keyboardInset = useReleasableKeyboardInset(keyboard);
   // keyboard-inset-open은 keyboardOpen prop(.mobile-keyboard-open)과 다른 목적의 별도
   // 마커입니다. keyboardOpen은 소비 앱이 주는 값이라 관례상 keyboard.open과 같을 뿐
   // 보장되지 않는 반면(위 주석), css/page.css가 .workspace의 패딩 트랜지션을 끄는
@@ -273,8 +428,8 @@ export function AppShell({ sidebar, children, collapsed = false, mobileOpen = fa
   // 늦게 줄 때 이 가드가 조용히 깨집니다.
   const className = ["app-shell", collapsed && "sidebar-collapsed", navHidden && "mobile-nav-hidden", keyboardOpen && "mobile-keyboard-open", keyboard.open && "keyboard-inset-open"].filter(Boolean).join(" ");
   // .workspace(page.css)가 이 변수를 기존 하단 패딩에 더합니다. 키보드가 닫히면
-  // 0으로 돌아가 레이아웃도 원래 폭으로 돌아갑니다.
-  const style = { "--keyboard-inset": keyboard.open ? `${keyboard.inset}px` : "0px" } as CSSProperties;
+  // (지금 스크롤 위치가 허락하는 만큼) 0으로 돌아가 레이아웃도 원래 폭으로 돌아갑니다.
+  const style = { "--keyboard-inset": `${keyboardInset}px` } as CSSProperties;
   return <div className={className} style={style}>
     {mobileOpen && onMobileClose && <button type="button" className="mobile-sidebar-overlay" aria-label={overlayLabel} onClick={onMobileClose} />}
     {sidebar}
