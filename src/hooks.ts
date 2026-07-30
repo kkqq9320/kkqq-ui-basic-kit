@@ -288,6 +288,17 @@ export function useScrollDirectionHidden(scrollRootId = "root") {
 
 export type VisualViewportBox = { top: number; left: number; width: number; height: number };
 
+function readVisualViewportBox(): VisualViewportBox | null {
+  const viewport = window.visualViewport;
+  if (!viewport) return null;
+  return {
+    top: Math.round(viewport.offsetTop),
+    left: Math.round(viewport.offsetLeft),
+    width: Math.round(viewport.width),
+    height: Math.round(viewport.height),
+  };
+}
+
 /**
  * 지금 실제로 보이는 영역의 좌표와 크기. `position: fixed` 요소를 여기에 맞추면
  * 가상 키보드·주소창·핀치줌과 무관하게 항상 보이는 영역 안에 놓입니다.
@@ -298,20 +309,29 @@ export type VisualViewportBox = { top: number; left: number; width: number; heig
  *
  * visualViewport가 없는 환경에서는 null을 돌려주고, 그때는 CSS 기본값
  * (레이아웃 뷰포트 전체)이 그대로 쓰입니다.
+ *
+ * **초기값은 `useState`의 지연 초기화 함수로 렌더 중에 동기적으로 계산합니다.**
+ * 예전에는 `useState(null)`로 시작해 `useEffect`(페인트 "이후"에야 도는 패시브
+ * 이펙트)에서만 값을 채웠습니다. 키보드가 이미 열려 있는 상태에서 다이얼로그가
+ * 새로 마운트되면(예: 필드에 포커스가 있는 채로 다른 버튼을 눌러 다이얼로그를 여는
+ * 경우), 그 사이 한 프레임은 `box === null`이라 인라인 스타일이 아예 없는 채로
+ * 페인트되어 백드롭이 전체 화면 크기(CSS 기본값)로 한 번 그려졌다가, 그다음 프레임에
+ * 실제(줄어든) 크기로 바뀌었습니다 — 다이얼로그의 첫 열림이 "두 번에 걸쳐" 그려지는
+ * 결함(§3 Interruptibility 위반: 논리적 목표가 아니라 항상 지금 값에서 시작해야 하는데,
+ * 여기서는 "지금 값"조차 첫 프레임에 없었습니다) 중 하나였습니다. 지연 초기화는
+ * 커밋(그리고 첫 페인트) 전, 렌더 단계에서 동기적으로 실행되므로 첫 프레임부터 이미
+ * 올바른 값을 반환합니다 — 두 번째 렌더도, 그 사이 프레임도 필요 없습니다.
+ * (`useEffect`는 여전히 필요합니다 — 마운트 이후의 리사이즈·스크롤을 계속 반영해야
+ * 하니까요. 최초 1회 계산만 렌더 단계로 당겨온 것입니다.)
  */
 export function useVisualViewportBox(): VisualViewportBox | null {
-  const [box, setBox] = useState<VisualViewportBox | null>(null);
+  const [box, setBox] = useState<VisualViewportBox | null>(readVisualViewportBox);
   useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) return;
     function update() {
-      const next = {
-        top: Math.round(viewport!.offsetTop),
-        left: Math.round(viewport!.offsetLeft),
-        width: Math.round(viewport!.width),
-        height: Math.round(viewport!.height),
-      };
-      setBox((current) => (current && current.top === next.top && current.left === next.left && current.width === next.width && current.height === next.height ? current : next));
+      const next = readVisualViewportBox();
+      setBox((current) => (current && next && current.top === next.top && current.left === next.left && current.width === next.width && current.height === next.height ? current : next));
     }
     update();
     viewport.addEventListener("resize", update);

@@ -1,10 +1,17 @@
 // @vitest-environment jsdom
+/// <reference types="vite/client" />
+// 위 참조가 `*?raw` 임포트(아래)의 앰비언트 타입을 준다 — vite/client.d.ts가 이미
+// 선언해 두므로 이 파일에서 새로 선언할 필요는 없다. @types/node가 없는 프로젝트라
+// fs 대신 이 방식(플러그인 없이도 되는 Vite 코어 기능)으로 실제 CSS 소스를 읽는다.
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { flushSync } from "react-dom";
+import { createRoot } from "react-dom/client";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Dialog, DialogActions, DialogHeading, Select } from "../src";
+import dialogCssSource from "../css/dialog.css?raw";
 
 afterEach(() => { cleanup(); delete (window as { visualViewport?: unknown }).visualViewport; });
 
@@ -301,5 +308,47 @@ describe("Dialog", () => {
     render(<Basic backdropClassName="entry-help-backdrop" />);
     const backdrop = screen.getByRole("dialog").closest(".dialog-backdrop")!;
     expect(backdrop.className).toBe("dialog-backdrop entry-help-backdrop");
+  });
+
+  describe("첫 열림이 두 단계로 그려지지 않는다 (키보드가 이미 열린 상태에서 마운트)", () => {
+    // RTL의 render()는 act()로 감싸여 있어 passive effect(useEffect)까지 동기적으로
+    // 다 flush해 버린다 — "커밋은 됐지만 아직 useEffect 전" 순간을 관찰할 수 없다.
+    // 실제 브라우저에서는 그 사이에 한 프레임이 페인트된다(레이아웃 이펙트는
+    // 페인트 전, 패시브 이펙트는 페인트 후). 그 프레임을 재현하려면 React를 직접
+    // 쓰고, act() 대신 flushSync로 "커밋까지"만 동기적으로 밀어붙인 다음 실제
+    // 마이크로태스크/타이머 한 틱을 흘려보내 passive effect가 그 뒤에 도착하는지
+    // 관찰해야 한다.
+    afterEach(() => { document.body.innerHTML = ""; });
+
+    function sleep(ms: number) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    it("커밋 직후(패시브 이펙트 이전)부터 이미 올바른 위치다", async () => {
+      installFakeVisualViewport(400);
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+      const root = createRoot(container);
+
+      flushSync(() => root.render(<Basic />));
+      // 레이아웃 이펙트까지는 flushSync 안에서 이미 끝났다. 패시브 이펙트는 아직이다.
+      const backdrop = document.querySelector(".dialog-backdrop") as HTMLElement;
+      expect(backdrop.style.height).toBe("400px");   // 첫 프레임부터 이미 정확하다
+
+      await sleep(20);   // 패시브 이펙트가 붙어도 값이 바뀌지 않는다(같은 값)
+      expect(backdrop.style.height).toBe("400px");
+
+      root.unmount();
+    });
+  });
+
+  it("dialog.css는 키보드가 열려 있다고 해서 백드롭 재배치 트랜지션을 끄지 않는다 (열림·닫힘 경로가 대칭)", () => {
+    // §7 Spatial consistency: "enter and exit along the same path" — 키보드가 닫힐 때
+    // 백드롭이 다시 커지는 건 이미 애니메이션되는데, 열릴 때(다이얼로그가 이미 뜬
+    // 채로 키보드가 열리는 경우)만 body:has(.keyboard-inset-open)로 트랜지션을 꺼서
+    // 순간이동시키면 그 자체가 비대칭이자 실기기가 신고한 "두 단계로 뚝뚝 끊어짐"의
+    // 실제 원인이다. jsdom은 실제 CSS cascade/트랜지션을 계산하지 않으므로(레이아웃
+    // 엔진이 없다) 이 계약은 소스 텍스트로 고정해 회귀를 잡는다.
+    expect(dialogCssSource).not.toMatch(/keyboard-inset-open\)\s*\.dialog-backdrop\s*\{\s*transition:\s*none/);
   });
 });
