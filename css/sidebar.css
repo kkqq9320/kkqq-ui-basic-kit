@@ -259,6 +259,8 @@
   .sidebar nav :is(a, button) > span,
   .sidebar-footer, .sidebar-user-copy, .sidebar-user-actions,
   .mobile-quick-bar { transition: none; }
+  .app-shell.mobile-keyboard-open .mobile-quick-bar,
+  .app-shell.mobile-keyboard-open .mobile-page-tabs-float { transition: none; }
   .sidebar nav :is(a, button).active svg, .mobile-quick-bar > button.active svg { animation: none; }
   .sidebar nav :is(a, button)::before { transform: none; }
 }
