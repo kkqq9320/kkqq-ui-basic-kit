@@ -39,8 +39,11 @@
 .empty { padding: 26px 0; color: var(--muted); text-align: center; }
 
 @media (max-width: 760px), (hover: none) and (pointer: coarse) {
-  /* 위쪽 74px은 떠 있는 컨트롤 줄(28~66px) 자리, 아래는 고정 바(60px + 여백) 자리 */
-  .workspace { padding: 74px 16px calc(102px + env(safe-area-inset-bottom)); }
+  /* 위쪽 74px은 떠 있는 컨트롤 줄(28~66px) 자리, 아래는 고정 바(60px + 여백) 자리.
+   * --keyboard-inset(AppShell.tsx)은 가상 키보드가 열렸을 때만 0이 아니고, 그만큼
+   * 스크롤 가능한 여유를 더 만들어 줍니다 — 이 패딩 자체는 아무것도 움직이지
+   * 않고, AppShell의 useKeyboardScrollCompensation이 실제로 스크롤을 옮깁니다. */
+  .workspace { padding: 74px 16px calc(102px + env(safe-area-inset-bottom) + var(--keyboard-inset, 0px)); }
   .page-header { grid-template-rows: 14px minmax(39px, auto) minmax(44px, auto); }
   /* 모바일에서는 떠 있는 컨트롤이 한 줄을 통째로 차지하고 헤더는 그 아래에서
    * 시작하므로 제목 오른쪽을 비울 필요가 없습니다. 폭을 깎으면 제목이 감겨
