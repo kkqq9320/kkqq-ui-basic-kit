@@ -277,7 +277,7 @@ function Page() {
 }
 
 describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려지지 않는다", () => {
-  it("필드 아래쪽이 키보드에 가려지면 그만큼(+여유 8px) 스크롤 호스트를 올린다", async () => {
+  it("필드 아래쪽이 키보드에 가려지면 그만큼(+여유 24px) 스크롤 호스트를 올린다", async () => {
     // bug-keyboard-shift.md 실측(Experiment B): scrollTop 1046, rect.bottom 507,
     // 844 -> 494로 줄면 보정 없이는 507이 494보다 13px 아래로(가려짐) 남는다.
     const viewport = installFakeVisualViewport(844);
@@ -289,8 +289,84 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     textarea.focus();
     viewport.openKeyboard(350);   // 844 -> 494
 
-    // overshoot = rect.bottom(507) - visibleBottom(494) + gap(8) = 21
-    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));
+    // overshoot = rect.bottom(507) - visibleBottom(494) + gap(24) = 37
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 37));
+  });
+
+  it("실기기 트레이스(rect=566~645, visBot=653)를 재현하면 새 여유만큼 필드 바닥이 실제로 남는다 — 상수가 아니라 결과 간격을 검증한다", async () => {
+    // owner 실기기 트레이스: "+931ms rect=566~645 visBot=653 over=0 reqΔ=259 achΔ=274
+    // clamp=N". over = rect.bottom(645) - visBot(653) + GAP(옛 8) = 0 — 옛 여유(8px)로는
+    // 필드 바닥이 보이는 영역 경계에 정확히 닿는(0px) 자리에서 멈췄다("보정이 실제로
+    // 걸린 모든 자리"의 대표 사례). 같은 rect/visBot 조합을 보정 "전" 입력으로 재사용해
+    // (follow-scroll 스텁이라 정착 후 rect.bottom을 다시 재므로, 결과가 곧 "실제로 남는
+    // 간격"이다) 새 여유에서는 그 간격이 8이 아니라 실제로 얼마나 남는지를 상수(GAP)를
+    // 다시 읽는 게 아니라 정착된 기하로 직접 검증한다.
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    root.scrollTop = 1046;
+    stubRectBottomFollowingScroll(textarea, 645, root);   // baseline = 1046
+
+    textarea.focus();
+    viewport.openKeyboard(844 - 653);   // visibleBottom = 653, 트레이스와 같은 값
+
+    // overshoot = 645 - 653 + GAP
+    await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));
+    await waitFor(() => {
+      const settledBottom = textarea.getBoundingClientRect().bottom;
+      expect(653 - settledBottom).toBe(24);   // 결과 간격 자체 — 8이 아니라 24가 실제로 남는다
+    });
+  });
+
+  it("필드 자신이 보이는 영역보다 크면(AutoGrowTextarea처럼 계속 자라는 경우) 위쪽이 아니라 지금 타이핑 중인 아래쪽(캐럿)이 보이는 쪽을 우선한다 — 위/아래를 동시에 만족시킬 방법이 없다", async () => {
+    // 필드가 보이는 영역보다 크면 위/아래 두 경계를 동시에 만족시킬 방법이 물리적으로
+    // 없다. AutoGrowTextarea는 사용자가 계속 입력하며 아래로 자라므로(내용만큼 늘어남,
+    // 내부 스크롤도 max-height도 없음 — AutoGrowTextarea.tsx) 지금 타이핑 중인 캐럿은
+    // 항상 "아래쪽"에 있다 — 그래서 아래쪽(캐럿)이 보이는 쪽을 우선해야 한다.
+    //
+    // "위쪽을 잃지 않는" 한도를 두는 방안을 먼저 시도했지만(rect.top이 viewport.offsetTop
+    // 아래로 못 내려가게 막는 한도), 그 한도가 걸리는 순간 그 뒤로는 field가 아무리 더
+    // 자라도(=캐럿이 아무리 아래로 내려가도) maxOvershoot이 0에 고정돼 전혀 스크롤하지
+    // 않는다 — 캐럿이 영원히 가려진 채로 남는 회귀였다(이 테스트가 그 회귀를 잡는다).
+    // 그래서 이 킷은 한도를 두지 않는다 — 위쪽이 화면 밖으로 밀려나는 대가를 치르더라도
+    // 아래쪽(캐럿)은 계속 GAP만큼 보이는 채로 유지된다. 위/아래를 동시에 만족시키는
+    // 방법이 없는 이상, 계속 타이핑 중인 사용자에게는 이쪽이 맞는 선택이다.
+    installFakeResizeObserver();
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    root.scrollTop = 1046;
+    const baseline = root.scrollTop;
+    const topAtBaseline = 100;
+    let height = 900;   // 열림 후 보이는 영역(444)보다 크다 — top=100, bottom=1000.
+    Object.defineProperty(textarea, "getBoundingClientRect", {
+      configurable: true,
+      value: () => {
+        const top = topAtBaseline - (root.scrollTop - baseline);
+        const bottom = top + height;
+        return { top, left: 0, right: 320, bottom, width: 320, height, x: 0, y: top, toJSON() {} };
+      },
+    });
+
+    textarea.focus();
+    viewport.openKeyboard(400);   // visibleBottom = 444
+
+    // overshoot = (100+900) - 444 + 24 = 580 → top은 100-580=-480까지 밀려난다(받아들인 대가).
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 580));
+    expect(textarea.getBoundingClientRect().bottom).toBe(444 - 24);   // 캐럿 쪽은 여전히 GAP만큼 보인다
+
+    // 초기 ResizeObserver 딜리버리가 지나갈 시간을 준다(이 파일의 다른 ResizeObserver
+    // 테스트와 같은 이유).
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    // 사용자가 계속 입력해 필드가 200px 더 자란다 — 캐럿이 그만큼 더 아래로 내려간다.
+    height += 200;
+    fireResizeObserved(textarea);
+
+    // "위쪽을 잃지 않는" 한도가 있었다면 이 시점엔 이미 maxOvershoot이 0으로 고정돼
+    // 있어 여기서부터는 절대 다시 스크롤하지 않는다 — 캐럿이 여기서부터 영원히 가려진
+    // 채로 남는다. 한도가 없으므로 여기서도 다시 GAP만큼 보이는 자리로 돌아온다.
+    await waitFor(() => expect(textarea.getBoundingClientRect().bottom).toBe(444 - 24));
   });
 
   it("이미 보이는 영역 안이면 스크롤하지 않는다", async () => {
@@ -322,11 +398,11 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
 
     textarea.focus();
     viewport.openKeyboard(350);
-    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 37));
 
     viewport.closeKeyboard();
     await waitFor(() => expect(keyboardInsetOf(root)).toBe("0px"));   // 패딩은 원래대로 줄어든다
-    expect(root.scrollTop).toBe(1046 + 21);   // 그래도 스크롤 위치는 그대로 — 되돌리지 않는다
+    expect(root.scrollTop).toBe(1046 + 37);   // 그래도 스크롤 위치는 그대로 — 되돌리지 않는다
   });
 
   it("그 사이 사용자가 직접 스크롤했어도 그 위치 그대로 둔다", async () => {
@@ -342,7 +418,7 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
 
     textarea.focus();
     viewport.openKeyboard(350);
-    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 37));
 
     // 타이핑하며 사용자가 직접 더 스크롤했다.
     root.scrollTop = 1300;
@@ -366,13 +442,13 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
 
     textarea.focus();
     viewport.openKeyboard(350);
-    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));   // 1067
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 37));   // 1083
 
     root.scrollTop += 2;   // 옛 문턱(18px) 안쪽의 흔들림 — 예전이라면 "사용자 스크롤 아님"으로 봤다
 
     viewport.closeKeyboard();
     await waitFor(() => expect(keyboardInsetOf(root)).toBe("0px"));
-    expect(root.scrollTop).toBe(1067 + 2);   // 1046이 아니다 — 되돌리는 코드가 아예 없다
+    expect(root.scrollTop).toBe(1083 + 2);   // 1046이 아니다 — 되돌리는 코드가 아예 없다
   });
 
   it("닫힌 뒤 같은 필드에 다시 초점을 맞춰 재열림해도 이전 사이클의 흔적이 남지 않는다", async () => {
@@ -387,18 +463,18 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
 
     textarea.focus();
     viewport.openKeyboard(350);
-    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));   // 1067
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 37));   // 1083
 
     viewport.closeKeyboard();
     await waitFor(() => expect(keyboardInsetOf(root)).toBe("0px"));
-    expect(root.scrollTop).toBe(1067);   // 첫 닫기 — 그대로 둔다
+    expect(root.scrollTop).toBe(1083);   // 첫 닫기 — 그대로 둔다
 
     // 같은 필드가 여전히 같은 자리(rect.bottom 507)에 있고 키보드가 다시 350px을
-    // 가린다 — overshoot 계산은 지금 scrollTop(1067) 위에 다시 21을 더해야 한다.
-    // 그 결과가 1046 기준(1046+21=1067, 즉 변화 없음)으로 나오면 삭제된 ref의
+    // 가린다 — overshoot 계산은 지금 scrollTop(1083) 위에 다시 37을 더해야 한다.
+    // 그 결과가 1046 기준(1046+37=1083, 즉 변화 없음)으로 나오면 삭제된 ref의
     // "원래 자리"가 어딘가에 여전히 살아 있다는 뜻이다.
     viewport.openKeyboard(350);
-    await waitFor(() => expect(root.scrollTop).toBe(1067 + 21));
+    await waitFor(() => expect(root.scrollTop).toBe(1083 + 37));
   });
 
   it("다른 필드로 재열림해도 첫 사이클과 독립적으로 계산된다", async () => {
@@ -417,18 +493,18 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
 
     first.focus();
     viewport.openKeyboard(350);
-    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));   // 1067, 첫째 기준
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 37));   // 1083, 첫째 기준
 
     viewport.closeKeyboard();
     await waitFor(() => expect(keyboardInsetOf(root)).toBe("0px"));
-    expect(root.scrollTop).toBe(1067);   // 되돌리지 않았다
+    expect(root.scrollTop).toBe(1083);   // 되돌리지 않았다
 
     second.focus();
     viewport.openKeyboard(350);
-    // overshoot = 450 - 494 + 8 = -36 → 이미 보이므로 스크롤하지 않는다.
-    // 첫째의 되돌리기 값(1046)이나 흔적이 끼어들지 않고 지금 scrollTop(1067)이 그대로 유지된다.
+    // overshoot = 450 - 494 + 24 = -20 → 이미 보이므로 스크롤하지 않는다.
+    // 첫째의 되돌리기 값(1046)이나 흔적이 끼어들지 않고 지금 scrollTop(1083)이 그대로 유지된다.
     await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));
-    expect(root.scrollTop).toBe(1067);
+    expect(root.scrollTop).toBe(1083);
   });
 
   it("키보드가 열린 채로 다른 편집 요소로 포커스가 옮겨가면 그 요소도 다시 맞춘다", async () => {
@@ -447,12 +523,12 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
 
     first.focus();
     viewport.openKeyboard(350);
-    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));   // 첫째 기준 보정
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 37));   // 첫째 기준 보정
 
     // 키보드가 열린 채로(탭 이동 등) 둘째로 포커스가 옮겨간다 — focusin 리스너가 다시 맞춰야 한다.
     second.focus();
-    // overshoot = 600 - 494 + 8 = 114, 지금 scrollTop(1067) 기준으로 더한다.
-    await waitFor(() => expect(root.scrollTop).toBe(1067 + 114));
+    // overshoot = 600 - 494 + 24 = 130, 지금 scrollTop(1083) 기준으로 더한다.
+    await waitFor(() => expect(root.scrollTop).toBe(1083 + 130));
   });
 
   it("#root 밖(다이얼로그 포털 자리)의 포커스는 건드리지 않는다", async () => {
@@ -529,11 +605,11 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     const writes = trackScrollTopWrites(root);
 
     textarea.focus();
-    viewport.openKeyboard(350);   // overshoot = 507 - 494 + 8 = 21
+    viewport.openKeyboard(350);   // overshoot = 507 - 494 + 24 = 37
 
-    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 37));
     expect(writes.length).toBeGreaterThan(1);          // 한 번의 대입이 아니다
-    expect(writes[writes.length - 1]).toBe(1046 + 21); // 마지막 프레임은 정확히 목표치
+    expect(writes[writes.length - 1]).toBe(1046 + 37); // 마지막 프레임은 정확히 목표치
   });
 
   it("prefers-reduced-motion에서는 애니메이션 없이 즉시 옮긴다 (짧게가 아니라 제거)", async () => {
@@ -551,7 +627,7 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     textarea.focus();
     viewport.openKeyboard(350);
 
-    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 37));
     expect(writes.length).toBe(1);
   });
 
@@ -574,19 +650,19 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     const writes = trackScrollTopWrites(root);
 
     first.focus();
-    viewport.openKeyboard(350);   // 목표 1046+21=1067
+    viewport.openKeyboard(350);   // 목표 1046+37=1083
 
     // 애니메이션이 목표에 닿기 전, 중간값에 도달할 때까지 기다린다.
     await waitFor(() => {
       expect(root.scrollTop).toBeGreaterThan(1046);
-      expect(root.scrollTop).toBeLessThan(1067);
+      expect(root.scrollTop).toBeLessThan(1083);
     });
     const interruptFrom = root.scrollTop;   // 지금 진행 중이던 값 (아직 목표 아님)
 
     second.focus();   // focusin 리스너가 동기적으로 다시 reposition()을 부른다
 
-    // 둘째 기준 overshoot = 600 - 494 + 8 = 114, 지금 값(interruptFrom) 위에 쌓인다.
-    await waitFor(() => expect(root.scrollTop).toBe(interruptFrom + 114));
+    // 둘째 기준 overshoot = 600 - 494 + 24 = 130, 지금 값(interruptFrom) 위에 쌓인다.
+    await waitFor(() => expect(root.scrollTop).toBe(interruptFrom + 130));
     // 가로챈 뒤로는 그 어떤 프레임도 가로챈 시점(interruptFrom)보다 아래로 되돌아가지
     // 않는다 — 되돌아간다면 논리적 목표가 아니라 "맨 처음" 값에서 다시 시작했다는 뜻.
     const afterInterrupt = writes.slice(writes.indexOf(interruptFrom) + 1);
@@ -610,18 +686,18 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     const writes = trackScrollTopWrites(root);
 
     textarea.focus();
-    viewport.openKeyboard(200);   // 1단계: 844 -> 644, overshoot = 700-644+8 = 64, 목표 1110
+    viewport.openKeyboard(200);   // 1단계: 844 -> 644, overshoot = 700-644+24 = 80, 목표 1126
 
     // 1단계 애니메이션이 목표에 닿기 전, 중간값에 도달할 때까지 기다린다.
     await waitFor(() => {
       expect(root.scrollTop).toBeGreaterThan(1046);
-      expect(root.scrollTop).toBeLessThan(1110);
+      expect(root.scrollTop).toBeLessThan(1126);
     });
     const midStage1 = root.scrollTop;
 
-    viewport.openKeyboard(350);   // 2단계(최종): 844 -> 494, overshoot = 700-494+8 = 214, 목표 1260
+    viewport.openKeyboard(350);   // 2단계(최종): 844 -> 494, overshoot = 700-494+24 = 230, 목표 1276
 
-    await waitFor(() => expect(root.scrollTop).toBe(1046 + 214));
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 230));
     // 1단계 중간값 이후로는 그 어떤 프레임도 그 값 아래로도, 맨 처음(1046)으로도
     // 되돌아가지 않는다 — 새 목표로 이어졌다는 뜻.
     const afterStage1 = writes.slice(writes.indexOf(midStage1) + 1);
@@ -647,7 +723,7 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     textarea.focus();
     viewport.openKeyboard(350);   // 단 한 번 — 644 같은 중간 단계 없이 곧장 494로
 
-    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 37));
   });
 
   it("포커스된 요소 자신의 높이가 나중에 바뀌면(자동 확장 textarea 등, 리사이즈도 focusin도 아님) 다시 맞춘다", async () => {
@@ -688,8 +764,8 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     bottom = 560;
     fireResizeObserved(textarea);
 
-    // overshoot = 560 - 494 + 8 = 74
-    await waitFor(() => expect(root.scrollTop).toBe(1046 + 74));
+    // overshoot = 560 - 494 + 24 = 90
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 90));
   });
 
   it("포커스된 요소가 안 바뀌면 매 프레임 ResizeObserver 관찰을 다시 만들지 않는다 — 자기재점화 루프 방지", async () => {
@@ -747,17 +823,17 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     stubRectBottomFollowingScroll(textarea, 507, root);   // baseline = 1046
 
     textarea.focus();
-    viewport.openKeyboard(350);   // visibleBottom = 494, overshoot = 507-494+8 = 21 → reduced motion이라 즉시 대입
-    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));
+    viewport.openKeyboard(350);   // visibleBottom = 494, overshoot = 507-494+24 = 37 → reduced motion이라 즉시 대입
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 37));
 
     // 최초 관찰의 실제 초기 딜리버리가 지나갈 시간을 준다 — follow-scroll rect 덕분에 이
-    // 시점엔 overshoot가 이미 0이라(1046+21 위치에서 다시 재도 안 움직인다) 아무 일도
+    // 시점엔 overshoot가 이미 0이라(1046+37 위치에서 다시 재도 안 움직인다) 아무 일도
     // 안 일어나야 정상이다. 그 뒤로는 대상이 안 바뀌었으므로 다시는 저절로 안 불려야 한다.
     await new Promise((resolve) => setTimeout(resolve, 150));
-    expect(root.scrollTop).toBe(1046 + 21);   // 아직 사용자가 스크롤하지 않았다 — 정착 확인
+    expect(root.scrollTop).toBe(1046 + 37);   // 아직 사용자가 스크롤하지 않았다 — 정착 확인
 
     // 사용자가 보정된 지점에서 위로 스크롤한다.
-    root.scrollTop = 1046 + 21 - 40;
+    root.scrollTop = 1046 + 37 - 40;
     const afterUserScroll = root.scrollTop;
 
     // 자기재점화가 있었다면 이 다음 프레임들에서 되돌렸을 시점이다.
@@ -852,11 +928,11 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
 
     textarea.focus();
     viewport.openKeyboard(350);
-    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 37));
 
     viewport.closeKeyboard();
     await waitFor(() => expect(keyboardInsetOf(root)).toBe("0px"));
-    expect(root.scrollTop).toBe(1046 + 21);   // 되돌리지 않는다(기존 계약) — 그저 즉시 0으로.
+    expect(root.scrollTop).toBe(1046 + 37);   // 되돌리지 않는다(기존 계약) — 그저 즉시 0으로.
   });
 
   it("naturalMax 스냅샷이 아니라 그 순간 살아있는 지오메트리로 다시 재므로, clientHeight가 스냅샷 이후 바뀌어도(주소창 접힘 등, 키보드와 무관) 닫을 때 clamp가 생기지 않는다 — B1", async () => {
@@ -905,8 +981,8 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     stubRectBottom(textarea, 600);
     viewport.openKeyboard(350);
 
-    // overshoot = 600 - visibleBottom(494) + gap(8) = 114, 지금 위치(scrollTopBeforeReopen) 위에.
-    await waitFor(() => expect(root.scrollTop).toBe(scrollTopBeforeReopen + 114));
+    // overshoot = 600 - visibleBottom(494) + gap(24) = 130, 지금 위치(scrollTopBeforeReopen) 위에.
+    await waitFor(() => expect(root.scrollTop).toBe(scrollTopBeforeReopen + 130));
     expect(parseFloat(keyboardInsetOf(root))).toBe(insetWhileOpen);   // 사이클 1과 똑같은 값으로 다시 예약된다 — 이전 사이클의 흔적 없음
   });
 
@@ -979,7 +1055,7 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
 
     textarea.focus();
     viewport.openKeyboard(350);
-    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 37));
     expect(shellHasHoldingMarker(root)).toBe(false);   // 열려 있는 동안도 당연히 없다(keyboard-inset-open만 있다).
 
     viewport.closeKeyboard();
@@ -1122,4 +1198,5 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     await waitFor(() => expect(parseFloat(keyboardInsetOf(root))).toBe(insetWhileOpen - SLACK));   // 사이클 1과 똑같은 폭 — 더 깎이지 않는다
     expect(root.scrollTop).toBe(bottomScrollTop2);
   });
+
 });

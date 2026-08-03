@@ -9,9 +9,40 @@ import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode }
 
 import { useVirtualKeyboard, type VirtualKeyboard } from "./hooks";
 
-/** 포커스된 요소의 아래쪽과 키보드 사이에 남길 여유(px). 0이면 이론적으로는
- * 맞지만 반올림 오차로 1px씩 걸치는 걸 막습니다. */
-const KEYBOARD_SCROLL_GAP = 8;
+/** 포커스된 요소의 아래쪽과 키보드 사이에 남길 여유(px).
+ *
+ * 8이었던 시절, owner 실기기 트레이스로 이 값이 틀렸다는 게 확정됐다 — 보정이 실제로
+ * 걸린 모든 케이스가 정확히 "over=0"(필드 바닥이 보이는 영역 경계에서 8px 위)에서
+ * 멈췄는데, 실기기에서는 이게 "닿은 것처럼" 보였다(예: "+931ms rect=566~645 visBot=653
+ * over=0"). 반대로 보정이 아예 필요 없었던 케이스는 150px 안팎의 여유가 있었다(예:
+ * "rect=424~503 visBot=653 over=-142") — owner가 말하던 "애매한 위치"는 사실 위치의
+ * 문제가 아니라, "보정이 실제로 걸리는 모든 자리"가 전부 이 여유 하나로 수렴했다는
+ * 뜻이다. 150px까지 키울 근거는 없지만(그 코너까지 갈 필요는 없다), 8은 분명히 틀렸다.
+ *
+ * 24 = 이 여유가 실제로 메워야 하는 세 몫의 합이다.
+ * (1) 포커스 아웃라인 3px(controls.css의 `:focus { outline: 3px solid ... }`) —
+ *     테두리 박스 "바깥"으로 번지므로 rect.bottom에 안 잡히는 픽셀이다. 필드 자신의
+ *     아래 패딩(controls.css의 `padding: 10px 11px`)은 이미 rect.bottom "안"에
+ *     포함돼 있으므로(테두리 박스 자체가 패딩까지 포함) 여기 다시 더하지 않는다 —
+ *     캐럿은 이미 그 10px만큼 박스 가장자리에서 떨어져 있다.
+ * (2) 반올림 오차 1~2px — 원래 8px 자체가 이 몫 하나만 노리고 정해졌던 값이다(옛
+ *     주석: "0이면 이론적으로는 맞지만 반올림 오차로 1px씩 걸치는 걸 막습니다").
+ * (3) 안드로이드의 입력 제안/악세서리 바가 visualViewport가 보고하는 경계보다 위에
+ *     그려져 이 여유를 갉아먹을 수 있는 몫 — 정확한 높이를 알 방법이 없으므로(기기·
+ *     키보드·언어마다 다르다) 정밀하게 상쇄하는 대신 "닿아 보인다"는 실기기 피드백이
+ *     다시 나오지 않을 정도의 지각적 여유로 20px을 잡는다.
+ * 셋을 더하면 3+1+20=24 — 8의 3배지만 150px 코너와는 자릿수가 다르다.
+ *
+ * 필드마다 실제 padding/line-height를 getComputedStyle로 읽어 유도하는 방안도
+ * 고려했지만 채택하지 않았다: 이 킷의 입력 요소는 전부 같은 padding을 쓰고
+ * (controls.css:11, input/select/textarea 공통), 정작 필드마다 다른 몫은 (3)
+ * 하나뿐인데 그건 OS 쪽 미지수라 필드 스타일을 다시 읽어도 좁혀지지 않는다 — 그래서
+ * 상수 하나로 충분하고, 매번 강제로 레이아웃을 읽는 비용을 들일 이유가 없다.
+ *
+ * 크기 확인: 보정이 필요 없었던 케이스(rect=424~503, visBot=653 → over =
+ * 503-653+24 = -126)는 이 값에서도 여전히 음수다 — 새 여유가 "이미 편했던" 자리까지
+ * 건드리지 않는다. */
+const KEYBOARD_SCROLL_GAP = 24;
 
 /** --motion-reposition(tokens.css)과 같은 값입니다. 스프링 라이브러리 없이 스크롤
  * 오프셋을 직접 애니메이션할 때도 이 킷의 다른 "재배치" 전환과 같은 리듬을 타야
@@ -293,6 +324,22 @@ function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId =
     const rect = focused.getBoundingClientRect();
     const visibleBottom = viewport.offsetTop + viewport.height;
     const overshoot = rect.bottom - visibleBottom + KEYBOARD_SCROLL_GAP;
+    // AutoGrowTextarea 같은 요소는 내부 스크롤도 max-height도 없이 내용만큼 계속
+    // 자란다(AutoGrowTextarea.tsx:20-28) — 그래서 필드 자신의 높이가 보이는 영역보다
+    // 커질 수 있다. 그 경우 위/아래 두 경계를 동시에 만족시킬 방법이 물리적으로 없다
+    // (필드 하나가 보이는 영역 전체보다 크므로). 아래쪽(캐럿 쪽 — 이 컴포넌트는 항상
+    // 아래로 자라므로 지금 타이핑 중인 자리는 늘 아래쪽에 있다)을 우선한다: rect.top이
+    // 보이는 영역 위로 밀려나는 대가를 치르더라도, overshoot를 그대로(한도 없이)
+    // 적용해 rect.bottom은 항상 GAP만큼 보이는 자리에 둔다.
+    //
+    // "rect.top이 보이는 영역의 top 아래로는 못 내려가게" 한도를 두는 방안을 먼저
+    // 시도했었다 — 그런데 그 한도가 한 번이라도 걸리면(필드가 보이는 영역보다 큰 순간)
+    // 그 뒤로는 field가 아무리 더 자라도(=캐럿이 아무리 아래로 내려가도) 한도 자체가
+    // 0에 고정돼 다시는 스크롤하지 않는 회귀였다 — 캐럿이 영원히 가려진 채로 남는다
+    // (AppShell.test.tsx의 "필드 자신이 보이는 영역보다 크면..." 테스트가 계속 자라는
+    // 시나리오로 이 회귀를 잡는다). 짧은 필드(흔한 경우)는 rect.bottom만 기준으로
+    // 삼아도 rect.top이 애초에 여유 있게 남아 있으므로 이 트레이드오프가 드러나지
+    // 않는다.
     if (overshoot > 0) animateScrollTopBy(scrollRoot, overshoot);
   }
 
