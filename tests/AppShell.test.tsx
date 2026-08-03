@@ -72,12 +72,57 @@ function renderIntoScrollRoot(ui: ReactElement) {
   return root;
 }
 
+/** renderIntoScrollRoot과 같지만 #root 자신을 data-keyboard-keep-visible이 붙은
+ * "바깥" 요소 안에 넣는다 — 그 마커가 스크롤 호스트(#root) 경계를 벗어난 조상에
+ * 있으면 무시돼야 한다는 걸 검증하는 테스트 전용 헬퍼다(그 조상은 이 훅이 옮기는
+ * scrollTop으로 전혀 움직이지 않으므로 기준으로 쓸 수 없다 — src/AppShell.tsx의
+ * findKeyboardKeepVisibleAncestor 문서 참고). wrapper에 data-test-outside를 붙여
+ * afterEach가 #root까지 통째로 치우게 한다. */
+function renderIntoScrollRootInsideMarkedWrapper(ui: ReactElement) {
+  const wrapper = document.createElement("div");
+  wrapper.setAttribute("data-test-outside", "1");
+  wrapper.setAttribute("data-keyboard-keep-visible", "");
+  document.body.appendChild(wrapper);
+  const root = document.createElement("div");
+  root.id = "root";
+  root.setAttribute("data-test-root", "1");
+  wrapper.appendChild(root);
+  render(ui, { container: root });
+  return { root, wrapper };
+}
+
 /** jsdom은 getBoundingClientRect를 항상 0으로 주므로, bug-keyboard-shift.md가 실측한
  * 좌표를 재현하려면 직접 덮어써야 한다. */
 function stubRectBottom(element: HTMLElement, bottom: number) {
   Object.defineProperty(element, "getBoundingClientRect", {
     configurable: true,
     value: () => ({ top: bottom - 79, left: 0, right: 320, bottom, width: 320, height: 79, x: 0, y: bottom - 79, toJSON() {} }),
+  });
+}
+
+/** stubRectBottom은 높이를 79(필드 하나)로 고정하지만, data-keyboard-keep-visible
+ * 컨테이너는 필드+액션 버튼 줄까지 포함해 그보다 훨씬 클 수 있다 — top도 직접 정할
+ * 수 있는 이 일반화 버전을 그런 요소에 쓴다. */
+function stubRect(element: HTMLElement, top: number, bottom: number) {
+  Object.defineProperty(element, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({ top, left: 0, right: 320, bottom, width: 320, height: bottom - top, x: 0, y: top, toJSON() {} }),
+  });
+}
+
+/** stubRectBottomFollowingScroll의 일반화 버전 — top도 baseline으로 따로 받는다.
+ * data-keyboard-keep-visible 컨테이너처럼 높이가 79 고정이 아닌 요소에, 그리고
+ * 보정이 정착된 뒤의 rect를 다시 확인해야 하는 테스트(캡 케이스)에 쓴다. */
+function stubRectFollowingScroll(element: HTMLElement, topAtBaseline: number, bottomAtBaseline: number, root: HTMLElement) {
+  const baseline = root.scrollTop;
+  Object.defineProperty(element, "getBoundingClientRect", {
+    configurable: true,
+    value: () => {
+      const delta = root.scrollTop - baseline;
+      const top = topAtBaseline - delta;
+      const bottom = bottomAtBaseline - delta;
+      return { top, left: 0, right: 320, bottom, width: 320, height: bottom - top, x: 0, y: top, toJSON() {} };
+    },
   });
 }
 
@@ -306,6 +351,22 @@ function Page() {
   </AppShell>;
 }
 
+/** Page()와 달리 필드를 액션 버튼 줄과 함께 컨테이너 하나(.memo-group)로 감싼다 —
+ * demo/main.tsx의 "메모 + 취소/삭제/저장" 패널과 같은 모양이다. marked가 true면 그
+ * 컨테이너에 data-keyboard-keep-visible을 붙인다. marked=false는 "구조는 똑같은데
+ * 마커만 없는" 대조군이다 — opt-in이므로 컨테이너로 감싸기만 해서는 아무 효과가
+ * 없어야 한다는 걸 증명하는 데 쓴다. */
+function PageWithMemoGroup({ marked = true }: { marked?: boolean } = {}) {
+  return <AppShell sidebar={<div />}>
+    <div className="memo-group" data-keyboard-keep-visible={marked ? "" : undefined}>
+      <textarea aria-label="메모" />
+      <div className="button-row">
+        <button type="button">저장</button>
+      </div>
+    </div>
+  </AppShell>;
+}
+
 describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려지지 않는다", () => {
   it("필드 아래쪽이 키보드에 가려지면 그만큼(+여유 24px) 스크롤 호스트를 올린다", async () => {
     // bug-keyboard-shift.md 실측(Experiment B): scrollTop 1046, rect.bottom 507,
@@ -468,6 +529,100 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
 
     await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));   // 키보드는 열렸다
     expect(root.scrollTop).toBe(500);   // 그래도 스크롤은 그대로
+  });
+
+  describe("data-keyboard-keep-visible — 필드 자신이 아니라 표시된 블록 전체를 키보드 위로 들어올린다", () => {
+    it("컨테이너로 감싸기만 하고 마커를 안 붙이면 오늘과 똑같이 필드 자신만 기준으로 삼는다 — opt-in이므로 구조만으로는 켜지지 않는다", async () => {
+      const viewport = installFakeVisualViewport(844);
+      const root = renderIntoScrollRoot(<PageWithMemoGroup marked={false} />);
+      const textarea = screen.getByLabelText("메모");
+      const group = root.querySelector(".memo-group") as HTMLElement;
+      stubRect(textarea, 380, 459);   // focusedOvershoot = 459-494+24 = -11 → 스크롤 불필요
+      stubRect(group, 350, 507);      // 마커가 있었다면 요구했을 값(아래 테스트와 같은 기하) — 대조용
+      root.scrollTop = 1046;
+
+      textarea.focus();
+      viewport.openKeyboard(350);   // visibleBottom = 494
+
+      await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));   // 키보드는 열렸다
+      expect(root.scrollTop).toBe(1046);   // 컨테이너 rect는 무시된다 — 필드 자신은 이미 충분히 보인다
+    });
+
+    it("마킹된 컨테이너가 있으면 필드 자신이 아니라 그 컨테이너의 아래쪽(액션 버튼 줄)이 키보드를 벗어나는 기준이 된다", async () => {
+      const viewport = installFakeVisualViewport(844);
+      const root = renderIntoScrollRoot(<PageWithMemoGroup marked />);
+      const textarea = screen.getByLabelText("메모");
+      const group = root.querySelector(".memo-group") as HTMLElement;
+      stubRect(textarea, 380, 459);   // focusedOvershoot = 459-494+24 = -11 → 필드 자신은 이미 충분
+      stubRect(group, 350, 507);      // containerOvershoot = 507-494+24 = 37 → 버튼 줄까지 포함하면 부족
+      root.scrollTop = 1046;
+
+      textarea.focus();
+      viewport.openKeyboard(350);   // visibleBottom = 494
+
+      // overshoot = max(focusedOvershoot(-11), min(containerOvershoot(37), ceiling(380))) = 37
+      await waitFor(() => expect(root.scrollTop).toBe(1046 + 37));
+    });
+
+    it("마킹된 컨테이너가 보이는 영역보다 크면, 포커스된 필드 자신의 위쪽이 보이는 영역 밖으로 밀려나지 않는 선에서만 들어올린다 — 버튼 줄이 다 안 보이더라도 타이핑 중인 자리는 지킨다", async () => {
+      const viewport = installFakeVisualViewport(844);
+      const root = renderIntoScrollRoot(<PageWithMemoGroup marked />);
+      const textarea = screen.getByLabelText("메모");
+      const group = root.querySelector(".memo-group") as HTMLElement;
+      root.scrollTop = 1046;
+      stubRectFollowingScroll(textarea, 400, 479, root);   // baseline 1046
+      stubRectFollowingScroll(group, 200, 900, root);      // 컨테이너가 보이는 영역(494)보다 훨씬 크다
+
+      textarea.focus();
+      viewport.openKeyboard(350);   // visibleBottom = 494
+
+      // focusedOvershoot = 479-494+24 = 9, containerOvershoot = 900-494+24 = 430,
+      // ceiling = 400-0 = 400 → overshoot = max(9, min(430, 400)) = 400 — 컨테이너가
+      // 원하는 430이 아니라 400에서 멈춘다. 그 이상 올리면 필드 자신의 위쪽이 보이는
+      // 영역 밖으로 밀려난다.
+      await waitFor(() => expect(root.scrollTop).toBe(1046 + 400));
+
+      // 대가: 필드 자신의 위쪽은 정확히 보이는 영역의 top(0)에 닿을 때까지만 밀려나고
+      // 그 이상은 밀려나지 않는다 — 컨테이너 아래쪽(버튼 줄)은 여전히 다 보이지 않는다
+      // (500 > 494, GAP 24를 더한 518에는 한참 못 미친다).
+      expect(textarea.getBoundingClientRect().top).toBe(0);
+      expect(group.getBoundingClientRect().bottom).toBe(500);
+    });
+
+    it("마킹이 오히려 필드 자신의 최소 요구량보다 덜 스크롤하게 만들지는 않는다 — 필드 자신이 이미 보이는 영역보다 큰 경우에도 마킹 없을 때와 같은 양을 보장한다", async () => {
+      const viewport = installFakeVisualViewport(844);
+      const root = renderIntoScrollRoot(<PageWithMemoGroup marked />);
+      const textarea = screen.getByLabelText("메모");
+      const group = root.querySelector(".memo-group") as HTMLElement;
+      root.scrollTop = 1046;
+      stubRectFollowingScroll(textarea, 30, 600, root);   // 필드 자신이 이미 보이는 영역(494)보다 크다
+      stubRectFollowingScroll(group, 10, 900, root);
+
+      textarea.focus();
+      viewport.openKeyboard(350);   // visibleBottom = 494
+
+      // focusedOvershoot = 600-494+24 = 130, containerOvershoot = 900-494+24 = 430,
+      // ceiling = 30-0 = 30 → min(430,30) = 30. 이 30만 썼다면 필드 자신의 최소
+      // 요구량(마킹 안 했다면 130 — 아래 "필드 자신이 보이는 영역보다 크면..." 테스트와
+      // 같은 값)보다 덜 스크롤하는 회귀다. max(130,30) = 130이 정답이다.
+      await waitFor(() => expect(root.scrollTop).toBe(1046 + 130));
+    });
+
+    it("data-keyboard-keep-visible이 스크롤 호스트(#root) 밖의 조상에 있으면 무시한다 — 그 요소는 이 훅이 옮기는 scrollTop으로 전혀 움직이지 않으므로 기준으로 쓸 수 없다", async () => {
+      const viewport = installFakeVisualViewport(844);
+      const { root, wrapper } = renderIntoScrollRootInsideMarkedWrapper(<Page />);
+      stubRect(wrapper, 0, 2000);   // 마커가 있는 바깥 요소 — 새어 들어오면 훨씬 큰 값을 요구하게 된다
+      const textarea = screen.getByLabelText("메모");
+      stubRect(textarea, 428, 507);   // focusedOvershoot = 507-494+24 = 37
+      root.scrollTop = 1046;
+
+      textarea.focus();
+      viewport.openKeyboard(350);   // visibleBottom = 494
+
+      // wrapper가 새어 들어왔다면 overshoot = max(37, min(2000-494+24, 428)) = 428이 된다 —
+      // 실제로 37이면 wrapper가 (scrollRoot 밖이라) 무시됐다는 뜻이다.
+      await waitFor(() => expect(root.scrollTop).toBe(1046 + 37));
+    });
   });
 
   it("키보드가 닫혀도 스크롤 위치를 강제로 되돌리지 않는다(사용자가 요청하지 않은 시점 이동을 만들지 않음)", async () => {

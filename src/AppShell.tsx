@@ -44,6 +44,56 @@ import { useVirtualKeyboard, type VirtualKeyboard } from "./hooks";
  * 건드리지 않는다. */
 const KEYBOARD_SCROLL_GAP = 24;
 
+/** 소비 앱이 "지금 포커스된 필드 하나"가 아니라 그 필드를 포함한 블록 전체(예:
+ * 메모 입력 + 그 아래 취소/삭제/저장 버튼 줄)를 가상 키보드 위로 들어올리고 싶을 때
+ * 이 블록의 컨테이너에 붙이는 명시적 opt-in 마커입니다. `portal`(Select.tsx)·`floatRef`/
+ * `quickBarRef`(MobilePageTabs)·`pinToBottom`(Sidebar)과 같은 계열의 결정입니다 — 이
+ * 킷은 소비 앱이 준 markup에서 "이 그룹이 어디서 끝나는가"를 스스로 추론하지 않고,
+ * 항상 소비 앱이 직접 표시한 경계만 믿습니다. 추론이 기각된 이유: 어떤 조상 `<div>`가
+ * "필드의 액션까지 포함한 그룹의 끝"인지는 클래스 이름도 DOM 깊이도 안정적으로 말해
+ * 주지 않습니다(`.button-row`가 그룹 "안"에 있을 수도, 다음 그룹의 시작일 수도
+ * 있습니다) — 이 킷이 소유하지 않은 markup의 구조를 짐작하면 소비 앱이 리팩터링할
+ * 때마다 조용히 깨지는 코드가 됩니다.
+ *
+ * `data-*`인 이유: 이 마커가 붙는 요소는 AppShell이 렌더하는 컴포넌트가 아니라
+ * `children`으로 들어오는 소비 앱의 평범한 `<div>`입니다 — React prop으로 전달할
+ * 통로 자체가 없고(그 컴포넌트를 이 킷이 만들지 않았으므로), DOM에서 직접 읽어야
+ * 합니다. 값이 아니라 **존재 자체**가 스위치입니다(다른 예: DateWheelPicker.tsx:338의
+ * `data-fields`는 값을 읽지만, 이건 `hasAttribute`만 봅니다 — 그래서
+ * `data-keyboard-keep-visible="false"`도 켜진 것으로 취급됩니다. HTML의 boolean
+ * 속성 관례(`disabled=""`도 `disabled="false"`도 똑같이 켜짐)와 같은 모양이라
+ * README에 이 점을 명시합니다).
+ */
+const KEYBOARD_KEEP_VISIBLE_ATTR = "data-keyboard-keep-visible";
+
+/** focused에서 시작해(자기 자신은 검사하지 않습니다 — 마커는 "필드 자신"이 아니라
+ * "필드를 포함한 더 큰 블록"을 가리키는 용도라, 필드 자신에 붙이는 건 의미가 없습니다)
+ * scrollRoot(포함) 안쪽만 거슬러 올라가며 `KEYBOARD_KEEP_VISIBLE_ATTR`이 붙은 가장
+ * 가까운 조상을 찾습니다.
+ *
+ * **scrollRoot 경계 안으로 제한하는 이유(과제가 명시적으로 물은 지점).** 이 훅이
+ * 스크롤하는 건 오직 `scrollRoot.scrollTop`뿐입니다 — scrollRoot 밖의 조상에 마커가
+ * 있어도 그 요소는 이 스크롤로 전혀 움직이지 않으므로 애초에 기준으로 쓸 수 없습니다
+ * (`Dialog.tsx`처럼 `document.body`에 포털된 자리가 대표적 예 — reposition()이 이미
+ * `scrollRoot.contains(focused)`로 그런 포커스 자체를 걸러내는 것과 같은 전제를
+ * 마커 탐색에도 그대로 씌우는 것뿐입니다). `while (node && scrollRoot.contains(node))`로
+ * 순회를 제한하면 이 보장은 "추가 검사"가 아니라 **구조적으로 자동입니다** —
+ * focused가 scrollRoot 안에 있는 한(reposition()의 앞선 가드가 이미 확인) focused와
+ * scrollRoot 사이의 모든 조상은 정의상 scrollRoot 안에 있으므로, 이 순회는 scrollRoot
+ * 자신을 마지막으로 검사한 뒤(scrollRoot 자신에 마커가 있는 경우까지 허용) scrollRoot의
+ * 부모에서 멈춥니다. 그래도 이 경계를 명시적으로 코드에 남기는 이유는 방어적
+ * 프로그래밍입니다 — scrollRoot를 앞으로 다른 방식(예: ref)으로 얻게 되어 "항상 DOM
+ * 조상"이라는 가정이 깨지더라도 이 함수 자신의 계약은 그대로 유지됩니다.
+ */
+function findKeyboardKeepVisibleAncestor(focused: HTMLElement, scrollRoot: HTMLElement): HTMLElement | null {
+  let node = focused.parentElement;
+  while (node && scrollRoot.contains(node)) {
+    if (node.hasAttribute(KEYBOARD_KEEP_VISIBLE_ATTR)) return node;
+    node = node.parentElement;
+  }
+  return null;
+}
+
 /** --motion-reposition(tokens.css)과 같은 값입니다. 스프링 라이브러리 없이 스크롤
  * 오프셋을 직접 애니메이션할 때도 이 킷의 다른 "재배치" 전환과 같은 리듬을 타야
  * 하므로, 토큰이 바뀌면 이 값도 같이 바꾸세요. */
@@ -107,7 +157,10 @@ function prefersReducedMotion() {
 
 /**
  * 가상 키보드가 열리면 지금 포커스된 요소가 가려지지 않게 스크롤 호스트(`#root`)를
- * 옮깁니다.
+ * 옮깁니다. 소비 앱이 조상 요소에 `KEYBOARD_KEEP_VISIBLE_ATTR`
+ * (`data-keyboard-keep-visible`)을 붙이면, 필드 자신이 아니라 그 조상의 아래쪽까지
+ * 함께 들어올립니다(예: 필드 + 그 아래 액션 버튼 줄) — 자세한 이유·한도는 그 상수
+ * 문서와 `reposition()` 안 주석을 참고하세요.
  *
  * `useVirtualKeyboard()`가 이미 계산해 둔 `inset`(hooks.ts 참고)은 한때 아무도
  * 쓰지 않았습니다. 이걸 쓰는 것만으로는 부족합니다 — 패딩(아래 `style`의
@@ -368,16 +421,16 @@ function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId =
       return;
     }
     observeFocusedElementSize();
-    const rect = focused.getBoundingClientRect();
     const visibleBottom = viewport.offsetTop + viewport.height;
-    const overshoot = rect.bottom - visibleBottom + KEYBOARD_SCROLL_GAP;
+    const focusedRect = focused.getBoundingClientRect();
+    const focusedOvershoot = focusedRect.bottom - visibleBottom + KEYBOARD_SCROLL_GAP;
     // AutoGrowTextarea 같은 요소는 내부 스크롤도 max-height도 없이 내용만큼 계속
     // 자란다(AutoGrowTextarea.tsx:20-28) — 그래서 필드 자신의 높이가 보이는 영역보다
     // 커질 수 있다. 그 경우 위/아래 두 경계를 동시에 만족시킬 방법이 물리적으로 없다
     // (필드 하나가 보이는 영역 전체보다 크므로). 아래쪽(캐럿 쪽 — 이 컴포넌트는 항상
     // 아래로 자라므로 지금 타이핑 중인 자리는 늘 아래쪽에 있다)을 우선한다: rect.top이
-    // 보이는 영역 위로 밀려나는 대가를 치르더라도, overshoot를 그대로(한도 없이)
-    // 적용해 rect.bottom은 항상 GAP만큼 보이는 자리에 둔다.
+    // 보이는 영역 위로 밀려나는 대가를 치르더라도, focusedOvershoot를 그대로(한도
+    // 없이) 적용해 rect.bottom은 항상 GAP만큼 보이는 자리에 둔다.
     //
     // "rect.top이 보이는 영역의 top 아래로는 못 내려가게" 한도를 두는 방안을 먼저
     // 시도했었다 — 그런데 그 한도가 한 번이라도 걸리면(필드가 보이는 영역보다 큰 순간)
@@ -386,7 +439,40 @@ function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId =
     // (AppShell.test.tsx의 "필드 자신이 보이는 영역보다 크면..." 테스트가 계속 자라는
     // 시나리오로 이 회귀를 잡는다). 짧은 필드(흔한 경우)는 rect.bottom만 기준으로
     // 삼아도 rect.top이 애초에 여유 있게 남아 있으므로 이 트레이드오프가 드러나지
-    // 않는다.
+    // 않는다. **이 값(focusedOvershoot)은 마커가 있든 없든 최종 요청량의 바닥(floor)
+    // 이다** — 마킹이 "포커스된 필드 자신의 최소 요구량보다 덜 스크롤하게" 만들 수는
+    // 없다(아래 참고). 마커가 없으면(오늘까지의 유일한 경로) 최종 요청량은 그냥 이
+    // 값 그대로다.
+    let overshoot = focusedOvershoot;
+
+    // data-keyboard-keep-visible로 표시된 조상이 있으면 그 컨테이너의 아래쪽(예:
+    // 필드 아래 취소/삭제/저장 버튼 줄)까지 같이 들어올린다 — KEYBOARD_KEEP_VISIBLE_ATTR
+    // 문서(위) 참고. 없으면 이 블록 전체를 건너뛰어 overshoot는 focusedOvershoot 그대로다.
+    const keepVisibleAncestor = findKeyboardKeepVisibleAncestor(focused, scrollRoot);
+    if (keepVisibleAncestor) {
+      const containerRect = keepVisibleAncestor.getBoundingClientRect();
+      const containerOvershoot = containerRect.bottom - visibleBottom + KEYBOARD_SCROLL_GAP;
+      // 한도(ceiling) — 과제가 명시한 요구사항: 마킹된 블록이 키보드 위 공간보다 크면,
+      // 포커스된 필드 "자신의" 위쪽이 보이는 영역 밖으로 밀려나서는 안 된다(타이핑
+      // 중인 자리를 아예 못 보는 게 버튼 하나 가려지는 것보다 나쁘다). focusedRect.top을
+      // 이 이상 끌어올리면(overshoot를 이 이상 주면) 그 위쪽이 viewport.offsetTop
+      // 위로 넘어간다 — 그래서 컨테이너를 위해 "추가로" 요청할 수 있는 몫은 여기까지다.
+      const ceiling = Math.max(0, focusedRect.top - viewport.offsetTop);
+      // **floor(focusedOvershoot)와 max를 취하는 이유 — 리뷰에서 드러난 사실: 마킹이
+      // 상황을 오히려 악화시킬 수 있다.** ceiling으로 자른 컨테이너 몫
+      // (min(containerOvershoot, ceiling))을 그대로 최종값으로 쓰면, 필드 자신이 이미
+      // 보이는 영역보다 커서 focusedOvershoot가 ceiling보다 큰 경우(AutoGrowTextarea가
+      // 자라 이 블록 안에 들어있는 경우가 정확히 이 모양이다) 컨테이너 몫이 필드
+      // 자신의 최소 요구량보다 작은 값으로 그 필드를 도로 가둬 버린다 — "마킹 안
+      // 했으면 130만큼 스크롤해서 필드 바닥이 보였을 텐데, 마킹했더니 30만 스크롤해서
+      // 필드 바닥이 오히려 안 보이게" 되는 회귀다(AppShell.test.tsx의 "마킹이 포커스된
+      // 필드 자신의 요구량보다 덜 스크롤하지 않는다" 테스트가 이 경로를 잡는다). 그래서
+      // 컨테이너를 위해 정한 값과 focusedOvershoot 중 **더 큰 쪽**을 최종으로 쓴다 —
+      // "마킹은 스크롤을 늘릴 수만 있지, 마킹 없이도 보장되던 최소 요구량 아래로 줄일
+      // 수는 없다"는 불변식이다. 이 불변식 덕분에 위 AutoGrowTextarea 테스트도 이
+      // 블록으로 감싸는 것만으로는 절대 깨지지 않는다.
+      overshoot = Math.max(focusedOvershoot, Math.min(containerOvershoot, ceiling));
+    }
     if (overshoot > 0) animateScrollTopBy(scrollRoot, overshoot);
   }
 
