@@ -114,7 +114,24 @@ body { margin: 0; min-width: 0; min-height: 100vh; color: var(--text); backgroun
  * (§6:138: 컴포넌트는 스크롤바 외형을 바꾸지 않는다). */
 @media (max-width: 760px), (hover: none) and (pointer: coarse) {
   html, body { height: 100%; overflow: hidden; scrollbar-gutter: auto; }
-  #root { width: 100%; height: 100vh; height: 100dvh; overflow-x: hidden; overflow-y: auto; scroll-padding-bottom: 40dvh; -webkit-overflow-scrolling: touch; }
+  /* scroll-padding-bottom: 40dvh를 여기 뒀었다 — AppShell.tsx의
+   * useKeyboardScrollCompensation이 생기기 전, 포커스된 필드를 키보드 위로 세우는
+   * 유일한(암묵적) 시도였다(git 히스토리 확인: budget 앱 베이스라인부터 주석 하나
+   * 없이 있던 값 — 원래 의도를 기록한 커밋 메시지나 문서가 이 저장소에도 그
+   * 조상 저장소에도 없다). 그 훅이 생긴 뒤로는 브라우저 자신의 네이티브
+   * scrollIntoView(이 패딩이 그 기준)와 이 훅의 계산이 같은 포커스 이벤트에
+   * 각자 반응해 스크롤을 더하는 이중 보정이 됐다 — owner 실기기 트레이스가
+   * 이 초과분(268px = 그 순간 visualViewport.height의 40%)을 그대로 잡아냈다
+   * (AppShell.tsx의 useKeyboardScrollCompensation 문서, tests/AppShell.test.tsx의
+   * "네이티브 scrollIntoView가 뒤늦게..." 테스트 참고). 24px(KEYBOARD_SCROLL_GAP)로
+   * 줄이는 대안도 검토했지만 기각했다 — "따로 계산해서 따로 옮기는" 두 주체 구조
+   * 자체는 그대로라 어떤 0이 아닌 값을 둬도 어긋난 나머지가 더해질 수 있다.
+   * 그래서 완전히 뗐다 — 이 킷의 키보드 보정이 이제 그 자리를 온전히 맡는다.
+   * 키보드와 무관한 포커스(Tab 이동, 소비 앱의 프로그램적 focus(), 해시 앵커
+   * 이동)에 미치는 영향은 AppShell.tsx의 useKeyboardScrollCompensation 문서 참고 —
+   * 브라우저의 내장 "포커스 요소가 안 보이면 스크롤" 동작 자체는 이 패딩 없이도
+   * 계속 일어나고, 이 패딩은 그 여유(cushion) 크기만 조절했을 뿐이다. */
+  #root { width: 100%; height: 100vh; height: 100dvh; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   html, body, #root { scrollbar-width: none !important; -ms-overflow-style: none; }
   html::-webkit-scrollbar, body::-webkit-scrollbar, #root::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; background: transparent !important; }
   html::-webkit-scrollbar-track, body::-webkit-scrollbar-track, #root::-webkit-scrollbar-track,

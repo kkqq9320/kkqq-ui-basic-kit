@@ -1,20 +1,32 @@
 // @vitest-environment jsdom
+/// <reference types="vite/client" />
+// 위 참조는 아래 `*?raw` 임포트의 타입을 준다(vite/client.d.ts의 `declare module
+// '*?raw'`) — tests/Dialog.test.tsx:2-12와 같은 이유·같은 idiom.
 //
 // 가상 키보드가 열리면(useVirtualKeyboard) 포커스된 필드가 그 뒤로 가려지지 않게
 // AppShell이 스크롤 호스트(#root)를 옮기는지, 닫히면 원래 자리로 돌아가는지 확인한다.
 // bug-keyboard-shift.md가 실측한 근본 원인: #root는 height:100dvh로 고정돼 키보드가
 // 열려도 clientHeight가 줄지 않고(안드로이드 기본 resizes-visual, index.html에
-// interactive-widget 지정 없음), scroll-padding-bottom:40dvh(tokens.css)는 실제
-// 키보드 높이와 무관한 상수라 scrollIntoView에 맡기면 우연히만 맞는다 — 그래서
-// visualViewport로 가려진 만큼을 직접 계산해 scrollTop에 더한다(Select.tsx의
-// scrollSelectedOptionIntoView와 같은 방식). jsdom은 Element.scrollIntoView를
-// 구현하지 않으므로(tests/Select.test.tsx:228) 이 방식이라야 단위 테스트가 성립한다.
+// interactive-widget 지정 없음), 브라우저 자신의 scrollIntoView는 그 상태에서 우연히만
+// 맞는다 — 그래서 visualViewport로 가려진 만큼을 직접 계산해 scrollTop에 더한다
+// (Select.tsx의 scrollSelectedOptionIntoView와 같은 방식). jsdom은
+// Element.scrollIntoView를 구현하지 않으므로(tests/Select.test.tsx:228) 이 방식이라야
+// 단위 테스트가 성립한다.
+//
+// `#root`는 한때 `scroll-padding-bottom: 40dvh`도 가지고 있었다(tokens.css) — 이
+// 훅이 생기기 전, 키보드 위로 포커스를 세우는 유일한(암묵적) 시도였다. 이 훅이
+// 생긴 뒤로는 둘이 같은 일을 각자 하는 이중 보정이 됐고, owner 실기기 트레이스가
+// 그 이중 보정의 초과분(268px = 그 순간 visualViewport.height의 40%)을 정확히
+// 잡아냈다 — task-scrollpad-report.md 참고. 고침은 그 패딩을 `#root`에서 완전히
+// 떼는 것이었다(더 이상 tokens.css에 없다) — 아래 "네이티브 scrollIntoView가
+// 뒤늦게..." 테스트가 이 이중 보정 회귀를 잡는다.
 
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { AppShell } from "../src/AppShell";
+import tokensCssSource from "../css/tokens.css?raw";
 
 afterEach(() => {
   cleanup();
@@ -309,6 +321,63 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
 
     // overshoot = rect.bottom(507) - visibleBottom(494) + gap(24) = 37
     await waitFor(() => expect(root.scrollTop).toBe(1046 + 37));
+  });
+
+  it("네이티브 scrollIntoView가 scroll-padding-bottom을 기준으로 뒤늦게 따로 스크롤을 더해도, 이 훅이 요청한 양(reqΔ)만큼만 최종적으로 움직인다 — owner 실기기 트레이스의 이중 보정(over-scroll)", async () => {
+    // owner 실기기 트레이스 한 번: `+198ms kb resize rect=877~956 visBot=668 over=312`
+    // (이 훅이 요청한 delta, reqΔ=312) → `+648ms ... reqΔ=312 want=928 stNow=1196
+    // achΔ=580`. 이 훅은 312만 요청했는데 실제로는 580(268 초과)만큼 움직였다. 268은
+    // 우연이 아니다 — 그 순간 visualViewport.height는 668이었고 40%는 267.2다. 브라우저
+    // 자신의 scrollIntoView가 `#root`의 `scroll-padding-bottom: 40dvh`(tokens.css)를
+    // 기준으로 "따로" 계산해 얹은 몫이 정확히 그만큼이었다는 뜻이다 — 이 훅의 보정과
+    // 브라우저의 네이티브 보정이 같은 포커스 이벤트에 각자 반응해 더해지는 이중 보정.
+    // 초과분은 이 훅의 400ms 애니메이션이 이미 정착된 "뒤"(트레이스의 +648ms처럼, 이
+    // 훅과 무관하게 늦게 온다)에 나타난다 — reqΔ는 st=616(정착 전 원래 값) 기준으로
+    // 이미 확정돼 있었다.
+    //
+    // 첫 번째 불변식(구조적, 이 테스트의 실제 잠금장치): `#root`에 scroll-padding-bottom이
+    // 있으면 안 된다. 값을 24px로 줄이는 대안도 검토했지만 기각했다 — 두 주체(이 훅,
+    // 브라우저)가 "따로 계산해서 따로 옮기는" 구조 자체는 그대로라 어떤 0이 아닌 값을
+    // 둬도 어긋난 나머지가 그대로 더해질 수 있다(요구되는 불변식은 achΔ==reqΔ지 "더
+    // 작게"가 아니다). 단위(dvh든 px든)에 상관없이 존재 자체를 잡는다 — 값만 다른
+    // 형태로 되돌아와도(예: 200px) 이 assert가 잡는다.
+    expect(tokensCssSource).not.toMatch(/#root\s*\{[^}]*scroll-padding-bottom/);
+
+    // 두 번째 불변식(행동, 예시/설명용 — 잠금장치는 위 assert다): jsdom은
+    // scrollIntoView도 scroll-padding도 구현하지 않으므로(레이아웃 엔진이 없다)
+    // 브라우저의 몫을 이 테스트가 직접 흉내 낸다 — 이 훅의 어떤 코드 경로도 이 흉내
+    // 낸 쓰기를 거치지 않는다(이 훅 자신의 scrollTop 쓰기만 보는 테스트로는 이 버그를
+    // 절대 볼 수 없다 — 158개의 기존 테스트가 전부 이 지점을 놓친 이유). 하드코딩한
+    // 숫자가 아니라 실제 tokens.css 소스에서 #root의 scroll-padding-bottom 값을 그대로
+    // 읽어(Dialog.test.tsx의 dialogCssSource 계약 테스트와 같은 idiom) 그 비율만큼을
+    // 흉내 낸다 — 값이 tokens.css에서 사라지면 흉내 낼 몫도 0이 되므로, 고정된 지금은
+    // 이 아래 코드가 사실상 no-op(0을 더함)이고 마지막 assert는 위 waitFor가 이미
+    // 확인한 것의 재확인이다. **이 dvh 전용 정규식은 값 형태가 바뀌면(예: 200px) 0을
+    // 돌려주므로 이 절반은 그 회귀를 못 잡는다 — 그 경우를 잡는 건 위의 구조적
+    // assert뿐이다.** 이 절반은 "왜 158개의 기존 테스트가 이 버그를 놓쳤는가"를
+    // 재현해 보여주는 용도로 남겨 둔다.
+    const scrollPaddingMatch = tokensCssSource.match(/#root\s*\{[^}]*?scroll-padding-bottom:\s*([\d.]+)dvh/);
+    const nativeScrollPaddingFraction = scrollPaddingMatch ? parseFloat(scrollPaddingMatch[1]) / 100 : 0;
+
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 507);
+    root.scrollTop = 1046;
+
+    textarea.focus();
+    viewport.openKeyboard(350);   // visibleBottom = 494
+
+    const reqDelta = 37;   // rect.bottom(507) - visibleBottom(494) + GAP(24) — 위 첫 테스트와 같은 입력
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + reqDelta));   // 이 훅 자신의 보정은 정착했다
+
+    // 네이티브 scrollIntoView 몫을 뒤늦게(트레이스처럼 이 훅의 정착 "이후") 얹는다.
+    root.scrollTop += Math.round(nativeScrollPaddingFraction * 494);
+
+    // 불변식: achΔ(실제로 움직인 전체 양)는 reqΔ(이 훅이 요청한 양)와 정확히 같아야
+    // 한다 — 더 작아도 안 되지만(가려짐, 이 파일의 다른 테스트들이 잡는다), 더 커도
+    // 안 된다(owner가 보는 과도 스크롤, 이 테스트가 잡는다).
+    expect(root.scrollTop - 1046).toBe(reqDelta);
   });
 
   it("실기기 트레이스(rect=566~645, visBot=653)를 재현하면 새 여유만큼 필드 바닥이 실제로 남는다 — 상수가 아니라 결과 간격을 검증한다", async () => {
