@@ -65,10 +65,21 @@
    * 예약된 여백이 저절로 줄거나(§16.2 Agency 위반) 심하면 그 사이클의 예약이 통째로
    * 0으로 무너진다. AppShell은 releaseFloor > 0인 동안만(즉 "마지막 한 걸음"으로
    * 정확히 0에 도달하기 전까지) 이 마커를 붙이므로, 지연 해제가 진행되는 내내
-   * 트랜지션 자체를 꺼서 rendered와 target이 항상 같게 만든다 — 0에 도달하는 마지막
-   * 걸음에서는 마커가 함께 사라지므로 바로 위에서 설명한 부드러운 최종 축소는 그대로
-   * 유지된다(그 시점부터는 recompute()의 scroll 리스너도 스스로 떨어져 나가 더 이상
-   * scrollHeight를 읽지 않으므로 안전하다). */
+   * 트랜지션 자체를 꺼서 rendered와 target이 항상 같게 만든다.
+   *
+   * **이 트랜지션은 더 이상 지연 해제의 실제 시각적 완만함을 만드는 쪽이 아니다.**
+   * AppShell.tsx의 useReleasableKeyboardInset은 이제 recompute()가 정한 목표까지
+   * JS(animateFloorTo, --motion-reposition/--sidebar-ease를 그대로 재사용)로 직접
+   * 여러 프레임에 걸쳐 값을 옮긴다 — 그 전체 구간 내내 .keyboard-inset-holding이
+   * 붙어 있으므로 위 트랜지션은 그동안 단 한 번도 실제로 걸리지 않는다. 마커가
+   * 떨어지는 순간엔 값이 이미 그 JS 애니메이션으로 목표(대개 정확히 0)에 도달해
+   * 있으므로, 이 트랜지션이 넘겨받는 건 사실상 변화가 없거나(0→0) 반올림 오차 수준의
+   * 마지막 1~2px뿐이다 — 육안으로 뭔가 "줄어드는" 걸 이 트랜지션이 보여주는 경우는
+   * 이제 거의 없다. 그럼에도 이 규칙 자체는 남겨 둔다: (1) 지오메트리를 아예 알 수
+   * 없는 경우(clientHeight <= 0, 레이아웃 없는 환경 — useReleasableKeyboardInset 문서
+   * 참고)는 렌더 단계에서 곧장 0으로 떨어지며 JS 애니메이션을 거치지 않는데, 그 경우
+   * 이 트랜지션이 유일한 완만함의 원천이고, (2) 이 규칙이 없으면 그 사이 어떤 경로로든
+   * 마커 없이 값이 바뀌는 경우 다시 하드컷이 된다 — 안전망으로 유지한다. */
   .app-shell:not(.keyboard-inset-open):not(.keyboard-inset-holding) .workspace { transition: padding-bottom var(--motion-reposition) var(--sidebar-ease); }
   .page-header { grid-template-rows: 14px minmax(39px, auto) minmax(44px, auto); }
   /* 모바일에서는 떠 있는 컨트롤이 한 줄을 통째로 차지하고 헤더는 그 아래에서

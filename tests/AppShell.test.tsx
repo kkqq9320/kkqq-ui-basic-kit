@@ -270,6 +270,24 @@ function shellHasHoldingMarker(root: HTMLElement) {
   return ((root.querySelector(".app-shell") as HTMLElement).className).includes("keyboard-inset-holding");
 }
 
+/** .app-shell의 style 속성(--keyboard-inset)에 대한 모든 "실제 변경"을 순서대로 기록한다 —
+ * trackScrollTopWrites와 같은 목적, 대상만 --keyboard-inset이다. React는 이전 렌더와 값이
+ * 같으면 그 스타일 프로퍼티를 아예 건드리지 않으므로(diff 후 변경분만 적용), 같은 값으로
+ * "유지"만 하는 렌더(예: 닫히는 순간의 hold)는 여기 기록되지 않는다 — 실제로 값이 바뀔
+ * 때만 기록되므로, 한 번의 순간이동과 여러 프레임에 걸친 연속적인 변화를 구분할 수 있다.
+ * MutationObserver는 jsdom이 실제로 구현하므로(React의 style.setProperty 호출이 곧 style
+ * 속성의 직렬화된 값을 바꾼다) React의 내부 쓰기 경로를 직접 몽키패치하지 않고도 관찰이
+ * 가능하다. */
+function trackKeyboardInsetWrites(root: HTMLElement): number[] {
+  const shell = root.querySelector(".app-shell") as HTMLElement;
+  const writes: number[] = [];
+  const observer = new MutationObserver(() => {
+    writes.push(parseFloat(shell.style.getPropertyValue("--keyboard-inset")) || 0);
+  });
+  observer.observe(shell, { attributes: true, attributeFilter: ["style"] });
+  return writes;
+}
+
 function Page() {
   return <AppShell sidebar={<div />}>
     <textarea aria-label="메모" />
@@ -1199,4 +1217,182 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     expect(root.scrollTop).toBe(bottomScrollTop2);
   });
 
+  it("닫힌 뒤 예약 여백이 걷힐 때 한 번에 뛰지 않고 여러 프레임에 걸쳐 연속으로 줄어든다 — 다이얼로그 박스와 같은 리듬", async () => {
+    // owner: "다이얼로그에 키보드 올라왔다가 내려가면 움직이는 것처럼 그렇게 부드럽게
+    // 하고싶어". 77f28fa는 마지막 열림 인셋을 KEYBOARD_INSET_SETTLE_MS만큼 유지했다가
+    // recompute()가 계산한 값으로 "한 번에" 뛰었다 — 그 뜀 자체가 owner가 말하는 계단식
+    // 움직임이다. 이제는 recompute()가 목표를 계산한 뒤 --motion-reposition(400ms)과
+    // --sidebar-ease로 그 값까지 애니메이션한다(스크롤 보정이 이미 하는 것과 같은 곡선).
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 50);   // 이미 잘 보임 — reposition()이 따로 스크롤하지 않게
+    const BASE_CONTENT_HEIGHT = 2000;
+    const CLIENT_HEIGHT = 800;
+    installClampingScrollRoot(root, BASE_CONTENT_HEIGHT, CLIENT_HEIGHT);
+
+    textarea.focus();
+    viewport.openKeyboard(350);
+    await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));
+    const insetWhileOpen = parseFloat(keyboardInsetOf(root));
+
+    // 여유(SLACK)를 남긴 채 닫는다 — floor가 곧장 0으로 스킵되지 않고 실제로 줄어드는
+    // 과정을 관찰할 수 있어야 한다.
+    const SLACK = 200;
+    root.scrollTop = BASE_CONTENT_HEIGHT + insetWhileOpen - CLIENT_HEIGHT - SLACK;
+    const writes = trackKeyboardInsetWrites(root);
+
+    viewport.closeKeyboard();
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(false));   // 닫히는 렌더가 커밋됐다(hold 시작)
+
+    const target = insetWhileOpen - SLACK;
+    await waitFor(() => expect(parseFloat(keyboardInsetOf(root))).toBe(target));
+
+    expect(writes.length).toBeGreaterThan(1);           // 한 번의 대입이 아니다 — 다이얼로그처럼 연속으로 움직인다
+    expect(writes[writes.length - 1]).toBe(target);     // 마지막 프레임은 정확히 목표치
+    // 단조 감소 — 다시 늘어나는 프레임이 없다(§16.2: 지연 "해제"이지 재예약이 아니다).
+    for (let i = 1; i < writes.length; i++) expect(writes[i]).toBeLessThanOrEqual(writes[i - 1] + 0.01);
+  });
+
+  it("prefers-reduced-motion에서는 예약 여백 해제도 애니메이션 없이 즉시 옮긴다(짧게가 아니라 제거)", async () => {
+    // §14: reduced motion은 "짧게"가 아니라 이동 자체를 없애는 것 — 스크롤 보정의
+    // reduced-motion 테스트와 같은 계약을 예약 여백 해제에도 적용한다.
+    installReducedMotionPreference();
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 50);
+    const BASE_CONTENT_HEIGHT = 2000;
+    const CLIENT_HEIGHT = 800;
+    installClampingScrollRoot(root, BASE_CONTENT_HEIGHT, CLIENT_HEIGHT);
+
+    textarea.focus();
+    viewport.openKeyboard(350);
+    await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));
+    const insetWhileOpen = parseFloat(keyboardInsetOf(root));
+
+    const SLACK = 200;
+    root.scrollTop = BASE_CONTENT_HEIGHT + insetWhileOpen - CLIENT_HEIGHT - SLACK;
+    const writes = trackKeyboardInsetWrites(root);
+
+    viewport.closeKeyboard();
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(false));
+
+    const target = insetWhileOpen - SLACK;
+    await waitFor(() => expect(parseFloat(keyboardInsetOf(root))).toBe(target));
+
+    // hold(값 그대로라 mutation 없음) 다음 곧장 목표로 — 중간값 없이 딱 한 번의 실제 변경.
+    expect(writes.length).toBe(1);
+  });
+
+  it("해제 애니메이션 도중 사용자가 위로 더 스크롤해 목표가 다시 줄어들면, 처음 값으로 되돌아가지 않고 지금 진행 중이던 값에서 새 목표로 이어간다 — §3 Interruptibility", async () => {
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 50);
+    const BASE_CONTENT_HEIGHT = 2000;
+    const CLIENT_HEIGHT = 800;
+    installClampingScrollRoot(root, BASE_CONTENT_HEIGHT, CLIENT_HEIGHT);
+
+    textarea.focus();
+    viewport.openKeyboard(350);
+    await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));
+    const insetWhileOpen = parseFloat(keyboardInsetOf(root));
+
+    // SLACK1은 insetWhileOpen보다 충분히 작게 남겨 둔다 — target1(=insetWhileOpen-SLACK1)과
+    // 그 뒤 EXTRA만큼 더 줄어드는 target2가 둘 다 0 밑으로 내려가 Math.max(0, ...) 바닥에
+    // 걸리지 않게(그러면 "새 목표로 이어가는지"가 아니라 바닥 클램프만 확인하는 셈이 된다).
+    const SLACK1 = 150;
+    root.scrollTop = BASE_CONTENT_HEIGHT + insetWhileOpen - CLIENT_HEIGHT - SLACK1;
+    const writes = trackKeyboardInsetWrites(root);
+
+    viewport.closeKeyboard();
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(false));
+
+    const target1 = insetWhileOpen - SLACK1;
+    // 애니메이션이 target1에 닿기 전, 중간값에 도달할 때까지 기다린다. 이 창구는
+    // KEYBOARD_INSET_SETTLE_MS(120ms) 이후 400ms 안에 있어야 하므로, 느린 머신에서
+    // waitFor의 기본 1000ms 제한에 걸리지 않게 여유 있는 timeout을 명시로 준다(범위
+    // 단언 자체는 그대로 — 느슨하게 만드는 게 아니라 기다리는 시간만 늘린다).
+    await waitFor(() => {
+      const now = parseFloat(keyboardInsetOf(root));
+      expect(now).toBeLessThan(insetWhileOpen);
+      expect(now).toBeGreaterThan(target1);
+    }, { timeout: 3000 });
+    const interruptFrom = parseFloat(keyboardInsetOf(root));
+
+    // 사용자가 그 사이 위로 더 스크롤한다 — 더 적은 예약만 있어도 안전해진다.
+    const EXTRA = 50;
+    root.scrollTop -= EXTRA;
+    root.dispatchEvent(new Event("scroll"));
+
+    const target2 = target1 - EXTRA;
+    await waitFor(() => expect(parseFloat(keyboardInsetOf(root))).toBe(target2));
+
+    // 가로챈 뒤로는 그 어떤 프레임도 가로챈 시점(interruptFrom)보다 위로도, 맨 처음
+    // (insetWhileOpen)으로도 되돌아가지 않는다 — 논리적 목표가 아니라 "지금" 값에서
+    // 이어졌다는 뜻.
+    const afterInterrupt = writes.slice(writes.indexOf(interruptFrom) + 1);
+    for (const value of afterInterrupt) expect(value).toBeLessThanOrEqual(interruptFrom + 0.01);
+    for (let i = 1; i < writes.length; i++) expect(writes[i]).toBeLessThanOrEqual(writes[i - 1] + 0.01);
+  });
+
+  it("해제 애니메이션이 진행되는 도중 clientHeight가 스크롤/타이머 이벤트 없이 흔들려도 이미 정해진 목표 자체는 다시 계산되지 않는다", async () => {
+    // 이 애니메이션이 스텝(77f28fa)을 연속으로 바꾸면서 넓어진 위험 창구: C1이 고친
+    // "닫히는 순간의 clientHeight 스파이크"는 KEYBOARD_INSET_SETTLE_MS(120ms) 동안 이미
+    // 가라앉는다고 보고 recompute()의 첫 계산은 안정된 지오메트리를 쓴다(B1/C1 테스트가
+    // 이미 고정해 둔 계약) — 그건 이 테스트의 대상이 아니다. 이 테스트가 보는 것은 그
+    // "이후", recompute()가 이미 올바른(안정된 지오메트리 기준) 목표를 정하고 그쪽으로
+    // 애니메이션하는 도중에, 스크롤/타이머 이벤트 없이 clientHeight가 또 흔들리는
+    // 경우다 — recompute()를 다시 부를 계기(scroll 이벤트나 settle 타이머)가 전혀
+    // 없으므로, animateFloorTo가 이미 겨냥한 target 자체는 이 흔들림으로 다시 계산되지
+    // (더 작은 값으로 바뀌지) 않아야 한다.
+    //
+    // 이 시점의 실제 root.scrollTop 자체가 물리적으로 clamp될 수 있는지는 별개 문제라
+    // 여기서 단언하지 않는다: 실제 브라우저는 scrollTop을 scrollHeight-clientHeight
+    // 이하로 항상 강제하므로, 그 순간 남아있던 여유보다 스파이크가 크면(이 애니메이션이
+    // 아직 target에 거의 다 왔을 때 캐치되는 경우 등) 그 clamp는 브라우저 자신의
+    // 불변식이라 JS로 막을 방법이 없다 — 77f28fa는 이 창구가 1프레임이었고 이
+    // 애니메이션은 최대 400ms로 넓힌다는 트레이드오프는 리포트("하드웨어만 확인
+    // 가능")에 남긴다.
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 50);
+    const CLIENT_HEIGHT_TRUE = 800;
+    const BASE_CONTENT_HEIGHT = 2000;
+    const scrollRoot = installClampingScrollRoot(root, BASE_CONTENT_HEIGHT, CLIENT_HEIGHT_TRUE);
+
+    textarea.focus();
+    viewport.openKeyboard(350);
+    await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));
+    const insetWhileOpen = parseFloat(keyboardInsetOf(root));
+
+    const SLACK = 250;
+    root.scrollTop = BASE_CONTENT_HEIGHT + insetWhileOpen - CLIENT_HEIGHT_TRUE - SLACK;
+
+    viewport.closeKeyboard();
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(false));
+
+    const target = insetWhileOpen - SLACK;
+    // settle recompute()가 target을 향해 애니메이션을 시작해, 아직 도착하지 않은
+    // 중간값에 도달할 때까지 기다린다. 위 인터럽트 테스트와 같은 이유로 넉넉한
+    // timeout을 명시한다(범위 단언은 그대로 유지 — 느슨해지는 건 대기 시간뿐이다).
+    await waitFor(() => {
+      const now = parseFloat(keyboardInsetOf(root));
+      expect(now).toBeLessThan(insetWhileOpen);
+      expect(now).toBeGreaterThan(target);
+    }, { timeout: 3000 });
+
+    // 이 시점에 clientHeight가(예: 주소창처럼 키보드와 무관한 이유로) C1과 같은 폭(130)
+    // 만큼 잠깐 부풀어 오른다 — scroll/settle 이벤트를 동반하지 않는다.
+    scrollRoot.setClientHeight(CLIENT_HEIGHT_TRUE + 130);
+
+    // target 자체는 흔들리지 않고 정확히 처음 계산된 값으로 안정된다 — clientHeight가
+    // 흔들렸다는 이유만으로 recompute()가 다시 불려 더 작은(또는 다른) 값으로
+    // 재계산되지 않았다는 뜻이다.
+    await waitFor(() => expect(parseFloat(keyboardInsetOf(root))).toBe(target));
+
+    scrollRoot.setClientHeight(CLIENT_HEIGHT_TRUE);   // 다음 테스트에 영향이 없도록 원상복구
+  });
 });

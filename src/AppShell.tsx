@@ -483,11 +483,106 @@ function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId =
  * 그대로입니다** — 여기서 하는 일은 "언제 처음 계산하느냐"를 늦추는 것이지, 이미
  * 걷어낸 값을 되돌리거나 재예약하는 게 아닙니다(AppShell.test.tsx의 C1 테스트가 두
  * 사이클 모두에서 achΔ=0과 "매번 같은 값으로 안정됨"을 확인합니다).
+ *
+ * **연속적인 해제(owner: "다이얼로그에 키보드 올라왔다가 내려가면 움직이는 것처럼
+ * 그렇게 부드럽게 하고싶어").** 위에서 설명한 recompute()는 `77f28fa`까지는 계산한
+ * `next`를 `setReleaseFloor(next)`로 그 자리에서 한 번에 대입했다 — hold(마지막 열림
+ * 인셋 유지) 다음에 곧장 계단식으로 뛰는 게, 다이얼로그의 백드롭(`Dialog.tsx`가
+ * `useVisualViewportBox()`로 얻은 top/height를 `css/dialog.css`가 `--motion-reposition`
+ * (400ms)과 `--sidebar-ease`로 트랜지션하는 것)과 비교됐을 때 owner가 말하는 "뚝뚝
+ * 끊기는" 그 지점이었다.
+ *
+ * **CSS 트랜지션이 아니라 JS 트윈을 골랐다.** 다이얼로그는 `top`/`height`를 CSS
+ * `transition`으로 보간한다 — 하지만 이 패딩 해제는 그럴 수 없다: `c1479ce`가 이미
+ * 실기기 리뷰로 잡은 버그(Finding 1)가 정확히 "이 트랜지션을 켜면 안 되는 이유"다.
+ * `.workspace`의 `padding-bottom`이 트랜지션 중이면, `recompute()`가 읽는
+ * `scrollRoot.scrollHeight`(지금 화면에 "그려진" 값)가 `current`(방금 커밋한 "목표"
+ * 값)보다 최대 400ms 동안 뒤처져, `naturalMax`를 과대평가하고 `candidate`를 과소평가한다
+ * — 사용자가 스크롤을 전혀 안 했는데도 예약된 여백이 저절로 줄어든다(§16.2 위반). 그래서
+ * `css/page.css`의 트랜지션은 `.keyboard-inset-holding`(아래, releaseFloor > 0인 동안)이
+ * 있는 채로는 절대 걸리지 않는다 — 이 함수가 반환하는 값이 실제로 줄어드는 전체 구간
+ * 내내 그 마커가 붙어 있으므로, CSS 트랜지션은 이 해제 도중 단 한 번도 걸리지 않는다.
+ * 대신 `animateFloorTo`(아래)가 스크롤 보정(`animateScrollTopBy`, 위)과 똑같은 곡선으로
+ * 이 숫자 자체를 여러 rAF 프레임에 걸쳐 옮긴다 — 매 프레임 우리가 직접 정한 값을
+ * `--keyboard-inset`에 곧장 반영하므로(React state → 다음 커밋의 인라인 스타일), "지금
+ * 그려진 값"과 "지금 목표"가 매 프레임 항상 같다. c1479ce가 막으려던 어긋남(rendered ≠
+ * target) 자체가 애초에 생기지 않는다 — CSS 트랜지션이 관여하지 않기 때문이다. 트랜지션
+ * 쪽 옵션(가드를 없애고 대신 `recompute()`가 `getComputedStyle`로 "실제 그려진" padding을
+ * 읽게 하는 방안)도 검토했지만, 매 스크롤 틱마다 강제 리플로우를 만들고(다이얼로그 스크림
+ * 주석이 이미 같은 이유로 피한 비용, `css/dialog.css` 참고) 여전히 트랜지션의 곡선·시간을
+ * 우리가 100% 통제할 수 없다는 문제가 남아 기각했다.
+ *
+ * `displayedFloorRef`는 "지금 실제로 반영된"(=지금 그려진) floor를 항상 미러링한다 —
+ * `recompute()`가 매번 최신값을 동기적으로 읽어야 하는데(예전의 함수형 setState
+ * 업데이터가 하던 일과 같다), 이제는 그 값이 setState 한 번이 아니라 **진행 중인
+ * 애니메이션의 매 프레임**에서 바뀔 수 있어 함수형 업데이터만으로는 "지금 애니메이션이
+ * 어디까지 왔는지"를 알 수 없다(업데이터는 리액트가 커밋한 마지막 상태만 보지, 같은
+ * 렌더 사이클 안에서 여러 번 진행 중인 rAF 프레임 값을 보지 않는다). 렌더 "본문"에서
+ * 이 ref를 직접 쓰지 않는다(호이스트 렌더 단계 보정과 달리 이건 매 프레임 애니메이션
+ * 진행 상태라 "현재 props에서 유도되는 순수한 값"이 아니다) — 대신 `releaseFloor`
+ * state가 바뀔 때마다 `useLayoutEffect`로 커밋 "후"에 동기화한다. `recompute()`는 항상
+ * 이펙트(타이머·스크롤 리스너) 안에서만 호출되므로, 그 시점엔 직전의 모든 커밋이 이미
+ * 반영돼 있어 이 ref가 "지금 그려진 값"과 어긋나지 않는다.
+ *
+ * **해제 애니메이션도 스크롤 보정과 같은 이유로 인터럽터블해야 한다(§3).** 사용자가
+ * 애니메이션 도중에 더 스크롤하면(예: 260px 걷어내는 중에 추가로 위로 스크롤), 새
+ * `recompute()` 호출은 처음(lastOpenInset)이나 이전 목표가 아니라 **지금 화면에 그려진
+ * 값**(`displayedFloorRef.current`)에서 새 목표로 다시 겨냥해야 한다 — `animateFloorTo`가
+ * 매번 그 값을 `from`으로 읽는 이유다.
+ *
+ * **clientHeight가 애니메이션 도중 또 흔들리는 경우(넓어진 위험 구간).** C1이 고친
+ * "닫히는 순간의 clientHeight 스파이크"는 KEYBOARD_INSET_SETTLE_MS(120ms) 동안 가라앉는다고
+ * 보고, 첫 recompute()(settle 타이머)는 그 뒤에야 지오메트리를 읽는다 — 그 보장은 그대로다.
+ * 이 애니메이션이 새로 여는 창구는 그 "이후"다: recompute()가 안정된 지오메트리로 이미
+ * 옳은 목표를 정한 뒤, 거기 도달하기까지 최대 400ms 동안 또 다른(무관한) clientHeight
+ * 변화가 있으면 어떻게 되는가? 이 함수는 그 400ms 동안 스크롤/타이머 이벤트 없이는
+ * 지오메트리를 다시 읽지 않는다 — 매 프레임 그저 이미 정해진 두 값(from, to) 사이를
+ * 보간할 뿐이라, 우리 코드 스스로 그 순간의 clientHeight를 다시 조회해 잘못된 결론을
+ * 내릴 여지가 없다(AppShell.test.tsx의 "clientHeight가 잠깐 부풀어도..." 테스트). 다만
+ * 이건 "우리 코드가 추가로 사고를 치지 않는다"는 증명이지 "물리적으로 항상 안전하다"는
+ * 증명은 아니다 — 실제 브라우저는 scrollTop을 scrollHeight-clientHeight 이하로 항상
+ * 강제하므로, 그 순간 남은 여유(SLACK - 이미 걷어낸 몫)보다 큰 clientHeight 변화가
+ * 겹치면 그 물리적 강제 자체는 JS로 막을 수 없다 — 77f28fa는 이 창구가 1프레임이었고
+ * 이 애니메이션은 최대 400ms로 넓힌다는 트레이드오프는 리포트에 남긴다.
  */
 function useReleasableKeyboardInset(keyboard: VirtualKeyboard, scrollRootId = "root"): number {
   const lastOpenInsetRef = useRef(0);
   const [releaseFloor, setReleaseFloor] = useState(0);
   const wasKeyboardOpenRef = useRef(keyboard.open);
+  /** "지금 실제로 반영된" releaseFloor의 미러 — 위 문서 참고. releaseFloor가 커밋될
+   * 때마다(아래 useLayoutEffect) 동기화되므로, recompute()는 이 ref를 읽는 것만으로
+   * 진행 중인 애니메이션의 "지금" 값을 항상 정확히 안다. */
+  const displayedFloorRef = useRef(0);
+  const releaseRafIdRef = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    displayedFloorRef.current = releaseFloor;
+  }, [releaseFloor]);
+
+  function cancelReleaseAnimation() {
+    if (releaseRafIdRef.current !== null) {
+      cancelAnimationFrame(releaseRafIdRef.current);
+      releaseRafIdRef.current = null;
+    }
+  }
+
+  /** displayedFloorRef.current(지금 그려진 값)에서 target까지, 스크롤 보정과 같은
+   * 곡선(repositionEase, KEYBOARD_SCROLL_ANIMATION_MS)으로 여러 rAF 프레임에 걸쳐
+   * releaseFloor를 옮긴다. 위 함수 문서 참고. */
+  function animateFloorTo(target: number) {
+    cancelReleaseAnimation();
+    const from = displayedFloorRef.current;
+    if (from === target) return;
+    if (prefersReducedMotion()) { setReleaseFloor(target); return; }
+    let startTime: number | null = null;
+    function step(timestamp: number) {
+      if (startTime === null) startTime = timestamp;
+      const progress = Math.min(1, (timestamp - startTime) / KEYBOARD_SCROLL_ANIMATION_MS);
+      setReleaseFloor(Math.round(from + (target - from) * repositionEase(progress)));
+      releaseRafIdRef.current = progress < 1 ? requestAnimationFrame(step) : null;
+    }
+    releaseRafIdRef.current = requestAnimationFrame(step);
+  }
 
   // 열려 있는 동안 렌더 본문에서 매번 갱신한다 — 현재 props에서 유도되는 순수한
   // 조건부 대입이라(증가·토글이 아님) StrictMode의 이중 렌더에서도 멱등하다. 이
@@ -504,7 +599,11 @@ function useReleasableKeyboardInset(keyboard: VirtualKeyboard, scrollRootId = "r
   // 렌더에서 전혀 안 바뀌므로 그 물리적 clamp 자체가 발생할 여지가 없다. 지오메트리를
   // 아예 알 수 없는 경우(clientHeight <= 0, 레이아웃 없는 환경)만 예외 — 그때는 나중에
   // 안정을 기다려도 얻을 게 없으므로 예전처럼 즉시 0으로 돌아간다(AppShell.test.tsx의
-  // "스크롤 지오메트리를 알 수 없으면..." 테스트가 이 가드를 이름으로 박아 둔다).
+  // "스크롤 지오메트리를 알 수 없으면..." 테스트가 이 가드를 이름으로 박아 둔다). 이
+  // 단계는 값이 안 바뀌는 "유지"이지 애니메이션 대상이 아니므로 setReleaseFloor를
+  // 직접 부른다(animateFloorTo가 아니다) — 어차피 from===target이라 애니메이션 함수를
+  // 거쳐도 즉시 반환되지만, 렌더 단계에서 rAF를 새로 예약하지 않는다는 걸 명시적으로
+  // 드러낸다.
   let inset = releaseFloor;
   if (wasKeyboardOpenRef.current !== keyboard.open) {
     wasKeyboardOpenRef.current = keyboard.open;
@@ -527,28 +626,31 @@ function useReleasableKeyboardInset(keyboard: VirtualKeyboard, scrollRootId = "r
   //    이 recompute()가 실제로 도는 시점엔 clientHeight가 이미 스스로 바로잡혀 있다.
   // 두 계기 모두 같은 recompute()를 공유한다 — 계산이 두 곳에 따로 있지 않다. 절대
   // 다시 늘리지 않는다(§16.2: 지연 "해제"이지 재예약이 아니다) — settle 타이머도
-  // Math.min(current, candidate)을 그대로 쓰므로 이 계약을 벗어나지 않는다.
+  // Math.min(current, candidate)을 그대로 쓰므로 이 계약을 벗어나지 않는다. current는
+  // 이제 setState의 함수형 업데이터가 아니라 displayedFloorRef.current(지금 그려진
+  // 값)에서 읽는다 — 위 함수 문서의 이유. next로 결정된 목표는 그 자리에서 대입하지
+  // 않고 animateFloorTo로 여러 프레임에 걸쳐 도착시킨다(연속적인 해제, 위 문서).
   useLayoutEffect(() => {
     if (keyboard.open) return;
     const scrollRoot = document.getElementById(scrollRootId);
     if (!scrollRoot) return;
     function recompute() {
-      setReleaseFloor((current) => {
-        if (current === 0) return current;
-        if (scrollRoot!.clientHeight <= 0) return current;   // 지오메트리를 믿을 수 없다 — 손대지 않는다.
-        const naturalMax = scrollRoot!.scrollHeight - current - scrollRoot!.clientHeight;
-        const candidate = Math.max(0, Math.round(scrollRoot!.scrollTop - naturalMax));
-        const next = Math.min(current, candidate);
-        if (next === current) return current;
-        if (next === 0) scrollRoot!.removeEventListener("scroll", recompute);   // 완전히 풀렸다 — 더 들을 필요 없다.
-        return next;
-      });
+      const current = displayedFloorRef.current;
+      if (current === 0) return;
+      if (scrollRoot!.clientHeight <= 0) return;   // 지오메트리를 믿을 수 없다 — 손대지 않는다.
+      const naturalMax = scrollRoot!.scrollHeight - current - scrollRoot!.clientHeight;
+      const candidate = Math.max(0, Math.round(scrollRoot!.scrollTop - naturalMax));
+      const next = Math.min(current, candidate);
+      if (next === current) return;
+      if (next === 0) scrollRoot!.removeEventListener("scroll", recompute);   // 완전히 풀렸다 — 더 들을 필요 없다.
+      animateFloorTo(next);
     }
     scrollRoot.addEventListener("scroll", recompute, { passive: true });
     const settleTimer = window.setTimeout(recompute, KEYBOARD_INSET_SETTLE_MS);
     return () => {
       scrollRoot.removeEventListener("scroll", recompute);
       window.clearTimeout(settleTimer);
+      cancelReleaseAnimation();
     };
   }, [keyboard.open, scrollRootId]);
 
