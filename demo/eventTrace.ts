@@ -19,9 +19,13 @@ const MAX_ENTRIES = 400;
 /** 이보다 긴 공백 뒤에 오는 이벤트는 새 "묶음"으로 치고 +0ms부터 다시 셉니다. */
 const BURST_GAP_MS = 700;
 
-/** src/AppShell.tsx:14의 KEYBOARD_SCROLL_GAP과 같은 값 — overshoot 공식을 그대로
- * 재현하려면 같은 여유값을 더해야 합니다. */
-const KEYBOARD_SCROLL_GAP = 8;
+/** src/AppShell.tsx의 KEYBOARD_SCROLL_GAP과 같은 값 — overshoot 공식을 그대로
+ * 재현하려면 같은 여유값을 더해야 합니다.
+ *
+ * 킷 쪽이 바뀌면 여기도 같이 바꿔야 합니다. 안 맞으면 이 패널이 찍는 over가 킷의
+ * 실제 판단과 어긋난 채 그럴듯해 보여서, 트레이스를 읽는 쪽이 조용히 오독합니다.
+ * 8에서 24로 오른 뒤 실제로 그럴 뻔했습니다. */
+const KEYBOARD_SCROLL_GAP = 24;
 /** src/AppShell.tsx:19의 KEYBOARD_SCROLL_ANIMATION_MS(400ms) + 여유. 리컴포짓 직후
  * 바로 재보면 애니메이션이 진행 중인 프레임을 "모자란다"로 오판할 수 있어, 트윈이
  * 다 끝났을 시점까지 기다렸다가 "실제로 도달한" 위치를 잰다. */
