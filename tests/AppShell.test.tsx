@@ -986,4 +986,140 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     await waitFor(() => expect(keyboardInsetOf(root)).toBe("0px"));   // 지오메트리 가드로 즉시 0(지연 해제 불필요)
     expect(shellHasHoldingMarker(root)).toBe(false);   // floor가 0이므로 마커도 없다 — 트랜지션이 정상적으로 걸린다.
   });
+
+  it("맨 아래로 스크롤된 채 닫히는 순간 clientHeight가 실제보다 부풀려 읽혀도(실기기 dvh 재계산 트랜지션) 뷰포트가 움직이지 않는다 — 두 번의 열기/닫기 사이클 모두(C1, owner 실기기 트레이스)", async () => {
+    // owner 실기기 트레이스: 메모를 맨 아래로 스크롤한 채 키보드를 열었다 닫으면 뷰포트가
+    // 위로 "뚝" 움직인다. 반복하면 또 움직이고, 몇 번 반복하면 결국 예약 여백이 바닥나
+    // 재열림 때 필드가 다시 가려진다. 트레이스가 잡은 원인: #root는 height:100dvh라
+    // 닫히는 전환 도중 dvh가 잠깐 더 큰 뷰포트 기준으로 재계산되며 clientHeight가
+    // 실제보다 부풀려 읽힌다(실측 1192, 22ms 뒤 928로 스스로 바로잡음 — 같은 순간
+    // visualViewport.height/window.innerHeight는 이미 정상이었다). 이전 구현("닫히는
+    // 순간의 floor" — B1 문서의 항목 1)은 이 순간 scrollRoot.scrollTop을 읽어 naturalMax를
+    // 계산했는데, installClampingScrollRoot의 get()이 실제 브라우저의 clamp를 흉내 내므로
+    // (clientHeight가 부풀어 있으면 그 자리에서 scrollTop을 새 최댓값으로 깎는다) 그
+    // 읽기 자체가 scrollTop을 되돌릴 수 없게 영구히 깎아 버렸다 — 우리 코드가 스크롤을
+    // 요청한 적 없는데도(reqΔ=0) 뷰포트가 움직인 것이다(achΔ≠0, owner가 보는 "뚝" 움직임).
+    //
+    // 이 테스트는 owner가 실제로 보고한 시나리오(맨 아래)를 그대로 재현한다 — 맨 아래에서는
+    // 걷어낼 여백이 아예 없으므로("맨 아래로 스크롤된 채..." 테스트, 위 참고) 정상적으로
+    // 계산해도 floor는 항상 insetWhileOpen 그대로다. 그러니 여기서 실패한다면 그건 계산이
+    // "틀려서"가 아니라, clientHeight가 부풀어 있는 동안 scrollTop을 읽었다는 사실 그
+    // 자체가 부수효과로 뷰포트를 움직였기 때문이다 — 그래서 이 테스트는 clientHeight를
+    // 되돌린 "뒤"에만 scrollTop을 읽는다(스텁의 read-side clamp가 아니라 실제 코드가
+    // 무엇을 했는지를 재기 위해서다).
+    //
+    // 고침(이 리포트의 C1): 닫히는 렌더는 이 순간 clientHeight를 아예 읽지 않고(scrollTop도
+    // 읽지 않는다) 마지막 열림 인셋을 그대로 유지한다 — --keyboard-inset이 안 바뀌므로
+    // scrollHeight도 안 바뀌어, clientHeight가 튀어도 clamp가 물리적으로 발생할 여지가
+    // 없다. 진짜 floor는 지오메트리가 안정된 뒤 한 번만 잰다(KEYBOARD_INSET_SETTLE_MS).
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 50);   // 이미 잘 보임 — reposition()이 따로 스크롤하지 않게, 지연 해제 산수만 격리해서 본다
+    const CLIENT_HEIGHT_TRUE = 800;
+    const CLIENT_HEIGHT_SPIKE = 930;   // 실기기 트레이스의 부풀림 폭(~131px)과 같은 자릿수
+    let content = 20000;
+    const scrollRoot = installClampingScrollRoot(root, content, CLIENT_HEIGHT_TRUE);
+
+    textarea.focus();
+    viewport.openKeyboard(350);
+    await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));
+    const insetWhileOpen = parseFloat(keyboardInsetOf(root));
+
+    // ---- 사이클 1 ---- 맨 아래(SLACK 0) — 예약 여백을 전부 쓰는 중.
+    root.scrollTop = content + insetWhileOpen - CLIENT_HEIGHT_TRUE;
+    const bottomScrollTop1 = root.scrollTop;
+
+    scrollRoot.setClientHeight(CLIENT_HEIGHT_SPIKE);   // 닫히는 전환 도중 dvh가 부풀려 읽히는 그 프레임
+    viewport.closeKeyboard();
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(false));   // 닫히는 렌더가 커밋됐다
+    scrollRoot.setClientHeight(CLIENT_HEIGHT_TRUE);   // 실기기 트레이스: 22ms 뒤 스스로 바로잡는다 — scrollTop을 읽기 "전"에 되돌린다
+
+    // 맨 아래에서는 걷어낼 여백이 없다 — floor는 처음부터 끝까지 insetWhileOpen 그대로다.
+    await waitFor(() => expect(parseFloat(keyboardInsetOf(root))).toBe(insetWhileOpen));
+    // 핵심 불변식(owner가 계속 말하는 그것): clientHeight가 닫는 순간 부풀려 있었어도,
+    // 지오메트리가 안정된 뒤에 보면 뷰포트는 조금도 움직이지 않았다. achΔ는 0이다.
+    expect(root.scrollTop).toBe(bottomScrollTop1);
+
+    // ---- 사이클 2 ---- (owner 리포트의 "반복하면 또 움직인다") 계속 타이핑하며 콘텐츠가
+    // 자란다(B1과 같은 이유로 사이클이 진짜 독립적인지 확인).
+    scrollRoot.growContentBy(1000);
+    content += 1000;
+    viewport.openKeyboard(350);   // 포커스는 유지된 채 다시 연다(블러 없음, owner 리포트의 "다시 탭하면"과 같은 모양)
+    await waitFor(() => expect(parseFloat(keyboardInsetOf(root))).toBe(insetWhileOpen));
+
+    root.scrollTop = content + insetWhileOpen - CLIENT_HEIGHT_TRUE;   // 다시 맨 아래
+    const bottomScrollTop2 = root.scrollTop;
+
+    scrollRoot.setClientHeight(CLIENT_HEIGHT_SPIKE);
+    viewport.closeKeyboard();
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(false));
+    scrollRoot.setClientHeight(CLIENT_HEIGHT_TRUE);
+
+    // 사이클 1과 똑같이 안정된다 — 사이클을 거듭해도 예약 여백이 줄어들지 않는다
+    // (compounding 없음). 한 사이클만 봤다면 이 "매번 같은 값"이라는 계약은 확인할 수
+    // 없었다 — owner 리포트가 명시적으로 요구하는 두 사이클 검증이다.
+    await waitFor(() => expect(parseFloat(keyboardInsetOf(root))).toBe(insetWhileOpen));
+    expect(root.scrollTop).toBe(bottomScrollTop2);   // 사이클 2 전체를 통틀어 한 번도 움직이지 않았다
+  });
+
+  it("맨 아래가 아니라 정말로 걷어낼 여백이 있을 때는, clientHeight가 닫는 순간 부풀려 읽혀도 안정된(부풀지 않은) 값 기준으로 floor를 계산한다(C1)", async () => {
+    // 위 테스트가 "맨 아래(걷어낼 게 없음)"만 확인하면, 걷어낼 여백이 실제로 있는
+    // 경우(예: 293/619번째 줄의 "지연 해제" 테스트들)에도 여전히 정상적으로 줄어드는지
+    // 확인할 수 없다 — 이 테스트는 그 경로가 살아있는지, 그리고 그 계산이 부풀려진
+    // clientHeight가 아니라 안정된 값을 쓰는지를 함께 확인한다.
+    //
+    // SLACK(정말 필요한 여백을 넘어서는 폭)은 스파이크 폭(D=130)보다 크게 잡는다 —
+    // 실기기 트레이스도 같은 모양이다(그 순간 실제로 남아 있던 여유 273px이 스파이크
+    // 폭 ~131px보다 커서 "그 자리에서 유지"만으로 clamp를 피할 수 있었다). SLACK이
+    // D보다 작은 경우(사실상 맨 아래에 아주 가까운 경우)는 D-SLACK만큼의 clamp가
+    // 물리적으로 불가피하다 — clientHeight 스파이크는 우리 코드와 무관하게 실제
+    // 레이아웃이 그 순간 그만큼 부풀었다는 뜻이라, 얼마나 남겨 두든 그 프레임의 실제
+    // 스크롤 가능 범위 자체가 줄어들기 때문이다(§9 리포트 "하드웨어만 확인 가능" 참고).
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 50);
+    const CLIENT_HEIGHT_TRUE = 800;
+    const CLIENT_HEIGHT_SPIKE = 930;   // +130
+    const SLACK = 200;   // > 130 — "유지"만으로 clamp를 피할 수 있는 실기기와 같은 관계
+    let content = 20000;
+    const scrollRoot = installClampingScrollRoot(root, content, CLIENT_HEIGHT_TRUE);
+
+    textarea.focus();
+    viewport.openKeyboard(350);
+    await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));
+    const insetWhileOpen = parseFloat(keyboardInsetOf(root));
+
+    // ---- 사이클 1 ----
+    root.scrollTop = content + insetWhileOpen - CLIENT_HEIGHT_TRUE - SLACK;
+    const bottomScrollTop1 = root.scrollTop;
+
+    scrollRoot.setClientHeight(CLIENT_HEIGHT_SPIKE);
+    viewport.closeKeyboard();
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(false));
+    scrollRoot.setClientHeight(CLIENT_HEIGHT_TRUE);   // 안정된 값으로 되돌린 "뒤"에만 읽는다
+
+    // 안정된 clientHeight(800) 기준으로 계산하면 insetWhileOpen - SLACK이 정답이다.
+    // 부풀려진 clientHeight(930)로 계산했다면 다른(더 큰) 값에 멈춰 있었을 것이다.
+    await waitFor(() => expect(parseFloat(keyboardInsetOf(root))).toBe(insetWhileOpen - SLACK));
+    expect(root.scrollTop).toBe(bottomScrollTop1);   // 걷어내는 동안에도 뷰포트 자체는 움직이지 않았다
+
+    // ---- 사이클 2 ---- 콘텐츠가 더 자란 채로 반복해도 같은 폭만큼만 걷어낸다(compounding 없음).
+    scrollRoot.growContentBy(1000);
+    content += 1000;
+    viewport.openKeyboard(350);
+    await waitFor(() => expect(parseFloat(keyboardInsetOf(root))).toBe(insetWhileOpen));
+
+    root.scrollTop = content + insetWhileOpen - CLIENT_HEIGHT_TRUE - SLACK;
+    const bottomScrollTop2 = root.scrollTop;
+
+    scrollRoot.setClientHeight(CLIENT_HEIGHT_SPIKE);
+    viewport.closeKeyboard();
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(false));
+    scrollRoot.setClientHeight(CLIENT_HEIGHT_TRUE);
+
+    await waitFor(() => expect(parseFloat(keyboardInsetOf(root))).toBe(insetWhileOpen - SLACK));   // 사이클 1과 똑같은 폭 — 더 깎이지 않는다
+    expect(root.scrollTop).toBe(bottomScrollTop2);
+  });
 });

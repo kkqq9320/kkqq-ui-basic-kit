@@ -18,6 +18,19 @@ const KEYBOARD_SCROLL_GAP = 8;
  * 하므로, 토큰이 바뀌면 이 값도 같이 바꾸세요. */
 const KEYBOARD_SCROLL_ANIMATION_MS = 400;
 
+/** 키보드가 닫힌 뒤, 예약 여백(floor)을 실제로 처음 계산하기까지 기다리는 시간(ms).
+ * #root는 height:100dvh라(tokens.css), 닫히는 전환 도중 dvh가 잠깐 더 큰 뷰포트를
+ * 기준으로 재계산되면서 clientHeight가 실제보다 부풀려 읽히는 프레임이 실기기
+ * 트레이스로 확인됐습니다(실측 1192px, 22ms 뒤 928px로 스스로 바로잡음 — 같은 순간
+ * visualViewport.height/window.innerHeight는 이미 정상이었습니다). 이 값을 곧장 믿고
+ * 예약 여백을 줄이면 그 자체로 #root.scrollHeight가 줄어, 브라우저가 scrollTop을
+ * 스스로 clamp합니다(요청한 적 없는 이동 — §16.2 위반, useReleasableKeyboardInset의
+ * C1 문서 참고). 그래서 닫히는 렌더는 계산하지 않고 마지막 열림 인셋을 그대로
+ * 유지하며, 이 시간만큼 기다려 지오메트리가 안정된 뒤에야 실제 floor를 한 번 잰다.
+ * 실측 22ms보다 넉넉한 여유를 둔다 — 사용자가 체감할 만큼 길지도 않다(§12의 다른
+ * 모션 지속시간과 무관한 값이라 그 절의 duration을 바꾸는 게 아니다). */
+const KEYBOARD_INSET_SETTLE_MS = 120;
+
 /** --sidebar-ease(tokens.css)와 같은 cubic-bezier(.32, .72, 0, 1) — Apple이 실제로
  * 쓰는 재배치 값(damping 1.0, response 0.4)을 오버슈트 없이 흉내 낸 곡선입니다.
  * `scrollTop`은 레이아웃 값이라 CSS `transition`으로 보간되지 않으므로(트랜지션은
@@ -393,6 +406,36 @@ function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId =
  * 중의 setState는 이번 렌더를 커밋하지 않고 새 상태로 즉시 다시 렌더하므로, DOM은
  * 열림(예: 274px)에서 곧장 보정된 닫힘(274px, 안 바뀜)으로만 커밋되고 위험한
  * 중간값(0px)은 한 번도 실제로 적용되지 않습니다.
+ *
+ * **C1(owner 실기기 트레이스) — "그 자리에서 산다"(위 항목 1)는 원칙 자체가 또 다른
+ * residue를 남겼습니다.** `#root`는 `height: 100dvh`라(tokens.css), 키보드가 닫히는
+ * 전환 도중 브라우저가 dvh를 잠깐 더 큰 뷰포트 기준으로 재계산하는 프레임이 실기기
+ * 트레이스로 확인됩니다 — `clientHeight`가 실제보다 부풀려 읽히고(실측 1192px),
+ * 22ms 뒤 스스로 바로잡힙니다(928px). 같은 순간 `visualViewport.height`(928)와
+ * `window.innerHeight`(1059)는 이미 정상이었습니다. 문제는 이 부풀려진 값 자체가
+ * "너무 커서 계산이 틀린다"는 게 아닙니다 — naturalMax/candidate 식은 clientHeight가
+ * 클수록 오히려 *더 많이* 남기는 방향으로 움직입니다(대수적으로 확인됨). 진짜 문제는
+ * 이 식이 `scrollRoot.scrollTop`을 **읽는다는 사실 자체**입니다: clientHeight가
+ * 부풀어 있는 바로 그 순간 그 읽기가 일어나면(실제 브라우저는 scrollTop을 항상
+ * `scrollHeight - clientHeight` 이하로 유지하므로), 그 읽기가 scrollTop을 그 자리에서
+ * 새(부풀려진 clientHeight 기준) 최댓값으로 깎아 버립니다 — 우리 코드가 스크롤을
+ * 요청한 적이 전혀 없는데도(reqΔ=0) 뷰포트가 움직입니다(achΔ≠0, owner가 보는 "뚝"
+ * 움직임). 이후 이 깎인 scrollTop을 그대로 floor 삼아 굳혀 버리면(다시 안 늘리는
+ * 계약과 맞물려) 그 손실은 영원히 남고, 사이클을 반복할수록 예약 여백이 계속
+ * 깎여나가 결국 필드가 다시 가려집니다(owner 리포트의 "반복하면 또 움직인다").
+ *
+ * **고침: "그 자리에서 산다"는 원칙은 유지하되, 닫히는 바로 그 렌더에서는 계산하지
+ * 않습니다.** 대신 마지막 열림 인셋(`lastOpenInsetRef.current`)을 그대로 유지합니다
+ * — `--keyboard-inset`이 이 렌더에서 전혀 안 바뀌므로(직전 커밋과 같은 숫자)
+ * `scrollHeight`도 안 바뀌어, `scrollTop`을 읽어도 clamp가 발생할 수조차 없습니다
+ * (물리적으로 여지가 없다 — clientHeight가 아무리 튀어도 애초에 줄어든 게 없으니
+ * "너무 작아서 깎이는" 상황 자체가 없습니다). 실제(더 작을 수 있는) floor는
+ * `KEYBOARD_INSET_SETTLE_MS`만큼 기다려 지오메트리가 안정된 뒤 아래
+ * `useLayoutEffect`가 `recompute()`를 한 번 불러 잽니다 — 스크롤 리스너와 같은 계산을
+ * 재사용하므로 로직이 두 곳에 따로 있지 않습니다. **"다시 늘리지 않는다" 계약(§16.2)은
+ * 그대로입니다** — 여기서 하는 일은 "언제 처음 계산하느냐"를 늦추는 것이지, 이미
+ * 걷어낸 값을 되돌리거나 재예약하는 게 아닙니다(AppShell.test.tsx의 C1 테스트가 두
+ * 사이클 모두에서 achΔ=0과 "매번 같은 값으로 안정됨"을 확인합니다).
  */
 function useReleasableKeyboardInset(keyboard: VirtualKeyboard, scrollRootId = "root"): number {
   const lastOpenInsetRef = useRef(0);
@@ -407,31 +450,37 @@ function useReleasableKeyboardInset(keyboard: VirtualKeyboard, scrollRootId = "r
   if (keyboard.open) lastOpenInsetRef.current = keyboard.inset;
 
   // 렌더 단계 보정 — 위 문서 참고. "방금 닫혔다"일 때만, 이번 렌더가 커밋되기 전에
-  // 안전한 floor를 살아있는 지오메트리에서 그 자리에서 계산해 곧장 반환값에 반영한다
-  // (캐시된 natural max를 참조하지 않는다 — B1).
+  // 곧장 반영한다. C1: 여기서는 계산하지 않고 마지막 열림 인셋을 그대로 유지한다 —
+  // clientHeight가 이 순간 신뢰할 수 있다는 보장이 없어(위 문서), 곧장 naturalMax를
+  // 계산해 줄이면 그 자체로 scrollHeight를 줄여 버려 clientHeight가 튀는 순간과
+  // 겹치면 브라우저가 scrollTop을 스스로 clamp한다. 유지하면 --keyboard-inset이 이
+  // 렌더에서 전혀 안 바뀌므로 그 물리적 clamp 자체가 발생할 여지가 없다. 지오메트리를
+  // 아예 알 수 없는 경우(clientHeight <= 0, 레이아웃 없는 환경)만 예외 — 그때는 나중에
+  // 안정을 기다려도 얻을 게 없으므로 예전처럼 즉시 0으로 돌아간다(AppShell.test.tsx의
+  // "스크롤 지오메트리를 알 수 없으면..." 테스트가 이 가드를 이름으로 박아 둔다).
   let inset = releaseFloor;
   if (wasKeyboardOpenRef.current !== keyboard.open) {
     wasKeyboardOpenRef.current = keyboard.open;
     if (!keyboard.open) {
       const scrollRoot = document.getElementById(scrollRootId);
-      if (scrollRoot && scrollRoot.clientHeight > 0) {
-        // 이 렌더는 아직 커밋 전이라 scrollRoot.scrollHeight는 직전 커밋(열려 있던
-        // 마지막 상태, 인셋 = lastOpenInsetRef.current)을 그대로 반영한다.
-        const naturalMaxScroll = scrollRoot.scrollHeight - lastOpenInsetRef.current - scrollRoot.clientHeight;
-        inset = Math.max(0, Math.round(scrollRoot.scrollTop - naturalMaxScroll));
-      } else {
-        inset = 0;
-      }
+      inset = scrollRoot && scrollRoot.clientHeight > 0 ? lastOpenInsetRef.current : 0;
       if (inset !== releaseFloor) setReleaseFloor(inset);
     }
   }
 
-  // 닫힌 뒤, 사용자가 위로 스크롤해 여백이 더 이상 필요 없어지면 그만큼씩 걷어낸다
-  // (지연 해제). 캐시된 natural max를 닫히는 스크롤 이벤트마다 다시 계산한다 — 지금
-  // 적용된 floor가 곧 지금 scrollHeight에 반영된 패딩과 같으므로 "scrollHeight - 지금
-  // floor - clientHeight"는 항상 그 순간의 콘텐츠만의 높이다(B1: 콘텐츠가 자라거나
-  // clientHeight가 또 바뀌어도 다음 틱이 자동으로 반영한다). 절대 다시 늘리지 않는다
-  // (§16.2: 지연 "해제"이지 재예약이 아니다).
+  // 닫힌 뒤 floor를 실제로 잰다(recompute) — 두 계기로 부른다:
+  // 1. 지연 해제(사용자가 위로 스크롤해 여백이 더 이상 필요 없어지면 그만큼씩 걷어낸다):
+  //    매 scroll 이벤트마다. 캐시된 natural max가 아니라 그 순간의 "scrollHeight - 지금
+  //    floor - clientHeight"를 다시 계산한다 — 지금 적용된 floor가 곧 지금 scrollHeight에
+  //    반영된 패딩과 같으므로, 이 뺄셈은 콘텐츠만의 높이를 항상 그 순간 기준으로
+  //    돌려준다(B1: 콘텐츠가 자라거나 clientHeight가 또 바뀌어도 다음 틱이 자동으로
+  //    반영한다).
+  // 2. C1 — settle 타이머: 위에서 유지만 하고 넘어간 "진짜" floor를 여기서 한 번
+  //    계산한다. KEYBOARD_INSET_SETTLE_MS만큼 기다리므로(실측 22ms보다 넉넉한 여유),
+  //    이 recompute()가 실제로 도는 시점엔 clientHeight가 이미 스스로 바로잡혀 있다.
+  // 두 계기 모두 같은 recompute()를 공유한다 — 계산이 두 곳에 따로 있지 않다. 절대
+  // 다시 늘리지 않는다(§16.2: 지연 "해제"이지 재예약이 아니다) — settle 타이머도
+  // Math.min(current, candidate)을 그대로 쓰므로 이 계약을 벗어나지 않는다.
   useLayoutEffect(() => {
     if (keyboard.open) return;
     const scrollRoot = document.getElementById(scrollRootId);
@@ -449,7 +498,11 @@ function useReleasableKeyboardInset(keyboard: VirtualKeyboard, scrollRootId = "r
       });
     }
     scrollRoot.addEventListener("scroll", recompute, { passive: true });
-    return () => scrollRoot.removeEventListener("scroll", recompute);
+    const settleTimer = window.setTimeout(recompute, KEYBOARD_INSET_SETTLE_MS);
+    return () => {
+      scrollRoot.removeEventListener("scroll", recompute);
+      window.clearTimeout(settleTimer);
+    };
   }, [keyboard.open, scrollRootId]);
 
   return keyboard.open ? keyboard.inset : inset;
