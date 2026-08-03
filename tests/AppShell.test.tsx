@@ -22,6 +22,7 @@ afterEach(() => {
   delete (window as { matchMedia?: unknown }).matchMedia;
   delete (window as { ResizeObserver?: unknown }).ResizeObserver;
   fakeResizeObserverEntries.length = 0;
+  freshObservationLog.length = 0;
   document.querySelectorAll("[data-test-root]").forEach((node) => node.remove());
   document.querySelectorAll("[data-test-outside]").forEach((node) => node.remove());
 });
@@ -134,15 +135,42 @@ function installReducedMotionPreference() {
 /** jsdom은 ResizeObserver를 구현하지 않는다. AutoGrowTextarea처럼 포커스된 요소
  * 자신의 크기가(뷰포트 리사이즈도 focusin도 아닌 경로로) 바뀔 때 AppShell이 다시
  * 맞추는지 확인하려면, observe()를 기록해 뒀다가 테스트가 직접 콜백을 터뜨릴 수 있는
- * 가짜가 필요하다. installFakeVisualViewport와 같은 자리의 헬퍼다. */
+ * 가짜가 필요하다. installFakeVisualViewport와 같은 자리의 헬퍼다.
+ *
+ * 실제 ResizeObserver의 두 가지 동작을 반드시 흉내 내야 한다(둘 다 예전 버전에는
+ * 없었다 — AppShell.tsx의 재점화 버그가 이 가짜의 구멍 때문에 안 잡혔다):
+ * 1. **초기 딜리버리**: 새로 observe()한 대상은 다음 프레임에 반드시 한 번 콜백을
+ *    받는다 — lastReportedSize가 아직 unset이라 지금 크기가 무엇이든 "달라진" 것으로
+ *    친다. 크기가 실제로 안 바뀌어도 온다.
+ * 2. **이미 관찰 중인 대상에 대한 observe()는 멱등**: 새 관찰을 만들지 않고
+ *    lastReportedSize도 그대로 둔다 — 그래서 초기 딜리버리도 다시 오지 않는다.
+ * disconnect() 후 곧장 observe()를 다시 부르면 (2)의 단락이 사라져 (1)이 매번 새로
+ * 발동한다 — AppShell.tsx가 고치기 전까지 걸려 있던 자기재점화 루프가 바로 이 조합이다.
+ */
 type FakeResizeObserverEntry = { target: Element; callback: ResizeObserverCallback };
 const fakeResizeObserverEntries: FakeResizeObserverEntry[] = [];
+/** observe()가 "새로"(멱등 스킵이 아니라) 관찰을 시작할 때마다 그 대상을 기록한다 —
+ * 자기재점화 루프는 "같은 대상을 매 프레임 새로 관찰한다"로 정확히 관측할 수 있다. */
+const freshObservationLog: Element[] = [];
 
 function installFakeResizeObserver() {
   class FakeResizeObserver {
     private callback: ResizeObserverCallback;
     constructor(callback: ResizeObserverCallback) { this.callback = callback; }
-    observe(target: Element) { fakeResizeObserverEntries.push({ target, callback: this.callback }); }
+    observe(target: Element) {
+      const alreadyObserving = fakeResizeObserverEntries.some((entry) => entry.target === target && entry.callback === this.callback);
+      if (alreadyObserving) return;   // 실제 스펙: 이미 관찰 중인 대상에 다시 observe()해도 새 관찰을 만들지 않는다(멱등).
+      const entry = { target, callback: this.callback };
+      fakeResizeObserverEntries.push(entry);
+      freshObservationLog.push(target);
+      // 실제 ResizeObserver는 새로 관찰을 시작한 대상에 다음 프레임에 반드시 한 번
+      // 콜백을 쏜다(초기 딜리버리) — lastReportedSize가 unset이라 지금 크기와 항상
+      // "다르기" 때문이다. 이걸 기록해 두지 않으면 disconnect()+observe()를 반복하는
+      // 코드가 매 프레임 자기 자신을 재점화하는 버그를 이 가짜가 절대 못 잡는다.
+      requestAnimationFrame(() => {
+        if (fakeResizeObserverEntries.includes(entry)) entry.callback([{ target } as ResizeObserverEntry], {} as ResizeObserver);
+      });
+    }
     unobserve(target: Element) {
       const at = fakeResizeObserverEntries.findIndex((entry) => entry.target === target && entry.callback === this.callback);
       if (at >= 0) fakeResizeObserverEntries.splice(at, 1);
@@ -609,6 +637,14 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));
     expect(root.scrollTop).toBe(1046);
 
+    // 새 가짜 ResizeObserver는 실제 스펙대로 새로 관찰을 시작한 대상에 다음 프레임에
+    // 한 번 초기 딜리버리를 보낸다(installFakeResizeObserver 주석 참고) — 그 한 번이
+    // 지나가 안정될 시간을 준 뒤에 textarea가 자라는 시나리오로 들어간다. 여기서
+    // 기다리지 않으면 그 초기 딜리버리가 아래 fireResizeObserved와 겹쳐, 아직 진행
+    // 중인 애니메이션 도중 정적인 rect.bottom(560)을 또 재는 이중 계산이 된다(이 파일
+    // stubRectBottomFollowingScroll 주석의 함정과 같은 종류).
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
     // 사용자가 여러 줄을 입력해 textarea가 자라난다(AutoGrowTextarea.resize()와 같은 일) —
     // rect.bottom이 visibleBottom 아래로 내려간다. 이 변화 자체는 리사이즈도 focusin도
     // 아니므로, ResizeObserver 콜백으로만 알 수 있다.
@@ -617,6 +653,79 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
 
     // overshoot = 560 - 494 + 8 = 74
     await waitFor(() => expect(root.scrollTop).toBe(1046 + 74));
+  });
+
+  it("포커스된 요소가 안 바뀌면 매 프레임 ResizeObserver 관찰을 다시 만들지 않는다 — 자기재점화 루프 방지", async () => {
+    // Critical merge blocker(전체 브랜치 리뷰): observeFocusedElementSize()는 reposition()이
+    // 끝날 때마다 불리는데, 예전 구현은 대상이 안 바뀌어도 매번 disconnect() 후 observe()를
+    // 다시 불렀다. disconnect()는 관찰 목록을 통째로 비우므로 그 직후의 observe()는 완전히
+    // 새 ResizeObservation을 만들고, 실제 ResizeObserver는 그렇게 새로 관찰을 시작한 대상에
+    // 다음 프레임에 반드시 한 번 콜백을 쏜다(installFakeResizeObserver 주석 — lastReportedSize가
+    // unset이라 지금 크기가 무엇이든 "달라진" 것으로 친다). 그 콜백이 다시 reposition()을
+    // 부르고, reposition()이 다시 무조건 disconnect()+observe()를 하면 "새 관찰 → 초기
+    // 딜리버리 → reposition() → 새 관찰"이 실제 크기 변화나 사용자 입력과 무관하게 매 프레임
+    // 영원히 반복된다. freshObservationLog로 "같은 대상을 몇 번이나 새로 관찰했는지" 직접 센다
+    // — 스펙상 불가피한 최초 1회를 넘어서면 자기재점화가 있다는 뜻이다.
+    installFakeResizeObserver();
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 50);   // 이미 잘 보임(overshoot < 0) — 스크롤 산수와 얽히지 않고 재관찰 횟수만 격리해서 본다
+    root.scrollTop = 1046;
+
+    textarea.focus();
+    viewport.openKeyboard(350);
+    await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));
+
+    // 최초 관찰의 실제 초기 딜리버리(스펙 동작, 불가피)가 지나갈 시간을 준다.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const freshCountAfterSettle = freshObservationLog.filter((target) => target === textarea).length;
+    // 정확히 1이어야 한다 — 0이면 애초에 관찰 자체가 안 된 것이고(과잉 가드로도 이 테스트를
+    // 속여서 통과시킬 수 있다), 2 이상이면 이미 재점화 중이다. toBeLessThanOrEqual(1)이었다면
+    // 0도 통과해 "관찰이 아예 안 섰다"는 다른 버그를 놓칠 수 있었다.
+    expect(freshCountAfterSettle).toBe(1);
+
+    // 안정된 뒤로도 프레임이 계속 지나가는 동안 더 늘어나지 않아야 한다 — 자기재점화가
+    // 있었다면 매 프레임 새로 관찰을 만들어 이 수가 계속 늘어난다.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(freshObservationLog.filter((target) => target === textarea).length).toBe(freshCountAfterSettle);
+  });
+
+  it("reduced motion에서 키보드가 열려 보정된 뒤 사용자가 위로 스크롤하면, 다음 프레임에도 그 스크롤이 유지된다(자기재점화로 되돌려지지 않는다)", async () => {
+    // Critical merge blocker의 실사용 영향: reduced-motion 경로(animateScrollTopBy)는
+    // 매 reposition() 호출마다 scrollTop에 즉시 delta를 더한다. 자기재점화 루프가 있으면
+    // 이 즉시 대입이 매 프레임 반복돼, 포커스된 필드가 조금이라도 보정된 뒤로는 사용자가
+    // 위로 스크롤해도 다음 프레임에 바로 되돌아간다 — reduced-motion 사용자가 키보드가
+    // 열린 동안 아예 위로 스크롤할 수 없게 된다(§14 위반). stubRectBottomFollowingScroll을
+    // 쓰는 이유: 정적인 stubRectBottom을 쓰면 최초 초기 딜리버리 시점에 "이미 적용된
+    // 보정분"을 또 요구하는 이중 계산이 돼(이 파일 71-76행 주석과 같은 함정) 테스트가
+    // 실제 버그와 무관한 이유로도 실패할 수 있다 — 스크롤을 따라가는 rect라야 "사용자가
+    // 스스로 움직인 것"과 "코드가 되돌린 것"을 정확히 구분할 수 있다.
+    installReducedMotionPreference();
+    installFakeResizeObserver();
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    root.scrollTop = 1046;
+    stubRectBottomFollowingScroll(textarea, 507, root);   // baseline = 1046
+
+    textarea.focus();
+    viewport.openKeyboard(350);   // visibleBottom = 494, overshoot = 507-494+8 = 21 → reduced motion이라 즉시 대입
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));
+
+    // 최초 관찰의 실제 초기 딜리버리가 지나갈 시간을 준다 — follow-scroll rect 덕분에 이
+    // 시점엔 overshoot가 이미 0이라(1046+21 위치에서 다시 재도 안 움직인다) 아무 일도
+    // 안 일어나야 정상이다. 그 뒤로는 대상이 안 바뀌었으므로 다시는 저절로 안 불려야 한다.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(root.scrollTop).toBe(1046 + 21);   // 아직 사용자가 스크롤하지 않았다 — 정착 확인
+
+    // 사용자가 보정된 지점에서 위로 스크롤한다.
+    root.scrollTop = 1046 + 21 - 40;
+    const afterUserScroll = root.scrollTop;
+
+    // 자기재점화가 있었다면 이 다음 프레임들에서 되돌렸을 시점이다.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(root.scrollTop).toBe(afterUserScroll);
   });
 
   it("맨 아래로 스크롤된 채 키보드가 닫히면, 지금 스크롤 위치가 기대고 있는 예약 여백을 그 자리에서 걷어내지 않는다", async () => {

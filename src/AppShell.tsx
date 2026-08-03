@@ -167,6 +167,10 @@ function prefersReducedMotion() {
 function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId = "root") {
   const rafIdRef = useRef<number | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  /** resizeObserverRef가 지금 실제로 관찰 중인 대상(없으면 null). observeFocusedElementSize가
+   * "대상이 안 바뀌었으면 다시 관찰하지 않는다" 가드에 쓴다 — 아래 disconnect() 실행 지점과
+   * 항상 같이 null로 되돌려, 이 ref가 "관찰 상태"를 정확히 반영하게 유지한다. */
+  const observedElementRef = useRef<Element | null>(null);
 
   function cancelPendingScroll() {
     if (rafIdRef.current !== null) {
@@ -190,19 +194,55 @@ function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId =
    * ResizeObserver로 "지금 포커스된 요소" 자체를 지켜보면, 원인이 AutoGrowTextarea든
    * 다른 어떤 크기 변화든 상관없이 다시 잽니다.
    *
-   * reposition()이 끝날 때마다 다시 부르므로(관찰 대상이 바뀌었을 수도, 안 바뀌었을
-   * 수도 있음) 매번 disconnect 후 지금 document.activeElement 하나만 다시 관찰합니다 —
-   * 인스턴스 하나를 재사용하는 이유는 매번 새로 만들면 이전 관찰이 새는 걸 막기 위한
-   * 관례일 뿐, disconnect가 항상 먼저 불리므로 실제로는 새로 만들어도 동작은 같습니다.
+   * reposition()이 끝날 때마다 다시 불리므로(관찰 대상이 바뀌었을 수도, 안 바뀌었을
+   * 수도 있음), **대상이 바뀌었을 때만** disconnect 후 다시 observe합니다.
+   *
+   * **왜 무조건 disconnect+observe하면 안 되는가(Critical, 전체 브랜치 리뷰의 머지
+   * 블로커) — 이전 버전의 주석은 "disconnect가 항상 먼저 불리므로 매번 새로 만들어도
+   * 동작은 같다"고 가정했는데, 이건 틀렸습니다.** 실제 ResizeObserver는 관찰 대상마다
+   * lastReportedSize를 들고 있다가, 그 값과 "다른" 크기가 관측된 대상에만 콜백을 쏩니다.
+   * disconnect()는 관찰 목록을 통째로 비우므로, 그 직후의 observe()는 완전히 새
+   * ResizeObservation을 만들고 lastReportedSize는 unset 상태로 시작합니다 — unset은
+   * "무엇과도 다르다"로 취급되어, 크기가 실제로 전혀 안 바뀐 대상도 다음 프레임에
+   * 무조건 한 번 콜백을 받습니다(초기 딜리버리, 스펙 동작이지 버그가 아닙니다). 그 콜백은
+   * 이 훅의 콜백(`() => reposition()`)이므로 reposition()이 다시 불리고, reposition()은
+   * observeFocusedElementSize()를 다시 부릅니다 — 대상이 안 바뀌었는데도 무조건
+   * disconnect+observe하면 또 새 관찰이 만들어지고 또 초기 딜리버리가 예약됩니다. 결과:
+   * "새 관찰 → 초기 딜리버리 → reposition() → 새 관찰"이 실제 크기 변화나 사용자 입력과
+   * 무관하게, ResizeObserver가 켜져 있고 포커스가 유지되는 한 매 프레임 영원히 반복됩니다.
+   * reduced-motion 경로(아래 animateScrollTopBy)는 이 재호출마다 scrollTop에 delta를 즉시
+   * 대입하므로, 사용자가 위로 스크롤해도 다음 프레임에 그대로 되돌아가 아예 스크롤을 할 수
+   * 없어집니다(§14 위반, 실측: AppShell.test.tsx의 reduced-motion 재점화 테스트). 애니메이션
+   * 경로에서도 reposition()이 맨 앞에서 부르는 cancelPendingScroll()이 매 프레임 진행 중이던
+   * tween을 끊고 다시 겨냥해, 트윈이 한 프레임도 온전히 진행하지 못하고 목표에 영원히
+   * 도달하지 못합니다(실측: 같은 파일의 AutoGrowTextarea 테스트가 이 경로로도 재현합니다).
+   *
+   * **고침: 지금 관찰 중인 대상을 `observedElementRef`에 기억해 뒀다가, 지금
+   * `document.activeElement`가 그 대상과 같으면 이미 그 대상을 계속 관찰 중이므로
+   * disconnect+observe를 건너뜁니다.** 이러면 대상이 바뀌지 않는 한 실제 브라우저가 최초
+   * 1회 보내는 초기 딜리버리(불가피, 막을 필요도 없음 — 그 한 번으로 reposition()이 다시
+   * 불려도 관찰 대상은 안 바뀌었으므로 이 가드가 즉시 멈춥니다) 이후로는 다시 관찰을
+   * 만들지 않아 재점화가 일어나지 않습니다. AutoGrowTextarea가 나중에 진짜로 커지는
+   * 경우는 여전히 잡습니다 — 관찰이 끊긴 적이 없으므로 실제 크기 변화가 오면 브라우저가
+   * 정상적으로 콜백을 쏩니다(관찰을 유지하는 것과 "다시 관찰을 만드는 것"은 다른 일이고,
+   * 이 훅에 필요한 건 항상 전자였습니다). 포커스가 다른 요소로 옮겨가면(탭 이동 등)
+   * 대상이 실제로 달라지므로 그때는 그대로 disconnect+observe로 전환합니다.
+   * `observedElementRef`는 이 함수 밖에서 실제로 disconnect()를 부르는 두 곳(아래
+   * reposition()의 가드 실패 분기, 첫 번째 이펙트의 cleanup)에서도 함께 null로 되돌려,
+   * "더 이상 아무것도 관찰하지 않는" 상태와 "이 대상을 계속 관찰 중"인 상태가 항상 실제
+   * 관찰 상태와 맞아떨어지게 합니다.
+   *
    * ResizeObserver가 없는 환경(구형 브라우저, 이 킷의 유일한 실사용처인 jsdom 테스트가
    * 직접 흉내 내지 않는 한)에서는 조용히 건너뜁니다 — visualViewport와 같은 선례로
    * feature-detect만 하고 폴리필을 들이지 않습니다.
    */
   function observeFocusedElementSize() {
     if (typeof ResizeObserver === "undefined") return;
+    const focused = document.activeElement;
+    if (focused === observedElementRef.current) return;   // 이미 이 대상을 관찰 중 — 재점화 방지, 위 문서 참고.
     if (!resizeObserverRef.current) resizeObserverRef.current = new ResizeObserver(() => reposition());
     resizeObserverRef.current.disconnect();
-    const focused = document.activeElement;
+    observedElementRef.current = focused instanceof Element ? focused : null;
     if (focused instanceof Element) resizeObserverRef.current.observe(focused);
   }
 
@@ -233,6 +273,7 @@ function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId =
     cancelPendingScroll();
     if (!scrollRoot || !viewport || !(focused instanceof HTMLElement) || !scrollRoot.contains(focused)) {
       resizeObserverRef.current?.disconnect();   // 지켜볼 대상이 없다 — 이전 대상을 계속 지켜보지 않는다.
+      observedElementRef.current = null;   // 실제로 관찰이 끊겼다 — 나중에 같은 대상이 다시 포커스돼도 새로 관찰해야 한다.
       return;
     }
     observeFocusedElementSize();
@@ -261,6 +302,7 @@ function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId =
       document.removeEventListener("focusin", reposition);
       cancelPendingScroll();
       resizeObserverRef.current?.disconnect();
+      observedElementRef.current = null;   // 여기서도 실제로 관찰이 끊긴다 — 위와 같은 이유.
     };
   }, [keyboard.open, scrollRootId]);
 
