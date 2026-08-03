@@ -200,13 +200,44 @@ function fireResizeObserved(target: Element) {
 // 콘텐츠 성장(AutoGrowTextarea)뿐 아니라 clientHeight 자체가 나중에 바뀌는 경우(실기기의
 // 주소창 접힘 — #root가 100dvh라 키보드와 무관하게 레이아웃 뷰포트가 바뀌면 따라 바뀐다)도
 // 재현해야 두 사이클 테스트가 성립한다.
-function installClampingScrollRoot(root: HTMLElement, baseContentHeight: number, clientHeight: number) {
+//
+// simulateTransitionLag(전체 브랜치 리뷰 Finding 1) — css/page.css:55의
+// `.app-shell:not(.keyboard-inset-open):not(.keyboard-inset-holding) .workspace`는
+// 두 마커 중 하나라도 없으면 padding-bottom에 400ms 트랜지션을 건다. 그동안 실제
+// 브라우저의 scrollHeight는 "지금 커밋된 --keyboard-inset 목표값"이 아니라 "지금
+// 화면에 그려진(아직 트랜지션 중일 수 있는) padding"을 반영한다. jsdom은 트랜지션을
+// 계산하지 않으므로(레이아웃 엔진이 없다) 이 지연을 그대로는 재현할 수 없다 — 그래서
+// 이 옵션이 켜져 있을 때만, "지금 .app-shell의 클래스 목록이 실제로 트랜지션을
+// 허용하는 상태인가"를 직접 읽어 흉내 낸다: 두 마커 중 하나라도 있으면(실제로도
+// 트랜지션이 안 걸리는 상태) 즉시 목표를 반영하고, 둘 다 없으면(트랜지션이 걸리는
+// 상태) 마지막으로 반영됐던(스테일) 값에 머문다. 이 판정 자체가 마커 클래스의
+// 유무에 달려 있으므로, 고침(마커 추가) 전에는 항상 스테일 값에 머물러 실제 버그를
+// 재현하고, 고침 후에는 즉시 목표를 반영해 회귀를 잡는다 — 스텁이 아니라 이 판정이
+// 테스트의 핵심이다.
+function installClampingScrollRoot(root: HTMLElement, baseContentHeight: number, clientHeight: number, options: { simulateTransitionLag?: boolean } = {}) {
+  const { simulateTransitionLag = false } = options;
   let content = baseContentHeight;
   let visibleHeight = clientHeight;
   Object.defineProperty(root, "clientHeight", { configurable: true, get: () => visibleHeight });
+  function shellEl(): HTMLElement | null {
+    return root.querySelector(".app-shell") as HTMLElement | null;
+  }
+  function targetInset(): number {
+    return parseFloat(shellEl()?.style.getPropertyValue("--keyboard-inset") || "0") || 0;
+  }
+  // 실제 css/page.css:55/87과 문자 그대로 같은 조건이어야 한다 — 이 스텁이 판정하는
+  // "트랜지션이 걸리는가"가 실제 선택자와 어긋나면 재현이 거짓이 된다.
+  function transitionApplies(): boolean {
+    const cls = shellEl()?.className || "";
+    return !cls.includes("keyboard-inset-open") && !cls.includes("keyboard-inset-holding");
+  }
+  let renderedInset = targetInset();
   function currentInset(): number {
-    const shell = root.querySelector(".app-shell") as HTMLElement | null;
-    return parseFloat(shell?.style.getPropertyValue("--keyboard-inset") || "0") || 0;
+    if (!simulateTransitionLag || !transitionApplies()) {
+      renderedInset = targetInset();   // 트랜지션이 안 걸리는 상태 — 실제 브라우저처럼 즉시 목표를 따라간다.
+      return renderedInset;
+    }
+    return renderedInset;   // 트랜지션이 걸린 상태 — 아직 이전 값에 머문다(최대 400ms 지연 재현).
   }
   function currentMax(): number {
     return Math.max(0, content + currentInset() - visibleHeight);
@@ -231,6 +262,12 @@ function installClampingScrollRoot(root: HTMLElement, baseContentHeight: number,
     growContentBy(delta: number) { content += delta; },
     setClientHeight(next: number) { visibleHeight = next; },
   };
+}
+
+/** .keyboard-inset-holding은 releaseFloor > 0인 동안(지연 해제 진행 중)에만 붙는다 —
+ * shellHasKeyboardInsetOpenMarker와 같은 동기화 idiom. */
+function shellHasHoldingMarker(root: HTMLElement) {
+  return ((root.querySelector(".app-shell") as HTMLElement).className).includes("keyboard-inset-holding");
 }
 
 function Page() {
@@ -871,5 +908,82 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     // overshoot = 600 - visibleBottom(494) + gap(8) = 114, 지금 위치(scrollTopBeforeReopen) 위에.
     await waitFor(() => expect(root.scrollTop).toBe(scrollTopBeforeReopen + 114));
     expect(parseFloat(keyboardInsetOf(root))).toBe(insetWhileOpen);   // 사이클 1과 똑같은 값으로 다시 예약된다 — 이전 사이클의 흔적 없음
+  });
+
+  it("지연 해제 중(releaseFloor > 0) css/page.css:55의 padding 트랜지션이 렌더된 scrollHeight를 목표값보다 뒤처지게 해도, 사용자가 스크롤하지 않은 틱에서는 예약분이 저절로 줄지 않는다 — 전체 브랜치 리뷰 Finding 1(팬텀 붕괴)", async () => {
+    // 원인(Finding 1): css/page.css:55는 keyboard-inset-open이 없는 동안(닫힌 뒤)
+    // .workspace의 padding-bottom에 400ms 트랜지션을 건다. useReleasableKeyboardInset의
+    // recompute()(AppShell.tsx:439-449)는 naturalMax = scrollHeight - current - clientHeight로
+    // 계산하는데, current는 "커밋된 목표값"이고 scrollHeight는 "지금 화면에 그려진(트랜지션
+    // 중이면 아직 못 따라잡은) padding"이다 — 트랜지션이 걸리는 동안 이 둘이 어긋나
+    // naturalMax를 (rendered - target)만큼 과대평가하고, candidate를 그만큼 과소평가한다.
+    // 사용자가 전혀 스크롤하지 않아도 'scroll' 이벤트 한 번(브라우저 자신의 clamp 부수
+    // 효과 등)이면 예약분이 저절로 줄어든다 — §16.2 Agency 위반. 고침(AppShell.tsx의
+    // .keyboard-inset-holding 마커 + css/page.css:55/87)은 releaseFloor > 0인 동안
+    // 트랜지션 자체를 꺼서 rendered와 target이 항상 같게 만든다.
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 50);   // 이미 잘 보임 — reposition()이 따로 스크롤하지 않게
+    const BASE_CONTENT_HEIGHT = 2000;
+    const CLIENT_HEIGHT = 800;
+    installClampingScrollRoot(root, BASE_CONTENT_HEIGHT, CLIENT_HEIGHT, { simulateTransitionLag: true });
+
+    textarea.focus();
+    viewport.openKeyboard(300);
+    await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));
+    const insetWhileOpen = parseFloat(keyboardInsetOf(root));
+
+    // 슬랙 100px을 남긴 채(바닥에서 100px 위) 닫는다 — 닫히는 렌더 자체(B1이 이미 고친
+    // 부분, 커밋 전 DOM을 읽으므로 이 트랜지션 버그의 영향을 받지 않는다)가 즉시
+    // insetWhileOpen - 100으로 floor를 계산해야 한다.
+    root.scrollTop = BASE_CONTENT_HEIGHT + insetWhileOpen - CLIENT_HEIGHT - 100;
+    const scrollTopAfterClose = root.scrollTop;
+
+    viewport.closeKeyboard();
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(false));
+    const floorAfterClose = insetWhileOpen - 100;
+    await waitFor(() => expect(parseFloat(keyboardInsetOf(root))).toBe(floorAfterClose));
+    expect(floorAfterClose).toBeGreaterThan(0);   // 전제 확인 — 지연 해제가 실제로 진행 중이어야 이 테스트가 의미 있다.
+    expect(shellHasHoldingMarker(root)).toBe(true);   // "final step to 0"이 아닌 동안은 마커가 있어야 트랜지션이 꺼진다.
+
+    // 사용자는 스크롤하지 않았다 — 그런데도 'scroll' 이벤트가 한 번 발생한다(예: 브라우저
+    // 자신의 clamp가 dispatch하는 네이티브 scroll, 또는 다른 리스너의 부수 효과). 지금
+    // 렌더된 padding이 아직 옛 값(insetWhileOpen)에 머물러 있어도(시뮬레이션), 이 훅은
+    // rendered가 아니라 committed target 기준으로 재야 하므로 floor가 그대로여야 한다.
+    root.dispatchEvent(new Event("scroll"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(parseFloat(keyboardInsetOf(root))).toBe(floorAfterClose);   // 팬텀 붕괴 없음
+    expect(root.scrollTop).toBe(scrollTopAfterClose);
+
+    // 이번엔 사용자가 실제로 완전히 안전한 지점(natural max)까지 스크롤한다 — 정상적으로
+    // 0까지 완전히 풀려야 하고, 그 "마지막 한 걸음"에서는 마커가 사라져(final step to 0)
+    // 다시 트랜지션이 허용돼야 한다(css/page.css:47-54가 원래 의도한 부드러운 축소).
+    root.scrollTop = BASE_CONTENT_HEIGHT - CLIENT_HEIGHT;
+    root.dispatchEvent(new Event("scroll"));
+    await waitFor(() => expect(keyboardInsetOf(root)).toBe("0px"));
+    expect(shellHasHoldingMarker(root)).toBe(false);   // floor가 0이면 마커가 없어야 마지막 트랜지션이 걸린다.
+  });
+
+  it("지연 해제가 필요 없는 보통 경로(닫자마자 floor가 곧장 0)에서는 마커가 아예 붙지 않는다 — 기존 부드러운 축소 트랜지션이 계속 걸린다", async () => {
+    // 위 테스트가 "마커가 있어야 트랜지션이 꺼진다"만 확인하면, ".keyboard-inset-open이
+    // 아니기만 하면 무조건 마커를 붙인다" 같은 과도한 구현도 통과해 버린다 — 그러면
+    // 지연 해제가 필요 없는 흔한 경로(맨 아래가 아닌 곳에서 닫는 경우, releaseFloor가
+    // 곧장 0)에서도 마커가 붙어 css/page.css:47-54가 원래 의도한 부드러운 축소
+    // 트랜지션 자체가 통째로 사라진다. 마커는 releaseFloor > 0일 때만 붙어야 한다.
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 507);
+    root.scrollTop = 1046;
+
+    textarea.focus();
+    viewport.openKeyboard(350);
+    await waitFor(() => expect(root.scrollTop).toBe(1046 + 21));
+    expect(shellHasHoldingMarker(root)).toBe(false);   // 열려 있는 동안도 당연히 없다(keyboard-inset-open만 있다).
+
+    viewport.closeKeyboard();
+    await waitFor(() => expect(keyboardInsetOf(root)).toBe("0px"));   // 지오메트리 가드로 즉시 0(지연 해제 불필요)
+    expect(shellHasHoldingMarker(root)).toBe(false);   // floor가 0이므로 마커도 없다 — 트랜지션이 정상적으로 걸린다.
   });
 });

@@ -490,7 +490,31 @@ export function AppShell({ sidebar, children, collapsed = false, mobileOpen = fa
   // 패딩이 트랜지션 중이라 아직 못 늘어난 레이아웃에 clamp되는 걸 막을 수 있습니다.
   // 두 마커를 하나로 합치지 마세요 — 합치면 소비 앱이 keyboardOpen을 깜빡 빠뜨리거나
   // 늦게 줄 때 이 가드가 조용히 깨집니다.
-  const className = ["app-shell", collapsed && "sidebar-collapsed", navHidden && "mobile-nav-hidden", keyboardOpen && "mobile-keyboard-open", keyboard.open && "keyboard-inset-open"].filter(Boolean).join(" ");
+  //
+  // keyboard-inset-holding — 전체 브랜치 리뷰 Finding 1. releaseFloor(keyboardInset,
+  // keyboard.open이 꺼진 뒤)가 아직 0보다 큰 동안, 즉 지연 해제가 진행 중인 동안
+  // 붙입니다. 이유: css/page.css:55의 padding 트랜지션이 켜져 있으면(마커가 하나도
+  // 없으면) --keyboard-inset이 바뀔 때마다 실제로 화면에 그려지는 .workspace의
+  // padding-bottom이 최대 400ms 동안 옛 값 쪽에 남습니다. 그런데
+  // useReleasableKeyboardInset의 recompute()(위)는 scrollRoot.scrollHeight를 읽어
+  // naturalMax = scrollHeight - current - clientHeight를 계산합니다 — scrollHeight는
+  // "지금 그려진" 값인데 current는 "이미 커밋된 목표값"이라, 트랜지션이 걸려 있는
+  // 동안은 이 둘이 어긋나 naturalMax를 (그려진 값 - 목표값)만큼 과대평가하고
+  // candidate를 그만큼 과소평가합니다 — 사용자가 스크롤을 전혀 안 했는데도 예약된
+  // 여백이 저절로 줄어드는(§16.2 Agency 위반, 최악의 경우 그 사이클의 예약이 통째로
+  // 0으로 무너짐) 결과가 됩니다. 고침은 이 트랜지션이 releaseFloor > 0인 동안은 걸리지
+  // 않게 막는 것입니다 — 그러면 rendered(scrollHeight가 반영하는 값)와 committed
+  // target(current)이 지연 해제가 끝날 때까지 항상 같아 이 어긋남 자체가 생기지
+  // 않습니다. floor가 정확히 0에 도달하는 "마지막 한 걸음"에서는(recompute()가 0으로
+  // 낮춘 바로 그 렌더에서) 마커가 함께 사라지므로 css/page.css:47-54가 원래 의도한
+  // 부드러운 최종 축소는 그대로 유지됩니다 — 그 시점부터는 recompute()의 scroll
+  // 리스너도 스스로 떨어져 나가 더 이상 scrollHeight를 읽지 않으므로(위 useLayoutEffect
+  // 참고) 그 마지막 트랜지션 창은 안전합니다. getComputedStyle로 그려진 padding을
+  // 직접 읽는 대안(레이아웃을 강제하고 102px+safe-area를 다시 빼야 함)보다 이쪽을
+  // 골랐습니다 — keyboard-inset-open과 같은 idiom이라 새 개념이 없고, 매 스크롤
+  // 틱마다 강제 리플로우를 만들지 않습니다.
+  const releaseInProgress = !keyboard.open && keyboardInset > 0;
+  const className = ["app-shell", collapsed && "sidebar-collapsed", navHidden && "mobile-nav-hidden", keyboardOpen && "mobile-keyboard-open", keyboard.open && "keyboard-inset-open", releaseInProgress && "keyboard-inset-holding"].filter(Boolean).join(" ");
   // .workspace(page.css)가 이 변수를 기존 하단 패딩에 더합니다. 키보드가 닫히면
   // (지금 스크롤 위치가 허락하는 만큼) 0으로 돌아가 레이아웃도 원래 폭으로 돌아갑니다.
   const style = { "--keyboard-inset": `${keyboardInset}px` } as CSSProperties;
