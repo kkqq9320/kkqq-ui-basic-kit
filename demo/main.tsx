@@ -218,11 +218,17 @@ function Demo() {
           </div>
         </Panel>
         <Panel title="텍스트와 버튼" hint="CONTROLS">
-          <label>메모 (3줄에서 시작해 자동 확장)<AutoGrowTextarea value={memo} onChange={setMemo} placeholder="여러 줄을 입력해 보세요" maxLength={500} ariaLabel="메모" /></label>
-          <div className="button-row" style={{ marginTop: 16 }}>
-            <button type="button" className="secondary-button">취소</button>
-            <button type="button" className="danger-button">삭제</button>
-            <button type="button" className="primary">저장</button>
+          {/* data-keyboard-keep-visible: 모바일에서 이 필드에 포커스하면 AppShell이
+              이 블록 전체(메모 + 아래 버튼 줄)의 아래쪽을 키보드 위로 들어올린다 —
+              필드 자신의 아래쪽만 기준으로 삼으면 취소/삭제/저장 버튼이 계속 키보드
+              뒤에 남는다. README.md의 "data-keyboard-keep-visible" 항목 참고. */}
+          <div data-keyboard-keep-visible>
+            <label>메모 (3줄에서 시작해 자동 확장)<AutoGrowTextarea value={memo} onChange={setMemo} placeholder="여러 줄을 입력해 보세요" maxLength={500} ariaLabel="메모" /></label>
+            <div className="button-row" style={{ marginTop: 16 }}>
+              <button type="button" className="secondary-button">취소</button>
+              <button type="button" className="danger-button">삭제</button>
+              <button type="button" className="primary">저장</button>
+            </div>
           </div>
         </Panel>
         <Panel title="다이얼로그" hint="DIALOG">

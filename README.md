@@ -285,6 +285,38 @@ useEffect(() => localStorage.setItem("sidebarCollapsed", String(collapsed)), [co
 
 `MobileQuickBar`는 CSS 그리드가 64px **3칸 고정**이라 항목 3개를 전제로 합니다.
 
+#### `data-keyboard-keep-visible` — 필드뿐 아니라 그 아래 액션까지 같이 들어올리기
+
+기본값에서 모바일 키보드가 열리면 **지금 포커스된 필드 자신**의 아래쪽만 키보드 위로
+스크롤됩니다. 필드 바로 아래 취소/삭제/저장 같은 액션 버튼 줄이 있으면 그 버튼들은
+계속 키보드 뒤에 남을 수 있습니다 — 이 킷은 소비 앱이 준 markup에서 "여기까지가 한
+그룹"이라고 스스로 추론하지 않으므로(`portal`·`floatRef`/`quickBarRef`·`pinToBottom`과
+같은 이유), 필드와 액션을 묶어 같이 들어올리고 싶으면 그 컨테이너에 직접 표시하세요.
+
+```tsx
+<div data-keyboard-keep-visible>
+  <label>메모<AutoGrowTextarea ariaLabel="메모" value={memo} onChange={setMemo} /></label>
+  <div className="button-row">
+    <button type="button" className="secondary-button">취소</button>
+    <button type="button" className="danger-button">삭제</button>
+    <button type="button" className="primary">저장</button>
+  </div>
+</div>
+```
+
+**값이 아니라 존재 자체가 스위치입니다** — `hasAttribute`만 확인하므로
+`data-keyboard-keep-visible="false"`도 켜진 것으로 취급됩니다(HTML의 `disabled`/`hidden`과
+같은 boolean 속성 관례). 끄려면 속성 자체를 렌더하지 마세요.
+
+컨테이너가 키보드 위 공간보다 크면(버튼 줄까지 다 보이기엔 자리가 모자라면) 컨테이너의
+아래쪽 전부가 아니라, **포커스된 필드 자신의 위쪽이 보이는 영역 밖으로 밀려나지 않는
+선까지만** 들어올립니다 — 타이핑 중인 자리를 아예 못 보게 되는 것이 버튼 한두 개가
+가려지는 것보다 나쁩니다. 그래도 이 한도가 필드 자신의 최소 요구량(마킹하지 않았을 때
+스크롤되는 양)보다 작아지는 일은 없습니다 — 마킹은 스크롤을 늘릴 수만 있지, 마킹
+전보다 덜 스크롤하게 만들지는 않습니다.
+
+마커가 없으면(오늘까지의 유일한 경로) 동작은 전혀 바뀌지 않습니다 — 완전한 opt-in입니다.
+
 ### SectionTabs
 
 ```tsx

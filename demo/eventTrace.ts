@@ -26,6 +26,19 @@ const BURST_GAP_MS = 700;
  * 실제 판단과 어긋난 채 그럴듯해 보여서, 트레이스를 읽는 쪽이 조용히 오독합니다.
  * 8에서 24로 오른 뒤 실제로 그럴 뻔했습니다. */
 const KEYBOARD_SCROLL_GAP = 24;
+
+/** src/AppShell.tsx의 KEYBOARD_KEEP_VISIBLE_ATTR과 같은 값 — 마킹된 컨테이너를 찾는
+ * 조건(hasAttribute)을 그대로 재현하려면 같은 속성 이름을 봐야 합니다.
+ *
+ * 킷 쪽이 바뀌면 여기도 같이 바꿔야 합니다 — 안 맞으면 keep=/cap=/over=가 킷의
+ * 실제 판단과 어긋난 채 그럴듯해 보여서 트레이스를 읽는 쪽이 조용히 오독합니다.
+ * GAP이 8에서 24로 오른 뒤 이 클래스의 드리프트가 실제로 날 뻔했습니다(위
+ * KEYBOARD_SCROLL_GAP 주석) — 이 마커는 같은 위험이 재현될 수 있는 두 번째 지점
+ * 입니다: 킷이 속성 이름을 바꾸거나 findKeyboardKeepVisibleAncestor의 탐색 조건을
+ * 바꾸면, 이 상수만 그대로 남아 이 패널은 계속 "그럴듯한" keep=/over=를 찍으면서도
+ * 실제로는 킷과 다른 대상을 보고 있을 수 있습니다. */
+const KEYBOARD_KEEP_VISIBLE_ATTR = "data-keyboard-keep-visible";
+
 /** src/AppShell.tsx:19의 KEYBOARD_SCROLL_ANIMATION_MS(400ms) + 여유. 리컴포짓 직후
  * 바로 재보면 애니메이션이 진행 중인 프레임을 "모자란다"로 오판할 수 있어, 트윈이
  * 다 끝났을 시점까지 기다렸다가 "실제로 도달한" 위치를 잰다. */
@@ -101,10 +114,35 @@ function cssPixels(value: string): number {
  *     hold=Y인 동안 css=는 keyboard.inset과 다른 값일 수 있습니다(release 중).
  *   - visibleBottom/overshoot는 AppShell.tsx:281-282와 같은 공식으로 이 함수가
  *     직접 다시 계산한 것이지, 킷이 계산한 값을 읽어온 게 아닙니다.
+ *   - keep=/cap=는 reposition()이 data-keyboard-keep-visible로 표시된 조상을 찾아
+ *     그 컨테이너 아래쪽까지 같이 반영하는 경로(findKeyboardKeepVisibleAncestor,
+ *     KEYBOARD_KEEP_VISIBLE_ATTR 참고)를 그대로 재현한 것입니다 — over=는 이제
+ *     "포커스된 요소 자신의 rect"가 아니라 "킷이 실제로 겨냥한 대상의 rect"를
+ *     기준으로 계산됩니다. keep=는 그 대상(마커가 없으면 self), cap=는 마킹된
+ *     컨테이너가 원한 값이 "필드 자신의 위쪽을 지키는 한도"에 걸려 그대로 못 쓰였는지
+ *     (Y/N, 마커가 없으면 n/a)를 보여줍니다. 이 절반을 빼놓고 over=만 고치면 마킹
+ *     안 된 필드에서는 여전히 맞지만 마킹된 블록·캡이 걸리는 자리에서는 조용히
+ *     틀린 값을 찍습니다 — GAP 드리프트와 같은 종류의 오독입니다(위 두 상수 주석).
  * "요청한 스크롤과 실제 달성한 스크롤"을 비교하려고 트리거 시점(now)과 settle
  * 시점(now+450ms) 두 번 이 스냅샷을 찍습니다 — 안드로이드가 키보드를 두 단계로
  * 올릴 때도 각 단계가 각자의 트리거+settle 쌍으로 남습니다.
  */
+
+/** src/AppShell.tsx의 findKeyboardKeepVisibleAncestor를 그대로 재현합니다 —
+ * focused에서 시작해(자기 자신은 검사하지 않음) scrollRoot(포함) 안쪽만 거슬러
+ * 올라가며 KEYBOARD_KEEP_VISIBLE_ATTR이 붙은 가장 가까운 조상을 찾습니다.
+ * scrollRoot 경계를 벗어나면 멈춥니다 — 그 밖의 조상은 이 훅이 옮기는 scrollTop으로
+ * 전혀 움직이지 않으므로(Dialog처럼 document.body에 포털된 자리가 대표적 예) 킷도
+ * 이 패널도 기준으로 쓸 수 없습니다. */
+function findKeepVisibleAncestor(focused: Element, scrollRoot: Element): Element | null {
+  let node = focused.parentElement;
+  while (node && scrollRoot.contains(node)) {
+    if (node.hasAttribute(KEYBOARD_KEEP_VISIBLE_ATTR)) return node;
+    node = node.parentElement;
+  }
+  return null;
+}
+
 type KeyboardMathSnapshot = { text: string; scrollTop: number; maxScroll: number; requested: number };
 
 function snapshotKeyboardMath(label: string, target: string | undefined): KeyboardMathSnapshot {
@@ -142,11 +180,30 @@ function snapshotKeyboardMath(label: string, target: string | undefined): Keyboa
   let rectText = "n/a";
   let visibleBottom: number | null = null;
   let overshoot: number | null = null;
+  let keepText = "self";
+  let capText = "n/a";
   if (focused instanceof HTMLElement && viewport) {
     const rect = focused.getBoundingClientRect();
     rectText = `${round(rect.top)}~${round(rect.bottom)}`;
     visibleBottom = vpTop + vpH;
-    overshoot = rect.bottom - visibleBottom + KEYBOARD_SCROLL_GAP;
+    const focusedOvershoot = rect.bottom - visibleBottom + KEYBOARD_SCROLL_GAP;
+    overshoot = focusedOvershoot;
+
+    // src/AppShell.tsx의 reposition() 재현(위 findKeepVisibleAncestor 문서 참고):
+    // 마킹된 컨테이너가 있으면 그 아래쪽까지 같이 반영하되(overshoot는 커질 수만
+    // 있음, focusedOvershoot가 항상 바닥이다), 포커스된 필드 자신의 위쪽이 보이는
+    // 영역 밖으로 밀려나지 않는 한도(ceiling) 안에서만 얹는다. 킷 쪽 공식
+    // (Math.max(focusedOvershoot, Math.min(containerOvershoot, ceiling)))과 한
+    // 글자도 달라서는 안 된다 — 위 KEYBOARD_KEEP_VISIBLE_ATTR 경고 참고.
+    const keepVisibleAncestor = scrollRoot ? findKeepVisibleAncestor(focused, scrollRoot) : null;
+    if (keepVisibleAncestor) {
+      const containerRect = keepVisibleAncestor.getBoundingClientRect();
+      const containerOvershoot = containerRect.bottom - visibleBottom + KEYBOARD_SCROLL_GAP;
+      const ceiling = Math.max(0, rect.top - vpTop);
+      overshoot = Math.max(focusedOvershoot, Math.min(containerOvershoot, ceiling));
+      keepText = describeTarget(keepVisibleAncestor);
+      capText = containerOvershoot > ceiling ? "Y" : "N";
+    }
   }
   // 반올림한 정수로 고정 — 안 그러면 over=(반올림 표시)와 want(=stBefore+requested,
   // 반올림 전 소수)가 같은 값인데도 서로 다르게 보여 읽는 사람이 혼란스러워진다.
@@ -155,7 +212,7 @@ function snapshotKeyboardMath(label: string, target: string | undefined): Keyboa
   const tgt = target ? `  tgt=${target}` : "";
   const text = `kb ${label}${tgt}  foc=${describeTarget(focused)} inRoot=${inRoot} edit=${editable}  op=${kitOpen} hold=${kitHold} css=${kitInset}px`
     + `  vpH=${vpH} vpTop=${vpTop} winH=${winH}  root[st=${scrollTop} sh=${scrollHeight} ch=${clientHeight} max=${maxScroll}]`
-    + `  rect=${rectText} visBot=${visibleBottom === null ? "n/a" : round(visibleBottom)} over=${overshoot === null ? "n/a" : round(overshoot)}  padB=${padBottom}`;
+    + `  rect=${rectText} visBot=${visibleBottom === null ? "n/a" : round(visibleBottom)} over=${overshoot === null ? "n/a" : round(overshoot)} keep=${keepText} cap=${capText}  padB=${padBottom}`;
 
   return { text, scrollTop, maxScroll, requested };
 }
