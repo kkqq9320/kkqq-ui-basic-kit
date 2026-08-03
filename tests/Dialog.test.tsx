@@ -1,8 +1,19 @@
 // @vitest-environment jsdom
 /// <reference types="vite/client" />
-// 위 참조가 `*?raw` 임포트(아래)의 앰비언트 타입을 준다 — vite/client.d.ts가 이미
-// 선언해 두므로 이 파일에서 새로 선언할 필요는 없다. @types/node가 없는 프로젝트라
-// fs 대신 이 방식(플러그인 없이도 되는 Vite 코어 기능)으로 실제 CSS 소스를 읽는다.
+// 위 참조는 아래 `import.meta.url`의 타입을 준다(vite/client.d.ts). CSS 소스
+// 텍스트 자체는 Vite의 `*?raw` 임포트 대신 node:fs로 직접 읽는다 — 이 vitest
+// 설치본은 기본값 `test.css.include: []`(vitest/dist/config.d.ts) 때문에 `?raw`를
+// 붙여도 .css 요청을 전부 빈 모듈로 목(mock)한다(실측: `.json?raw`는 내용을 그대로
+// 돌려주는데 `.css?raw`는 어떤 CSS 파일이든 길이 0을 돌려준다 — 이 파일의 회귀
+// 테스트뿐 아니라 vite.config.ts를 건드리기 전까지는 이 킷의 어떤 테스트도 `?raw`로
+// 실제 CSS를 읽을 수 없다). vite.config.ts에 `test.css.include`를 추가하는 게
+// 근본 수정이지만 이번 작업 범위 밖이라(허용 파일 목록에 없음) 건드리지 않는다 —
+// 대신 fs로 직접 읽는다. @types/node가 없는 프로젝트라 "node:fs"/"node:url"의
+// 최소 표면만 ./node-fs.d.ts에 로컬로 선언해 뒀다(새 의존성이 아니다). node:url의
+// URL을 쓰는 이유는 그 선언 파일의 주석 참고 — `@vitest-environment jsdom` 아래서
+// 전역 URL이 jsdom의 patched 버전이라 file: 베이스를 무시하기 때문이다.
+import { readFileSync } from "node:fs";
+import { URL as NodeURL } from "node:url";
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { flushSync } from "react-dom";
@@ -11,7 +22,7 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Dialog, DialogActions, DialogHeading, Select } from "../src";
-import dialogCssSource from "../css/dialog.css?raw";
+const dialogCssSource = readFileSync(new NodeURL("../css/dialog.css", import.meta.url), "utf8");
 
 afterEach(() => { cleanup(); delete (window as { visualViewport?: unknown }).visualViewport; });
 
@@ -350,5 +361,39 @@ describe("Dialog", () => {
     // 실제 원인이다. jsdom은 실제 CSS cascade/트랜지션을 계산하지 않으므로(레이아웃
     // 엔진이 없다) 이 계약은 소스 텍스트로 고정해 회귀를 잡는다.
     expect(dialogCssSource).not.toMatch(/keyboard-inset-open\)\s*\.dialog-backdrop\s*\{\s*transition:\s*none/);
+  });
+
+  it("백드롭의 실제 커버 영역(::before)은 top/height 트랜지션과 무관하게 항상 뷰포트 전체를 즉시 덮는다 — 전체 브랜치 리뷰 Finding 2(성장 방향 구멍)", () => {
+    // 원인(Finding 2): .dialog-backdrop 자신의 top/height는(바로 위 규칙, 46d7277)
+    // visualViewport가 커질 때(키보드가 닫히거나 주소창이 늘어날 때) 400ms에 걸쳐
+    // 새 값까지 자란다. 그 400ms 동안 실제로 그려진 박스는 아직 다 못 자란 상태라,
+    // 새로 드러난 영역이 트랜지션이 끝날 때까지 안 덮인다 — 뒤 페이지가 비치고, 그
+    // 자리는 .dialog-backdrop의 mousedown 핸들러가 붙은 영역 밖이라 클릭도 안 먹는다
+    // (§10 위반). top/height 트랜지션 자체를 없애면 46d7277이 고친 반대 방향(키보드가
+    // "열릴 때") 하드컷이 되돌아오므로 그 트랜지션은 그대로 둔다 — 대신 실제 스크림
+    // (틴트+블러)을 이 트랜지션과 무관한, 항상 뷰포트 전체를 즉시 덮는 별도 레이어
+    // (::before)로 옮긴다. jsdom은 실제 CSS 트랜지션/레이아웃을 계산하지 않으므로
+    // (46d7277의 같은 전례) 이 계약도 소스 텍스트로 고정한다.
+    const beforeBlock = dialogCssSource.match(/\.dialog-backdrop::before\s*\{([^}]*)\}/);
+    expect(beforeBlock).not.toBeNull();
+    const beforeRule = beforeBlock![1];
+
+    // 항상 뷰포트 전체 — top/height가 뭐든 상관없이 고정된 구조적 커버 영역이다.
+    expect(beforeRule).toMatch(/position:\s*fixed/);
+    expect(beforeRule).toMatch(/inset:\s*0\b/);
+    // 트랜지션이 전혀 없어야 한다 — 있으면 이 레이어도 같은 지연을 겪어 구멍이 재발한다.
+    expect(beforeRule).not.toMatch(/transition/);
+    // §10의 58% 검정 틴트 + 8px 블러가 이 레이어에 있어야, "항상 덮는 영역"과 "실제
+    // 스크림"이 같은 곳이 된다 — 틴트만 옮기고 블러를 빠뜨리면 성장 구간에서 블러
+    // 없는 틴트만 보이는 구멍이 남는다(§10은 틴트와 블러를 둘 다 공유 계약으로 못박음).
+    expect(beforeRule).toMatch(/backdrop-filter:\s*blur\(8px\)/);
+    expect(beforeRule).toMatch(/rgba\(10,\s*11,\s*24,\s*\.58\)/);
+
+    // 스크림(배경·블러)을 옮긴 것이지 복제한 게 아니다 — 부모 규칙에 그대로 남아 있으면
+    // 다이얼로그가 떠 있는 내내 8px 블러를 두 겹으로 합성하는 비용을 진다(§12: 이
+    // 레이어가 실제로 필요한 순간은 400ms 트랜지션 구간뿐이다).
+    const baseBlock = dialogCssSource.match(/\.dialog-backdrop\s*\{([^}]*)\}/);
+    expect(baseBlock).not.toBeNull();
+    expect(baseBlock![1]).not.toMatch(/backdrop-filter/);
   });
 });
