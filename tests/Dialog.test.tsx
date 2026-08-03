@@ -1,20 +1,15 @@
 // @vitest-environment jsdom
 /// <reference types="vite/client" />
-// 위 참조는 아래 `import.meta.url`의 타입을 준다(vite/client.d.ts). CSS 소스
-// 텍스트 자체는 Vite의 `*?raw` 임포트 대신 node:fs로 직접 읽는다 — 이 vitest
-// 설치본은 기본값 `test.css.include: []`(vitest/dist/config.d.ts) 때문에 `?raw`를
-// 붙여도 .css 요청을 전부 빈 모듈로 목(mock)한다(실측: `.json?raw`는 내용을 그대로
-// 돌려주는데 `.css?raw`는 어떤 CSS 파일이든 길이 0을 돌려준다 — 이 파일의 회귀
-// 테스트뿐 아니라 vite.config.ts를 건드리기 전까지는 이 킷의 어떤 테스트도 `?raw`로
-// 실제 CSS를 읽을 수 없다). vite.config.ts에 `test.css.include`를 추가하는 게
-// 근본 수정이지만 이번 작업 범위 밖이라(허용 파일 목록에 없음) 건드리지 않는다 —
-// 대신 fs로 직접 읽는다. @types/node가 없는 프로젝트라 "node:fs"/"node:url"의
-// 최소 표면만 ./node-fs.d.ts에 로컬로 선언해 뒀다(새 의존성이 아니다). node:url의
-// URL을 쓰는 이유는 그 선언 파일의 주석 참고 — `@vitest-environment jsdom` 아래서
-// 전역 URL이 jsdom의 patched 버전이라 file: 베이스를 무시하기 때문이다.
-import { readFileSync } from "node:fs";
-import { URL as NodeURL } from "node:url";
-
+// 위 참조는 아래 `*?raw` 임포트의 타입을 준다(vite/client.d.ts의
+// `declare module '*?raw'`). CSS 소스 텍스트를 Vite의 `*?raw` 임포트로 그대로
+// 읽는다 — vitest의 기본값 `test.css.include: []`(vitest/dist/config.d.ts)는 `.css`
+// 요청(`?raw` 포함)을 전부 빈 모듈로 목(mock)하므로, 예전에는 이 파일의 CSS 계약
+// 테스트가 항상 빈 문자열만 검사해 절대 실패할 수 없었다(실측: `.json?raw`는 내용을
+// 그대로 돌려주는데 `.css?raw`는 어떤 CSS 파일이든 길이 0을 돌려줬다). 이제
+// vite.config.ts의 `test.css.include`가 `.css`(와 `?raw` 등 쿼리가 붙은 변형)를 실제
+// vite CSS 파이프라인으로 넘기므로, 이 임포트가 진짜 소스 텍스트를 돌려준다 —
+// node:fs로 직접 읽던 예전 워크어라운드(와 그걸 위해 선언했던 tests/node-fs.d.ts)는
+// 이제 불필요해 함께 지웠다.
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -22,7 +17,7 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Dialog, DialogActions, DialogHeading, Select } from "../src";
-const dialogCssSource = readFileSync(new NodeURL("../css/dialog.css", import.meta.url), "utf8");
+import dialogCssSource from "../css/dialog.css?raw";
 
 afterEach(() => { cleanup(); delete (window as { visualViewport?: unknown }).visualViewport; });
 
