@@ -101,6 +101,34 @@ function scheduleReleaseOnDrain(readStack: (state: unknown) => string[]) {
   window.addEventListener("popstate", listener);
 }
 
+/** back()을 불렀지만 아직 popstate로 착지하지 않은 횟수(B3, 아래 useBackToClose 문서
+ * 참고). 동시 정리(같은 커밋에서 겹친 팝업 두 개가 함께 닫히는 경우) 때, 정리
+ * 타이머들이 각자 window.history.state를 읽어 "내가 맨 위인가"를 판단하는데, 먼저
+ * back()을 부른 쪽의 내비게이션이 아직 착지하지 않아(진짜 비동기) 뒤이어 도는
+ * 타이머는 여전히 옛 상태를 봅니다. 이 카운터로 "곧 사라질 예정인 맨 위 N개"를 셈에
+ * 넣어, 아직 착지 전이라도 그 바로 아래 있던 자기 표식이 사실은 "다음 차례"임을 알 수
+ * 있게 합니다. */
+let unlandedBackCount = 0;
+let unlandedBackListenerInstalled = false;
+
+/** window.history.back()을 부르면서 위 카운터를 관리합니다. popstate가 올 때마다
+ * 하나씩 돌려받습니다 — 그 popstate가 이 함수가 부른 것이든 사용자의 물리적
+ * 뒤로가기든(실제 내비게이션은 어느 쪽이든 한 칸이므로 구분할 필요가 없습니다),
+ * 이미 0이면 그냥 무시합니다. 음수로 새지 않게 하는 이 가드는 방어적인 의미도
+ * 있습니다: 테스트가 어떤 back()의 popstate를 끝까지 흘려보내지 않고 끝나도(드물게
+ * 있음 — 예: back()을 스텁만 하고 디스패치는 안 하는 테스트), 카운트가 다음 테스트로
+ * 새어 나가 엉뚱한 판정을 만들 위험을 최소화합니다. */
+function callBackTracked() {
+  unlandedBackCount++;
+  if (!unlandedBackListenerInstalled) {
+    unlandedBackListenerInstalled = true;
+    window.addEventListener("popstate", () => {
+      if (unlandedBackCount > 0) unlandedBackCount--;
+    });
+  }
+  window.history.back();
+}
+
 /**
  * 뒤로가기로 팝업을 닫습니다. 열릴 때 history에 표식을 push 해 두고, popstate에서
  * 그 표식이 사라졌으면 닫습니다. 그래서 뒤로가기가 뒤 페이지로 가는 대신 팝업만
@@ -180,6 +208,57 @@ function scheduleReleaseOnDrain(readStack: (state: unknown) => string[]) {
  * 경로(위 주석)는 popstate를 아예 쏘지 않고 스택을 절대 비우지도 않으므로(위에 뭔가
  * 남아 있을 때만 타는 경로) 이 리스너와 아무 상호작용이 없습니다. history.scrollRestoration이
  * 없는 환경(구형·비표준)도 있으므로 항상 존재를 확인한 뒤에만 손댑니다.
+ *
+ * B3 — 동시 정리(전체 브랜치 리뷰 마지막 Important finding): 같은 커밋에서 겹친 팝업
+ * 두 개가 함께 닫히면(예: Select의 `choose()`가 `onChange`로 감싸는 Dialog까지 같이
+ * 닫는 경우) "맨 위인지 재확인" 로직(위 B2)이 무너집니다. React는 자식 effect의
+ * cleanup을 부모보다 먼저 돌립니다(실측: nested `<Dialog><Select/></Dialog>`에서
+ * 안쪽 Select의 정리 타이머가 항상 먼저 돕니다) — 그래서 안쪽(S)의 타이머가 먼저 돌아
+ * 자기가 맨 위임을 확인하고 `back()`을 부르지만, 그 `back()`은 비동기라 아직
+ * 착지하지 않습니다. 곧이어 바깥(D)의 타이머가 돌 때 `window.history.state`는 여전히
+ * 옛 값([D, S])이라, D는 자기가 S 밑에 묻힌 것으로 착각해 진짜 `back()` 대신 "묻힌
+ * 표식" replaceState 경로(아래)를 탑니다 — 그런데 그 경로는 **지금 current인 항목**
+ * (S가 곧 벗어날 그 항목)만 고치므로, D가 실제로 push했던 항목은 손대지 못한 채 [D]
+ * 표식을 영원히 남깁니다. 결과가 두 가지입니다: (1) 두 팝업을 닫았는데 `back()`은
+ * 한 번만 불려 실제 history 항목이 하나 안 팝힌 채 남고, 다음 물리적 뒤로가기가
+ * 아무것도 못 닫고 소비됩니다 — 사용자가 버튼/선택으로 닫았는데 표식이 안 걷힌
+ * 셈이라 §10과 어긋납니다. (2) 그 항목에는 이제 마운트된 팝업 없이 표식만 남고, 이
+ * 표식이 있는 한 두 release 경로(위 handlePopState, scheduleReleaseOnDrain)가 절대
+ * `length === 0`을 보지 못해 `savedScrollRestoration`이 "manual"에 멈춥니다 — 사용자가
+ * 그 항목에 머무는 동안 scrollRestoration 보호 전체가 조용히 죽습니다(영구는 아닙니다
+ * — 나중에 진짜 빈 항목에 닿으면 풀립니다. 위 문단 참고).
+ *
+ * 고친 방법: `unlandedBackCount`(모듈 스코프, `scheduleReleaseOnDrain` 바로 아래) —
+ * "`back()`을 불렀지만 아직 popstate로 착지하지 않은 횟수"를 세어, "맨 위인지" 판정을
+ * 그 아직 안 착지한 만큼 미리 걷어낸 **effective 스택**에 대고 합니다. S가 `back()`을
+ * 부르며 카운트를 1 올리면, 뒤이어 도는 D의 타이머는 `current`([D, S])에서 그 1개를
+ * 미리 빼([D]) 자기가 사실은 다음 차례임을 정확히 봅니다 — 그래서 D도 (묻힌 게
+ * 아니라) 진짜 `back()`을 부릅니다. 두 `back()` 모두 실제로 착지하면 두 항목 모두
+ * 정상적으로 소비되고, `scheduleReleaseOnDrain`을 부르는 조건에서 낡은
+ * `current.length === 1` 게이트도 없앴습니다 — effective 스택 계산이 이미 "이 `back()`
+ * 까지 합쳐 스택이 빌 것인가"를 정확히 알려주므로, 원래 게이트가 놓치던(자기 걸로
+ * 스택이 비지만 아직 남의 pending back()이 하나 더 있는) 경우까지 커버합니다. 여러 번
+ * 스케줄해도 `cancelPendingReleaseOnDrain`이 매번 이전 것을 대체하므로 안전합니다
+ * (같은 `length === 0` 조건을 기다리는 리스너가 항상 최대 하나만 있습니다).
+ *
+ * `current`(raw, 착지 여부와 무관)는 묻힌 표식 replaceState 경로에 그대로 남겨
+ * 둡니다 — 그 경로가 실제로 손대는 건 지금 current인 항목이지, 아직 안 착지한
+ * back()들이 언젠가 도착할 미래의 항목이 아니기 때문입니다.
+ *
+ * 대안(고려했으나 채택 안 함) — "정리 요청을 큐에 넣고 popstate가 올 때마다 하나씩
+ * 소비": 이론적으로 더 일반적입니다(부모가 자식보다 먼저 정리되는 순서도 다룰 수
+ * 있음). 하지만 실측(임시 프로브 테스트로 확인)으로 그 순서는 이 킷의 nested
+ * Dialog>Select 형태에서 재현되지 않습니다 — React는 같은 커밋 안에서 자식 effect의
+ * cleanup을 항상 부모보다 먼저 돌리므로, 안쪽이 항상 먼저 돕니다. 부모(바깥 팝업)가
+ * 자식보다 먼저 정리되는 순서는 애초에 부모-자식 포함 관계가 아니라 **형제** 팝업이
+ * 겹친 경우에만 일어나는데, 그건 87b58b5가 이미 다루는 "진짜 묻힌 표식"(자기보다
+ * 늦게 열린, 자기와 무관한 남이 아직 열려 있는 채로 자기만 닫히는 경우)과 같은
+ * 모양이라 이 카운터로 고칠 대상이 아닙니다 — 그 경우 묻힌 표식을 뽑을 방법이 없다는
+ * 트레이드오프(죽은 history 항목 하나, 나중에 뒤로가기 한 번이 허공에 소비됨)는
+ * 여전히 유효하고 의도된 동작입니다. 큐 방식은 이 코드베이스에 실제로 존재하지 않는
+ * 문제(정리 순서 자체를 통제)를 풀려고 새 타이밍(추가 매크로태스크 한 틱)을 들여오는
+ * 대가로, 실측으로 확인된 진짜 버그(concurrent nested teardown)는 카운터보다 더 잘
+ * 고치지 못합니다 — 그래서 카운터를 골랐습니다.
  */
 export function useBackToClose(open: boolean, onClose: () => void, stackKey = "__dsPopupStack") {
   const closeRef = useRef(onClose);
@@ -201,6 +280,15 @@ export function useBackToClose(open: boolean, onClose: () => void, stackKey = "_
     if (!readStack(window.history.state).includes(popupId)) {
       claimScrollRestoration();
       window.history.pushState({ ...window.history.state, [stackKey]: [...readStack(window.history.state), popupId] }, "");
+      // 새 표식이 쌓이면 unlandedBackCount(B3)를 잊는다. 그 카운트는 "지금 스택의
+      // 맨 위 N개가 곧 사라질 예정"이라는 뜻인데, push는 그 위에 전혀 새로운(그
+      // 카운트와 무관한) 내용을 얹는다 — 아직 착지 안 한 back()은 착지 "그 순간"의
+      // 맨 위를 뽑을 뿐(B2 문서 참고, 착지 시점 기준으로 목적지를 다시 계산), push
+      // 이후로는 더 이상 정적으로 셀 수 없다. 그래서 push 이후의 판정은(이미
+      // 그랬듯) B2의 "실행 시점에 다시 읽기"에 맡기고, 여기서는 그냥 0으로
+      // 되돌린다 — 결과가 부정확한 미래 예측보다는 옛 코드와 동일한(이미 검증된)
+      // 재확인 동작이 더 안전하다.
+      unlandedBackCount = 0;
     }
     function handlePopState(event: PopStateEvent) {
       if (!readStack(event.state).includes(popupId)) closeRef.current();
@@ -215,8 +303,20 @@ export function useBackToClose(open: boolean, onClose: () => void, stackKey = "_
         // 예약된 사이 다른 팝업이 열려 자기 표식 위에 쌓였을 수 있다(B2). 그때 back()을
         // 부르면 스택 맨 위, 즉 남의 표식을 뽑아버려 그 팝업이 열리자마자 닫힌다. 그러니
         // 지금 다시 스택을 읽어 자기 표식이 여전히 맨 위일 때만 back()을 부른다.
+        //
+        // "맨 위"는 raw current가 아니라 effective 스택으로 판정한다(B3). 같은 커밋에서
+        // 겹친 팝업이 함께 닫히면(예: Select의 choose()가 onChange로 감싸는 Dialog까지
+        // 닫는 경우) 안쪽이 먼저 back()을 부르고 아직 착지하지 않은 채로 바깥의 타이머가
+        // 돈다 — 그때 raw current는 여전히 옛 값([바깥, 안쪽])이라 바깥은 자기가 안쪽
+        // 밑에 묻힌 것으로 착각한다. unlandedBackCount(아직 착지 안 한 back() 수)만큼
+        // current 끝에서 미리 걷어내면, 아직 착지 전이라도 바로 아래 있던 자기 표식이
+        // 사실은 다음 차례임을 정확히 본다. 카운트가(테스트가 popstate를 끝까지 흘려보내지
+        // 않고 끝나는 등으로) current.length보다 커도 clamp해 effective가 음수 길이로
+        // 새지 않게 한다.
         const current = readStack(window.history.state);
-        if (current[current.length - 1] === popupId) {
+        const unlanded = Math.min(unlandedBackCount, current.length);
+        const effective = unlanded > 0 ? current.slice(0, current.length - unlanded) : current;
+        if (effective[effective.length - 1] === popupId) {
           // 여기서 곧바로 releaseScrollRestoration()을 부르면 안 된다 — 실제 브라우저에서
           // 확인된 버그였다: 이 시점엔 아직 "지금 떠나려는" 이 항목이 current이므로, 값을
           // 쓰면 그 항목에 찍히고 만다. 정작 되돌아갈 이전 항목(예: 원래 페이지)은
@@ -231,14 +331,24 @@ export function useBackToClose(open: boolean, onClose: () => void, stackKey = "_
           // 팝업이 떠 있는 동안 scrollRestoration이 풀려 원래 스크롤 점프 버그가
           // 되살아난다. scheduleReleaseOnDrain은 popstate가 올 때마다 실제 스택 길이를
           // 다시 확인해, 진짜 0이 될 때까지 계속 기다린다.
-          if (current.length === 1) scheduleReleaseOnDrain(readStack);
-          window.history.back();
+          //
+          // 매번(옛 current.length === 1 게이트 없이) 스케줄한다(B3) — effective 스택이
+          // 이미 "이 back()까지 합쳐 스택이 빌 것인가"를 정확히 알려주므로, 옛 게이트가
+          // 놓치던 "자기 걸로는 비지만 남의 pending back()이 하나 더 있어야 진짜 빈다"는
+          // 경우까지 커버해야 한다. cancelPendingReleaseOnDrain이 매번 이전 리스너를
+          // 대체하므로 중복 스케줄은 안전하다.
+          scheduleReleaseOnDrain(readStack);
+          callBackTracked();
           return;
         }
         // 묻혔다 — back()으로는 못 뽑는다(뽑으면 남의 것이 뽑힌다). 그래서 실제 history
         // 항목은 하나 죽은 채 남는다(나중에 뒤로가기 한 번이 허공에 소비된다 — §10과의
         // 긴장, 보고서 참고). 대신 표식은 지금 스택 상태에서 걷어내, 나중에 이 팝업이
         // 다시 열릴 때 "이미 표식이 있다"고 착각해 push를 건너뛰지 않게 한다.
+        //
+        // 여기서는 raw current를 그대로 쓴다(effective가 아니다) — 이 replaceState가
+        // 실제로 고치는 대상은 "지금 current인 항목"이지, 아직 안 착지한 back()들이
+        // 언젠가 도착할 미래의 항목이 아니다.
         if (!current.includes(popupId)) return;
         window.history.replaceState({ ...window.history.state, [stackKey]: current.filter((id) => id !== popupId) }, "");
       }, 0);

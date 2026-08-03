@@ -518,6 +518,105 @@ describe("B1: 킷 팝업이 열린 동안만 scrollRestoration을 manual로 바�
   });
 });
 
+describe("B3: 같은 커밋에서 겹친 팝업 두 개가 함께 닫히는 동시 정리 — 전체 브랜치 리뷰 마지막 Important finding", () => {
+  function installScrollRestorationStub(initial: ScrollRestoration) {
+    let value: ScrollRestoration = initial;
+    const setter = vi.fn((next: ScrollRestoration) => { value = next; });
+    Object.defineProperty(window.history, "scrollRestoration", {
+      configurable: true,
+      get: () => value,
+      set: setter,
+    });
+    return { setter, get value() { return value; } };
+  }
+
+  afterEach(() => {
+    delete (window.history as unknown as { scrollRestoration?: unknown }).scrollRestoration;
+  });
+
+  it("Select의 choose()가 onChange로 감싸는 Dialog까지 같이 닫으면, 두 표식 모두 back()으로 소비되고 scrollRestoration도 결국 auto로 복원된다", () => {
+    // 원인: choose()(src/Select.tsx)는 onChange를 부른 뒤 곧바로 setOpen(false)를
+    // 부른다. 이 테스트의 onChange는 감싸는 Dialog도 같은 틱에서 닫으므로, Dialog와
+    // Select 두 useBackToClose 인스턴스의 정리 effect가 "같은 커밋"에서 함께 도는
+    // 동시 정리 상황을 만든다. 각자 window.setTimeout(0)으로 자기 정리를 예약하는데
+    // (StrictMode 재마운트 취소용), 두 타이머 모두 같은 macrotask 배치에서 순서대로
+    // 실행된다 — React가 자식 effect cleanup을 부모보다 먼저 돌리므로(임시 프로브로
+    // 실측 확인) 안쪽(Select)이 항상 먼저 돈다.
+    vi.useFakeTimers();
+    const stub = installScrollRestorationStub("auto");
+
+    // history.back()을 실제 브라우저처럼 "진짜 비동기"로 흉내 낸다: 호출 즉시
+    // popstate를 쏘지 않고 큐에 쌓아 뒀다가, flushOneQueuedPopState()를 명시적으로
+    // 불러야만 하나씩 착지한다(B1 describe의 fireQueuedPopState 패턴을 — 이번엔 두
+    // 번 겹쳐 불릴 수 있으므로 — 큐로 일반화한 것). 목적지(state)는 호출 시점이
+    // 아니라 착지 시점의 스택을 기준으로 계산한다(B1/B2와 동일 관례). 이렇게
+    // 지연시켜야만 안쪽(Select)의 back()이 착지하기 전에 바깥(Dialog)의 정리
+    // 타이머가 도는 "미착지 구간"이 실제로 생긴다 — 동기 스파이(파일 기본값의
+    // backSpy)로는 이 창을 만들 수 없다.
+    const queue: Array<() => void> = [];
+    backSpy.mockImplementation(() => {
+      queue.push(() => {
+        const remaining = stack().slice(0, -1);
+        const state = remaining.length ? { [STACK_KEY]: remaining } : null;
+        window.history.replaceState(state, "");
+        window.dispatchEvent(new PopStateEvent("popstate", { state }));
+      });
+    });
+    function flushOneQueuedPopState() {
+      const next = queue.shift();
+      expect(next).toBeDefined();
+      act(() => { next!(); });
+    }
+
+    function DialogWithSelect() {
+      const [dialogOpen, setDialogOpen] = useState(true);
+      const [value, setValue] = useState("a");
+      return <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} ariaLabel="분류 등록">
+        <Select ariaLabel="통화" value={value} options={[{ value: "a", label: "첫째" }, { value: "b", label: "둘째" }]} onChange={(next) => { setValue(next); setDialogOpen(false); }} />
+      </Dialog>;
+    }
+    render(<DialogWithSelect />);
+    expect(stack()).toHaveLength(1);   // 다이얼로그 표식
+    expect(stub.value).toBe("manual");
+
+    fireEvent.click(screen.getByRole("button", { name: "통화" }));
+    expect(screen.getByRole("listbox")).toBeTruthy();
+    expect(stack()).toHaveLength(2);   // + 드롭다운 표식
+
+    // 옵션을 고르면 Select의 choose()가 onChange(다이얼로그도 같이 닫음) 뒤
+    // setOpen(false)를 부른다 — Dialog와 Select 둘 다 이 한 번의 클릭으로, 같은
+    // 커밋에서 닫힌다.
+    fireEvent.click(screen.getByRole("option", { name: "둘째" }));
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    act(() => { vi.advanceTimersByTime(1); });   // 두 정리 타이머 모두 실행되는 시점
+
+    // 핵심 단정 1: back()이 "두 번" 불려야 한다 — 표식이 두 개였으니 실제 history
+    // 항목도 두 개 소비돼야 한다. 고쳐지기 전 코드는 여기서 정확히 한 번만 부른다
+    // (바깥이 안쪽 밑에 묻힌 것으로 착각해 replaceState 경로를 타기 때문이다 —
+    // window.history.state가 아직 안쪽의 미착지 back()을 반영하지 못한 옛 값이라
+    // 바깥은 자기 위에 안쪽이 있다고 오판한다) — 그러면 바깥 자신의 history 항목이
+    // 하나 안 팝힌 채 남아, 나중에 물리적 뒤로가기 한 번이 아무것도 못 닫고
+    // 소비된다(§10 위반: 버튼/선택으로 닫았는데 뒤로가기 횟수가 밀린다).
+    expect(backSpy).toHaveBeenCalledTimes(2);
+    expect(queue).toHaveLength(2);
+
+    flushOneQueuedPopState();   // 안쪽(Select)의 back()이 착지
+    expect(stub.value).toBe("manual");   // 아직 바깥 표식이 남아 있다 — 너무 일찍 풀리면 안 된다
+
+    flushOneQueuedPopState();   // 바깥(Dialog)의 back()이 착지
+
+    // 핵심 단정 2: 두 back() 모두 착지한 뒤에는 스택이 완전히 비고 scrollRestoration도
+    // 정확히 "auto"로 복원돼야 한다. 고쳐지기 전 코드는 바깥이 replaceState 경로를
+    // 타면서 release-on-drain 리스너를 한 번도 걸지 않으므로, 여기서 "manual"에
+    // 영원히 멈춘 채로 남는다 — 사용자가 이 항목에 머무는 동안 스크롤 점프 보호
+    // 전체가 조용히 죽는다.
+    expect(stack()).toHaveLength(0);
+    expect(stub.value).toBe("auto");
+  });
+});
+
 describe("B2: A가 닫히며 B의 표식을 뽑는 문제", () => {
   const optionsX = [{ value: "x", label: "엑스" }];
 
