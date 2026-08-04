@@ -30,8 +30,17 @@
  * overflow를 자르는 조상(사이드바 슬롯, 스크롤 카드) 안에서 쓰세요. */
 .app-select-menu.app-select-menu-portaled { position: fixed; z-index: 450; top: auto; right: auto; bottom: auto; left: auto; }
 .app-select-menu button { width: 100%; min-height: 34px; padding: 7px 10px; border: 0; border-radius: 6px; color: var(--text); background: transparent; font-size: var(--font-size-control); text-align: left; white-space: normal; overflow-wrap: anywhere; }
-/* 선택됐지만 호버되지 않은 상태는 조용한 처리 — 호버는 surfaces.css가 담당 */
-.app-select-menu button.selected:not(:hover):not(:focus-visible) { color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 78%, transparent); font-weight: 700; }
+/* 고를 수 없는 옵션. 값은 킷의 다른 disabled 표면과 같다(controls.css:22, dialog.css:88).
+ * 옵션은 배경이 투명하므로 opacity가 결과적으로 글씨를 흐리게 만든다.
+ * 이게 없으면 방향키가 이 옵션을 건너뛰는 것이 결함으로 보인다 — 똑같이 생겼으니까. */
+.app-select-menu button:disabled { opacity: .55; cursor: not-allowed; }
+/* 선택됐지만 호버되지 않은 상태는 조용한 처리 — 호버는 surfaces.css가 담당.
+ * :not(:disabled)가 필요한 이유는 특이도다. 이 선택자는 (0,4,1)이고 바로 위
+ * button:disabled는 (0,2,1)이라, 값이 disabled 옵션을 가리키면 강조색이 이겨서
+ * 고를 수 없는 항목이 "선택된 항목"처럼 보인다. disabled 쪽 특이도를 올려 이기는
+ * 방법은 특이도 경쟁이 되어 다음 사람이 또 밟는다 — 여기서 아예 매칭하지 않게 한다.
+ * (16f528a가 sidebar.css에서 같은 종류의 캐스케이드 사고를 냈다.) */
+.app-select-menu button.selected:not(:hover):not(:focus-visible):not(:disabled) { color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 78%, transparent); font-weight: 700; }
 
 @media (prefers-reduced-motion: reduce) {
   .dropdown-chevron { transition: none; }

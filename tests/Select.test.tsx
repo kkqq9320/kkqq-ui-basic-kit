@@ -5,6 +5,7 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Select } from "../src/Select";
+import selectCssSource from "../css/select.css?raw";
 
 afterEach(cleanup);
 
@@ -404,6 +405,29 @@ describe("Select", () => {
       fireEvent.scroll(document);
 
       expect(screen.queryByRole("listbox")).toBeNull();   // 억제되지 않아 정상적으로 닫힌다
+    });
+  });
+
+  describe("disabled 옵션은 눈으로 구분된다", () => {
+    // jsdom은 CSS 캐스케이드를 계산하지 않으므로(레이아웃 엔진이 없다) 이 계약은
+    // 소스 텍스트로 고정한다 — AppShell.test.tsx·Dialog.test.tsx의 같은 idiom.
+    // 빈 문자열 가드가 없으면 .css?raw가 ""로 목킹되는 날 이 테스트들이 통째로
+    // 공허하게 통과한다(이 저장소에서 실제로 있었던 결함).
+    it("disabled 옵션에 시각 처리가 있다", () => {
+      expect(selectCssSource.length).toBeGreaterThan(1000);
+      expect(selectCssSource).toMatch(/\.app-select-menu button:disabled\s*\{[^}]*opacity:\s*\.55/);
+      expect(selectCssSource).toMatch(/\.app-select-menu button:disabled\s*\{[^}]*cursor:\s*not-allowed/);
+    });
+
+    // 특이도 함정: .selected 규칙이 (0,4,1)로 :disabled 규칙 (0,2,1)을 이긴다.
+    // 값이 disabled 옵션을 가리키면 강조색이 disabled 표시를 덮어써서, 고를 수 없는
+    // 항목이 "선택된 항목"처럼 보인다. 특이도를 올려 이기는 대신 .selected가
+    // disabled를 아예 매칭하지 않게 한다 — 의미가 맞는 쪽이다.
+    it(".selected 규칙이 disabled를 제외한다", () => {
+      expect(selectCssSource.length).toBeGreaterThan(1000);
+      const selectedRule = selectCssSource.match(/\.app-select-menu button\.selected[^{]*\{/);
+      expect(selectedRule).not.toBeNull();
+      expect(selectedRule![0]).toMatch(/:not\(:disabled\)/);
     });
   });
 });
