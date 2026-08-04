@@ -311,6 +311,31 @@ describe("Select", () => {
 
       menu.remove();
     });
+
+    // 방향키 위(Task 4)가 정확히 이 분기(optionTop < menu.scrollTop)에 의존한다.
+    // 위 두 테스트는 전부 menu.scrollTop = 0에서 시작하므로 이 분기가 한 번도
+    // 실행되지 않는다 — 위쪽 끝에 맞추는 줄을 `menu.scrollTop = optionTop - 100;`으로
+    // 바꿔도 전체 테스트가 그대로 통과한다(계측으로 확인). 화면 아래쪽으로 충분히
+    // 스크롤한 채로 맨 위(index 0)로 올라가면, offsetTop(=MENU_PADDING=6)에
+    // 정확히 맞춰야 한다.
+    it("활성 옵션이 위로 벗어나면 위쪽 끝에만 맞춘다", () => {
+      stubMenuLayout(MANY_OPTIONS.length);
+      const menu = document.createElement("div");
+      menu.className = "app-select-menu";
+      for (const option of MANY_OPTIONS) {
+        const button = document.createElement("button");
+        button.setAttribute("role", "option");
+        menu.appendChild(button);
+      }
+      document.body.appendChild(menu);
+      menu.scrollTop = 500;   // 목록 아래쪽 — 목록 끝보다는 한참 위, index 0의 offsetTop보다는 한참 아래
+
+      scrollActiveOptionIntoView(menu as HTMLDivElement, 0);
+      expect(menu.scrollTop).toBe(6);
+      expect(MENU_PADDING).toBe(6);   // 산술이 상수와 어긋나면 여기서 먼저 걸린다
+
+      menu.remove();
+    });
   });
 
   describe("스크롤로 트리거가 화면에서 멀어지면 닫힌다 (DateWheelPicker와 같은 동작 — §16.4)", () => {
