@@ -118,6 +118,28 @@ let unlandedBackListenerInstalled = false;
  * 있습니다: 테스트가 어떤 back()의 popstate를 끝까지 흘려보내지 않고 끝나도(드물게
  * 있음 — 예: back()을 스텁만 하고 디스패치는 안 하는 테스트), 카운트가 다음 테스트로
  * 새어 나가 엉뚱한 판정을 만들 위험을 최소화합니다. */
+/** **테스트 전용.** 지금 카운트를 돌려주고 0으로 되돌립니다. `src/index.ts`가 명시적
+ * 재수출만 하므로 이 함수는 패키지 공개 API에 들어가지 않습니다.
+ *
+ * 왜 필요한가 — 이건 프로덕션 버그가 아니라 **테스트 위생** 장치입니다. 실제 브라우저에서
+ * 같은 문서 안의 `history.back()`은 반드시 popstate를 쏘므로(아래 useBackToClose 문서에도
+ * 같은 근거가 적혀 있습니다) 이 카운트는 항상 드레인됩니다. 하지만 테스트는 back()을
+ * 스텁해 popstate를 안 쏠 수 있고, 이 카운터는 모듈 스코프라 그 값이 **다음 테스트로
+ * 넘어갑니다**. 실측으로 확인했습니다: back()을 no-op으로 스텁한 테스트가 1을 남겼고
+ * 다음 테스트가 1로 시작했습니다.
+ *
+ * 노출 창구는 좁습니다 — 팝업이 표식을 push하는 순간 아래에서 0으로 되돌리므로(이 파일의
+ * push 분기), 렌더가 한 번 일어나면 스스로 낫습니다(같은 실측에서 render 직후 0). 그래서
+ * 이건 조용히 리셋해 덮을 게 아니라 **터뜨려야 할 문제**입니다: 테스트가 자기가 부른
+ * back()을 착지시키지 않았다는 사실 자체가 그 테스트의 결함이고, 다른 테스트를 오염시키기
+ * 전에 그 자리에서 드러나야 합니다. 그래서 읽기와 리셋을 한 함수로 묶어, afterEach가
+ * `toBe(0)`으로 범인을 지목하는 동시에 다음 테스트는 무조건 깨끗하게 시작하게 합니다. */
+export function takeUnlandedBackCountForTest(): number {
+  const value = unlandedBackCount;
+  unlandedBackCount = 0;
+  return value;
+}
+
 function callBackTracked() {
   unlandedBackCount++;
   if (!unlandedBackListenerInstalled) {
