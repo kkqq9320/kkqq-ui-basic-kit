@@ -99,6 +99,11 @@ function findKeyboardKeepVisibleAncestor(focused: HTMLElement, scrollRoot: HTMLE
  * 하므로, 토큰이 바뀌면 이 값도 같이 바꾸세요. */
 const KEYBOARD_SCROLL_ANIMATION_MS = 400;
 
+/** 키보드가 올라오는 동안 비주얼 뷰포트가 조용해지기를 기다리는 시간(ms). 이 시간
+ * 안에 다음 변화가 오면 다시 처음부터 셉니다 — 그래서 실제 발화는 "마지막 변화로부터
+ * 이만큼 지난 뒤" 한 번뿐입니다. 자세한 근거는 이 값을 쓰는 이펙트의 주석에. */
+const KEYBOARD_VIEWPORT_SETTLE_MS = 80;
+
 /** 키보드가 닫힌 뒤, 예약 여백(floor)을 실제로 처음 계산하기까지 기다리는 시간(ms).
  * #root는 height:100dvh라(tokens.css), 닫히는 전환 도중 dvh가 잠깐 더 큰 뷰포트를
  * 기준으로 재계산되면서 clientHeight가 실제보다 부풀려 읽히는 프레임이 실기기
@@ -505,9 +510,26 @@ function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId =
   // reposition() 안에서 cancelPendingScroll() 후 지금(presentation) scrollTop을
   // 새로 읽어 새 목표로 다시 겨냥합니다 — 리스너를 다시 달지 않으므로 그 재조준 외에
   // 다른 부수효과는 없습니다.
+  // **뷰포트가 멈춘 뒤에 잽니다.** owner 실기기 트레이스 2026-08-04: 안드로이드는 키보드가
+  // 올라올 때 레이아웃을 줄이는 대신 비주얼 뷰포트를 팬합니다(vpTop 0→329). 팬은 그
+  // 자체로 필드를 드러내는데, 예전에는 이 이펙트가 팬이 시작되기도 전의 지오메트리로
+  // over를 재고 곧장 스크롤을 시작해 둘이 겹쳤습니다. 같은 캡처 안에 대조군이 있습니다:
+  //   팬이 있던 사이클  over=121에서 출발 → 브라우저가 329 팬 → 최종 over=-243 (목표 0)
+  //   팬이 없던 사이클  over=62에서 출발  → 킷이 62 스크롤   → 최종 over=0   (정확)
+  // 닫을 때 되돌리지 않는 계약(§9) 때문에 그 초과분은 영구히 남아, 열고 닫을 때마다
+  // 페이지가 조금씩 위로 밀렸습니다(st 877→912→936→998에서 수렴).
+  //
+  // 공식은 이미 팬을 반영합니다(visibleBottom = offsetTop + height) — 틀린 건 **시점**
+  // 뿐이었습니다. 그래서 매 팬 단계마다 재지 않고, 뷰포트가 조용해진 뒤 한 번만 잽니다.
+  // 팬이 도는 동안 사용자는 브라우저가 필드를 드러내는 걸 이미 보고 있으므로 지연으로
+  // 느껴지지 않습니다(owner가 실기기에서 두 동작을 나란히 비교해 이쪽을 골랐습니다).
+  // 팬이 없는 기기는 리사이즈가 곧 끝나므로 사실상 예전과 같은 시점입니다.
   useLayoutEffect(() => {
     if (!keyboard.open) return;
-    reposition();
+    // 트레이스의 팬 단계 간격은 5~25ms, 팬 전체는 ~210ms입니다 — 그 간격은 넘고 팬 종료는
+    // 놓치지 않는 값. 매 단계가 이 타이머를 다시 걸어(cleanup) 마지막 단계에서만 발화합니다.
+    const settleTimer = window.setTimeout(reposition, KEYBOARD_VIEWPORT_SETTLE_MS);
+    return () => window.clearTimeout(settleTimer);
   }, [keyboard.open, keyboard.inset, scrollRootId]);
 }
 

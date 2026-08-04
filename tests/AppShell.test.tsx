@@ -1320,6 +1320,44 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     expect(shellHasHoldingMarker(root)).toBe(false);   // floor가 0이므로 마커도 없다 — 트랜지션이 정상적으로 걸린다.
   });
 
+  it("팬이 도는 동안에는 스크롤하지 않고, 뷰포트가 멈춘 뒤의 지오메트리로 한 번만 잰다 — owner 실기기 트레이스 2026-08-04", async () => {
+    // 안드로이드는 키보드를 올릴 때 레이아웃을 줄이는 대신 비주얼 뷰포트를 팬한다
+    // (트레이스 vpTop 0→329). 팬 자체가 필드를 드러내므로, 팬 전 지오메트리로 재고 곧장
+    // 스크롤하면 브라우저와 이중으로 밀어 올린다. 닫을 때 되돌리지 않는 계약(§9) 때문에
+    // 그 초과분이 영구히 남아, 열고 닫을 때마다 페이지가 조금씩 위로 밀렸다(실기기
+    // st 877→912→936→998에서 수렴). 근거 전체는 src/AppShell.tsx의
+    // KEYBOARD_VIEWPORT_SETTLE_MS를 쓰는 이펙트 주석에.
+    //
+    // **이 테스트가 실제로 가르는 것.** 팬만으로 이미 충분해서 킷이 스크롤할 이유가
+    // 전혀 없는 배치를 쓴다:
+    //   팬 전  visBot = 0   + 653 = 653 → over = 696 - 653 + 24 = +67  (예전 동작은 여기서 움직인다)
+    //   팬 후  visBot = 329 + 653 = 982 → over = 696 - 982 + 24 = -262 (움직일 이유가 없다)
+    // 그러므로 올바른 최종 스크롤량은 정확히 0이고, 팬 전에 재던 동작은 67이다 — 이 단언은
+    // "무엇을 계산하느냐"가 아니라 **언제 재느냐**에만 반응한다. 이 브랜치에서 실패할 수
+    // 없는 테스트가 이미 네 번 나왔으므로, 고침을 빼면 실제로 빨개지는지 확인하고 넣었다.
+    installReducedMotionPreference();   // 트윈 대신 즉시 대입 — 타이밍이 아니라 "얼마나 갔나"만 본다
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 1059 });
+    const viewport = installFakeVisualViewport(1060);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottomFollowingScroll(textarea, 696, root);   // 킷이 스크롤하면 rect도 따라 올라간다
+
+    textarea.focus();
+    viewport.openKeyboard(407);
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(true));
+
+    // 팬은 실기기처럼 여러 단계로 온다 — 각 단계가 settle 타이머를 다시 건다.
+    for (const offsetTop of [14, 112, 268, 329]) {
+      (window.visualViewport as unknown as { offsetTop: number }).offsetTop = offsetTop;
+      window.visualViewport!.dispatchEvent(new Event("resize"));
+      await waitFor(() => expect(parseFloat(keyboardInsetOf(root))).toBe(1059 - (offsetTop + 653)));
+    }
+
+    await new Promise((resolve) => { window.setTimeout(resolve, 250); });   // settle 창구(80ms)보다 넉넉히
+
+    expect(root.scrollTop).toBe(0);
+  });
+
   it("예약 여백이 0인 팬 방식 기기에서도, 닫히는 한 프레임의 clientHeight 부풀림이 뷰포트를 깎지 못한다 — owner 실기기 트레이스 2026-08-04", async () => {
     // 트레이스가 확정한 값들을 그대로 쓴다(네 사이클, 산술이 ±1px로 일치):
     //   #root는 height:100dvh(tokens.css:134). 닫히는 한 프레임에 dvh가 더 큰 뷰포트
