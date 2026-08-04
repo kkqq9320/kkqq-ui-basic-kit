@@ -39,9 +39,25 @@ const KEYBOARD_SCROLL_GAP = 24;
  * 실제로는 킷과 다른 대상을 보고 있을 수 있습니다. */
 const KEYBOARD_KEEP_VISIBLE_ATTR = "data-keyboard-keep-visible";
 
-/** src/AppShell.tsx:19의 KEYBOARD_SCROLL_ANIMATION_MS(400ms) + 여유. 리컴포짓 직후
- * 바로 재보면 애니메이션이 진행 중인 프레임을 "모자란다"로 오판할 수 있어, 트윈이
- * 다 끝났을 시점까지 기다렸다가 "실제로 도달한" 위치를 잰다. */
+/** src/AppShell.tsx의 KEYBOARD_SCROLL_ANIMATION_MS(400ms) + 여유 — **원래 근거는
+ * 반쪽이었고, 아래가 지금 맞는 설명이다.**
+ *
+ * 킷은 이벤트가 온 순간에 재지 않는다. KEYBOARD_VIEWPORT_SETTLE_MS(80ms)만큼
+ * 디바운스해서 **마지막 이벤트로부터 80ms 지난 뒤 딱 한 번** reposition()한다
+ * (AppShell.tsx:527의 focusin 경로, :563의 open/inset 경로 — 둘 다 매 이벤트가
+ * 타이머를 다시 건다). 그러면 트윈은 이벤트+80ms에 시작해 이벤트+480ms에 끝나는데
+ * 이 창구는 450ms라, 측정 시점의 트윈 진행률은 (450-80)/400 = 0.925다.
+ *
+ * **그 때문에 생기는 오차 자체는 무시할 만하다.** repositionEase는
+ * cubic-bezier(.32,.72,0,1)이고 ease(0.925) = 0.99944 — 도달률 오차 0.06%로,
+ * 1000px 스크롤에서도 0.6px이다. (ledger에 "achΔ가 healthy 사이클에서 ~8% 모자라
+ * 보인다"고 적혀 있던 건 **선형 이징을 가정한 책상 계산**이었다: 1-0.925 = 7.5%.
+ * 킷은 선형 이징을 쓰지 않는다. 실제 기기 캡처에 남은 개창 방향 수치는
+ * reqΔ=239 achΔ=91, reqΔ=359 achΔ=134로 도달률 38%/37%지, 92%가 아니다 —
+ * 그 격차는 트윈이 덜 끝나서가 아니라 아래 logKeyboardMath 주석의 이유 때문이다.)
+ *
+ * **그러므로 진짜 결함은 이 창구의 길이가 아니라 reqΔ를 재는 시점이다.** 480ms로
+ * 넓혀봐야 0.06%밖에 달라지지 않는다. 아래 logKeyboardMath 주석을 반드시 같이 읽을 것. */
 const SETTLE_MS = 450;
 
 /** 닫힘 해제(useReleasableKeyboardInset)를 프레임 단위로 따라가는 창구의 길이.
@@ -227,8 +243,45 @@ function snapshotKeyboardMath(label: string, target: string | undefined): Keyboa
   return { text, scrollTop, maxScroll, requested };
 }
 
+/** 킷이 지금 "열림"으로 보고 있는가 — `.app-shell`의 `keyboard-inset-open`을 그대로
+ * 읽는다(snapshotKeyboardMath의 `op=`와 같은 판정). 여기서 hooks.ts의 120px 문턱을
+ * 다시 구현하지 않는 이유는 startReleaseTrace 트리거의 주석과 같다 — 재구현하면
+ * 드리프트 지점이 하나 더 는다. */
+function kitKeyboardOpen(): boolean {
+  return document.querySelector(".app-shell")?.classList.contains("keyboard-inset-open") ?? false;
+}
+
+/** 지오메트리 스냅샷 **한 줄만** 남긴다 — reqΔ/want/achΔ/clamp 짝은 붙이지 않는다.
+ *
+ * **왜 따로 있는가:** 그 짝은 "킷이 이 순간 이만큼 요청했고 그래서 이만큼 갔다"로
+ * 읽힌다. 킷에 대응하는 경로가 **아예 없는** 이벤트에 그걸 붙이면 숫자가 그럴듯한 채로
+ * 완전한 허구가 된다 — 이 파일이 이미 세 군데(GAP·마커·pin)에서 경고하는 것과 정확히
+ * 같은 종류의 조용한 오독이다. 지오메트리 자체는 여전히 유용하므로(팬이 언제 얼마나
+ * 돌았는지는 이 줄로만 보인다) 줄 자체는 남긴다. */
+function logKeyboardSnapshot(label: string, target?: string) {
+  append(snapshotKeyboardMath(label, target).text);
+}
+
 /** 트리거 시점 스냅샷을 즉시 한 줄 남기고, 450ms 뒤(§ SETTLE_MS) 다시 재서
  * "요청한 스크롤 대비 실제 달성한 스크롤"을 두 번째 줄에 덧붙인다.
+ *
+ * ⚠️ **reqΔ는 킷이 실제로 요청한 값이 아니다 — 시점이 다르다.** 이 함수는 이벤트가 온
+ * "그 순간"의 지오메트리로 over를 계산하는데, 킷은 그 순간에 재지 않고
+ * KEYBOARD_VIEWPORT_SETTLE_MS(80ms) 디바운스 뒤 **마지막 이벤트로부터 80ms 지나 한 번만**
+ * 잰다(위 SETTLE_MS 주석). 안드로이드 팬은 5~25ms 간격으로 ~210ms 이어지므로 개창 한 번에:
+ *     패널   viewport 이벤트마다 트리거+settle 두 줄 → 20~80줄, 각자 다른 reqΔ
+ *     킷     reposition() 1회                       → 요청은 단 하나
+ * 즉 중간 줄들의 reqΔ는 **킷이 한 번도 요청한 적 없는 값**이며, 팬이 아직 도는 중의
+ * 지오메트리로 계산돼 실제보다 크다. 그래서 achΔ가 reqΔ에 한참 못 미쳐 보인다(실기기
+ * 캡처: reqΔ=239 achΔ=91, reqΔ=359 achΔ=134 — 도달률 38%/37%). 이건 킷이 못 간 게 아니라
+ * **브라우저의 팬이 그 차이를 이미 처리했기 때문**이고, 80ms 디바운스는 바로 그 이중
+ * 보정을 없애려고 넣은 것이다(AppShell.tsx:545-558). 트윈이 덜 끝나서 생기는 몫은
+ * 0.06%뿐이라 이 격차를 설명하지 못한다.
+ *
+ * **결론: 개창 방향 판단의 근거로 이 짝을 쓰지 말 것.** 팬도 트윈도 끝나 있는 마지막
+ * settle 줄의 `stNow`/`over=`만 신뢰할 수 있다. 이 짝을 무엇으로 대체할지는 아직
+ * 미결이다 — 킷의 디바운스를 여기 또 복제할 것인가(미러 하나 추가), 아니면 닫힘 쪽
+ * startReleaseTrace처럼 scrollTop을 프레임 단위로 관찰할 것인가(미러 하나 제거).
  *
  * 안드로이드 두 단계 리사이즈(53ms 간격)처럼 트리거가 겹치면, 이 타이머 하나의
  * achΔ 안에도 "다른" 트리거가 그 사이에 만든 스크롤이 섞여 들어갈 수 있다 — 이걸
@@ -425,11 +478,24 @@ export function installEventTrace() {
   // 옮겨갔는지를 놓치면 그 판정의 절반을 볼 수 없다. document.activeElement는 focusout
   // 시점에 이미 새 대상으로 넘어가 있을 수 있어(스펙상 그렇다) event.target을 tgt=로
   // 따로 남긴다 — foc=는 항상 "지금" document.activeElement, tgt=는 "이 이벤트가 가리키는" 요소.
+  // focusin에서 req/ach 짝을 붙이는 건 **킷이 열림으로 보고 있을 때뿐**이다.
+  // 킷의 focusin 리스너는 `if (!keyboard.open) return` 안쪽에서만 등록된다
+  // (AppShell.tsx:511,529) — 닫힌 상태의 focusin(= 필드를 처음 탭해 키보드를 부르는,
+  // 가장 흔한 경로)에는 그 리스너가 **아예 달려 있지도 않다**. 그 자리에 reqΔ를 찍으면
+  // 킷이 부르지도 않은 계산을 킷의 판단인 양 보여주게 된다. 그 개창의 실제 보정은
+  // 잠시 뒤 keyboard.open이 켜지면서 두 번째 이펙트(:559)가 하고, 그건 그때의 viewport
+  // 이벤트 줄로 잡힌다.
   document.addEventListener("focusin", (event) => {
-    logKeyboardMath("focusin", describeTarget(event.target));
+    const target = describeTarget(event.target);
+    if (kitKeyboardOpen()) logKeyboardMath("focusin", target);
+    else logKeyboardSnapshot("focusin(kb닫힘)", target);
   }, { passive: true });
+  // focusout에는 킷에 대응하는 경로가 **하나도 없다** — reposition()을 부르는 곳은
+  // focusin 리스너(:529)와 open/inset 이펙트(:563) 둘뿐이고 어느 쪽도 focusout을 듣지
+  // 않는다. 그러니 여기 붙던 reqΔ/want/achΔ/clamp는 열림 여부와 무관하게 전부 허구였다.
+  // 지오메트리 줄만 남긴다 — 포커스가 언제 어디서 빠졌는지는 여전히 봐야 한다.
   document.addEventListener("focusout", (event) => {
-    logKeyboardMath("focusout", describeTarget(event.target));
+    logKeyboardSnapshot("focusout", describeTarget(event.target));
   }, { passive: true });
 
   append(`trace installed  reduce=${reduceMotionState()}  ua=${truncate(navigator.userAgent, 90)}`);

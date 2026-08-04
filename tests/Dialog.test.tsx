@@ -355,6 +355,15 @@ describe("Dialog", () => {
     // 순간이동시키면 그 자체가 비대칭이자 실기기가 신고한 "두 단계로 뚝뚝 끊어짐"의
     // 실제 원인이다. jsdom은 실제 CSS cascade/트랜지션을 계산하지 않으므로(레이아웃
     // 엔진이 없다) 이 계약은 소스 텍스트로 고정해 회귀를 잡는다.
+    // .css?raw가 빈 문자열로 목킹되면 아래 .not.toMatch는 **아무것도 검증하지 않은 채
+    // 통과한다** — 이 브랜치에서 실제로 있었던 결함이다(0726277이 vitest의
+    // test.css.include 기본값 때문에 CSS 계약 테스트가 통째로 공허하게 통과하던 걸
+    // 고쳤다). 그 인프라 수정은 소스를 진짜로 읽히게 만들었을 뿐, 이 단언 자체를
+    // 의미 있게 만들지는 않는다 — 다시 빈 문자열이 되는 날 이 테스트는 조용히 초록으로
+    // 돌아간다. AppShell.test.tsx:437과 같은 idiom으로 그 구멍을 막는다.
+    // (같은 파일 :372,:390의 계약들은 .match() + .not.toBeNull()이라 스스로 막혀 있다 —
+    //  가드가 없던 건 이 한 줄뿐이다.)
+    expect(dialogCssSource.length).toBeGreaterThan(1000);
     expect(dialogCssSource).not.toMatch(/keyboard-inset-open\)\s*\.dialog-backdrop\s*\{\s*transition:\s*none/);
   });
 
