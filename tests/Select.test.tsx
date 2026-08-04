@@ -613,5 +613,42 @@ describe("Select", () => {
 
       expect(document.activeElement).toBe(screen.getByRole("option", { name: "첫째" }));
     });
+
+    it("Tab은 메뉴를 닫고 포커스를 트리거에 남긴다 — 문서 처음으로 튀지 않게", () => {
+      render(<ControlledSelect initialValue="a" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "첫째" }));
+
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "Tab" });
+
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    it("옵션은 tab 순서에서 빠진다 — 활성 하나만 0이고 나머지는 -1", () => {
+      // ARIA listbox 계약: 옵션이 개별적으로 tab 순서에 들어가면 안 된다.
+      // 이게 깨지면 옵션 50개짜리 Select에서 다음 필드까지 Tab을 50번 눌러야 한다.
+      render(<ControlledSelect initialValue="a" />);
+      fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });
+
+      const tabIndexes = screen.getAllByRole("option").map((option) => option.getAttribute("tabindex"));
+      expect(tabIndexes.filter((value) => value === "0")).toHaveLength(1);
+      expect(tabIndexes.filter((value) => value === "-1")).toHaveLength(OPTIONS.length - 1);
+    });
+
+    it("Escape는 값을 바꾸지 않고 닫으며 포커스를 트리거로 돌려준다", () => {
+      const onChange = vi.fn();
+      render(<Select ariaLabel="항목" value="a" options={OPTIONS} onChange={onChange} />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "ArrowDown" });
+
+      fireEvent.keyDown(document, { key: "Escape" });
+
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(onChange).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(trigger);
+    });
   });
 });
