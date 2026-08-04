@@ -2,8 +2,22 @@
  * 필요한 CSS: tokens.css, sidebar.css, page.css
  *
  * 데스크톱은 [사이드바 | 작업 영역] 2열 그리드, 모바일은 단일 열 + 오프캔버스 서랍.
- * 상태는 전부 controlled입니다. navHidden/keyboardOpen은 hooks.ts의
- * useScrollDirectionHidden / useVirtualKeyboardOpen을 그대로 넣으면 됩니다.
+ * navHidden/keyboardOpen은 hooks.ts의 useScrollDirectionHidden /
+ * useVirtualKeyboardOpen을 그대로 넣으면 됩니다.
+ *
+ * **프롭은 controlled지만 이 컴포넌트가 상태 없이 도는 건 아닙니다.** 한때 여기와
+ * README에 "상태는 전부 controlled입니다"라고 적혀 있었는데, 모바일 가상 키보드 보정이
+ * 들어오면서 사실이 아니게 됐습니다: AppShell은 스스로 visualViewport를 구독하고
+ * (useVirtualKeyboard), 포커스된 필드를 키보드 위로 올리려고 `#root`를 **직접
+ * 스크롤하며**, 닫히는 창구 동안에는 `#root`의 height까지 잠깐 붙듭니다. 소비 앱이
+ * 넘기는 값들은 여전히 controlled이지만, 뷰포트에 반응하는 이 동작은 프롭으로 끄거나
+ * 대체할 수 없습니다.
+ *
+ * **절 번호 표기.** 이 파일에서 문서 이름 없이 쓰는 `§16.2`, `§14`, `§16.4`는 **Apple
+ * 인터페이스 원칙**의 절 번호입니다(§16.2 Agency, §14 reduced-motion, §16.4 Familiarity).
+ * 이 킷의 계약인 `PRINCIPLES.md`는 §1~§12뿐이고, 그쪽을 가리킬 때는 항상
+ * "`PRINCIPLES.md` §9"처럼 문서 이름을 붙입니다 — 안 그러면 PRINCIPLES에서 §16.2를
+ * 찾다가 없어서 헤매게 됩니다.
  */
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
