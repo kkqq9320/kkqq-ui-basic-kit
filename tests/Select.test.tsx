@@ -496,4 +496,87 @@ describe("Select", () => {
       expect(selectedRule![0]).toMatch(/:not\(:disabled\)/);
     });
   });
+
+  describe("키보드로 조작한다", () => {
+    it("닫힌 상태에서 ↓를 누르면 열리고 현재 값이 활성이 된다", () => {
+      render(<ControlledSelect initialValue="b" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+
+      expect(screen.getByRole("listbox")).toBeTruthy();
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "둘째" }));
+    });
+
+    it("선택값이 없으면 첫 선택 가능한 옵션이 활성이 된다", () => {
+      render(<ControlledSelect />);
+      fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });
+
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "첫째" }));
+    });
+
+    it("↓가 disabled 옵션을 건너뛴다", () => {
+      render(<ControlledSelect initialValue="a" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+
+      // OPTIONS = a, b, c(disabled). a에서 ↓는 b로.
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "ArrowDown" });
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "둘째" }));
+
+      // b에서 ↓는 c가 disabled라 갈 곳이 없다 — 제자리.
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "ArrowDown" });
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "둘째" }));
+    });
+
+    it("Home과 End가 양 끝의 선택 가능한 옵션으로 간다", () => {
+      render(<ControlledSelect initialValue="b" />);
+      fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });
+
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "Home" });
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "첫째" }));
+
+      // 마지막(셋째)은 disabled라 End는 둘째로 간다.
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "End" });
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "둘째" }));
+    });
+
+    it("Enter가 활성 옵션을 고르고 닫고 포커스를 트리거로 돌려준다", () => {
+      render(<ControlledSelect initialValue="a" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "ArrowDown" });
+
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "Enter" });
+
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(trigger.textContent).toBe("둘째");
+    });
+
+    it("Ctrl+↓와 Meta+↓는 무시한다 — 브라우저 단축키를 뺏지 않는다", () => {
+      render(<ControlledSelect />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+
+      fireEvent.keyDown(trigger, { key: "ArrowDown", ctrlKey: true });
+      expect(screen.queryByRole("listbox")).toBeNull();
+
+      fireEvent.keyDown(trigger, { key: "ArrowDown", metaKey: true });
+      expect(screen.queryByRole("listbox")).toBeNull();
+    });
+
+    it("Alt+↓는 ↓와 똑같이 연다 — 네이티브 select 습관", () => {
+      render(<ControlledSelect />);
+      fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown", altKey: true });
+
+      expect(screen.getByRole("listbox")).toBeTruthy();
+    });
+
+    it("선택 가능한 옵션이 없으면 방향키가 아무것도 하지 않는다", () => {
+      const allDisabled = [{ value: "a", label: "첫째", disabled: true }];
+      render(<Select ariaLabel="항목" value="" options={allDisabled} onChange={() => undefined} />);
+
+      fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });
+      expect(screen.queryByRole("listbox")).toBeNull();
+    });
+  });
 });

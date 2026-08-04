@@ -13,6 +13,7 @@ import { createPortal } from "react-dom";
 
 import { useBackToClose, useEscapeToClose } from "./hooks";
 import { captureScrollSnapshot, dropdownViewportSpace, isPrimaryButton, restoreFocusWithoutScroll, shouldOpenDropdownAbove, type ScrollSnapshot } from "./positioning";
+import { firstEnabledValue, initialActiveValue, lastEnabledValue, stepEnabledValue } from "./selectKeyboard";
 
 export type SelectOption = { value: string; label: string; disabled?: boolean };
 
@@ -90,6 +91,8 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
   const [open, setOpen] = useState(false);
   const [openAbove, setOpenAbove] = useState(false);
   const [position, setPosition] = useState<MenuPosition | null>(null);
+  // 지금 방향키로 짚고 있는 옵션의 value. 닫혀 있으면 null입니다.
+  const [activeValue, setActiveValue] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -254,11 +257,79 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
     scrollSelectedOptionIntoView(menu);
   }, [open, position]);
 
+  // 변형 A(roving tabindex): 활성 옵션에 **진짜 포커스**를 준다. 기존 :focus-visible
+  // 하이라이트(surfaces.css:24)가 그대로 동작하므로 CSS를 건드리지 않는다.
+  // preventScroll을 쓰는 이유는 restoreFocusWithoutScroll과 같다 — 네이티브 포커스
+  // 스크롤은 조상까지 움직인다. 메뉴 안 스크롤은 아래에서 직접 한다.
+  useLayoutEffect(() => {
+    if (!open || activeValue === null) return;
+    const menu = menuRef.current;
+    if (!menu) return;
+    const activeIndex = options.findIndex((option) => option.value === activeValue);
+    if (activeIndex === -1) return;
+    (menu.children[activeIndex] as HTMLElement | undefined)?.focus({ preventScroll: true });
+    scrollActiveOptionIntoView(menu, activeIndex);
+  }, [open, activeValue, options]);
+
+  /**
+   * 트리거와 메뉴 **양쪽에** 붙는 하나의 핸들러입니다. 변형 A(roving tabindex)에서는
+   * 열려 있는 동안 포커스가 옵션에 있으므로 이벤트가 메뉴에서 버블링돼 오고, 닫혀
+   * 있으면 트리거에서 옵니다. 둘 중 포커스를 가진 쪽만 이벤트를 받으므로 중복 처리는
+   * 일어나지 않습니다.
+   */
+  function handleKeyDown(event: React.KeyboardEvent) {
+    // Ctrl·Meta가 눌린 키는 건드리지 않습니다 — 브라우저·OS 단축키입니다.
+    // Alt와 Shift는 검사하지 않으므로, 네이티브 <select> 습관대로 Alt+↓를 눌러도
+    // 그냥 ↓로 처리돼 열립니다. 그래서 Alt+↓를 위한 별도 분기가 없습니다.
+    if (event.ctrlKey || event.metaKey) return;
+    const key = event.key;
+
+    if (!open) {
+      if (key !== "ArrowDown" && key !== "ArrowUp" && key !== "Enter" && key !== " ") return;
+      const initial = initialActiveValue(options, value);
+      if (initial === null) return;   // 선택 가능한 옵션이 하나도 없다 — 열지 않습니다
+      // <button>은 Enter를 keydown에서, Space를 keyup에서 click으로 바꿉니다.
+      // 여기서 막지 않으면 그 click이 트리거의 onClick과 겹쳐 곧바로 다시 닫습니다.
+      event.preventDefault();
+      setActiveValue(initial);
+      setOpen(true);
+      return;
+    }
+
+    if (key === "Tab") {
+      // 기본 동작(다음 요소로 이동)은 막지 않습니다. 다만 변형 A에서는 포커스가
+      // 옵션(포털이면 body 끝)에 있어서, 그냥 닫으면 포커스한 요소가 언마운트되며
+      // 포커스가 body로 떨어지고 Tab이 문서 처음부터 시작합니다. keydown은 기본 Tab
+      // 동작보다 먼저 실행되므로, 여기서 트리거로 옮겨 두면 브라우저가 트리거 기준으로
+      // 다음 tabbable을 계산합니다.
+      triggerRef.current?.focus({ preventScroll: true });
+      setOpen(false);
+      return;
+    }
+
+    if (key === "Enter" || key === " ") {
+      event.preventDefault();   // 옵션 <button>의 네이티브 click과 겹치지 않게
+      if (activeValue !== null) choose(activeValue);
+      return;
+    }
+
+    let next: string | null = null;
+    if (key === "ArrowDown") next = stepEnabledValue(options, activeValue, 1);
+    else if (key === "ArrowUp") next = stepEnabledValue(options, activeValue, -1);
+    else if (key === "Home") next = firstEnabledValue(options);
+    else if (key === "End") next = lastEnabledValue(options);
+    else return;
+
+    event.preventDefault();   // 방향키가 페이지를 스크롤하지 않게
+    if (next !== null) setActiveValue(next);
+  }
+
   function choose(nextValue: string) {
     const scrollSnapshot = selectionScrollRef.current.length ? selectionScrollRef.current : captureScrollSnapshot();
     selectionScrollRef.current = [];
     onChange(nextValue);
     setOpen(false);
+    setActiveValue(null);
     // 유령 click은 아래 rAF(포커스 복원)와 같은 프레임에서 나오는 것으로 보이므로,
     // 여기서 곧바로 풀면(같은 프레임) 아직 안 왔을 수 있다(실측 24ms). 한 프레임
     // 더 미뤄서 푼다 — 프레임 기준이라 느린 기기에서는 같이 늘어나 여유가 준다.
@@ -278,12 +349,13 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
     aria-label={ariaLabel}
     style={portal && position ? { top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight } : undefined}
     onPointerDownCapture={() => { selectionScrollRef.current = captureScrollSnapshot(); }}
+    onKeyDown={handleKeyDown}
   >
-    {options.map((option) => <button type="button" role="option" aria-selected={option.value === value} className={option.value === value ? "selected" : ""} disabled={option.disabled} key={option.value} onClick={() => choose(option.value)}>{option.label}</button>)}
+    {options.map((option) => <button type="button" role="option" aria-selected={option.value === value} tabIndex={option.value === activeValue ? 0 : -1} className={option.value === value ? "selected" : ""} disabled={option.disabled} key={option.value} onClick={() => choose(option.value)}>{option.label}</button>)}
   </div>;
 
   return <div className={`app-select dropdown-align-${align} ${open ? "open" : ""} ${openAbove ? "drop-up" : ""} ${className}`.trim()} ref={rootRef}>
-    <button ref={triggerRef} type="button" className="app-select-trigger" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} disabled={disabled} onClick={() => {
+    <button ref={triggerRef} type="button" className="app-select-trigger" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} disabled={disabled} onKeyDown={handleKeyDown} onClick={() => {
       if (suppressReopenRef.current) { suppressReopenRef.current = false; return; }   // 유령 click 삼키기 — 토글하지 않는다
       setOpen((current) => !current);
     }}><span>{selected?.label || placeholder}</span><i className="dropdown-chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></i></button>
