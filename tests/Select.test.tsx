@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Select } from "../src/Select";
+import { Select, scrollActiveOptionIntoView } from "../src/Select";
 import selectCssSource from "../css/select.css?raw";
 
 afterEach(cleanup);
@@ -269,6 +269,47 @@ describe("Select", () => {
 
       expect(scrollIntoView).not.toHaveBeenCalled();
       delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    });
+
+    it("활성 옵션이 아래로 벗어나면 아래쪽 끝에만 맞춘다 — 가운데로 튀지 않는다", () => {
+      stubMenuLayout(MANY_OPTIONS.length);
+      const menu = document.createElement("div");
+      menu.className = "app-select-menu";
+      for (const option of MANY_OPTIONS) {
+        const button = document.createElement("button");
+        button.setAttribute("role", "option");
+        menu.appendChild(button);
+      }
+      document.body.appendChild(menu);
+      menu.scrollTop = 0;
+
+      // 인덱스 10은 MENU_CAP 아래에 있다. 가운데 정렬이면 훨씬 크게 움직인다.
+      // stubMenuLayout의 offsetTop은 MENU_PADDING + index * ROW_HEIGHT다 —
+      // MENU_PADDING을 빼먹으면 6px 어긋난다.
+      scrollActiveOptionIntoView(menu as HTMLDivElement, 10);
+      const expected = MENU_PADDING + 11 * ROW_HEIGHT - MENU_CAP;   // 6 + 374 - 320 = 60
+      expect(menu.scrollTop).toBe(60);
+      expect(expected).toBe(60);   // 산술이 상수와 어긋나면 여기서 먼저 걸린다
+
+      menu.remove();
+    });
+
+    it("활성 옵션이 이미 보이면 스크롤을 건드리지 않는다", () => {
+      stubMenuLayout(MANY_OPTIONS.length);
+      const menu = document.createElement("div");
+      menu.className = "app-select-menu";
+      for (const option of MANY_OPTIONS) {
+        const button = document.createElement("button");
+        button.setAttribute("role", "option");
+        menu.appendChild(button);
+      }
+      document.body.appendChild(menu);
+      menu.scrollTop = 0;
+
+      scrollActiveOptionIntoView(menu as HTMLDivElement, 0);
+      expect(menu.scrollTop).toBe(0);
+
+      menu.remove();
     });
   });
 

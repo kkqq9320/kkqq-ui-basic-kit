@@ -59,6 +59,31 @@ function scrollSelectedOptionIntoView(menu: HTMLDivElement) {
   menu.scrollTop = Math.min(Math.max(0, centered), maxScrollTop);
 }
 
+/**
+ * 활성 옵션이 메뉴 안에 보이도록 **최소한만** 옮깁니다.
+ *
+ * `scrollSelectedOptionIntoView`(위)와 다른 점은 **가운데로 맞추지 않는다**는 것입니다.
+ * 그쪽은 열 때 한 번 도는 거라 가운데가 자연스럽지만, 방향키는 한 칸씩 움직이므로
+ * 매번 가운데로 재정렬하면 목록이 손가락보다 크게 튑니다.
+ *
+ * `Element.scrollIntoView()`를 쓰지 않는 이유는 `scrollSelectedOptionIntoView`와
+ * 같습니다 — 조상 스크롤 컨테이너까지 함께 움직여 다이얼로그 뒤 페이지가 튑니다.
+ * `tests/Select.test.tsx`가 이 계약을 고정하고 있습니다.
+ *
+ * 값이 아니라 **인덱스**를 받는 이유: 옵션은 `options` 순서 그대로 렌더되므로
+ * `menu.children[index]`가 정확히 대응합니다. 값으로 찾으면 선택자 이스케이프가
+ * 필요하고(`CSS.escape`는 jsdom에 없습니다) 이득이 없습니다.
+ */
+export function scrollActiveOptionIntoView(menu: HTMLDivElement, activeIndex: number) {
+  const option = menu.children[activeIndex] as HTMLElement | undefined;
+  if (!option) return;
+  const menuHeight = menu.clientHeight;
+  const optionTop = option.offsetTop;
+  const optionBottom = optionTop + option.offsetHeight;
+  if (optionTop < menu.scrollTop) { menu.scrollTop = optionTop; return; }
+  if (optionBottom > menu.scrollTop + menuHeight) menu.scrollTop = optionBottom - menuHeight;
+}
+
 type MenuPosition = { top: number; left: number; width: number; maxHeight: number };
 
 export function Select({ value, options, onChange, ariaLabel, placeholder = "선택하세요", align = "left", className = "", disabled = false, portal = false, mobileBottomInset = 78 }: SelectProps) {
