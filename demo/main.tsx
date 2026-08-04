@@ -53,6 +53,95 @@ function HistoryLogPanel() {
   </Panel>;
 }
 
+type KeyboardInspectorSnapshot = { focus: string; focusVisible: string; background: string };
+
+/** 지금 열려 있는 Select 트리거 하나를 찾는다. 메뉴가 아니라 **트리거**를 기준으로
+ * 삼는 이유: 포털 모드 메뉴는 body 맨 끝에 따로 렌더되어 document 순서가 "실제로
+ * 열려 있는 것"과 무관하지만, 트리거는 열려 있는 동안만 aria-expanded="true"를
+ * 달기 때문에(Select.tsx:404) 자기 상태를 스스로 증명한다. */
+function findOpenSelectTrigger(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[aria-haspopup="listbox"][aria-expanded="true"]');
+}
+
+/** 트리거의 aria-controls가 그 트리거의 메뉴 id를 가리킨다(Select.tsx:405) — 이걸
+ * 따라가면 portal 여부와 무관하게 정확히 그 Select의 메뉴를 얻는다. */
+function findOpenSelectMenu(trigger: HTMLElement): HTMLElement | null {
+  const menuId = trigger.getAttribute("aria-controls");
+  return menuId ? document.getElementById(menuId) : null;
+}
+
+/** 활성 옵션을 키트 내부 로직을 베끼지 않고 DOM에 이미 나와 있는 표식으로만 찾는다:
+ * roving 변형은 tabindex="0", descendant 변형은 .active 클래스, 혹은 트리거의
+ * aria-activedescendant가 가리키는 요소 — Select.tsx가 실제로 쓰는 세 가지 표식 그대로다. */
+function findActiveOption(menu: HTMLElement, trigger: HTMLElement): HTMLElement | null {
+  const descendantId = trigger.getAttribute("aria-activedescendant");
+  if (descendantId) {
+    const byId = document.getElementById(descendantId);
+    if (byId) return byId;
+  }
+  return menu.querySelector<HTMLElement>('[tabindex="0"]') ?? menu.querySelector<HTMLElement>(".active");
+}
+
+function readKeyboardInspectorSnapshot(): KeyboardInspectorSnapshot {
+  const trigger = findOpenSelectTrigger();
+  const menu = trigger ? findOpenSelectMenu(trigger) : null;
+  if (!trigger || !menu) return { focus: "-", focusVisible: "-", background: "-" };
+  const activeOption = findActiveOption(menu, trigger);
+
+  const activeElement = document.activeElement;
+  let focus: string;
+  if (activeElement === trigger) focus = "trigger";
+  else if (activeOption && activeElement === activeOption) focus = "option";
+  else if (activeElement === document.body) focus = "body";
+  // 표식이 가리키는 옵션과는 다르지만 포커스가 메뉴 안에 있는 경우 — 표식과 실제
+  // 포커스가 어긋났다는 뜻이라 "other"로 뭉개지 않고 따로 알린다. 이게 바로 이
+  // 계측기가 잡아내야 할 종류의 드리프트다.
+  else if (activeElement && menu.contains(activeElement)) focus = "option*";
+  else focus = "other";
+
+  // 오래된 엔진은 :focus-visible 자체를 모르는 가상 클래스로 보고 matches()에서 던진다 — "?"로 보고한다.
+  let focusVisible = "-";
+  if (activeOption) {
+    try {
+      focusVisible = String(activeOption.matches(":focus-visible"));
+    } catch {
+      focusVisible = "?";
+    }
+  }
+
+  const background = activeOption ? getComputedStyle(activeOption).backgroundColor : "-";
+
+  return { focus, focusVisible, background };
+}
+
+/** 키보드 변형 A/B 계측 판독기 — 데모 전용, A/B 스위치 옆에 작게 붙인다.
+ *
+ * 이게 왜 필요한가: 폰에서는 메뉴를 여는 동작이 항상 탭이고, roving 변형(A)은 그
+ * 클릭 핸들러가 실행한 useLayoutEffect 안에서 활성 옵션에 **프로그램적으로**
+ * 포커스를 준다(Select.tsx:274-291). Chromium과 WebKit은 스크립트로 준 포커스에는
+ * :focus-visible을 잘 안 붙이는 경향이 있어서, 그 결과 A가 실제로는 옅은 .selected
+ * 스타일로만 보이고 descendant 변형(B, .active — React가 모달리티와 무관하게 직접
+ * 붙이는 클래스)만 또렷하게 보일 수 있다. 이 차이는 두 아키텍처의 본질이 아니라
+ * 브라우저 휴리스틱이 만든 착시일 수 있다 — 소유자가 눈으로만 보고 고르면 이 착시를
+ * "B가 더 낫다"로 오해할 수 있다. 그래서 눈이 아니라 계측으로 판단하도록, 지금
+ * 포커스가 어디 있는지·:focus-visible이 실제로 맞는지·어떤 하이라이트 규칙이 이겨서
+ * 실제로 적용됐는지(계산된 배경색)를 그대로 보여준다. 열린 메뉴가 없으면 "-"로 비워 둔다.
+ */
+function KeyboardModeInspector() {
+  const [snapshot, setSnapshot] = useState<KeyboardInspectorSnapshot>(readKeyboardInspectorSnapshot);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setSnapshot(readKeyboardInspectorSnapshot()), 200);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return <span style={{ display: "flex", gap: 8, fontSize: 11, fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace", color: "var(--muted)" }}>
+    <span>foc={snapshot.focus}</span>
+    <span>fv={snapshot.focusVisible}</span>
+    <span>bg={snapshot.background}</span>
+  </span>;
+}
+
 function Glyph({ d }: { d: string[] }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true">{d.map((path, index) => <path d={path} key={index} />)}</svg>;
 }
@@ -121,6 +210,8 @@ function Demo() {
   const [currency, setCurrency] = useState("krw");
   const [centered, setCentered] = useState("krw");
   const [long, setLong] = useState("item-0");
+  // A/B 비교용 임시 토글 — 소유자가 고르면 이것과 진 변형을 같이 지웁니다.
+  const [keyboardActiveMode, setKeyboardActiveMode] = useState<"roving" | "descendant">("roving");
   const [date, setDate] = useState("2026-07-23");
   const [optionalDate, setOptionalDate] = useState("");
   const [memo, setMemo] = useState("");
@@ -163,7 +254,7 @@ function Demo() {
         slot={<>
           <small>작업 공간</small>
           {/* 슬롯이 접기 애니메이션 때문에 overflow를 자르므로 portal 필수 */}
-          <Select ariaLabel="작업 공간" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} portal />
+          <Select ariaLabel="작업 공간" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} portal keyboardActiveMode={keyboardActiveMode} />
           <button type="button" className="text-button">+ 새로 만들기</button>
         </>}
         sections={[
@@ -200,11 +291,17 @@ function Demo() {
         {historyProbeEnabled() && <HistoryLogPanel />}
         <SectionHeading title="컨트롤" description="입력·드롭다운·날짜는 41px, 표준 액션은 38px, 조밀한 액션은 32px입니다. 같은 문맥의 버튼은 반드시 같은 높이를 씁니다." />
         <Panel title="드롭다운" hint="SELECT">
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+            <strong style={{ fontSize: 12 }}>키보드 변형</strong>
+            <button type="button" onClick={() => setKeyboardActiveMode("roving")} aria-pressed={keyboardActiveMode === "roving"}>A: roving</button>
+            <button type="button" onClick={() => setKeyboardActiveMode("descendant")} aria-pressed={keyboardActiveMode === "descendant"}>B: descendant</button>
+            <KeyboardModeInspector />
+          </div>
           <div className="demo-grid">
-            <label>왼쪽 정렬 (기본)<Select ariaLabel="통화" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} /></label>
-            <label>가운데 정렬<Select ariaLabel="가운데 정렬 통화" align="center" value={centered} options={SHORT_OPTIONS} onChange={setCentered} /></label>
-            <label>긴 목록 (위로 열림 확인)<Select ariaLabel="긴 목록" value={long} options={LONG_OPTIONS} onChange={setLong} /></label>
-            <label>비활성<Select ariaLabel="비활성 드롭다운" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} disabled /></label>
+            <label>왼쪽 정렬 (기본)<Select ariaLabel="통화" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} keyboardActiveMode={keyboardActiveMode} /></label>
+            <label>가운데 정렬<Select ariaLabel="가운데 정렬 통화" align="center" value={centered} options={SHORT_OPTIONS} onChange={setCentered} keyboardActiveMode={keyboardActiveMode} /></label>
+            <label>긴 목록 (위로 열림 확인)<Select ariaLabel="긴 목록" value={long} options={LONG_OPTIONS} onChange={setLong} keyboardActiveMode={keyboardActiveMode} /></label>
+            <label>비활성<Select ariaLabel="비활성 드롭다운" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} disabled keyboardActiveMode={keyboardActiveMode} /></label>
           </div>
         </Panel>
         <Panel title="날짜 피커" hint="DATE WHEEL">
@@ -281,7 +378,7 @@ function Demo() {
       <p className="muted-copy">입력칸을 눌러 키보드를 올린 채 위아래로 스크롤해 보세요.</p>
       {LONG_DIALOG_FIELDS.map((field, index) => {
         const key = `${field.kind}-${index}`;
-        if (field.kind === "select") return <label key={key}>{field.label}<Select ariaLabel={field.label} value={currency} options={SHORT_OPTIONS} onChange={setCurrency} portal /></label>;
+        if (field.kind === "select") return <label key={key}>{field.label}<Select ariaLabel={field.label} value={currency} options={SHORT_OPTIONS} onChange={setCurrency} portal keyboardActiveMode={keyboardActiveMode} /></label>;
         if (field.kind === "date") return <label key={key}>{field.label}<DateWheelPicker ariaLabel={field.label} value={date} onChange={setDate} /></label>;
         if (field.kind === "memo") return <label key={key}>{field.label}<AutoGrowTextarea value={memo} onChange={setMemo} maxLength={500} ariaLabel={field.label} placeholder={field.placeholder} /></label>;
         return <label key={key}>{field.label}<input inputMode={field.numeric ? "numeric" : undefined} placeholder={field.placeholder} /></label>;
