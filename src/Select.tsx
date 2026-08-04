@@ -8,7 +8,7 @@
  * 자르는 요소(사이드바 슬롯, 스크롤 카드, 테이블 래퍼)가 있으면 메뉴가 잘리므로
  * 그럴 때 portal을 켜세요. body에 fixed로 붙고 스크롤·리사이즈를 따라갑니다.
  */
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { useBackToClose, useEscapeToClose } from "./hooks";
@@ -32,6 +32,10 @@ export type SelectProps = {
   portal?: boolean;
   /** portal일 때 모바일에서 하단 고정 바를 피하려고 비워둘 높이. */
   mobileBottomInset?: number;
+  /** **임시 prop — A/B 비교가 끝나면 삭제됩니다.** 활성 옵션을 어떻게 나타낼지:
+   * `"roving"`은 옵션에 진짜 포커스를 주고(기본), `"descendant"`는 포커스를 트리거에
+   * 두고 `aria-activedescendant`로 가리킵니다. 소비 앱에서 쓰지 마세요. */
+  keyboardActiveMode?: "roving" | "descendant";
 };
 
 /** 옵션 한 줄 34px + 메뉴 패딩 12px. 메뉴가 아직 없을 때 높이 추정에 씁니다. */
@@ -87,12 +91,16 @@ export function scrollActiveOptionIntoView(menu: HTMLDivElement, activeIndex: nu
 
 type MenuPosition = { top: number; left: number; width: number; maxHeight: number };
 
-export function Select({ value, options, onChange, ariaLabel, placeholder = "선택하세요", align = "left", className = "", disabled = false, portal = false, mobileBottomInset = 78 }: SelectProps) {
+export function Select({ value, options, onChange, ariaLabel, placeholder = "선택하세요", align = "left", className = "", disabled = false, portal = false, mobileBottomInset = 78, keyboardActiveMode = "roving" }: SelectProps) {
   const [open, setOpen] = useState(false);
   const [openAbove, setOpenAbove] = useState(false);
   const [position, setPosition] = useState<MenuPosition | null>(null);
   // 지금 방향키로 짚고 있는 옵션의 value. 닫혀 있으면 null입니다.
   const [activeValue, setActiveValue] = useState<string | null>(null);
+  const optionIdBase = useId();
+  // 인덱스로 만듭니다 — value에는 선택자·id에서 escape가 필요한 문자가 올 수 있고,
+  // 옵션은 options 순서 그대로 렌더되므로 인덱스가 안정적입니다.
+  const optionId = (index: number) => `${optionIdBase}-${index}`;
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -261,15 +269,20 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
   // 하이라이트(surfaces.css:24)가 그대로 동작하므로 CSS를 건드리지 않는다.
   // preventScroll을 쓰는 이유는 restoreFocusWithoutScroll과 같다 — 네이티브 포커스
   // 스크롤은 조상까지 움직인다. 메뉴 안 스크롤은 아래에서 직접 한다.
+  //
+  // 변형 B(aria-activedescendant)는 keyboardActiveMode="descendant"로 같은 이펙트를
+  // 공유한다 — activeValue·스크롤 계산이 완전히 같고, 다른 건 포커스를 옮기느냐뿐이다.
   useLayoutEffect(() => {
     if (!open || activeValue === null) return;
     const menu = menuRef.current;
     if (!menu) return;
     const activeIndex = options.findIndex((option) => option.value === activeValue);
     if (activeIndex === -1) return;
-    (menu.children[activeIndex] as HTMLElement | undefined)?.focus({ preventScroll: true });
+    // descendant 모드에서는 포커스를 옮기지 않습니다 — 트리거에 머무는 것이 그 변형의
+    // 요점입니다. 스크롤은 두 모드 모두 필요합니다.
+    if (keyboardActiveMode === "roving") (menu.children[activeIndex] as HTMLElement | undefined)?.focus({ preventScroll: true });
     scrollActiveOptionIntoView(menu, activeIndex);
-  }, [open, activeValue, options]);
+  }, [open, activeValue, options, keyboardActiveMode]);
 
   /**
    * 트리거와 메뉴 **양쪽에** 붙는 하나의 핸들러입니다. 변형 A(roving tabindex)에서는
@@ -347,6 +360,11 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
     });
   }
 
+  // 트리거의 aria-activedescendant에 쓸 인덱스. 옵션마다 findIndex를 부르면 옵션 수의
+  // 제곱이 되므로 렌더 앞에서 한 번만 구한다 — options.map의 index는 그대로 옵션
+  // 렌더에 쓴다.
+  const activeIndex = activeValue === null ? -1 : options.findIndex((option) => option.value === activeValue);
+
   const menu = <div
     ref={menuRef}
     className={`app-select-menu dropdown-menu-surface${portal ? " app-select-menu-portaled" : ""}${portal && openAbove ? " drop-up" : ""}`}
@@ -356,18 +374,39 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
     onPointerDownCapture={() => { selectionScrollRef.current = captureScrollSnapshot(); }}
     onKeyDown={handleKeyDown}
   >
-    {options.map((option) => <button type="button" role="option" aria-selected={option.value === value} tabIndex={option.value === activeValue ? 0 : -1} className={option.value === value ? "selected" : ""} disabled={option.disabled} key={option.value} onClick={() => choose(option.value)}>{option.label}</button>)}
+    {options.map((option, index) => <button
+      type="button"
+      role="option"
+      id={optionId(index)}
+      aria-selected={option.value === value}
+      tabIndex={keyboardActiveMode === "roving" && option.value === activeValue ? 0 : -1}
+      className={`${option.value === value ? "selected" : ""}${keyboardActiveMode === "descendant" && option.value === activeValue ? " active" : ""}`.trim()}
+      disabled={option.disabled}
+      key={option.value}
+      onClick={() => choose(option.value)}
+    >{option.label}</button>)}
   </div>;
 
   return <div className={`app-select dropdown-align-${align} ${open ? "open" : ""} ${openAbove ? "drop-up" : ""} ${className}`.trim()} ref={rootRef}>
-    <button ref={triggerRef} type="button" className="app-select-trigger" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} disabled={disabled} onKeyDown={handleKeyDown} onClick={() => {
-      if (suppressReopenRef.current) { suppressReopenRef.current = false; return; }   // 유령 click 삼키기 — 토글하지 않는다
-      // 마우스로 열 때도 키보드 경로와 같은 값으로 시드합니다 — 네이티브 <select>처럼
-      // 방향키가 지금 선택된 값에서 이어가게 하려면(§ 위 initialActiveValue), 닫혀 있을
-      // 때만(=지금 열려는 참일 때만) 시드해야 닫는 클릭에서 activeValue를 건드리지 않습니다.
-      if (!open) setActiveValue(initialActiveValue(options, value));
-      setOpen((current) => !current);
-    }}><span>{selected?.label || placeholder}</span><i className="dropdown-chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></i></button>
+    <button
+      ref={triggerRef}
+      type="button"
+      className="app-select-trigger"
+      aria-label={ariaLabel}
+      aria-haspopup="listbox"
+      aria-expanded={open}
+      aria-activedescendant={keyboardActiveMode === "descendant" && open && activeIndex !== -1 ? optionId(activeIndex) : undefined}
+      disabled={disabled}
+      onKeyDown={handleKeyDown}
+      onClick={() => {
+        if (suppressReopenRef.current) { suppressReopenRef.current = false; return; }   // 유령 click 삼키기 — 토글하지 않는다
+        // 마우스로 열 때도 키보드 경로와 같은 값으로 시드합니다 — 네이티브 <select>처럼
+        // 방향키가 지금 선택된 값에서 이어가게 하려면(§ 위 initialActiveValue), 닫혀 있을
+        // 때만(=지금 열려는 참일 때만) 시드해야 닫는 클릭에서 activeValue를 건드리지 않습니다.
+        if (!open) setActiveValue(initialActiveValue(options, value));
+        setOpen((current) => !current);
+      }}
+    ><span>{selected?.label || placeholder}</span><i className="dropdown-chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></i></button>
     {open && (portal ? (position ? createPortal(menu, document.body) : null) : menu)}
   </div>;
 }

@@ -21,7 +21,9 @@
   transform-origin: 50% 50%;
   transition: transform var(--motion-fast) ease, color var(--motion-fast) ease, background-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
 }
-:where(.app-select-menu) button:is(:hover, :focus-visible):not(:disabled) {
+/* .active는 aria-activedescendant 변형용입니다 — 그 변형은 포커스를 트리거에 두므로
+ * :focus-visible이 옵션에서 절대 맞지 않습니다. 하이라이트가 사라지지 않게 여기 넣습니다. */
+:where(.app-select-menu) button:is(:hover, :focus-visible, .active):not(:disabled) {
   z-index: 1;
   color: var(--dropdown-option-hover-text);
   background: var(--dropdown-option-hover-background);
@@ -33,5 +35,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   :where(.app-select-menu) button { transition: none; }
-  :where(.app-select-menu) button:is(:hover, :focus-visible):not(:disabled) { transform: none; }
+  :where(.app-select-menu) button:is(:hover, :focus-visible, .active):not(:disabled) { transform: none; }
 }

@@ -662,5 +662,26 @@ describe("Select", () => {
       expect(onChange).not.toHaveBeenCalled();
       expect(document.activeElement).toBe(trigger);
     });
+
+    it("descendant 모드에서는 포커스가 트리거에 남고 aria-activedescendant가 가리킨다", () => {
+      render(<Select ariaLabel="항목" value="a" options={OPTIONS} onChange={() => undefined} keyboardActiveMode="descendant" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      trigger.focus();   // 실기기에서는 트리거에 포커스가 있어야 keydown이 도달한다 — fireEvent는 그 전제를 만들지 않는다
+
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+
+      expect(document.activeElement).toBe(trigger);
+      const activeId = trigger.getAttribute("aria-activedescendant");
+      expect(activeId).toBeTruthy();
+      expect(document.getElementById(activeId!)?.textContent).toBe("둘째");
+    });
+
+    it("descendant 모드에서 활성 옵션에 .active 클래스가 붙는다 — :focus-visible이 안 맞으므로", () => {
+      render(<Select ariaLabel="항목" value="a" options={OPTIONS} onChange={() => undefined} keyboardActiveMode="descendant" />);
+      fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });
+
+      expect(screen.getByRole("option", { name: "첫째" }).className).toContain("active");
+    });
   });
 });
