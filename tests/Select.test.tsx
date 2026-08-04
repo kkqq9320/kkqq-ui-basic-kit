@@ -24,6 +24,18 @@ function ControlledPortalSelect({ initialValue = "" }: { initialValue?: string }
   return <Select ariaLabel="항목" value={value} options={OPTIONS} onChange={setValue} portal />;
 }
 
+/** jsdom은 getBoundingClientRect를 항상 0으로 주므로 직접 덮어써야 한다(tests/AppShell.test.tsx의
+ * stubRectBottom과 같은 이유). top을 바꿀 수 있게 해 "트리거가 실제로 화면에서 움직였다"를
+ * 흉내 낸다. */
+function stubRect(element: HTMLElement, top: number) {
+  let currentTop = top;
+  Object.defineProperty(element, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({ top: currentTop, left: 0, right: 100, bottom: currentTop + 40, width: 100, height: 40, x: 0, y: currentTop, toJSON() {} }),
+  });
+  return { setTop(next: number) { currentTop = next; } };
+}
+
 describe("Select", () => {
   it("shows the placeholder until something is selected", () => {
     render(<ControlledSelect />);
@@ -44,6 +56,26 @@ describe("Select", () => {
     expect(screen.getByRole("listbox", { name: "항목" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("option", { name: "둘째" }));
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(trigger.textContent).toBe("둘째");
+  });
+
+  // 실제 휴대폰 트레이스(온스크린 이벤트 추적 패널로 채집): 옵션을 한 번 탭했는데
+  // click이 두 번 온다 — 옵션 자신의 click(+120ms, menu=yes) 다음에, mousedown/mouseup
+  // 없이 트리거를 겨냥한 click이 24ms 뒤(+144ms, menu=no)에 또 온다. 이미 닫힌 뒤라
+  // :165의 무방비 토글이 그걸 "다시 열기"로 읽어 메뉴가 곧바로 재오픈됐다. 이 테스트는
+  // 그 순서(옵션 click → 트리거 click, 같은 한 번의 탭)를 그대로 재현한다.
+  it("does not let a same-tap phantom click on the trigger reopen the menu after choosing an option", () => {
+    render(<ControlledSelect />);
+    const trigger = screen.getByRole("button", { name: "항목" });
+
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("option", { name: "둘째" }));
+    expect(screen.queryByRole("listbox")).toBeNull();
+
+    // 같은 탭이 만든 두 번째(유령) click — 실기기에서 트리거를 겨냥해 온다.
+    fireEvent.click(trigger);
+
     expect(screen.queryByRole("listbox")).toBeNull();
     expect(trigger.textContent).toBe("둘째");
   });
@@ -236,6 +268,142 @@ describe("Select", () => {
 
       expect(scrollIntoView).not.toHaveBeenCalled();
       delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    });
+  });
+
+  describe("스크롤로 트리거가 화면에서 멀어지면 닫힌다 (DateWheelPicker와 같은 동작 — §16.4)", () => {
+    // DateWheelPicker는 바깥 닫기를 pointerdown으로 판정한다 — 터치가 스크롤로
+    // 이어지더라도 반드시 pointerdown(터치 시작)이 먼저 온다. 그래서 "스크롤에
+    // 닫힌다"는 실은 "스크롤을 시작하는 순간 우연히 닫히는" pointerdown의 부수
+    // 효과였다(실기기·라이브 브라우저 양쪽에서 확인: 데스크톱 wheel-스크롤로는
+    // DateWheelPicker가 전혀 닫히지 않고, 아무 스크롤 없이 pointerdown 하나만
+    // 쏴도 닫힌다). Select는 바깥 닫기를 mousedown으로 판정하는데, 스크롤로
+    // 이어지는 터치는 브라우저가 합성 mousedown/click을 만들지 않으므로 이
+    // 부작용이 없어 지금까지 스크롤에 반응하지 않았다.
+    //
+    // 정렬은 "아무 스크롤이나 닫기"가 아니라 "트리거(앵커)가 실제로 움직였는가"로
+    // 판정한다 — 무조건 닫으면 메뉴가 열리는 순간 브라우저가 트리거를 화면 안으로
+    // 스스로 스크롤시키는 경우(포커스 이동 등) 열리자마자 스스로 닫혀 버릴 위험이
+    // 있다(라이브 브라우저에서 프레임이 그려지지 않아 육안으로는 확인 못 함 — 코드
+    // 리뷰로 방어). 트리거 위치가 그대로인 스크롤(메뉴 자신의 스크롤, 무관한 스크롤,
+    // 열리는 순간의 side effect)은 닫지 않는다.
+
+    it("트리거가 화면에서 실제로 멀어지는 스크롤에는 닫힌다", () => {
+      render(<ControlledSelect />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      const rect = stubRect(trigger, 200);
+      fireEvent.click(trigger);
+      expect(screen.getByRole("listbox")).toBeTruthy();
+
+      rect.setTop(130);   // 페이지가 스크롤되어 트리거가 70px 위로 이동
+      fireEvent.scroll(document);
+
+      expect(screen.queryByRole("listbox")).toBeNull();
+    });
+
+    it("트리거 위치가 그대로인 스크롤(메뉴 자신의 스크롤이나 무관한 스크롤)은 닫지 않는다", () => {
+      render(<ControlledSelect />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      stubRect(trigger, 200);
+      fireEvent.click(trigger);
+
+      fireEvent.scroll(document);   // 트리거는 움직이지 않았다 — 열리는 순간의 side effect까지 방어
+
+      expect(screen.getByRole("listbox")).toBeTruthy();
+    });
+
+    it("메뉴 자신의 스크롤(옵션 목록)은 닫지 않는다", () => {
+      render(<ControlledSelect />);
+      fireEvent.click(screen.getByRole("button", { name: "항목" }));
+      const menu = screen.getByRole("listbox");
+
+      fireEvent.scroll(menu);
+
+      expect(screen.getByRole("listbox")).toBeTruthy();
+    });
+
+    it("모바일 스크롤 호스트(#root)가 스크롤돼 트리거가 멀어져도 닫힌다 (portal)", () => {
+      // tokens.css:101-107 — 모바일에서는 #root가 스크롤 호스트이고 document는
+      // 스크롤되지 않는다. scroll은 버블되지 않으므로 document의 capture 리스너가
+      // #root의 스크롤도 잡는지(placeMenu의 기존 리스너와 같은 전제) 확인한다.
+      const root = document.createElement("div");
+      root.id = "root";
+      document.body.appendChild(root);
+      render(<ControlledPortalSelect />, { container: root });
+      const trigger = screen.getByRole("button", { name: "항목" });
+      const rect = stubRect(trigger, 300);
+      fireEvent.click(trigger);
+      expect(screen.getByRole("listbox")).toBeTruthy();
+
+      rect.setTop(40);
+      fireEvent.scroll(root);
+
+      expect(screen.queryByRole("listbox")).toBeNull();
+      root.remove();
+    });
+  });
+
+  describe("메뉴 안에서 시작한 스와이프는 체이닝돼 페이지가 스크롤돼도 닫지 않는다 (DateWheelPicker와 대비되는 owner 리포트)", () => {
+    // Owner: 긴 Select가 열린 채로 메뉴 위에 손가락을 대고 아래로 스와이프하면 닫혀
+    //버린다 — 스크롤하고 싶었을 뿐인데. 확인된 메커니즘: 메뉴(overflow-y: auto)가
+    // 스크롤 끝에 닿거나 애초에 스크롤할 여유가 없으면, 같은 터치 제스처가 조상
+    // 스크롤러(document/#root)로 체이닝된다. 그 조상이 실제로 스크롤되면 트리거
+    // rect도 움직이므로, 위 블록의 "트리거가 실제로 멀어지는 스크롤에는 닫힌다"
+    // 판정이 그대로 걸려 메뉴를 닫아 버린다 — 그 스크롤을 사용자가 "메뉴 안에서"
+    // 시작했다는 사실은 event.target(=document/#root)만 봐서는 알 수 없다.
+    //
+    // 구분 기준은 "이 스크롤의 target이 메뉴인가"가 아니라 "이 제스처가 메뉴
+    // 안에서 시작됐는가"다 — 제스처가 메뉴 안에서 시작해 포인터가 아직 떠 있는
+    // 동안에는, 그 제스처가 만든 어떤 체이닝된 조상 스크롤도 닫기 판정에서
+    // 제외해야 한다. DateWheelPicker의 "스와이프 시작하면 안 닫힌다"는 이 로직이
+    // 아니라 pointerdown이 바깥 클릭 판정 자체를 우연히 먼저 타는 부수 효과였다
+    // (Select.tsx 주석 참고) — 여기서는 그 사고를 재현하지 않고, 명시적으로
+    // "메뉴 안에서 시작된 포인터가 떠 있는 동안"만 억제한다.
+    it("포인터가 메뉴 안에서 눌린 채로 체이닝된 페이지 스크롤이 트리거를 움직여도 열려 있는다", () => {
+      render(<ControlledSelect />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      const rect = stubRect(trigger, 200);
+      fireEvent.click(trigger);
+      const option = screen.getByRole("option", { name: "첫째" });
+
+      fireEvent.pointerDown(option);   // 제스처가 메뉴 안에서 시작
+      rect.setTop(130);                // 체이닝으로 페이지가 스크롤돼 트리거가 70px 위로 이동
+      fireEvent.scroll(document);
+
+      expect(screen.getByRole("listbox")).toBeTruthy();   // 닫히지 않는다
+    });
+
+    it("포인터를 떼면 억제가 풀려, 이후의 실제 페이지 스크롤은 다시 정상적으로 닫는다", () => {
+      // 억제가 제스처 동안만이라는 걸 증명한다 — 영구 억제라면 이 테스트가 실패한다.
+      render(<ControlledSelect />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      const rect = stubRect(trigger, 200);
+      fireEvent.click(trigger);
+      const option = screen.getByRole("option", { name: "첫째" });
+
+      fireEvent.pointerDown(option);
+      rect.setTop(130);
+      fireEvent.scroll(document);
+      expect(screen.getByRole("listbox")).toBeTruthy();   // 아직 제스처 중 — 안 닫힘
+
+      fireEvent.pointerUp(option);
+      rect.setTop(60);   // 손을 뗀 뒤 별개의 진짜 페이지 스크롤이 트리거를 또 움직인다
+      fireEvent.scroll(document);
+
+      expect(screen.queryByRole("listbox")).toBeNull();   // 이번엔 정상적으로 닫힌다
+    });
+
+    it("메뉴 밖에서 시작한 포인터는 억제하지 않는다 — 손가락이 메뉴 밖이면 그대로 닫힌다", () => {
+      render(<ControlledSelect />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      const rect = stubRect(trigger, 200);
+      fireEvent.click(trigger);
+
+      fireEvent.pointerDown(document.body);   // 메뉴 밖에서 시작한 포인터
+      rect.setTop(130);
+      fireEvent.scroll(document);
+
+      expect(screen.queryByRole("listbox")).toBeNull();   // 억제되지 않아 정상적으로 닫힌다
     });
   });
 });

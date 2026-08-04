@@ -39,8 +39,48 @@
 .empty { padding: 26px 0; color: var(--muted); text-align: center; }
 
 @media (max-width: 760px), (hover: none) and (pointer: coarse) {
-  /* 위쪽 74px은 떠 있는 컨트롤 줄(28~66px) 자리, 아래는 고정 바(60px + 여백) 자리 */
-  .workspace { padding: 74px 16px calc(102px + env(safe-area-inset-bottom)); }
+  /* 위쪽 74px은 떠 있는 컨트롤 줄(28~66px) 자리, 아래는 고정 바(60px + 여백) 자리.
+   * --keyboard-inset(AppShell.tsx)은 가상 키보드가 열렸을 때만 0이 아니고, 그만큼
+   * 스크롤 가능한 여유를 더 만들어 줍니다 — 이 패딩 자체는 아무것도 움직이지
+   * 않고, AppShell의 useKeyboardScrollCompensation이 실제로 스크롤을 옮깁니다. */
+  .workspace { padding: 74px 16px calc(102px + env(safe-area-inset-bottom) + var(--keyboard-inset, 0px)); }
+  /* 키보드가 닫힐 때만 이 패딩을 부드럽게 줄인다(§4 배치 전환: damping 1.0, 오버슈트
+   * 없음). 열릴 때는 절대 걸면 안 된다 — AppShell.tsx의 useKeyboardScrollCompensation이
+   * 같은 프레임(useLayoutEffect) 안에서 곧장 scrollTop을 미는데, 패딩이 트랜지션
+   * 중이면 그 순간의 레이아웃은 아직 늘어나지 않은 옛 값 기준이라 scrollTop 증가분이
+   * 그대로 clamp돼 포커스 필드가 다시 가려진다. .keyboard-inset-open은 AppShell이
+   * keyboard.open과 같은 렌더에서만 붙이는 내부 전용 마커라, 키보드가 진짜 열려 있는
+   * 동안은 이 선택자가 매치되지 않아 트랜지션 자체가 없다 — 닫히는 순간(마커가
+   * 떨어지는 순간)에야 매치되어 트랜지션이 붙는다.
+   *
+   * .keyboard-inset-holding도 같은 이유로 걸러야 한다 — 전체 브랜치 리뷰 Finding 1.
+   * AppShell.tsx의 useReleasableKeyboardInset은 닫힌 뒤에도 지금 scrollTop이 예약된
+   * 여백에 기대고 있으면 --keyboard-inset을 곧장 0으로 떨어뜨리지 않고 여러 스크롤
+   * 틱에 걸쳐 조금씩 걷어낸다(지연 해제, releaseFloor > 0). 이 지연 해제 계산은
+   * "지금 화면에 실제로 그려진 padding-bottom"이 "막 커밋한 목표값"과 같다는 전제로
+   * scrollHeight를 읽는다(그 훅의 문서 참고) — 그런데 이 트랜지션이 걸려 있으면
+   * 그 전제가 최대 400ms 동안 깨진다: --keyboard-inset이 새 목표로 바뀌어도
+   * scrollHeight는 아직 옛(더 큰) padding 쪽에 머물러, naturalMax가 그 차이만큼
+   * 과대평가되고 candidate가 과소평가된다. 사용자가 스크롤을 전혀 안 했는데도
+   * 예약된 여백이 저절로 줄거나(§16.2 Agency 위반) 심하면 그 사이클의 예약이 통째로
+   * 0으로 무너진다. AppShell은 releaseFloor > 0인 동안만(즉 "마지막 한 걸음"으로
+   * 정확히 0에 도달하기 전까지) 이 마커를 붙이므로, 지연 해제가 진행되는 내내
+   * 트랜지션 자체를 꺼서 rendered와 target이 항상 같게 만든다.
+   *
+   * **이 트랜지션은 더 이상 지연 해제의 실제 시각적 완만함을 만드는 쪽이 아니다.**
+   * AppShell.tsx의 useReleasableKeyboardInset은 이제 recompute()가 정한 목표까지
+   * JS(animateFloorTo, --motion-reposition/--sidebar-ease를 그대로 재사용)로 직접
+   * 여러 프레임에 걸쳐 값을 옮긴다 — 그 전체 구간 내내 .keyboard-inset-holding이
+   * 붙어 있으므로 위 트랜지션은 그동안 단 한 번도 실제로 걸리지 않는다. 마커가
+   * 떨어지는 순간엔 값이 이미 그 JS 애니메이션으로 목표(대개 정확히 0)에 도달해
+   * 있으므로, 이 트랜지션이 넘겨받는 건 사실상 변화가 없거나(0→0) 반올림 오차 수준의
+   * 마지막 1~2px뿐이다 — 육안으로 뭔가 "줄어드는" 걸 이 트랜지션이 보여주는 경우는
+   * 이제 거의 없다. 그럼에도 이 규칙 자체는 남겨 둔다: (1) 지오메트리를 아예 알 수
+   * 없는 경우(clientHeight <= 0, 레이아웃 없는 환경 — useReleasableKeyboardInset 문서
+   * 참고)는 렌더 단계에서 곧장 0으로 떨어지며 JS 애니메이션을 거치지 않는데, 그 경우
+   * 이 트랜지션이 유일한 완만함의 원천이고, (2) 이 규칙이 없으면 그 사이 어떤 경로로든
+   * 마커 없이 값이 바뀌는 경우 다시 하드컷이 된다 — 안전망으로 유지한다. */
+  .app-shell:not(.keyboard-inset-open):not(.keyboard-inset-holding) .workspace { transition: padding-bottom var(--motion-reposition) var(--sidebar-ease); }
   .page-header { grid-template-rows: 14px minmax(39px, auto) minmax(44px, auto); }
   /* 모바일에서는 떠 있는 컨트롤이 한 줄을 통째로 차지하고 헤더는 그 아래에서
    * 시작하므로 제목 오른쪽을 비울 필요가 없습니다. 폭을 깎으면 제목이 감겨
@@ -66,4 +106,13 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .page-action-button { transition: none; }
+  /* 위 .app-shell:not(.keyboard-inset-open):not(.keyboard-inset-holding) .workspace와
+   * 문자 그대로 같은 선택자여야 한다 — 특이도가 같아야 소스 순서(이 블록이 파일
+   * 뒤쪽)로 이긴다. 두 선택자 모두 클래스 4개(.app-shell, :not() 둘, .workspace)라
+   * 특이도는 (0,4,0)으로 동일하다. 특이도가 낮은 `.workspace { transition: none; }`만
+   * 써서는 안 된다: 16f528a에서 바로 이 실수로 sidebar.css의 감춤 트랜지션이
+   * reduced-motion 아래서도 계속 돌아 접근성 회귀가 났었다. 줄이는 게 아니라 아예
+   * 없애야 한다(§14) — 이 축소는 애초에 코드가 만드는 유일한 움직임이라 "짧게"가
+   * 아니라 "0"이어야 한다. */
+  .app-shell:not(.keyboard-inset-open):not(.keyboard-inset-holding) .workspace { transition: none; }
 }

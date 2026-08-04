@@ -13,8 +13,60 @@
  *   "키보드가 열렸나"를 CSS가 알 필요가 없습니다.
  *   align-items에 safe를 붙여, 다이얼로그가 영역보다 커지면 가운데 대신 위쪽에
  *   붙습니다(가운데 정렬은 넘칠 때 위쪽이 잘려 닿을 수 없게 됩니다).
+ *
+ * top/height 트랜지션 (키보드가 열리거나 닫힐 때 백드롭이 다시 커지거나 줄어드는
+ * 것을 부드럽게):
+ *   §10은 백드롭이 "지금 보이는 영역"에 정확히 맞아야 한다고 요구할 뿐, 거기 어떻게
+ *   도착하는지는 요구하지 않습니다. 트랜지션 없이는 top/height가 한 프레임에
+ *   최종값으로 뛰어, 다이얼로그가 새 중앙으로 순간이동합니다(§4 위반 — 아무 관성도
+ *   없는데 하드컷). 그래서 top/height만 트랜지션합니다(damping 1.0, response 0.4 —
+ *   오버슈트 없이 자리 잡음): left/width는 넣지 않습니다 — 그건 화면 회전에서도
+ *   바뀌는데, 회전 중인 레이아웃을 400ms에 걸쳐 보간하는 건 옳지 않습니다.
+ *
+ *   예전에는 `body:has(.keyboard-inset-open)`가 붙어 있는 동안(AppShell.tsx가
+ *   keyboard.open일 때만 붙이는 내부 마커) 이 트랜지션을 통째로 껐습니다 — "키보드가
+ *   실제로 열리는 순간엔 즉각 반응이 응답성 있게 느껴진다(§1)"는 논리였습니다. 실제로는
+ *   그 반대가 사실로 드러났습니다: 다이얼로그가 이미 뜬 채로 키보드가 열리면(자동
+ *   포커스가 흔한 경로입니다), 백드롭이 "먼저 전체 화면으로 그려졌다가 → 키보드가
+ *   열리며 순간이동으로 줄어드는" 두 단계로 보였고, 이게 바로 실기기가 신고한 "두번
+ *   탁탁 끊어져서 올라가는" 결함이었습니다(§7 Spatial consistency 위반이기도 합니다 —
+ *   키보드가 "닫힐 때"는 이미 이 트랜지션으로 부드럽게 커지는데 "열릴 때"만 하드컷이면
+ *   열림·닫힘 경로가 비대칭입니다). 다이얼로그가 마운트되기 "전"부터 키보드가 열려 있던
+ *   경우(진짜 즉시성이 필요할 수 있는 경우)는 `useVisualViewportBox()`가 이제 첫 렌더에서
+ *   동기적으로 올바른 값을 계산하므로(hooks.ts) 마운트 후에 값이 바뀌는 일 자체가 없어
+ *   트랜지션 유무가 아무 차이도 만들지 않습니다 — 그래서 이 가드를 완전히 없앴습니다.
+ *
+ * 스크림을 ::before로 분리(전체 브랜치 리뷰 Finding 2, "성장 방향 구멍"):
+ *   위 top/height 트랜지션은 "줄어드는" 방향(키보드가 열림)에서는 안전합니다 — 백드롭
+ *   자신의 박스가 실제 보이는 영역보다 늦게(더 크게) 줄어도, 그 여분은 키보드 뒤에
+ *   가려 아무도 못 봅니다. 문제는 반대 방향입니다: 보이는 영역이 "커질" 때(키보드가
+ *   닫히거나 주소창이 늘어날 때) top/height는 400ms에 걸쳐 새 값까지 자라는데, 그 동안
+ *   실제로 그려진 박스는 아직 다 못 자란 상태입니다 — 새로 드러난 영역이 트랜지션이
+ *   끝날 때까지 안 덮입니다. 그 틈으로 뒤 페이지가 비치고(§10 위반: "지금 보이는
+ *   영역"을 항상 덮어야 함), 그 자리는 이 요소의 mousedown 핸들러가 붙은 영역 밖이라
+ *   클릭도 안 먹습니다. top/height 트랜지션을 없애면 반대 방향(키보드가 "열릴 때")
+ *   하드컷이 되돌아와 바로 위에서 고친 결함이 재발하므로 트랜지션 자체는 그대로
+ *   둡니다 — 대신 실제 스크림(틴트+블러)을 이 트랜지션과 무관한 별도 레이어로
+ *   옮깁니다. `::before`는 `top: 0; bottom: 0`(= `inset: 0`)로 항상 뷰포트 전체를
+ *   즉시(트랜지션 없이) 덮으므로, `.dialog-backdrop` 자신의 top/height가 지금 몇
+ *   px든 상관없이 이 레이어 아래로는 절대 구멍이 생기지 않습니다. 의사 요소는 실제
+ *   DOM 노드가 아니라 host(`.dialog-backdrop`) 위에서 발생하는 이벤트로 처리되므로
+ *   (`event.target`이 host입니다) 기존 `onMouseDown` 핸들러가 그대로 받습니다 — 오히려
+ *   지금까지 못 받던 성장 구간의 클릭도 이제 정상적으로 닫기로 처리됩니다(실측:
+ *   overflow-y: auto인 이 요소 안에서 position:fixed 의사 요소가 조상의 overflow에
+ *   클립되지 않고 자기 자신의 hit-test로 이어짐을 헤드리스 브라우저로 직접 확인).
+ *   `z-index: -1`은 이 스택 컨텍스트(`.dialog-backdrop`가 `position:fixed`+`z-index`로
+ *   이미 자기 스택 컨텍스트를 엽니다) 안에서만 유효합니다 — 그리드 아이템인
+ *   `.dialog`는 z-index:auto라도 CSS Grid/Flexbox의 페인트 순서 규칙상 "z-index:0인
+ *   포지션드 후손"과 같은 단계에서 그려지므로(음수 z-index보다 항상 위), 이 레이어
+ *   뒤에 안전하게 깔립니다. 블러는 여기 한 겹만 있습니다 — `.dialog-backdrop` 자신의
+ *   배경/블러를 지우고 이쪽으로 옮긴 것이지 복제한 게 아닙니다(중복이면 다이얼로그가
+ *   떠 있는 내내 8px backdrop-filter를 두 겹 합성하는 비용을 지는데, 이 레이어가
+ *   실제로 다른 값을 보여줘야 하는 순간은 400ms 성장 트랜지션 구간뿐이라 그 비용을
+ *   정당화하지 못합니다 — §12).
  */
-.dialog-backdrop { position: fixed; z-index: 200; top: 0; left: 0; width: 100%; height: 100%; display: grid; align-items: safe center; justify-items: center; overflow-y: auto; padding: 20px; background: rgba(10, 11, 24, .58); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.dialog-backdrop { position: fixed; z-index: 200; top: 0; left: 0; width: 100%; height: 100%; display: grid; align-items: safe center; justify-items: center; overflow-y: auto; padding: 20px; transition: top var(--motion-reposition) var(--sidebar-ease), height var(--motion-reposition) var(--sidebar-ease); }
+.dialog-backdrop::before { content: ""; position: fixed; inset: 0; z-index: -1; background: rgba(10, 11, 24, .58); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 /* max-height 100%는 백드롭(= 보이는 영역)의 콘텐츠 박스 기준입니다. 길어지면
  * 화면 밖으로 나가는 대신 다이얼로그 안에서 스크롤되고 키보드는 계속 보입니다. */
 .dialog { width: min(440px, 100%); max-height: 100%; display: grid; gap: 15px; padding: 22px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: 12px; color: var(--text); background: var(--surface); box-shadow: 0 24px 70px rgba(8, 9, 24, .28); }
@@ -41,4 +93,16 @@
 
 @media (max-width: 760px), (hover: none) and (pointer: coarse) {
   .dialog-backdrop { padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 특이도 확인: 위 기본 규칙의 .dialog-backdrop도 (0,1,0)이고 이 선택자도 (0,1,0)으로
+   * 같다 — 같은 특이도라면 소스 순서(이 블록이 파일 뒤쪽)로 이겨야 하므로 여기 있는
+   * 것만으로 충분하다. body:has(.keyboard-inset-open) .dialog-backdrop 변형은 더 이상
+   * 기본 규칙에도 없으므로(위 top/height 트랜지션 설명 참고) 여기서도 따로 명시할
+   * 특이도 경쟁 상대가 없다 — 16f528a가 sidebar.css에서 겪은 것과 같은 특이도 착오를
+   * 만들지 않으려면 "기본 규칙이 실제로 쓰는 선택자와 정확히 같은 선택자"를 확인하는
+   * 것이 핵심이지, 과거에 있던 선택자를 습관적으로 남겨두는 게 아니다.
+   * 줄이는 게 아니라 없애야 하므로(§14) transition 자체를 none으로 둡니다. */
+  .dialog-backdrop { transition: none; }
 }

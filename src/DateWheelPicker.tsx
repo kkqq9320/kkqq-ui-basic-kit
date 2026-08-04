@@ -342,7 +342,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
           <button type="button" className="date-wheel-step" aria-label={`${labels.units[unit]} ${labels.next}`} disabled={!shifted(unit, 1)} onClick={() => applyShift(unit, 1)}><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></button>
         </section>; })}
       </div>
-      <div className="date-wheel-actions"><button type="button" onClick={() => onChange(clampToRange(todayIn(timeZone)))}>{labels.today}</button>{allowClear && <button type="button" onClick={() => onChange("")}>{labels.clear}</button>}<button type="button" className="primary" onClick={() => { if (!value) onChange(baseValue); setOpen(false); requestAnimationFrame(() => triggerRef.current?.focus()); }}>{labels.done}</button></div>
+      <div className="date-wheel-actions"><button type="button" onClick={() => onChange(clampToRange(todayIn(timeZone)))}>{labels.today}</button>{allowClear && <button type="button" onClick={() => onChange("")}>{labels.clear}</button>}<button type="button" className="primary" onClick={() => { if (!value) onChange(baseValue); setOpen(false); requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true })); }}>{labels.done}</button></div>
     </div>, document.body)}
   </div>;
 }

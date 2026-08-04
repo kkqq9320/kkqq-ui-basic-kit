@@ -1,10 +1,23 @@
 // @vitest-environment jsdom
-
+/// <reference types="vite/client" />
+// 위 참조는 아래 `*?raw` 임포트의 타입을 준다(vite/client.d.ts의
+// `declare module '*?raw'`). CSS 소스 텍스트를 Vite의 `*?raw` 임포트로 그대로
+// 읽는다 — vitest의 기본값 `test.css.include: []`(vitest/dist/config.d.ts)는 `.css`
+// 요청(`?raw` 포함)을 전부 빈 모듈로 목(mock)하므로, 예전에는 이 파일의 CSS 계약
+// 테스트가 항상 빈 문자열만 검사해 절대 실패할 수 없었다(실측: `.json?raw`는 내용을
+// 그대로 돌려주는데 `.css?raw`는 어떤 CSS 파일이든 길이 0을 돌려줬다). 이제
+// vite.config.ts의 `test.css.include`가 `.css`(와 `?raw` 등 쿼리가 붙은 변형)를 실제
+// vite CSS 파이프라인으로 넘기므로, 이 임포트가 진짜 소스 텍스트를 돌려준다 —
+// node:fs로 직접 읽던 예전 워크어라운드(와 그걸 위해 선언했던 tests/node-fs.d.ts)는
+// 이제 불필요해 함께 지웠다.
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { flushSync } from "react-dom";
+import { createRoot } from "react-dom/client";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Dialog, DialogActions, DialogHeading, Select } from "../src";
+import dialogCssSource from "../css/dialog.css?raw";
 
 afterEach(() => { cleanup(); delete (window as { visualViewport?: unknown }).visualViewport; });
 
@@ -301,5 +314,81 @@ describe("Dialog", () => {
     render(<Basic backdropClassName="entry-help-backdrop" />);
     const backdrop = screen.getByRole("dialog").closest(".dialog-backdrop")!;
     expect(backdrop.className).toBe("dialog-backdrop entry-help-backdrop");
+  });
+
+  describe("첫 열림이 두 단계로 그려지지 않는다 (키보드가 이미 열린 상태에서 마운트)", () => {
+    // RTL의 render()는 act()로 감싸여 있어 passive effect(useEffect)까지 동기적으로
+    // 다 flush해 버린다 — "커밋은 됐지만 아직 useEffect 전" 순간을 관찰할 수 없다.
+    // 실제 브라우저에서는 그 사이에 한 프레임이 페인트된다(레이아웃 이펙트는
+    // 페인트 전, 패시브 이펙트는 페인트 후). 그 프레임을 재현하려면 React를 직접
+    // 쓰고, act() 대신 flushSync로 "커밋까지"만 동기적으로 밀어붙인 다음 실제
+    // 마이크로태스크/타이머 한 틱을 흘려보내 passive effect가 그 뒤에 도착하는지
+    // 관찰해야 한다.
+    afterEach(() => { document.body.innerHTML = ""; });
+
+    function sleep(ms: number) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    it("커밋 직후(패시브 이펙트 이전)부터 이미 올바른 위치다", async () => {
+      installFakeVisualViewport(400);
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+      const root = createRoot(container);
+
+      flushSync(() => root.render(<Basic />));
+      // 레이아웃 이펙트까지는 flushSync 안에서 이미 끝났다. 패시브 이펙트는 아직이다.
+      const backdrop = document.querySelector(".dialog-backdrop") as HTMLElement;
+      expect(backdrop.style.height).toBe("400px");   // 첫 프레임부터 이미 정확하다
+
+      await sleep(20);   // 패시브 이펙트가 붙어도 값이 바뀌지 않는다(같은 값)
+      expect(backdrop.style.height).toBe("400px");
+
+      root.unmount();
+    });
+  });
+
+  it("dialog.css는 키보드가 열려 있다고 해서 백드롭 재배치 트랜지션을 끄지 않는다 (열림·닫힘 경로가 대칭)", () => {
+    // §7 Spatial consistency: "enter and exit along the same path" — 키보드가 닫힐 때
+    // 백드롭이 다시 커지는 건 이미 애니메이션되는데, 열릴 때(다이얼로그가 이미 뜬
+    // 채로 키보드가 열리는 경우)만 body:has(.keyboard-inset-open)로 트랜지션을 꺼서
+    // 순간이동시키면 그 자체가 비대칭이자 실기기가 신고한 "두 단계로 뚝뚝 끊어짐"의
+    // 실제 원인이다. jsdom은 실제 CSS cascade/트랜지션을 계산하지 않으므로(레이아웃
+    // 엔진이 없다) 이 계약은 소스 텍스트로 고정해 회귀를 잡는다.
+    expect(dialogCssSource).not.toMatch(/keyboard-inset-open\)\s*\.dialog-backdrop\s*\{\s*transition:\s*none/);
+  });
+
+  it("백드롭의 실제 커버 영역(::before)은 top/height 트랜지션과 무관하게 항상 뷰포트 전체를 즉시 덮는다 — 전체 브랜치 리뷰 Finding 2(성장 방향 구멍)", () => {
+    // 원인(Finding 2): .dialog-backdrop 자신의 top/height는(바로 위 규칙, 46d7277)
+    // visualViewport가 커질 때(키보드가 닫히거나 주소창이 늘어날 때) 400ms에 걸쳐
+    // 새 값까지 자란다. 그 400ms 동안 실제로 그려진 박스는 아직 다 못 자란 상태라,
+    // 새로 드러난 영역이 트랜지션이 끝날 때까지 안 덮인다 — 뒤 페이지가 비치고, 그
+    // 자리는 .dialog-backdrop의 mousedown 핸들러가 붙은 영역 밖이라 클릭도 안 먹는다
+    // (§10 위반). top/height 트랜지션 자체를 없애면 46d7277이 고친 반대 방향(키보드가
+    // "열릴 때") 하드컷이 되돌아오므로 그 트랜지션은 그대로 둔다 — 대신 실제 스크림
+    // (틴트+블러)을 이 트랜지션과 무관한, 항상 뷰포트 전체를 즉시 덮는 별도 레이어
+    // (::before)로 옮긴다. jsdom은 실제 CSS 트랜지션/레이아웃을 계산하지 않으므로
+    // (46d7277의 같은 전례) 이 계약도 소스 텍스트로 고정한다.
+    const beforeBlock = dialogCssSource.match(/\.dialog-backdrop::before\s*\{([^}]*)\}/);
+    expect(beforeBlock).not.toBeNull();
+    const beforeRule = beforeBlock![1];
+
+    // 항상 뷰포트 전체 — top/height가 뭐든 상관없이 고정된 구조적 커버 영역이다.
+    expect(beforeRule).toMatch(/position:\s*fixed/);
+    expect(beforeRule).toMatch(/inset:\s*0\b/);
+    // 트랜지션이 전혀 없어야 한다 — 있으면 이 레이어도 같은 지연을 겪어 구멍이 재발한다.
+    expect(beforeRule).not.toMatch(/transition/);
+    // §10의 58% 검정 틴트 + 8px 블러가 이 레이어에 있어야, "항상 덮는 영역"과 "실제
+    // 스크림"이 같은 곳이 된다 — 틴트만 옮기고 블러를 빠뜨리면 성장 구간에서 블러
+    // 없는 틴트만 보이는 구멍이 남는다(§10은 틴트와 블러를 둘 다 공유 계약으로 못박음).
+    expect(beforeRule).toMatch(/backdrop-filter:\s*blur\(8px\)/);
+    expect(beforeRule).toMatch(/rgba\(10,\s*11,\s*24,\s*\.58\)/);
+
+    // 스크림(배경·블러)을 옮긴 것이지 복제한 게 아니다 — 부모 규칙에 그대로 남아 있으면
+    // 다이얼로그가 떠 있는 내내 8px 블러를 두 겹으로 합성하는 비용을 진다(§12: 이
+    // 레이어가 실제로 필요한 순간은 400ms 트랜지션 구간뿐이다).
+    const baseBlock = dialogCssSource.match(/\.dialog-backdrop\s*\{([^}]*)\}/);
+    expect(baseBlock).not.toBeNull();
+    expect(baseBlock![1]).not.toMatch(/backdrop-filter/);
   });
 });

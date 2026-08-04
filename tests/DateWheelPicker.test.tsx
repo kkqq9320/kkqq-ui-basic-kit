@@ -4,7 +4,7 @@
 // 접근성 이름이 원본과 100% 같으므로, 이 테스트가 통과하면 추출 과정에서
 // 동작이 바뀌지 않았다는 증거가 됩니다. 아래쪽에 props 파라미터화 테스트를 더했습니다.
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -131,6 +131,22 @@ describe("DateWheelPicker", () => {
     expect(screen.getByRole("button", { name: "날짜" }).textContent).toBe("미정");
     // 나머지는 기본값 그대로
     expect(screen.getByRole("button", { name: "날짜 오늘로 설정" })).toBeTruthy();
+  });
+
+  it("완료 버튼으로 닫으면 트리거로 포커스를 되돌리되 스크롤 위치는 건드리지 않는다 (preventScroll)", async () => {
+    // 이 focus() 호출에 preventScroll이 빠지면, 데스크톱에서 완료를 눌렀을 때
+    // 브라우저가 트리거를 보이게 하려고 페이지를 스크롤해 버린다. positioning.ts:55와
+    // 같은 컬럼의 다른 모든 focus 복귀가 지키는 규칙이다.
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();
+
+    const focusSpy = vi.spyOn(trigger, "focus");
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+
+    await waitFor(() => expect(focusSpy).toHaveBeenCalled());   // requestAnimationFrame으로 미뤄진다
+    expect(focusSpy).toHaveBeenCalledWith({ preventScroll: true });
   });
 
   it("resolves today in the supplied time zone", () => {

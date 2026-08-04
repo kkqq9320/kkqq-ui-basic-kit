@@ -21,16 +21,75 @@
 
 ## 설치
 
-**이 저장소는 비공개이므로, 키트는 프로젝트 안으로 복사해서 씁니다.** 그래야
-컨테이너·CI·다른 PC 어디서든 자격증명 없이 빌드됩니다.
+**이 저장소는 공개입니다 — 복사하지 말고 그냥 설치하세요.**
 
-복사본은 조용히 어긋나기 때문에 원래 권하지 않던 방식입니다. 그 위험은
-아래 **동기화 절차와 `KIT-VERSION` 표시**가 대신 막습니다 — 어긋남을 막을 수
-없다면, 최소한 **눈에 보이게** 만듭니다.
+```bash
+npm i github:kkqq9320/kkqq-ui-basic-kit
+```
 
-덤이 하나 있습니다. 복사하면 `PRINCIPLES.md`가 프로젝트 안에 함께 들어옵니다.
-Claude를 포함해 그 저장소에서 일하는 누구든 **저장소 접근 권한 없이 디자인 계약을
-읽을 수 있습니다.** 비공개 저장소를 의존성으로 걸었을 때는 불가능한 일입니다.
+자격증명이 필요 없으므로 컨테이너·CI·다른 PC 어디서든 그대로 빌드됩니다.
+npm 레지스트리에는 올리지 않습니다(`package.json`의 `private: true`) — 설치
+경로는 위 GitHub 지정자입니다.
+
+**CSS를 한 번 import 합니다.** (앱 진입점)
+
+```ts
+import "kkqq-ui-basic-kit/css/index.css";
+```
+
+**컴포넌트를 씁니다.**
+
+```tsx
+import { Select, DateWheelPicker, Dialog } from "kkqq-ui-basic-kit";
+```
+
+끝입니다. `fonts/`의 폰트는 `css/fonts.css`가 상대 경로로 참조하므로 번들러가
+알아서 해시·복사합니다.
+
+> **CSS import에서 타입 에러가 난다면** — `TS2882: Cannot find module or type
+> declarations for side-effect import of 'kkqq-ui-basic-kit/css/index.css'` —
+> 소비 프로젝트에 `*.css` 앰비언트 선언이 없는 것입니다. `tsconfig.json`에
+> `"types": ["vite/client"]`를 넣거나 `declare module "*.css";` 한 줄을 두세요.
+> 키트 쪽 문제가 아니라 소비 프로젝트의 타입 설정입니다.
+
+### 키트를 고쳐야 할 때 — 받은 걸 고치지 말고 저장소에서 고칩니다
+
+> ⚠️ **`node_modules/kkqq-ui-basic-kit/`를 직접 고치지 마세요.** 다음 `npm install`
+> 이나 `npm ci` 한 번에 **아무 경고 없이 사라집니다.** vendor 사본을 고치는 것보다
+> 나쁩니다 — 사본은 최소한 소비자 저장소에 커밋이라도 되지만, 이건 흔적도 안 남고
+> "어제는 됐는데"만 남습니다.
+
+고칠 일이 생기면 순서는 이렇습니다.
+
+**1. 키트 저장소에서 고칩니다.** 데모(`npm run dev`)와 테스트(`npm test`)가 여기
+있으므로, 고친 걸 실제로 확인할 수 있는 자리도 여기뿐입니다. 프로젝트마다 달라야 하는
+것은 대부분 프롭·CSS 토큰으로 해결됩니다 — 손대기 전에
+[CUSTOMIZING.md](CUSTOMIZING.md)를 먼저 보세요.
+
+**2. 커밋하고 push합니다.**
+
+**3. 소비 프로젝트의 참조를 새 커밋으로 올립니다.**
+
+```bash
+npm i github:kkqq9320/kkqq-ui-basic-kit#<새-커밋-SHA>
+```
+
+버전을 SHA로 고정해 두면 키트가 앞서 나가도 소비 프로젝트가 **자기가 정한 시점에만**
+따라갑니다 — 브랜치 이름으로 걸어 두면 남의 커밋이 예고 없이 들어옵니다. 지금
+가계부 앱이 이 방식입니다.
+
+**고치는 동안에는 로컬 링크를 씁니다.** 매번 push하고 SHA를 올리는 왕복 없이, 키트를
+고치면 소비 앱에 곧바로 반영됩니다:
+
+```bash
+npm i file:../kkqq-ui-basic-kit
+```
+
+### 복사해서 써야 한다면
+
+외부 네트워크가 막힌 빌드 환경처럼 설치가 불가능할 때만 씁니다. **기본 경로가
+아닙니다** — 사본은 조용히 어긋납니다. 아래 `KIT-VERSION` 절차는 그 어긋남을
+막지는 못하고, 최소한 **눈에 보이게** 만듭니다.
 
 **1. 키트를 `vendor/`로 복사합니다.**
 
@@ -52,22 +111,9 @@ git -C "$KIT" rev-parse HEAD > "$DEST/KIT-VERSION"
 "kkqq-ui-basic-kit": "file:vendor/kkqq-ui-basic-kit"
 ```
 
-**3. CSS를 한 번 import 합니다.** (앱 진입점)
+CSS import와 컴포넌트 사용은 위와 같습니다.
 
-```ts
-import "kkqq-ui-basic-kit/css/index.css";
-```
-
-**4. 컴포넌트를 씁니다.**
-
-```tsx
-import { Select, DateWheelPicker, Dialog } from "kkqq-ui-basic-kit";
-```
-
-끝입니다. `fonts/`의 폰트는 `css/fonts.css`가 상대 경로로 참조하므로 번들러가
-알아서 해시·복사합니다.
-
-### 동기화 — 사본이 어긋나지 않게
+#### 동기화 — 사본이 어긋나지 않게
 
 `KIT-VERSION`에는 복사 시점의 키트 커밋 SHA가 들어 있습니다. 이 파일은 **사본에만
 있고 키트 저장소에는 없습니다.**
@@ -92,20 +138,14 @@ diff -r "$KIT/css" vendor/kkqq-ui-basic-kit/css
 > 프로젝트마다 달라야 하는 것은 대부분 프롭·CSS 토큰으로 해결됩니다 —
 > [CUSTOMIZING.md](CUSTOMIZING.md)를 먼저 보세요.
 
-> **같은 PC에서 키트를 함께 고쳐 가며 쓸 때**는 복사 대신 로컬 링크가 낫습니다.
-> 자격증명이 필요 없고, 키트를 고치면 곧바로 반영됩니다:
+> **Vite에서 확인했습니다.** 새 Vite+React 앱에 설치본을 넣고 dev·`vite build`·
+> `tsc --noEmit`이 모두 통과하는 것을 확인했습니다 — `node_modules` 안의 `.tsx`가
+> 변환되고, CSS와 폰트가 번들에 실리고, 타입도 `src/`에서 그대로 해석됩니다.
 >
-> ```bash
-> npm i file:../kkqq-ui-basic-kit
-> ```
->
-> `npm i github:kkqq9320/kkqq-ui-basic-kit`도 동작하지만 저장소가 비공개라
-> **설치하는 모든 환경에 GitHub 자격증명이 필요**합니다. 도커 빌드처럼
-> 자격증명이 없는 환경에서 실패하므로 기본 경로에서 뺐습니다.
-
-> **Vite 기준입니다.** 소스(`.tsx`)를 그대로 내보내므로, `node_modules` 안의
-> TypeScript를 컴파일하지 않는 번들러(기본 설정의 Next.js, CRA 등)에서는
-> 그 설정을 열어 주거나 키트에 빌드 단계를 넣어야 합니다.
+> 다만 이 키트는 **소스를 그대로 내보내고 빌드 단계가 없습니다**(`exports`의 `.`이
+> `./src/index.ts`를 가리킵니다). `node_modules` 안의 TypeScript를 컴파일하지 않는
+> 번들러 — 기본 설정의 Next.js(`transpilePackages` 필요), CRA 등 — 에서는 그 설정을
+> 열어 주거나 키트에 빌드 단계를 넣어야 합니다. **그쪽은 확인하지 않았습니다.**
 
 ### ⚠️ 필수 전제: 앱이 `#root`에 마운트돼야 합니다
 
@@ -246,7 +286,13 @@ labels={{
 
 ### AppShell + Sidebar
 
-라우터·인증·API에 의존하지 않습니다. 상태는 전부 controlled입니다.
+라우터·인증·API에 의존하지 않습니다. 컴포넌트에 넘기는 값은 controlled입니다.
+
+> 다만 **`AppShell`은 예외적으로 스스로 상태를 갖습니다.** 모바일 가상 키보드 보정
+> 때문에 `visualViewport`를 직접 구독하고, 포커스된 필드를 키보드 위로 올리려고
+> `#root`를 **직접 스크롤**하며, 키보드가 닫히는 동안에는 `#root`의 height도 잠깐
+> 붙듭니다. 프롭으로 끄거나 대체할 수 없습니다. (이 문서는 한동안 "상태는 전부
+> controlled"라고 적고 있었는데, 그 보정이 들어온 뒤로 사실이 아니었습니다.)
 
 ```tsx
 const [collapsed, setCollapsed] = useState(() => localStorage.getItem("sidebarCollapsed") === "true");
@@ -284,6 +330,52 @@ useEffect(() => localStorage.setItem("sidebarCollapsed", String(collapsed)), [co
 `href`를 주면 `<a>`로, 없으면 `<button>`으로 렌더합니다.
 
 `MobileQuickBar`는 CSS 그리드가 64px **3칸 고정**이라 항목 3개를 전제로 합니다.
+
+#### `data-keyboard-keep-visible` — 필드뿐 아니라 그 아래 액션까지 같이 들어올리기
+
+기본값에서 모바일 키보드가 열리면 **지금 포커스된 필드 자신**의 아래쪽만 키보드 위로
+스크롤됩니다. 필드 바로 아래 취소/삭제/저장 같은 액션 버튼 줄이 있으면 그 버튼들은
+계속 키보드 뒤에 남을 수 있습니다 — 이 킷은 소비 앱이 준 markup에서 "여기까지가 한
+그룹"이라고 스스로 추론하지 않으므로(`portal`·`floatRef`/`quickBarRef`·`pinToBottom`과
+같은 이유), 필드와 액션을 묶어 같이 들어올리고 싶으면 그 컨테이너에 직접 표시하세요.
+
+```tsx
+<div data-keyboard-keep-visible>
+  <label>메모<AutoGrowTextarea ariaLabel="메모" value={memo} onChange={setMemo} /></label>
+  <div className="button-row">
+    <button type="button" className="secondary-button">취소</button>
+    <button type="button" className="danger-button">삭제</button>
+    <button type="button" className="primary">저장</button>
+  </div>
+</div>
+```
+
+**값이 아니라 존재 자체가 스위치입니다** — `hasAttribute`만 확인하므로
+`data-keyboard-keep-visible="false"`도 켜진 것으로 취급됩니다(HTML의 `disabled`/`hidden`과
+같은 boolean 속성 관례). 끄려면 속성 자체를 렌더하지 마세요.
+
+컨테이너가 키보드 위 공간보다 크면(버튼 줄까지 다 보이기엔 자리가 모자라면) 컨테이너의
+아래쪽 전부가 아니라, **포커스된 필드 자신의 위쪽이 보이는 영역 밖으로 밀려나지 않는
+선까지만** 들어올립니다 — 타이핑 중인 자리를 아예 못 보게 되는 것이 버튼 한두 개가
+가려지는 것보다 나쁩니다. 그래도 이 한도가 필드 자신의 최소 요구량(마킹하지 않았을 때
+스크롤되는 양)보다 작아지는 일은 없습니다 — 마킹은 스크롤을 늘릴 수만 있지, 마킹
+전보다 덜 스크롤하게 만들지는 않습니다.
+
+마커를 안 붙이면 **이 기능은 켜지지 않습니다** — 완전한 opt-in이고, 컨테이너로 감싸기만
+해서는 아무 일도 일어나지 않습니다.
+
+> ⚠️ **이 절이 "이번 릴리스는 아무것도 안 바뀐다"는 뜻은 아닙니다.** 마커와 무관하게
+> 키보드 보정 자체가 달라졌습니다: 보정 계산이 비주얼 뷰포트가 멈춘 뒤로 미뤄졌고,
+> `#root`의 `scroll-padding-bottom`이 제거됐으며, 키보드가 닫히는 동안 `#root`의
+> height를 잠깐 붙듭니다.
+
+**마커는 반드시 필드의 조상에 붙입니다.** 필드 자신에 붙이면 아무 일도 일어나지
+않습니다 — 탐색이 `parentElement`에서 시작하기 때문입니다. 그리고 탐색은 스크롤
+호스트(`#root`) 안쪽까지만 올라갑니다. **`#root` 바깥 조상에 붙인 마커는 조용히
+무시됩니다** — 에러도 경고도 없습니다. 대표적인 경우가 `document.body`로 포털되는
+`Dialog` 안입니다. 이 훅이 움직이는 건 `#root.scrollTop`뿐이라, 그 밖의 요소는 애초에
+이 스크롤로 움직이지 않으므로 기준으로 쓸 수 없습니다. 다이얼로그 안의 배치는
+`PRINCIPLES.md` §10이 따로 규정합니다.
 
 ### SectionTabs
 
@@ -436,10 +528,17 @@ CSS 클래스는 원본 프로젝트 이름을 대체로 유지했습니다. 헷
 
 ## 개발
 
-`node_modules`가 필요합니다. 이 저장소에서는 가계부 앱의
-`frontend/node_modules`를 가리키는 정션이 걸려 있습니다. 다른 곳에서는
-`react`, `react-dom`, `vite`, `@vitejs/plugin-react`, `vitest`,
-`@testing-library/react`, `jsdom`을 설치하세요.
+클론한 뒤 `npm ci` 하면 됩니다. 이 저장소는 다른 프로젝트에 의존하지 않습니다 —
+개발 의존성은 전부 `package.json`과 `package-lock.json`에 있습니다.
+
+```bash
+npm ci
+```
+
+> 한때 `node_modules`가 가계부 앱의 `frontend/node_modules`를 가리키는 **정션**
+> 이었고 이 문서도 그렇게 안내했습니다. 그 때문에 키트가 한 번도 독립적으로
+> 설치된 적이 없었고, 그 앱의 의존성이 빌드에 섞여 들어왔습니다. 정션은
+> 제거됐고, 격리된 클론에서 `npm ci`만으로 전체 테스트가 통과하는 것을 확인했습니다.
 
 ```bash
 npm run dev         # 데모 → http://localhost:5273
