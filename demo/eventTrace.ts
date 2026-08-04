@@ -39,26 +39,28 @@ const KEYBOARD_SCROLL_GAP = 24;
  * 실제로는 킷과 다른 대상을 보고 있을 수 있습니다. */
 const KEYBOARD_KEEP_VISIBLE_ATTR = "data-keyboard-keep-visible";
 
-/** src/AppShell.tsx의 KEYBOARD_SCROLL_ANIMATION_MS(400ms) + 여유 — **원래 근거는
- * 반쪽이었고, 아래가 지금 맞는 설명이다.**
+/** 개창(키보드가 올라오는) 궤적을 프레임 단위로 따라가는 창구의 길이.
  *
- * 킷은 이벤트가 온 순간에 재지 않는다. KEYBOARD_VIEWPORT_SETTLE_MS(80ms)만큼
- * 디바운스해서 **마지막 이벤트로부터 80ms 지난 뒤 딱 한 번** reposition()한다
- * (AppShell.tsx:527의 focusin 경로, :563의 open/inset 경로 — 둘 다 매 이벤트가
- * 타이머를 다시 건다). 그러면 트윈은 이벤트+80ms에 시작해 이벤트+480ms에 끝나는데
- * 이 창구는 450ms라, 측정 시점의 트윈 진행률은 (450-80)/400 = 0.925다.
+ * 이 창구가 담아야 하는 것 = 팬(~210ms, 5~25ms 간격) + 킷의 디바운스
+ * (KEYBOARD_VIEWPORT_SETTLE_MS 80ms, 마지막 팬 단계부터 다시 셈) + 트윈
+ * (KEYBOARD_SCROLL_ANIMATION_MS 400ms) = 약 690ms. 900은 거기에 ~30% 여유다.
  *
- * **그 때문에 생기는 오차 자체는 무시할 만하다.** repositionEase는
- * cubic-bezier(.32,.72,0,1)이고 ease(0.925) = 0.99944 — 도달률 오차 0.06%로,
- * 1000px 스크롤에서도 0.6px이다. (ledger에 "achΔ가 healthy 사이클에서 ~8% 모자라
- * 보인다"고 적혀 있던 건 **선형 이징을 가정한 책상 계산**이었다: 1-0.925 = 7.5%.
- * 킷은 선형 이징을 쓰지 않는다. 실제 기기 캡처에 남은 개창 방향 수치는
- * reqΔ=239 achΔ=91, reqΔ=359 achΔ=134로 도달률 38%/37%지, 92%가 아니다 —
- * 그 격차는 트윈이 덜 끝나서가 아니라 아래 logKeyboardMath 주석의 이유 때문이다.)
+ * **이 파일에 예전에 있던 SETTLE_MS(450)의 최후를 여기 적어 둔다** — 같은 실수를
+ * 다시 하지 않기 위해서다. 그 상수는 "트윈 400ms + 여유"라는 근거로 450이었는데,
+ * 킷이 80ms 디바운스를 갖게 되면서 트윈은 이벤트+80ms에 시작해 이벤트+480ms에
+ * 끝나게 됐다. 그래서 450ms 시점의 트윈 진행률은 (450-80)/400 = 0.925다.
  *
- * **그러므로 진짜 결함은 이 창구의 길이가 아니라 reqΔ를 재는 시점이다.** 480ms로
- * 넓혀봐야 0.06%밖에 달라지지 않는다. 아래 logKeyboardMath 주석을 반드시 같이 읽을 것. */
-const SETTLE_MS = 450;
+ * 그때 ledger에는 "achΔ가 healthy 사이클에서 ~8% 모자라 보인다"고 적혀 있었지만,
+ * 그건 **선형 이징을 가정한 책상 계산**이었다(1-0.925 = 7.5%). 킷의 실제 곡선은
+ * repositionEase = cubic-bezier(.32,.72,0,1)이고 `ease(0.925) = 0.999435`이므로
+ * 실제 오차는 **0.057%** — 1000px 스크롤에서 0.6px이다. 창구를 480ms로 넓혀도
+ * 그만큼밖에 달라지지 않는다.
+ *
+ * 그리고 8%는 어떤 캡처에서도 관측된 적이 없다: 실기기에 남은 개창 방향 수치는
+ * reqΔ=239 achΔ=91, reqΔ=359 achΔ=134로 도달률 38%/37%다. 결함은 창구의 길이가
+ * 아니라 **재는 시점**이었고, 그래서 예측(SETTLE_MS 짝)을 통째로 버리고 관찰
+ * (startOpenTrace)로 바꿨다 — logKeyboardSnapshot 주석 참고. */
+const OPEN_TRACE_MS = 900;
 
 /** 닫힘 해제(useReleasableKeyboardInset)를 프레임 단위로 따라가는 창구의 길이.
  * KEYBOARD_INSET_SETTLE_MS(120) + KEYBOARD_SCROLL_ANIMATION_MS(400)에 스크롤
@@ -169,9 +171,7 @@ function findKeepVisibleAncestor(focused: Element, scrollRoot: Element): Element
   return null;
 }
 
-type KeyboardMathSnapshot = { text: string; scrollTop: number; maxScroll: number; requested: number };
-
-function snapshotKeyboardMath(label: string, target: string | undefined): KeyboardMathSnapshot {
+function snapshotKeyboardMath(label: string, target: string | undefined): string {
   const shell = document.querySelector(".app-shell");
   const workspace = document.querySelector(".workspace");
   const scrollRoot = document.getElementById("root");
@@ -231,16 +231,10 @@ function snapshotKeyboardMath(label: string, target: string | undefined): Keyboa
       capText = containerOvershoot > ceiling ? "Y" : "N";
     }
   }
-  // 반올림한 정수로 고정 — 안 그러면 over=(반올림 표시)와 want(=stBefore+requested,
-  // 반올림 전 소수)가 같은 값인데도 서로 다르게 보여 읽는 사람이 혼란스러워진다.
-  const requested = overshoot !== null ? Math.max(0, round(overshoot)) : 0;
-
   const tgt = target ? `  tgt=${target}` : "";
-  const text = `kb ${label}${tgt}  foc=${describeTarget(focused)} inRoot=${inRoot} edit=${editable}  op=${kitOpen} hold=${kitHold} css=${kitInset}px`
+  return `kb ${label}${tgt}  foc=${describeTarget(focused)} inRoot=${inRoot} edit=${editable}  op=${kitOpen} hold=${kitHold} css=${kitInset}px`
     + `  vpH=${vpH} vpTop=${vpTop} winH=${winH}  root[st=${scrollTop} sh=${scrollHeight} ch=${clientHeight} pin=${pinnedHeightOf(scrollRoot)} max=${maxScroll}]`
     + `  rect=${rectText} visBot=${visibleBottom === null ? "n/a" : round(visibleBottom)} over=${overshoot === null ? "n/a" : round(overshoot)} keep=${keepText} cap=${capText}  padB=${padBottom}`;
-
-  return { text, scrollTop, maxScroll, requested };
 }
 
 /** 킷이 지금 "열림"으로 보고 있는가 — `.app-shell`의 `keyboard-inset-open`을 그대로
@@ -251,67 +245,36 @@ function kitKeyboardOpen(): boolean {
   return document.querySelector(".app-shell")?.classList.contains("keyboard-inset-open") ?? false;
 }
 
-/** 지오메트리 스냅샷 **한 줄만** 남긴다 — reqΔ/want/achΔ/clamp 짝은 붙이지 않는다.
+/** 지오메트리 스냅샷 **한 줄만** 남긴다.
  *
- * **왜 따로 있는가:** 그 짝은 "킷이 이 순간 이만큼 요청했고 그래서 이만큼 갔다"로
- * 읽힌다. 킷에 대응하는 경로가 **아예 없는** 이벤트에 그걸 붙이면 숫자가 그럴듯한 채로
- * 완전한 허구가 된다 — 이 파일이 이미 세 군데(GAP·마커·pin)에서 경고하는 것과 정확히
- * 같은 종류의 조용한 오독이다. 지오메트리 자체는 여전히 유용하므로(팬이 언제 얼마나
- * 돌았는지는 이 줄로만 보인다) 줄 자체는 남긴다. */
+ * 예전에는 이벤트마다 `reqΔ/want/achΔ/clamp` 짝(트리거 줄 + SETTLE_MS 뒤 줄)을 같이
+ * 찍었다. **그 짝은 삭제했다.** 이유:
+ *
+ * 그 짝은 "킷이 이 순간 이만큼 요청했고 그래서 이만큼 갔다"로 읽히는데, 킷은 이벤트가
+ * 온 그 순간에 재지 않는다. KEYBOARD_VIEWPORT_SETTLE_MS(80ms) 디바운스 뒤
+ * **마지막 이벤트로부터 80ms 지나 한 번만** 잰다(AppShell.tsx:527 focusin 경로,
+ * :563 open/inset 경로 — 매 이벤트가 타이머를 다시 건다). 안드로이드 팬은 5~25ms
+ * 간격으로 ~210ms 이어지므로 개창 한 번에:
+ *     패널   viewport 이벤트마다 두 줄 → 18~86줄, 각자 다른 reqΔ
+ *     킷     reposition() 1회         → 요청은 단 하나
+ * 즉 중간 줄들의 reqΔ는 **킷이 한 번도 요청한 적 없는 값**이었고, 팬이 아직 도는 중의
+ * 지오메트리로 계산돼 실제보다 컸다. 그래서 achΔ가 한참 못 미쳐 보였다(실기기 캡처:
+ * reqΔ=239 achΔ=91, reqΔ=359 achΔ=134 — 도달률 38%/37%). 그 격차는 킷이 못 간 게
+ * 아니라 **브라우저의 팬이 이미 처리한 몫**이고, 80ms 디바운스는 정확히 그 이중 보정을
+ * 없애려고 넣은 것이다(AppShell.tsx:545-558).
+ *
+ * 창구 길이를 늘리는 건 답이 아니었다: 트윈이 덜 끝나서 생기는 몫은
+ * `1 - ease(0.925) = 0.057%`뿐이다(ledger에 있던 "~8%"는 선형 이징을 가정한 책상
+ * 계산이었다 — 위 OPEN_TRACE_MS 주석에 그 산술과 옛 SETTLE_MS의 최후를 적어 뒀다).
+ *
+ * **그래서 예측을 그만두고 관찰로 바꿨다.** 개창 궤적은 이제 `startOpenTrace`가
+ * 프레임 단위로 실제 scrollTop을 따라가 찍는다 — 닫힘 쪽 `startReleaseTrace`와 같은
+ * 방식이다. 이건 미러를 **하나 없앤다**: 킷의 디바운스 타이밍을 여기 복제하지 않아도
+ * 되고, 이 파일이 이미 세 군데(GAP·마커·pin)에서 경고하는 종류의 드리프트 지점이
+ * 늘지 않는다. 이 줄의 `over=`는 여전히 "지금 이 순간이라면 킷이 이렇게 계산할 것"을
+ * 보여주므로 팬이 언제 얼마나 돌았는지를 읽는 데 그대로 쓴다. */
 function logKeyboardSnapshot(label: string, target?: string) {
-  append(snapshotKeyboardMath(label, target).text);
-}
-
-/** 트리거 시점 스냅샷을 즉시 한 줄 남기고, 450ms 뒤(§ SETTLE_MS) 다시 재서
- * "요청한 스크롤 대비 실제 달성한 스크롤"을 두 번째 줄에 덧붙인다.
- *
- * ⚠️ **reqΔ는 킷이 실제로 요청한 값이 아니다 — 시점이 다르다.** 이 함수는 이벤트가 온
- * "그 순간"의 지오메트리로 over를 계산하는데, 킷은 그 순간에 재지 않고
- * KEYBOARD_VIEWPORT_SETTLE_MS(80ms) 디바운스 뒤 **마지막 이벤트로부터 80ms 지나 한 번만**
- * 잰다(위 SETTLE_MS 주석). 안드로이드 팬은 5~25ms 간격으로 ~210ms 이어지므로 개창 한 번에:
- *     패널   viewport 이벤트마다 트리거+settle 두 줄 → 20~80줄, 각자 다른 reqΔ
- *     킷     reposition() 1회                       → 요청은 단 하나
- * 즉 중간 줄들의 reqΔ는 **킷이 한 번도 요청한 적 없는 값**이며, 팬이 아직 도는 중의
- * 지오메트리로 계산돼 실제보다 크다. 그래서 achΔ가 reqΔ에 한참 못 미쳐 보인다(실기기
- * 캡처: reqΔ=239 achΔ=91, reqΔ=359 achΔ=134 — 도달률 38%/37%). 이건 킷이 못 간 게 아니라
- * **브라우저의 팬이 그 차이를 이미 처리했기 때문**이고, 80ms 디바운스는 바로 그 이중
- * 보정을 없애려고 넣은 것이다(AppShell.tsx:545-558). 트윈이 덜 끝나서 생기는 몫은
- * 0.06%뿐이라 이 격차를 설명하지 못한다.
- *
- * **결론: 개창 방향 판단의 근거로 이 짝을 쓰지 말 것.** 팬도 트윈도 끝나 있는 마지막
- * settle 줄의 `stNow`/`over=`만 신뢰할 수 있다. 이 짝을 무엇으로 대체할지는 아직
- * 미결이다 — 킷의 디바운스를 여기 또 복제할 것인가(미러 하나 추가), 아니면 닫힘 쪽
- * startReleaseTrace처럼 scrollTop을 프레임 단위로 관찰할 것인가(미러 하나 제거).
- *
- * 안드로이드 두 단계 리사이즈(53ms 간격)처럼 트리거가 겹치면, 이 타이머 하나의
- * achΔ 안에도 "다른" 트리거가 그 사이에 만든 스크롤이 섞여 들어갈 수 있다 — 이걸
- * 막을 방법은 없으므로(각 트리거는 독립적으로 재는 게 맞다) 대신 숨기지 않는다:
- * stBefore(이 트리거가 쟀던 시작점)·want(그 트리거의 목표)·stNow(지금 실제 위치)를
- * 전부 그대로 남겨서, 두 settle 줄의 stBefore가 다른데 stNow가 같다면 "겹쳤다"는
- * 게 숫자로 바로 드러나게 한다.
- *
- * clamp는 반드시 "같은 시점"의 max로 판정한다 — want는 트리거 시점 계산이므로
- * maxAtReq(트리거 시점 max)와 비교해야 맞다. settle 시점의 max(--keyboard-inset이
- * 그 사이 더 커지거나 작아졌으면 다르다)도 max=로 같이 남겨서 범위 자체가
- * 움직였는지 눈으로 비교할 수 있게 한다. clamp=Y인데 stNow가 그 시점 max와
- * 거의 같다면 "스크롤 호스트의 범위에 막혔다"는 뜻이고 — 로그의 다른 어떤
- * 필드도 이걸 대신 말해주지 않는다(과제 요구사항 그대로). clamp=N인데도 achΔ가
- * reqΔ에 못 미치면 "계산은 맞았는데 그 뒤 누가 되돌렸다" 쪽에 가깝고, over 자체가
- * rect/visBot과 안 맞으면 "애초에 잘못 계산됐다" 쪽이다 — 세 갈래를 구분하는
- * 방법은 이 두 줄을 나란히 보는 것뿐이라 갈라놓지 않았다. */
-function logKeyboardMath(label: string, target?: string) {
-  const before = snapshotKeyboardMath(label, target);
-  append(before.text);
-  const stBefore = before.scrollTop;
-  const want = before.scrollTop + before.requested;
-  const maxAtReq = before.maxScroll;
-  window.setTimeout(() => {
-    const after = snapshotKeyboardMath(`${label}~${SETTLE_MS}`, target);
-    const stNow = after.scrollTop;
-    const achieved = stNow - stBefore;
-    const clamp = before.requested > 0 ? (want > after.maxScroll + 1 ? "Y" : "N") : "n/a";
-    append(`${after.text}  reqΔ=${round(before.requested)} stBefore=${stBefore} want=${want} stNow=${stNow} achΔ=${round(achieved)}  maxAtReq=${maxAtReq} max=${after.maxScroll} clamp=${clamp}`);
-  }, SETTLE_MS);
+  append(snapshotKeyboardMath(label, target));
 }
 
 /** src/AppShell.tsx:154의 prefersReducedMotion()과 같은 판정입니다.
@@ -342,63 +305,90 @@ function pinnedHeightOf(scrollRoot: HTMLElement | null): number {
   return Number.isFinite(parsed) ? round(parsed) : 0;
 }
 
-type ReleaseSample = { t: number; inset: number; pad: number; st: number; sh: number; ch: number; pin: number };
+type ReleaseSample = {
+  t: number; inset: number; pad: number; st: number; sh: number; ch: number; pin: number;
+  /** 개창 방향에서만 찍는다 — 안드로이드의 비주얼 뷰포트 팬이 개창 궤적의 절반이다
+   * (vpTop 0→407). 닫힘 줄의 형식은 기기 검증을 거쳤으므로 그대로 두고, 여기에만 쓴다. */
+  vpTop: number; vpH: number;
+  /** scrollTop의 상한. 궤적이 여기서 멈췄으면 트윈이 아니라 브라우저가 세운 것이다. */
+  max: number;
+};
 
 function sampleRelease(): ReleaseSample {
   const shell = document.querySelector(".app-shell");
   const workspace = document.querySelector(".workspace");
   const scrollRoot = document.getElementById("root");
+  const viewport = window.visualViewport;
+  const sh = scrollRoot ? round(scrollRoot.scrollHeight) : -1;
+  const ch = scrollRoot ? round(scrollRoot.clientHeight) : -1;
   return {
     t: performance.now(),
     inset: shell ? round(cssPixels(getComputedStyle(shell).getPropertyValue("--keyboard-inset"))) : -1,
     pad: workspace ? round(cssPixels(getComputedStyle(workspace).paddingBottom)) : -1,
     st: scrollRoot ? round(scrollRoot.scrollTop) : -1,
-    sh: scrollRoot ? round(scrollRoot.scrollHeight) : -1,
-    ch: scrollRoot ? round(scrollRoot.clientHeight) : -1,
+    sh,
+    ch,
     pin: pinnedHeightOf(scrollRoot),
+    vpTop: viewport ? round(viewport.offsetTop) : -1,
+    vpH: viewport ? round(viewport.height) : -1,
+    max: scrollRoot ? Math.max(0, sh - ch) : -1,
   };
 }
 
-let releaseTracing = false;
+function signed(value: number): string {
+  return `${value >= 0 ? "+" : ""}${value}`;
+}
 
-/** 키보드가 닫히는 순간부터 RELEASE_TRACE_MS 동안 **매 프레임** 지오메트리를 재서,
- * 값이 바뀐 프레임만 한 줄씩 남긴다.
+type FrameTraceStats = { frames: number; changed: number; maxInsetStep: number; maxScrollStep: number; dropped: number };
+
+type FrameTraceSpec = {
+  /** 줄 접두사이자 동시 실행 방지 키. */
+  name: string;
+  windowMs: number;
+  startLine: (first: ReleaseSample) => string;
+  /** 이 프레임을 "움직인 프레임"으로 셀지. 방향마다 봐야 하는 축이 다르다. */
+  moved: (now: ReleaseSample, previous: ReleaseSample) => boolean;
+  frameLine: (now: ReleaseSample, previous: ReleaseSample, first: ReleaseSample) => string;
+  endLine: (last: ReleaseSample, first: ReleaseSample, stats: FrameTraceStats) => string;
+  abortLine: string;
+  /** 창구가 정상 종료한 뒤 한 줄 더 남기고 싶을 때(개창의 최종 over= 등). */
+  afterEnd?: () => void;
+};
+
+/** 같은 이름의 트레이스는 겹쳐 걸지 않는다. 이름이 다르면(개창 vs 닫힘) 겹쳐도 된다 —
+ * 900ms 창구가 도는 중에 사용자가 키보드를 닫으면 닫힘 트레이스는 반드시 잡혀야 하고,
+ * 줄 접두사가 다르니 섞여도 읽는 쪽이 구분할 수 있다. 플래그 하나를 공유했다면 그
+ * 닫힘이 통째로 유실됐을 것이다. */
+const activeTraces = new Set<string>();
+
+/** rAF로 창구가 끝날 때까지 매 프레임 지오메트리를 재고, 움직인 프레임만 한 줄씩 남긴다.
  *
- * **왜 시작·끝 두 점으로는 부족한가.** owner의 보고는 "내려오긴 하는데 둔탁하다"이고,
+ * **왜 시작·끝 두 점으로는 부족한가.** owner의 보고는 "내려오긴 하는데 둔탁하다"였고,
  * 그건 도착점이 아니라 **궤적의 성질**이다 — 시작·끝만 재면 406->0이라는 같은 결과가
- * 한 프레임에 뛴 경우와 24프레임에 걸쳐 흐른 경우 모두에서 똑같이 찍힌다. 기존
- * logKeyboardMath의 trigger/+450ms 쌍이 정확히 그 두 점짜리라, 이 질문에는 구조적으로
- * 답할 수 없다.
+ * 한 프레임에 뛴 경우와 24프레임에 걸쳐 흐른 경우 모두에서 똑같이 찍힌다. 예전
+ * logKeyboardMath의 trigger/+450ms 쌍이 정확히 그 두 점짜리라 구조적으로 답할 수 없었다.
  *
- * 마지막 줄의 **maxΔst가 이 트레이스의 결론**이다: 한 프레임에 움직인 scrollTop의
- * 최댓값이 전체 이동량과 비슷하면 화면은 사실상 한 번에 뛴 것이고(트윈이 안 돌았거나
- * 브라우저 clamp가 트윈보다 앞서 갔다는 뜻), 전체 이동량을 프레임 수로 나눈 값 근처면
- * 트윈은 정상이고 "둔탁"의 원인은 다른 데(예: 120ms 정지 뒤 빠르게 시작하는 곡선의
- * 앞머리, 또는 해제 도중 트윈이 반복 재조준되는 것) 있다.
- *
- * inset과 st를 나란히 두는 이유: 화면을 실제로 움직이는 건 st다. inset이 부드럽게
- * 줄었는데 st가 계단이면 원인은 트윈이 아니라 브라우저의 scrollTop clamp다. */
-function startReleaseTrace() {
-  if (releaseTracing) return;   // 이미 이번 닫힘을 따라가는 중 — 겹쳐 걸지 않는다.
-  releaseTracing = true;
+ * 워치독 — rAF는 탭이 백그라운드로 가면 멈춘다. 사용자가 도중에 앱을 전환하면 이름이
+ * 집합에 남은 채로 굳고, 그 뒤의 모든 사이클이 **아무 줄도 남기지 않은 채** 조용히
+ * 무시된다. 한 번의 캡처에서 여러 사이클을 받는 게 이 트레이스의 용도라 그건 그대로
+ * 캡처 전체를 버리게 만든다. 벽시계로 창구를 한 번 더 닫아 둔다.
+ * aborted를 따로 두는 이유: 워치독이 창구를 닫은 뒤 탭이 돌아오면 멈춰 있던 rAF가 그대로
+ * 이어서 깨어난다. 그때 이 실행이 계속 줄을 남기면 그 사이 시작된 새 트레이스와 뒤섞여
+ * 읽는 쪽이 두 사이클을 하나로 오독한다 — 깨어난 옛 실행은 조용히 끝내야 한다. */
+function runFrameTrace(spec: FrameTraceSpec) {
+  if (activeTraces.has(spec.name)) return;
+  activeTraces.add(spec.name);
 
   const first = sampleRelease();
-  append(`kbrelease start  reduce=${reduceMotionState()}  inset=${first.inset} pad=${first.pad} st=${first.st} sh=${first.sh} ch=${first.ch} pin=${first.pin}`);
+  append(spec.startLine(first));
 
-  // 워치독 — rAF는 탭이 백그라운드로 가면 멈춘다. 사용자가 해제 도중 앱을 전환하면
-  // 이 플래그가 참인 채로 굳고, 그 뒤의 모든 닫힘이 **아무 줄도 남기지 않은 채**
-  // 조용히 무시된다. 한 번의 캡처에서 여러 사이클을 받는 게 이 트레이스의 용도라
-  // 그건 그대로 캡처 전체를 버리게 만든다. 벽시계로 창구를 한 번 더 닫아 둔다.
-  // aborted를 따로 두는 이유: 워치독이 창구를 닫은 뒤 탭이 돌아오면 멈춰 있던 rAF가
-  // 그대로 이어서 깨어난다. 그때 이 실행이 계속 줄을 남기면, 그 사이에 시작된 새 트레이스와
-  // 뒤섞여 읽는 쪽이 두 사이클을 하나로 오독한다 — 깨어난 옛 실행은 조용히 끝내야 한다.
   let aborted = false;
   const watchdog = window.setTimeout(() => {
-    if (!releaseTracing) return;
+    if (!activeTraces.has(spec.name)) return;
     aborted = true;
-    releaseTracing = false;
-    append("kbrelease abort  rAF가 창구 안에 끝나지 않았다(탭 백그라운드 등) — 다음 닫힘은 정상 기록된다");
-  }, RELEASE_TRACE_MS + 600);
+    activeTraces.delete(spec.name);
+    append(spec.abortLine);
+  }, spec.windowMs + 600);
 
   let previous = first;
   let frames = 0;
@@ -411,31 +401,98 @@ function startReleaseTrace() {
     if (aborted) return;   // 워치독이 이미 이 실행을 끝냈다 — 깨어나도 아무것도 남기지 않는다.
     const now = sampleRelease();
     frames += 1;
-    const dInset = now.inset - previous.inset;
-    const dScroll = now.st - previous.st;
-    if (dInset !== 0 || dScroll !== 0) {
+    if (spec.moved(now, previous)) {
       changed += 1;
+      const dInset = now.inset - previous.inset;
+      const dScroll = now.st - previous.st;
       if (Math.abs(dInset) > Math.abs(maxFrameInset)) maxFrameInset = dInset;
       if (Math.abs(dScroll) > Math.abs(maxFrameScroll)) maxFrameScroll = dScroll;
       if (lines < RELEASE_TRACE_MAX_LINES) {
         lines += 1;
-        append(`kbrelease +${round(now.t - first.t)}ms  inset=${now.inset}(${dInset >= 0 ? "+" : ""}${dInset}) pad=${now.pad} st=${now.st}(${dScroll >= 0 ? "+" : ""}${dScroll}) sh=${now.sh} ch=${now.ch} pin=${now.pin}`);
+        append(spec.frameLine(now, previous, first));
       }
     }
     previous = now;
-    if (now.t - first.t < RELEASE_TRACE_MS) {
+    if (now.t - first.t < spec.windowMs) {
       requestAnimationFrame(frame);
       return;
     }
-    releaseTracing = false;
+    activeTraces.delete(spec.name);
     window.clearTimeout(watchdog);
-    const droppedNote = changed > lines ? `  (${changed - lines}줄 생략)` : "";
-    append(
-      `kbrelease end  frames=${frames} changed=${changed}  inset ${first.inset}->${now.inset}  st ${first.st}->${now.st} (Δ${now.st - first.st})`
-      + `  maxΔinset=${maxFrameInset} maxΔst=${maxFrameScroll}${droppedNote}`,
-    );
+    append(spec.endLine(now, first, {
+      frames, changed, maxInsetStep: maxFrameInset, maxScrollStep: maxFrameScroll, dropped: changed - lines,
+    }));
+    spec.afterEnd?.();
   }
   requestAnimationFrame(frame);
+}
+
+/** 키보드가 **닫히는** 순간부터 RELEASE_TRACE_MS 동안의 궤적.
+ *
+ * 마지막 줄의 **maxΔst가 이 트레이스의 결론**이다: 한 프레임에 움직인 scrollTop의
+ * 최댓값이 전체 이동량과 비슷하면 화면은 사실상 한 번에 뛴 것이고(트윈이 안 돌았거나
+ * 브라우저 clamp가 트윈보다 앞서 갔다는 뜻), 전체 이동량을 프레임 수로 나눈 값 근처면
+ * 트윈은 정상이고 "둔탁"의 원인은 다른 데(예: 120ms 정지 뒤 빠르게 시작하는 곡선의
+ * 앞머리, 또는 해제 도중 트윈이 반복 재조준되는 것) 있다.
+ *
+ * inset과 st를 나란히 두는 이유: 화면을 실제로 움직이는 건 st다. inset이 부드럽게
+ * 줄었는데 st가 계단이면 원인은 트윈이 아니라 브라우저의 scrollTop clamp다.
+ *
+ * ⚠️ **이 줄들의 형식은 실기기 검증을 거쳤고 handoff 문서와 메모리가 그대로 인용한다
+ * (627e7e3의 `maxΔst=0` 4/4). 필드를 빼거나 이름을 바꾸지 말 것** — 공유 러너로 옮기면서도
+ * 출력은 한 글자도 바꾸지 않았다. */
+function startReleaseTrace() {
+  runFrameTrace({
+    name: "kbrelease",
+    windowMs: RELEASE_TRACE_MS,
+    startLine: (f) => `kbrelease start  reduce=${reduceMotionState()}  inset=${f.inset} pad=${f.pad} st=${f.st} sh=${f.sh} ch=${f.ch} pin=${f.pin}`,
+    moved: (n, p) => n.inset !== p.inset || n.st !== p.st,
+    frameLine: (n, p, first) =>
+      `kbrelease +${round(n.t - first.t)}ms  inset=${n.inset}(${signed(n.inset - p.inset)}) pad=${n.pad} st=${n.st}(${signed(n.st - p.st)}) sh=${n.sh} ch=${n.ch} pin=${n.pin}`,
+    endLine: (n, first, s) =>
+      `kbrelease end  frames=${s.frames} changed=${s.changed}  inset ${first.inset}->${n.inset}  st ${first.st}->${n.st} (Δ${n.st - first.st})`
+      + `  maxΔinset=${s.maxInsetStep} maxΔst=${s.maxScrollStep}${s.dropped > 0 ? `  (${s.dropped}줄 생략)` : ""}`,
+    abortLine: "kbrelease abort  rAF가 창구 안에 끝나지 않았다(탭 백그라운드 등) — 다음 닫힘은 정상 기록된다",
+  });
+}
+
+/** 키보드가 **올라오는** 방향의 궤적 — 예전의 reqΔ/achΔ 예측을 대체한다.
+ *
+ * **왜 예측이 아니라 관찰인가.** 예전 짝은 이벤트 순간의 지오메트리로 "킷이 이만큼
+ * 요청했을 것"을 계산했는데, 킷은 그 순간에 재지 않는다(80ms 디바운스 — logKeyboardSnapshot
+ * 주석 참고). 그래서 그 숫자들은 킷이 한 번도 요청한 적 없는 값이었다. 킷의 디바운스를
+ * 여기 복제하는 대신 **실제로 일어난 일을 본다** — 이 파일이 이미 세 군데(GAP·마커·pin)에서
+ * 경고하는 드리프트 지점을 늘리지 않는 쪽이다. 닫힘 트리거가 120px 문턱을 재구현하지 않고
+ * `.app-shell`의 클래스를 보는 것과 같은 논리다.
+ *
+ * **읽는 법 — 세 갈래가 이 한 트레이스로 갈린다:**
+ *   `vpTop`이 오르는 동안 `st`가 그대로 → 브라우저가 팬으로 필드를 드러내는 중.
+ *     킷은 아직 손대지 않았다(80ms 디바운스가 기다리는 구간이 바로 여기다).
+ *   `vpTop`이 멎은 뒤 `st`가 여러 프레임에 걸쳐 흐름 → 트윈이 정상으로 돌았다.
+ *     `maxΔst`가 전체 이동량에 가까우면 한 프레임에 뛴 것(reduce=Y이거나 clamp).
+ *   `atMax=Y` → 궤적을 세운 건 트윈이 아니라 **브라우저의 상한**이다. 예전 `clamp=`가
+ *     예측으로 답하려던 걸 관찰로 답한다.
+ * 마지막 `kbopen final` 줄의 `over=`가 **결과 판정**이다: 0 근처면 정확, 음수로 크면
+ * 과보정(= ratchet의 증상, 실기기에서 -243이 나왔다), 양수면 아직 가려져 있다. */
+function startOpenTrace(reason: string) {
+  runFrameTrace({
+    name: "kbopen",
+    windowMs: OPEN_TRACE_MS,
+    startLine: (f) => `kbopen start  reason=${reason}  reduce=${reduceMotionState()}  vpTop=${f.vpTop} vpH=${f.vpH}  inset=${f.inset} pad=${f.pad} st=${f.st} sh=${f.sh} ch=${f.ch} pin=${f.pin} max=${f.max}`,
+    // 닫힘과 달리 vpTop/vpH도 본다 — 안드로이드에서 개창의 절반은 킷이 아니라 팬이
+    // 만들고(vpTop 0→407), st만 보면 그 구간이 통째로 "아무 일도 없음"으로 접힌다.
+    moved: (n, p) => n.inset !== p.inset || n.st !== p.st || n.vpTop !== p.vpTop || n.vpH !== p.vpH,
+    frameLine: (n, p, first) =>
+      `kbopen +${round(n.t - first.t)}ms  vpTop=${n.vpTop}(${signed(n.vpTop - p.vpTop)}) vpH=${n.vpH}(${signed(n.vpH - p.vpH)})`
+      + `  inset=${n.inset}(${signed(n.inset - p.inset)}) st=${n.st}(${signed(n.st - p.st)}) sh=${n.sh} ch=${n.ch} pin=${n.pin} max=${n.max}`,
+    endLine: (n, first, s) =>
+      `kbopen end  frames=${s.frames} changed=${s.changed}  vpTop ${first.vpTop}->${n.vpTop}  inset ${first.inset}->${n.inset}`
+      + `  st ${first.st}->${n.st} (Δ${n.st - first.st})  maxΔst=${s.maxScrollStep}  max=${n.max} atMax=${n.st >= n.max - 1 ? "Y" : "N"}`
+      + `${s.dropped > 0 ? `  (${s.dropped}줄 생략)` : ""}`,
+    abortLine: "kbopen abort  rAF가 창구 안에 끝나지 않았다(탭 백그라운드 등) — 다음 개창은 정상 기록된다",
+    // 팬도 트윈도 끝난 뒤의 최종 판정 — 이 한 줄의 over=가 "결과가 맞았나"에 답한다.
+    afterEnd: () => logKeyboardSnapshot("kbopen final"),
+  });
 }
 
 function append(text: string) {
@@ -478,17 +535,20 @@ export function installEventTrace() {
   // 옮겨갔는지를 놓치면 그 판정의 절반을 볼 수 없다. document.activeElement는 focusout
   // 시점에 이미 새 대상으로 넘어가 있을 수 있어(스펙상 그렇다) event.target을 tgt=로
   // 따로 남긴다 — foc=는 항상 "지금" document.activeElement, tgt=는 "이 이벤트가 가리키는" 요소.
-  // focusin에서 req/ach 짝을 붙이는 건 **킷이 열림으로 보고 있을 때뿐**이다.
-  // 킷의 focusin 리스너는 `if (!keyboard.open) return` 안쪽에서만 등록된다
-  // (AppShell.tsx:511,529) — 닫힌 상태의 focusin(= 필드를 처음 탭해 키보드를 부르는,
-  // 가장 흔한 경로)에는 그 리스너가 **아예 달려 있지도 않다**. 그 자리에 reqΔ를 찍으면
-  // 킷이 부르지도 않은 계산을 킷의 판단인 양 보여주게 된다. 그 개창의 실제 보정은
-  // 잠시 뒤 keyboard.open이 켜지면서 두 번째 이펙트(:559)가 하고, 그건 그때의 viewport
-  // 이벤트 줄로 잡힌다.
+  // **킷이 이미 열려 있는 채로** 다른 필드를 탭하면(메모 → 숫자 필드) 킷의 focusin
+  // 리스너가 재조준을 건다(AppShell.tsx:529, 역시 80ms 디바운스). 그건 개창과 같은
+  // 종류의 궤적이므로 같은 트레이스로 관찰한다. 킷의 focusin 리스너는
+  // `if (!keyboard.open) return` 안쪽에서만 등록되므로(:511,529) **닫힌 상태의
+  // focusin에는 그 리스너가 아예 달려 있지도 않다** — 그 개창의 실제 보정은 잠시 뒤
+  // keyboard.open이 켜지면서 일어나고, 그건 아래 MutationObserver가 거는 트레이스가 잡는다.
   document.addEventListener("focusin", (event) => {
     const target = describeTarget(event.target);
-    if (kitKeyboardOpen()) logKeyboardMath("focusin", target);
-    else logKeyboardSnapshot("focusin(kb닫힘)", target);
+    if (kitKeyboardOpen()) {
+      logKeyboardSnapshot("focusin", target);
+      startOpenTrace("refocus");
+    } else {
+      logKeyboardSnapshot("focusin(kb닫힘)", target);
+    }
   }, { passive: true });
   // focusout에는 킷에 대응하는 경로가 **하나도 없다** — reposition()을 부르는 곳은
   // focusin 리스너(:529)와 open/inset 이펙트(:563) 둘뿐이고 어느 쪽도 focusout을 듣지
@@ -500,17 +560,22 @@ export function installEventTrace() {
 
   append(`trace installed  reduce=${reduceMotionState()}  ua=${truncate(navigator.userAgent, 90)}`);
 
-  // 닫힘 해제 트레이스의 방아쇠 — 킷이 스스로 "닫혔다"고 판단한 그 순간에 맞춘다.
+  // 두 방향 트레이스의 방아쇠 — 킷이 스스로 "열렸다/닫혔다"고 판단한 그 순간에 맞춘다.
   // .app-shell의 keyboard-inset-open은 useVirtualKeyboard의 keyboard.open을 그대로
   // 반영하므로(AppShell이 붙인다), 이걸 보면 hooks.ts의 120px 문턱이나 restingHeight
   // 누적 규칙을 여기서 다시 구현하지 않아도 된다 — 재구현했다면 그게 바로 이 파일이
-  // 이미 경고하고 있는 종류의 드리프트 지점이 하나 더 느는 것이다. 있음->없음
-  // 전이에서만 건다(반대 방향은 열림이라 해제와 무관).
+  // 이미 경고하고 있는 종류의 드리프트 지점이 하나 더 느는 것이다.
+  //
+  // 개창 트레이스를 **여기서** 거는 이유: 팬은 이 클래스가 붙는 것과 거의 동시에 시작해
+  // ~210ms 이어지고, 킷의 측정은 그 팬이 멎고 80ms 뒤다. 그 전 구간을 통째로 담아야
+  // "팬이 얼마나 했고 킷이 얼마나 했나"가 갈린다 — 킷이 재는 순간을 예측해 그 근처만
+  // 찍으려 하면 예전 SETTLE_MS 짝과 같은 실수를 반복하게 된다.
   let shellKeyboardOpen = false;
   new MutationObserver((records) => {
     for (const record of records) {
       if (!(record.target instanceof Element) || !record.target.classList.contains("app-shell")) continue;
       const open = record.target.classList.contains("keyboard-inset-open");
+      if (!shellKeyboardOpen && open) startOpenTrace("open");
       if (shellKeyboardOpen && !open) startReleaseTrace();
       shellKeyboardOpen = open;
     }
@@ -518,9 +583,13 @@ export function installEventTrace() {
 
   const vv = window.visualViewport;
   if (vv) {
+    // 지오메트리 줄만 남긴다. 예전에는 여기서도 reqΔ/achΔ 짝을 찍었는데, 팬 한 번에
+    // 이벤트가 9~43개 오므로 그 짝만으로 18~86줄이었다 — MAX_ENTRIES(400)에 대고 보면
+    // 개창 두세 번이 링버퍼의 나머지를 전부 밀어냈다. 궤적은 이제 kbopen 트레이스가
+    // 프레임 단위로 담으므로 여기서 중복해서 예측할 이유가 없다.
     const onViewportChange = (event: Event) => {
       append(`viewport ${event.type}  height=${Math.round(vv.height)}  offsetTop=${Math.round(vv.offsetTop)}  menu=${menuPresent()}`);
-      logKeyboardMath(event.type, undefined);
+      logKeyboardSnapshot(event.type, undefined);
     };
     vv.addEventListener("resize", onViewportChange);
     vv.addEventListener("scroll", onViewportChange);
