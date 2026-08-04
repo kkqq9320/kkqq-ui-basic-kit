@@ -44,6 +44,16 @@ const KEYBOARD_KEEP_VISIBLE_ATTR = "data-keyboard-keep-visible";
  * 다 끝났을 시점까지 기다렸다가 "실제로 도달한" 위치를 잰다. */
 const SETTLE_MS = 450;
 
+/** 닫힘 해제(useReleasableKeyboardInset)를 프레임 단위로 따라가는 창구의 길이.
+ * KEYBOARD_INSET_SETTLE_MS(120) + KEYBOARD_SCROLL_ANIMATION_MS(400)에 스크롤
+ * 이벤트가 트윈을 다시 겨냥하는 경우(recompute -> animateFloorTo가 진행 중 트윈을
+ * 취소하고 새로 400ms를 잡는다)까지 담기려면 둘의 합보다 넉넉해야 한다. */
+const RELEASE_TRACE_MS = 1100;
+
+/** 한 번의 해제에서 남길 수 있는 최대 줄 수 — MAX_ENTRIES(400)를 이 트레이스
+ * 하나가 다 밀어내지 않게 하는 상한. 변화가 있는 프레임만 남기므로 보통은 훨씬 적다. */
+const RELEASE_TRACE_MAX_LINES = 44;
+
 let entries: TraceEntry[] = [];
 let burstStart: number | null = null;
 let lastEventAt: number | null = null;
@@ -251,6 +261,114 @@ function logKeyboardMath(label: string, target?: string) {
   }, SETTLE_MS);
 }
 
+/** src/AppShell.tsx:154의 prefersReducedMotion()과 같은 판정입니다.
+ *
+ * **이 한 값이 닫힘 해제의 모양을 통째로 가릅니다** — animateFloorTo(AppShell.tsx:709)와
+ * animateScrollTopBy(:400) 둘 다 이게 참이면 트윈을 건너뛰고 목표를 그 자리에서
+ * 대입합니다. 안드로이드 "애니메이션 제거"나 개발자 옵션의 애니메이션 배율 0이
+ * 여기에 그대로 매핑되므로, 기기 설정 하나로 킷이 멀쩡히 도는데도 모든 게 계단으로
+ * 보일 수 있습니다. 패널이 이걸 안 찍으면 그 경우와 "트윈이 돌았는데도 둔탁하다"를
+ * 구분할 방법이 없습니다. */
+function reduceMotionState(): "Y" | "N" | "?" {
+  if (typeof window.matchMedia !== "function") return "?";
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "Y" : "N";
+}
+
+type ReleaseSample = { t: number; inset: number; pad: number; st: number; sh: number; ch: number };
+
+function sampleRelease(): ReleaseSample {
+  const shell = document.querySelector(".app-shell");
+  const workspace = document.querySelector(".workspace");
+  const scrollRoot = document.getElementById("root");
+  return {
+    t: performance.now(),
+    inset: shell ? round(cssPixels(getComputedStyle(shell).getPropertyValue("--keyboard-inset"))) : -1,
+    pad: workspace ? round(cssPixels(getComputedStyle(workspace).paddingBottom)) : -1,
+    st: scrollRoot ? round(scrollRoot.scrollTop) : -1,
+    sh: scrollRoot ? round(scrollRoot.scrollHeight) : -1,
+    ch: scrollRoot ? round(scrollRoot.clientHeight) : -1,
+  };
+}
+
+let releaseTracing = false;
+
+/** 키보드가 닫히는 순간부터 RELEASE_TRACE_MS 동안 **매 프레임** 지오메트리를 재서,
+ * 값이 바뀐 프레임만 한 줄씩 남긴다.
+ *
+ * **왜 시작·끝 두 점으로는 부족한가.** owner의 보고는 "내려오긴 하는데 둔탁하다"이고,
+ * 그건 도착점이 아니라 **궤적의 성질**이다 — 시작·끝만 재면 406->0이라는 같은 결과가
+ * 한 프레임에 뛴 경우와 24프레임에 걸쳐 흐른 경우 모두에서 똑같이 찍힌다. 기존
+ * logKeyboardMath의 trigger/+450ms 쌍이 정확히 그 두 점짜리라, 이 질문에는 구조적으로
+ * 답할 수 없다.
+ *
+ * 마지막 줄의 **maxΔst가 이 트레이스의 결론**이다: 한 프레임에 움직인 scrollTop의
+ * 최댓값이 전체 이동량과 비슷하면 화면은 사실상 한 번에 뛴 것이고(트윈이 안 돌았거나
+ * 브라우저 clamp가 트윈보다 앞서 갔다는 뜻), 전체 이동량을 프레임 수로 나눈 값 근처면
+ * 트윈은 정상이고 "둔탁"의 원인은 다른 데(예: 120ms 정지 뒤 빠르게 시작하는 곡선의
+ * 앞머리, 또는 해제 도중 트윈이 반복 재조준되는 것) 있다.
+ *
+ * inset과 st를 나란히 두는 이유: 화면을 실제로 움직이는 건 st다. inset이 부드럽게
+ * 줄었는데 st가 계단이면 원인은 트윈이 아니라 브라우저의 scrollTop clamp다. */
+function startReleaseTrace() {
+  if (releaseTracing) return;   // 이미 이번 닫힘을 따라가는 중 — 겹쳐 걸지 않는다.
+  releaseTracing = true;
+
+  const first = sampleRelease();
+  append(`kbrelease start  reduce=${reduceMotionState()}  inset=${first.inset} pad=${first.pad} st=${first.st} sh=${first.sh} ch=${first.ch}`);
+
+  // 워치독 — rAF는 탭이 백그라운드로 가면 멈춘다. 사용자가 해제 도중 앱을 전환하면
+  // 이 플래그가 참인 채로 굳고, 그 뒤의 모든 닫힘이 **아무 줄도 남기지 않은 채**
+  // 조용히 무시된다. 한 번의 캡처에서 여러 사이클을 받는 게 이 트레이스의 용도라
+  // 그건 그대로 캡처 전체를 버리게 만든다. 벽시계로 창구를 한 번 더 닫아 둔다.
+  // aborted를 따로 두는 이유: 워치독이 창구를 닫은 뒤 탭이 돌아오면 멈춰 있던 rAF가
+  // 그대로 이어서 깨어난다. 그때 이 실행이 계속 줄을 남기면, 그 사이에 시작된 새 트레이스와
+  // 뒤섞여 읽는 쪽이 두 사이클을 하나로 오독한다 — 깨어난 옛 실행은 조용히 끝내야 한다.
+  let aborted = false;
+  const watchdog = window.setTimeout(() => {
+    if (!releaseTracing) return;
+    aborted = true;
+    releaseTracing = false;
+    append("kbrelease abort  rAF가 창구 안에 끝나지 않았다(탭 백그라운드 등) — 다음 닫힘은 정상 기록된다");
+  }, RELEASE_TRACE_MS + 600);
+
+  let previous = first;
+  let frames = 0;
+  let changed = 0;
+  let lines = 0;
+  let maxFrameInset = 0;
+  let maxFrameScroll = 0;
+
+  function frame() {
+    if (aborted) return;   // 워치독이 이미 이 실행을 끝냈다 — 깨어나도 아무것도 남기지 않는다.
+    const now = sampleRelease();
+    frames += 1;
+    const dInset = now.inset - previous.inset;
+    const dScroll = now.st - previous.st;
+    if (dInset !== 0 || dScroll !== 0) {
+      changed += 1;
+      if (Math.abs(dInset) > Math.abs(maxFrameInset)) maxFrameInset = dInset;
+      if (Math.abs(dScroll) > Math.abs(maxFrameScroll)) maxFrameScroll = dScroll;
+      if (lines < RELEASE_TRACE_MAX_LINES) {
+        lines += 1;
+        append(`kbrelease +${round(now.t - first.t)}ms  inset=${now.inset}(${dInset >= 0 ? "+" : ""}${dInset}) pad=${now.pad} st=${now.st}(${dScroll >= 0 ? "+" : ""}${dScroll}) sh=${now.sh} ch=${now.ch}`);
+      }
+    }
+    previous = now;
+    if (now.t - first.t < RELEASE_TRACE_MS) {
+      requestAnimationFrame(frame);
+      return;
+    }
+    releaseTracing = false;
+    window.clearTimeout(watchdog);
+    const droppedNote = changed > lines ? `  (${changed - lines}줄 생략)` : "";
+    append(
+      `kbrelease end  frames=${frames} changed=${changed}  inset ${first.inset}->${now.inset}  st ${first.st}->${now.st} (Δ${now.st - first.st})`
+      + `  maxΔinset=${maxFrameInset} maxΔst=${maxFrameScroll}${droppedNote}`,
+    );
+  }
+  requestAnimationFrame(frame);
+}
+
 function append(text: string) {
   const now = performance.now();
   // 새 배열을 만들어 교체합니다(push로 제자리 변경 금지) — React 상태로 그대로 흘려보내는
@@ -297,6 +415,24 @@ export function installEventTrace() {
   document.addEventListener("focusout", (event) => {
     logKeyboardMath("focusout", describeTarget(event.target));
   }, { passive: true });
+
+  append(`trace installed  reduce=${reduceMotionState()}  ua=${truncate(navigator.userAgent, 90)}`);
+
+  // 닫힘 해제 트레이스의 방아쇠 — 킷이 스스로 "닫혔다"고 판단한 그 순간에 맞춘다.
+  // .app-shell의 keyboard-inset-open은 useVirtualKeyboard의 keyboard.open을 그대로
+  // 반영하므로(AppShell이 붙인다), 이걸 보면 hooks.ts의 120px 문턱이나 restingHeight
+  // 누적 규칙을 여기서 다시 구현하지 않아도 된다 — 재구현했다면 그게 바로 이 파일이
+  // 이미 경고하고 있는 종류의 드리프트 지점이 하나 더 느는 것이다. 있음->없음
+  // 전이에서만 건다(반대 방향은 열림이라 해제와 무관).
+  let shellKeyboardOpen = false;
+  new MutationObserver((records) => {
+    for (const record of records) {
+      if (!(record.target instanceof Element) || !record.target.classList.contains("app-shell")) continue;
+      const open = record.target.classList.contains("keyboard-inset-open");
+      if (shellKeyboardOpen && !open) startReleaseTrace();
+      shellKeyboardOpen = open;
+    }
+  }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ["class"] });
 
   const vv = window.visualViewport;
   if (vv) {
