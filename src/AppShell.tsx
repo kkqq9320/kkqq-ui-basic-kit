@@ -495,6 +495,13 @@ function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId =
   // churn과 그로 인한 취소가 일어나지 않게 합니다.
   useLayoutEffect(() => {
     if (!keyboard.open) return;
+    // **focusin은 일부러 즉시 잽니다(디바운스 없음).** 리뷰에서 "키보드가 이미 올라와
+    // 있는 채로 다른 필드를 탭하면 안드로이드가 다시 팬하므로 여기도 아래 이펙트와 같은
+    // 창구를 태워야 한다"는 지적이 나왔고, 실제로 태워 봤더니 §3 인터럽터빌리티 계약
+    // 테스트("애니메이션 도중 다른 필드로 포커스가 옮겨가면 …")가 깨졌습니다. 그 지적은
+    // 추론이지 실기기 측정이 아니므로, 검증된 계약을 추측으로 바꾸지 않고 그대로 둡니다.
+    // 필드 전환에서 정말로 초과분이 쌓이는지는 다음 실기기 캡처에서 확인할 항목입니다
+    // (판정 방법: 키보드를 올린 채 필드만 옮겨 다니며 #root의 scrollTop이 단조 증가하는지).
     document.addEventListener("focusin", reposition);
     return () => {
       document.removeEventListener("focusin", reposition);
@@ -833,13 +840,31 @@ function useReleasableKeyboardInset(keyboard: VirtualKeyboard, scrollRootId = "r
     // 더 작은 높이는 상한(scrollHeight - clientHeight)을 **키우므로** 그 자체로는 clamp를
     // 만들 수 없습니다. (AppShell.test.tsx의 C1 테스트가 정확히 이 순서, 즉 부풀림이 닫힘보다
     // 먼저 오는 경우를 재현합니다.)
-    const observedHeight = scrollRoot.clientHeight;
+    // **키보드가 한 번도 열린 적 없으면 붙들지 않습니다.** 이 이펙트는 `!keyboard.open`이면
+    // 도는데, 거기엔 첫 마운트도 포함됩니다 — 그때는 막을 닫힘 자체가 없습니다. 게다가
+    // `#root`의 `height: 100dvh`는 `css/tokens.css:115`의 모바일 미디어 쿼리 **안**이라,
+    // 데스크톱의 `#root`에는 높이 규칙이 아예 없습니다. 거기에 인라인 height를 쓰면
+    // "부풀림을 막는" 게 아니라 **없던 제약을 새로 만드는** 일이 됩니다. 그래서 열려 있던
+    // 적이 있을 때(=knownGood이 잡혔을 때)만 붙듭니다.
     const knownGoodHeight = lastOpenClientHeightRef.current;
-    const pinnedHeight = knownGoodHeight > 0 ? Math.min(observedHeight, knownGoodHeight) : observedHeight;
-    if (pinnedHeight > 0) scrollRoot.style.height = `${pinnedHeight}px`;
-    function unpinHeight() { scrollRoot!.style.height = ""; }
+    const observedHeight = scrollRoot.clientHeight;
+    const pinnedHeight = knownGoodHeight > 0 ? Math.min(observedHeight, knownGoodHeight) : 0;
+    let heightPinned = pinnedHeight > 0;
+    if (heightPinned) scrollRoot.style.height = `${pinnedHeight}px`;
+    function unpinHeight() {
+      heightPinned = false;
+      scrollRoot!.style.height = "";
+    }
 
     function recompute() {
+      // **붙들려 있는 동안에는 재지 않습니다.** 이 함수는 scrollHeight와 clientHeight로
+      // naturalMax를 구하는데, clientHeight가 우리가 못 박은 값이면 그건 브라우저의 실제
+      // 지오메트리가 아닙니다. 붙든 값이 실제보다 **작을** 때(닫은 직후 사용자가 스크롤해
+      // 주소창이 접히면 실제 dvh가 커집니다 — 그리고 그 스크롤이 바로 이 함수를 부릅니다)
+      // naturalMax를 과대평가해 안전선보다 많이 걷어내고, 그 결과 scrollHeight가 줄어
+      // 브라우저가 scrollTop을 clamp합니다. 바로 이 고침이 없애려던 그 이동입니다.
+      // settle 타이머가 unpinHeight() 다음에 이 함수를 부르므로 측정 자체는 안 밀립니다.
+      if (heightPinned) return;
       const current = displayedFloorRef.current;
       if (current === 0) return;
       if (scrollRoot!.clientHeight <= 0) return;   // 지오메트리를 믿을 수 없다 — 손대지 않는다.

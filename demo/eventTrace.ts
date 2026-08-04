@@ -221,7 +221,7 @@ function snapshotKeyboardMath(label: string, target: string | undefined): Keyboa
 
   const tgt = target ? `  tgt=${target}` : "";
   const text = `kb ${label}${tgt}  foc=${describeTarget(focused)} inRoot=${inRoot} edit=${editable}  op=${kitOpen} hold=${kitHold} css=${kitInset}px`
-    + `  vpH=${vpH} vpTop=${vpTop} winH=${winH}  root[st=${scrollTop} sh=${scrollHeight} ch=${clientHeight} max=${maxScroll}]`
+    + `  vpH=${vpH} vpTop=${vpTop} winH=${winH}  root[st=${scrollTop} sh=${scrollHeight} ch=${clientHeight} pin=${pinnedHeightOf(scrollRoot)} max=${maxScroll}]`
     + `  rect=${rectText} visBot=${visibleBottom === null ? "n/a" : round(visibleBottom)} over=${overshoot === null ? "n/a" : round(overshoot)} keep=${keepText} cap=${capText}  padB=${padBottom}`;
 
   return { text, scrollTop, maxScroll, requested };
@@ -274,7 +274,22 @@ function reduceMotionState(): "Y" | "N" | "?" {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "Y" : "N";
 }
 
-type ReleaseSample = { t: number; inset: number; pad: number; st: number; sh: number; ch: number };
+/** `#root`에 인라인 height가 박혀 있으면 그 값, 없으면 0.
+ *
+ * **이게 없으면 `ch=`를 오독합니다.** 킷은 닫히는 창구(120ms) 동안 `#root`에 인라인
+ * height를 씁니다(`src/AppShell.tsx`의 C2). 인라인 height는 `100dvh`를 이기므로 그
+ * 구간의 `clientHeight`는 브라우저의 실제 지오메트리가 아니라 **킷이 못 박은 값**입니다.
+ * 즉 이 패널의 `ch=`는 그 구간에서 구조적으로 평평해집니다 — C1/C2 진단의 근거였던
+ * 1192 스파이크를 더는 볼 수 없습니다. 표식 없이 그대로 두면 다음 캡처를 읽는 사람이
+ * "스파이크가 사라졌다"고 결론 내립니다. 실제로는 가려졌을 뿐입니다.
+ * `pin=0`이면 `ch=`는 브라우저 값, `pin>0`이면 `ch=`는 곧 `pin`입니다. */
+function pinnedHeightOf(scrollRoot: HTMLElement | null): number {
+  if (!scrollRoot) return -1;
+  const parsed = parseFloat(scrollRoot.style.height);
+  return Number.isFinite(parsed) ? round(parsed) : 0;
+}
+
+type ReleaseSample = { t: number; inset: number; pad: number; st: number; sh: number; ch: number; pin: number };
 
 function sampleRelease(): ReleaseSample {
   const shell = document.querySelector(".app-shell");
@@ -287,6 +302,7 @@ function sampleRelease(): ReleaseSample {
     st: scrollRoot ? round(scrollRoot.scrollTop) : -1,
     sh: scrollRoot ? round(scrollRoot.scrollHeight) : -1,
     ch: scrollRoot ? round(scrollRoot.clientHeight) : -1,
+    pin: pinnedHeightOf(scrollRoot),
   };
 }
 
@@ -314,7 +330,7 @@ function startReleaseTrace() {
   releaseTracing = true;
 
   const first = sampleRelease();
-  append(`kbrelease start  reduce=${reduceMotionState()}  inset=${first.inset} pad=${first.pad} st=${first.st} sh=${first.sh} ch=${first.ch}`);
+  append(`kbrelease start  reduce=${reduceMotionState()}  inset=${first.inset} pad=${first.pad} st=${first.st} sh=${first.sh} ch=${first.ch} pin=${first.pin}`);
 
   // 워치독 — rAF는 탭이 백그라운드로 가면 멈춘다. 사용자가 해제 도중 앱을 전환하면
   // 이 플래그가 참인 채로 굳고, 그 뒤의 모든 닫힘이 **아무 줄도 남기지 않은 채**
@@ -350,7 +366,7 @@ function startReleaseTrace() {
       if (Math.abs(dScroll) > Math.abs(maxFrameScroll)) maxFrameScroll = dScroll;
       if (lines < RELEASE_TRACE_MAX_LINES) {
         lines += 1;
-        append(`kbrelease +${round(now.t - first.t)}ms  inset=${now.inset}(${dInset >= 0 ? "+" : ""}${dInset}) pad=${now.pad} st=${now.st}(${dScroll >= 0 ? "+" : ""}${dScroll}) sh=${now.sh} ch=${now.ch}`);
+        append(`kbrelease +${round(now.t - first.t)}ms  inset=${now.inset}(${dInset >= 0 ? "+" : ""}${dInset}) pad=${now.pad} st=${now.st}(${dScroll >= 0 ? "+" : ""}${dScroll}) sh=${now.sh} ch=${now.ch} pin=${now.pin}`);
       }
     }
     previous = now;
