@@ -101,6 +101,12 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
   // 인덱스로 만듭니다 — value에는 선택자·id에서 escape가 필요한 문자가 올 수 있고,
   // 옵션은 options 순서 그대로 렌더되므로 인덱스가 안정적입니다.
   const optionId = (index: number) => `${optionIdBase}-${index}`;
+  // aria-activedescendant(트리거에 있음)가 가리키는 옵션은 트리거의 서브트리 안에
+  // 있지 않습니다(옵션은 메뉴 쪽에, portal 모드면 body 끝에 따로 있습니다) — ARIA는
+  // 이런 경우 참조하는 요소가 활성 옵션을 담은 컨테이너를 aria-controls/aria-owns로
+  // 가리키도록 요구합니다. 그 컨테이너(리스트박스)에 안정적인 id를 줘야 트리거가
+  // 가리킬 수 있습니다.
+  const menuId = `${optionIdBase}-menu`;
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -367,6 +373,7 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
 
   const menu = <div
     ref={menuRef}
+    id={menuId}
     className={`app-select-menu dropdown-menu-surface${portal ? " app-select-menu-portaled" : ""}${portal && openAbove ? " drop-up" : ""}`}
     role="listbox"
     aria-label={ariaLabel}
@@ -395,6 +402,7 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
       aria-label={ariaLabel}
       aria-haspopup="listbox"
       aria-expanded={open}
+      aria-controls={open ? menuId : undefined}
       aria-activedescendant={keyboardActiveMode === "descendant" && open && activeIndex !== -1 ? optionId(activeIndex) : undefined}
       disabled={disabled}
       onKeyDown={handleKeyDown}

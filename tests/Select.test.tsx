@@ -91,6 +91,21 @@ describe("Select", () => {
     expect(screen.getByRole("option", { name: "셋째" })).toHaveProperty("disabled", true);
   });
 
+  // ARIA는 aria-activedescendant를 가진 요소가 참조 대상을 담고 있거나(포함 관계),
+  // 그 컨테이너를 aria-controls/aria-owns로 가리켜야 유효하다고 요구한다. 여기서는
+  // 트리거가 포커스를 갖고 옵션은 메뉴 쪽 별도 서브트리(portal 모드면 body 끝)에
+  // 있어 포함 관계가 성립하지 않으므로, aria-controls가 리스트박스를 가리켜야 한다.
+  it("트리거의 aria-controls가 열린 리스트박스를 가리킨다", () => {
+    render(<ControlledSelect />);
+    const trigger = screen.getByRole("button", { name: "항목" });
+
+    fireEvent.click(trigger);
+
+    const controlsId = trigger.getAttribute("aria-controls");
+    expect(controlsId).toBeTruthy();
+    expect(document.getElementById(controlsId!)).toBe(screen.getByRole("listbox"));
+  });
+
   it("closes on Escape and on an outside click", () => {
     render(<ControlledSelect />);
     const trigger = screen.getByRole("button", { name: "항목" });
@@ -496,6 +511,21 @@ describe("Select", () => {
       expect(selectedRule).not.toBeNull();
       expect(selectedRule![0]).toMatch(/:not\(:disabled\)/);
     });
+
+    // keyboardActiveMode 캐스케이드 함정: roving 모드는 활성 옵션에 진짜 포커스를 줘
+    // :not(:focus-visible)가 이 규칙을 죽이고 surfaces.css의 공용 하이라이트가 전부를
+    // 그린다. descendant 모드는 포커스를 트리거에 두므로 :focus-visible이 옵션에서
+    // 절대 맞지 않는다 — .active가 그 역할의 짝이어야, 이 규칙이 거기서도 똑같이
+    // 물러나 두 모드가 같은 옵션에서 같은 하이라이트를 낸다. initialActiveValue가
+    // 메뉴를 열 때마다 활성을 현재 값으로 시딩하므로 active===selected는 두 모드
+    // 모두 "열자마자 보는" 기본값이지 드문 경우가 아니다 — .active를 빼먹으면 두
+    // 모드를 비교할 때마다 매번 이 캐스케이드 차이가 결과를 오염시킨다.
+    it(".selected 규칙이 .active도 제외한다 — descendant 모드가 roving 모드와 같은 하이라이트를 내려면", () => {
+      expect(selectCssSource.length).toBeGreaterThan(1000);
+      const selectedRule = selectCssSource.match(/\.app-select-menu button\.selected[^{]*\{/);
+      expect(selectedRule).not.toBeNull();
+      expect(selectedRule![0]).toMatch(/:not\(\.active\)/);
+    });
   });
 
   describe("descendant 모드의 .active 하이라이트가 CSS에도 있다 — jsdom은 캐스케이드를 계산하지 않으므로 소스 텍스트로 고정", () => {
@@ -696,11 +726,38 @@ describe("Select", () => {
       expect(document.getElementById(activeId!)?.textContent).toBe("둘째");
     });
 
-    it("descendant 모드에서 활성 옵션에 .active 클래스가 붙는다 — :focus-visible이 안 맞으므로", () => {
+    // value="a" + ArrowDown 한 번만 쓰면 활성 옵션과 선택 옵션이 우연히 둘 다 첫째라,
+    // className에 active가 붙는 이유가 "지금 활성이라서"인지 "선택돼 있어서"인지
+    // 구분이 안 된다 — descendant 분기를 option.value === activeValue에서
+    // option.value === value로 바꿔도 이 상태로는 똑같이 통과한다. 아래 tab-order
+    // 테스트("옵션은 tab 순서에서 빠진다")가 이미 같은 함정을 겪었다 — 거기와 똑같이
+    // ↓를 한 번 더 눌러 활성을 선택값(첫째)에서 둘째로 떼어 놓은 뒤, .active가 새
+    // 활성(둘째)에는 있고 예전 선택(첫째)에는 없다고 요소 단위로 확정한다.
+    it("descendant 모드에서 .active는 선택된 옵션이 아니라 활성 옵션을 따라간다", () => {
       render(<Select ariaLabel="항목" value="a" options={OPTIONS} onChange={() => undefined} keyboardActiveMode="descendant" />);
-      fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });
+      const trigger = screen.getByRole("button", { name: "항목" });
 
-      expect(screen.getByRole("option", { name: "첫째" }).className).toContain("active");
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });   // 열기 + 활성을 선택값(첫째)으로 시딩
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });   // 활성을 둘째로 옮겨 선택(첫째)과 갈라놓는다
+
+      expect(screen.getByRole("option", { name: "둘째" }).className).toContain("active");
+      expect(screen.getByRole("option", { name: "첫째" }).className).not.toContain("active");
+    });
+
+    // tabIndex의 keyboardActiveMode 게이트(`keyboardActiveMode === "roving" && ...`)가
+    // 지워져도 고치기 전 스위트는 전부 통과했다 — descendant 모드에서 tabindex를 읽는
+    // 테스트가 없었다. 실제 결함은 Tab 순서 유출이다: descendant 모드의 전제는
+    // 포커스가 트리거를 절대 벗어나지 않는다는 것인데, 게이트가 없으면 활성 옵션이
+    // 진짜 tab 순서에 들어가 그 전제를 깬다. 활성 옵션을 포함해 "전부" -1이어야
+    // 한다 — roving 모드처럼 활성 옵션 하나만 0이면 안 된다.
+    it("descendant 모드에서는 활성 옵션을 포함해 전부 tabindex=-1이다 — 포커스가 트리거를 벗어나면 안 된다", () => {
+      render(<Select ariaLabel="항목" value="a" options={OPTIONS} onChange={() => undefined} keyboardActiveMode="descendant" />);
+      fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });   // 열기 + 활성 시딩
+
+      // every(...) === true는 실패해도 "누가" 0을 들고 있는지 안 알려준다 —
+      // toEqual로 옵션별 배열째로 비교해 실패 시 diff에 위치가 남게 한다.
+      const tabIndexes = screen.getAllByRole("option").map((option) => option.getAttribute("tabindex"));
+      expect(tabIndexes).toEqual(OPTIONS.map(() => "-1"));
     });
 
     // Escape·Tab·바깥 클릭·앵커 이동 스크롤은 전부 setOpen(false)만 하고 activeValue를
