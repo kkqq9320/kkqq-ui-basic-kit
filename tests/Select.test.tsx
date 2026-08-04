@@ -629,12 +629,24 @@ describe("Select", () => {
     it("옵션은 tab 순서에서 빠진다 — 활성 하나만 0이고 나머지는 -1", () => {
       // ARIA listbox 계약: 옵션이 개별적으로 tab 순서에 들어가면 안 된다.
       // 이게 깨지면 옵션 50개짜리 Select에서 다음 필드까지 Tab을 50번 눌러야 한다.
+      // 여는 것만으로는 활성 옵션과 선택된 옵션이 같은 값(a/첫째)이라, tabIndex가
+      // activeValue를 추적하는지 value(선택값)를 추적하는지 구분이 안 된다 — 두 로직이
+      // 우연히 같은 카운트를 만든다. ↓를 한 번 더 눌러 활성을 둘째로 옮겨 둘을
+      // 갈라놓아야, 0을 든 옵션이 실제로 활성(둘째)인지 확인할 수 있다.
       render(<ControlledSelect initialValue="a" />);
       fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "ArrowDown" });
 
-      const tabIndexes = screen.getAllByRole("option").map((option) => option.getAttribute("tabindex"));
+      const allOptions = screen.getAllByRole("option");
+      const tabIndexes = allOptions.map((option) => option.getAttribute("tabindex"));
       expect(tabIndexes.filter((value) => value === "0")).toHaveLength(1);
       expect(tabIndexes.filter((value) => value === "-1")).toHaveLength(OPTIONS.length - 1);
+
+      // 개수만이 아니라 "누가" 0을 들고 있는지를 요소 동일성으로 확정한다 — 인덱스가
+      // 아니라 실제 tabindex="0" 요소를 찾아, 그것이 활성 옵션(둘째)이어야지 선택된
+      // 옵션(첫째)이면 안 된다고 못박는다.
+      const activeOption = allOptions.find((option) => option.getAttribute("tabindex") === "0");
+      expect(activeOption).toBe(screen.getByRole("option", { name: "둘째" }));
     });
 
     it("Escape는 값을 바꾸지 않고 닫으며 포커스를 트리거로 돌려준다", () => {
