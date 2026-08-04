@@ -473,7 +473,15 @@ function startReleaseTrace() {
  *   `atMax=Y` → 궤적을 세운 건 트윈이 아니라 **브라우저의 상한**이다. 예전 `clamp=`가
  *     예측으로 답하려던 걸 관찰로 답한다.
  * 마지막 `kbopen final` 줄의 `over=`가 **결과 판정**이다: 0 근처면 정확, 음수로 크면
- * 과보정(= ratchet의 증상, 실기기에서 -243이 나왔다), 양수면 아직 가려져 있다. */
+ * 과보정(= ratchet의 증상, 실기기에서 -243이 나왔다), 양수면 아직 가려져 있다.
+ *
+ * **`reason=refocus`는 잘 안 보인다 — 그게 정상이다.** runFrameTrace는 같은 이름이
+ * 이미 돌고 있으면 그냥 돌아가는데, "키보드가 올라온 채로 다른 필드를 탭"하는 건 보통
+ * 앞선 개창의 900ms 창구 안에서 일어난다. 그럼 새 트레이스가 시작되지 않고 진행 중인
+ * 트레이스가 그 구간을 계속 담는다(잃는 건 없다 — 그 focusin은 자기 지오메트리 줄로
+ * 남고, 재조준의 결과는 같은 트레이스의 뒷부분에 그대로 나타난다). 창구 밖에서 탭했을
+ * 때만 `reason=refocus`로 새로 시작한다. 이 줄을 못 봤다고 재조준 경로가 안 돈다고
+ * 결론 내리지 말 것. */
 function startOpenTrace(reason: string) {
   runFrameTrace({
     name: "kbopen",
@@ -487,7 +495,10 @@ function startOpenTrace(reason: string) {
       + `  inset=${n.inset}(${signed(n.inset - p.inset)}) st=${n.st}(${signed(n.st - p.st)}) sh=${n.sh} ch=${n.ch} pin=${n.pin} max=${n.max}`,
     endLine: (n, first, s) =>
       `kbopen end  frames=${s.frames} changed=${s.changed}  vpTop ${first.vpTop}->${n.vpTop}  inset ${first.inset}->${n.inset}`
-      + `  st ${first.st}->${n.st} (Δ${n.st - first.st})  maxΔst=${s.maxScrollStep}  max=${n.max} atMax=${n.st >= n.max - 1 ? "Y" : "N"}`
+      // max=0(스크롤할 게 없는 페이지)에서는 st>=max-1이 항상 참이라 "브라우저 상한에
+      // 막혔다"로 읽힌다 — 시도한 적조차 없는데. atMax는 옛 clamp=를 대신하는 필드라
+      // 그 오독이 그대로 진단으로 이어진다. 스크롤 여지가 있을 때만 판정한다.
+      + `  st ${first.st}->${n.st} (Δ${n.st - first.st})  maxΔst=${s.maxScrollStep}  max=${n.max} atMax=${n.max > 0 ? (n.st >= n.max - 1 ? "Y" : "N") : "n/a"}`
       + `${s.dropped > 0 ? `  (${s.dropped}줄 생략)` : ""}`,
     abortLine: "kbopen abort  rAF가 창구 안에 끝나지 않았다(탭 백그라운드 등) — 다음 개창은 정상 기록된다",
     // 팬도 트윈도 끝난 뒤의 최종 판정 — 이 한 줄의 over=가 "결과가 맞았나"에 답한다.
@@ -583,13 +594,20 @@ export function installEventTrace() {
 
   const vv = window.visualViewport;
   if (vv) {
-    // 지오메트리 줄만 남긴다. 예전에는 여기서도 reqΔ/achΔ 짝을 찍었는데, 팬 한 번에
-    // 이벤트가 9~43개 오므로 그 짝만으로 18~86줄이었다 — MAX_ENTRIES(400)에 대고 보면
-    // 개창 두세 번이 링버퍼의 나머지를 전부 밀어냈다. 궤적은 이제 kbopen 트레이스가
-    // 프레임 단위로 담으므로 여기서 중복해서 예측할 이유가 없다.
+    // kbopen 트레이스가 도는 동안에는 지오메트리 줄을 접는다 — 그 구간은 프레임 단위로
+    // 이미, 더 촘촘히 담기고 있어서 중복이다. 중간 `over=`들은 팬이 도는 중의 값이라
+    // 어차피 판정 근거로 쓰면 안 되고(logKeyboardSnapshot 주석), 판정은 트레이스 끝의
+    // `kbopen final` 한 줄이 한다. 창구 밖(주소창 접힘 등 키보드와 무관한 뷰포트 변화)
+    // 에서는 그대로 남긴다 — 거기선 이 줄이 유일한 기록이다.
+    //
+    // ⚠️ **이건 링버퍼 절약책이 아니다.** 실측: 팬 한 번(간격 5/15/25ms)에 남는 줄이
+    // 이전 129/45/27줄 → 지금 90/62/56줄이다. 즉 촘촘한 간격에서만 줄고 나머지에서는
+    // **오히려 늘었다** — 프레임 단위 관찰의 본질적 비용이다(MAX_ENTRIES=400,
+    // 프레임 줄은 RELEASE_TRACE_MAX_LINES=44로 상한). 한 캡처에 여러 사이클을 담아야
+    // 하면 이 점을 감안할 것.
     const onViewportChange = (event: Event) => {
       append(`viewport ${event.type}  height=${Math.round(vv.height)}  offsetTop=${Math.round(vv.offsetTop)}  menu=${menuPresent()}`);
-      logKeyboardSnapshot(event.type, undefined);
+      if (!activeTraces.has("kbopen")) logKeyboardSnapshot(event.type, undefined);
     };
     vv.addEventListener("resize", onViewportChange);
     vv.addEventListener("scroll", onViewportChange);
