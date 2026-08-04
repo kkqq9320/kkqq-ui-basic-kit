@@ -495,16 +495,27 @@ function useKeyboardScrollCompensation(keyboard: VirtualKeyboard, scrollRootId =
   // churn과 그로 인한 취소가 일어나지 않게 합니다.
   useLayoutEffect(() => {
     if (!keyboard.open) return;
-    // **focusin은 일부러 즉시 잽니다(디바운스 없음).** 리뷰에서 "키보드가 이미 올라와
-    // 있는 채로 다른 필드를 탭하면 안드로이드가 다시 팬하므로 여기도 아래 이펙트와 같은
-    // 창구를 태워야 한다"는 지적이 나왔고, 실제로 태워 봤더니 §3 인터럽터빌리티 계약
-    // 테스트("애니메이션 도중 다른 필드로 포커스가 옮겨가면 …")가 깨졌습니다. 그 지적은
-    // 추론이지 실기기 측정이 아니므로, 검증된 계약을 추측으로 바꾸지 않고 그대로 둡니다.
-    // 필드 전환에서 정말로 초과분이 쌓이는지는 다음 실기기 캡처에서 확인할 항목입니다
-    // (판정 방법: 키보드를 올린 채 필드만 옮겨 다니며 #root의 scrollTop이 단조 증가하는지).
-    document.addEventListener("focusin", reposition);
+    // **focusin도 같은 창구를 지납니다.** 키보드가 이미 올라와 있는 채로 다른 필드를
+    // 탭하면(메모 → 숫자 필드) 안드로이드는 키보드 높이를 바꾸며 다시 팬합니다. 이
+    // 리스너가 곧장 reposition()을 부르면 팬 전 지오메트리로 재게 되어, 아래 이펙트에서
+    // 없앤 이중 보정이 이 문으로 그대로 살아남습니다 — 닫을 때 되돌리지 않으므로 그
+    // 초과분도 영구히 남습니다. 여기를 빼놓으면 아래 주석의 "한 번만 잰다"가 거짓이 됩니다.
+    //
+    // 처음에는 이걸 넣었다가 §3 인터럽터빌리티 테스트가 깨져서 되돌렸습니다. 다시 보니
+    // 깨진 건 계약이 아니라 그 테스트의 **정확한 산술**이었습니다: 재조준이 80ms 늦어지는
+    // 동안 진행 중이던 애니메이션이 조금 더 가므로 목표가 `interruptFrom + 130`에서
+    // 벗어납니다. §3가 금지하는 "맨 처음 값에서 다시 시작"은 그대로 안 일어나고, 그
+    // 테스트의 프레임별 단조 검사도 그대로 통과합니다. 그래서 테스트를 타이밍이 아니라
+    // 계약을 단언하도록 바꾸고 이 경로를 살렸습니다.
+    let focusSettleTimer = 0;
+    function repositionAfterViewportSettles() {
+      window.clearTimeout(focusSettleTimer);
+      focusSettleTimer = window.setTimeout(reposition, KEYBOARD_VIEWPORT_SETTLE_MS);
+    }
+    document.addEventListener("focusin", repositionAfterViewportSettles);
     return () => {
-      document.removeEventListener("focusin", reposition);
+      document.removeEventListener("focusin", repositionAfterViewportSettles);
+      window.clearTimeout(focusSettleTimer);
       cancelPendingScroll();
       resizeObserverRef.current?.disconnect();
       observedElementRef.current = null;   // 여기서도 실제로 관찰이 끊긴다 — 위와 같은 이유.

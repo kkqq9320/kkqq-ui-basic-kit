@@ -417,6 +417,7 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     // 둬도 어긋난 나머지가 그대로 더해질 수 있다(요구되는 불변식은 achΔ==reqΔ지 "더
     // 작게"가 아니다). 단위(dvh든 px든)에 상관없이 존재 자체를 잡는다 — 값만 다른
     // 형태로 되돌아와도(예: 200px) 이 assert가 잡는다.
+    expect(tokensCssSource.length).toBeGreaterThan(1000);   // .css?raw가 빈 문자열로 목킹되면 아래 .not.toMatch가 공허하게 통과한다 — 이 브랜치에서 실제로 있었던 결함
     expect(tokensCssSource).not.toMatch(/#root\s*\{[^}]*scroll-padding-bottom/);
 
     // 두 번째 불변식(행동, 예시/설명용 — 잠금장치는 위 assert다): jsdom은
@@ -560,6 +561,12 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
       viewport.openKeyboard(350);   // visibleBottom = 494
 
       await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));   // 키보드는 열렸다
+      // **여기서 곧장 단언하면 안 된다.** reposition()은 KEYBOARD_VIEWPORT_SETTLE_MS(80ms)
+      // 뒤에 돌고, animateScrollTopBy의 첫 rAF 프레임은 from을 그대로 다시 쓴다. 그래서
+      // 기다리지 않으면 "마커를 무시하도록 망가뜨려도" 이 단언이 통과한다 — 리뷰가
+      // 뮤테이션 두 가지로 실증했다(마커 탐색을 parentElement 고정으로 바꿔도 통과,
+      // overshoot=500을 무조건 먹여도 통과). 이 브랜치의 다섯 번째 "실패할 수 없는 테스트"였다.
+      await new Promise((resolve) => { window.setTimeout(resolve, 250); });
       expect(root.scrollTop).toBe(1046);   // 컨테이너 rect는 무시된다 — 필드 자신은 이미 충분히 보인다
     });
 
@@ -918,8 +925,13 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
 
     second.focus();   // focusin 리스너가 동기적으로 다시 reposition()을 부른다
 
-    // 둘째 기준 overshoot = 600 - 494 + 24 = 130, 지금 값(interruptFrom) 위에 쌓인다.
-    await waitFor(() => expect(root.scrollTop).toBe(interruptFrom + 130));
+    // 둘째 기준 overshoot = 600 - 494 + 24 = 130이 "재조준하는 그 순간의 값" 위에 쌓인다.
+    // 정확히 interruptFrom + 130으로 단언하지 않는 이유: focusin도 KEYBOARD_VIEWPORT_SETTLE_MS
+    // 만큼 기다렸다 재므로, 그 사이 첫 애니메이션이 조금 더 진행한 뒤 그 자리에서 겨냥한다.
+    // §3가 실제로 금지하는 건 "맨 처음 값(1046)에서 다시 시작하는 것"이고, 그랬다면 최종값이
+    // 1046+130=1176 — interruptFrom+130보다 **작다**. 그래서 이 하한이 그 위반을 정확히 잡는다
+    // (아래 프레임별 단조 검사와 함께). 타이밍이 아니라 계약을 단언한다.
+    await waitFor(() => expect(root.scrollTop).toBeGreaterThanOrEqual(interruptFrom + 130));
     // 가로챈 뒤로는 그 어떤 프레임도 가로챈 시점(interruptFrom)보다 아래로 되돌아가지
     // 않는다 — 되돌아간다면 논리적 목표가 아니라 "맨 처음" 값에서 다시 시작했다는 뜻.
     const afterInterrupt = writes.slice(writes.indexOf(interruptFrom) + 1);
@@ -1408,6 +1420,33 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     // 불변식: 킷은 스크롤을 요청한 적이 없다(reqΔ=0). 그러니 achΔ도 0이어야 한다.
     // 고침 전에는 1997-1192=805로 깎여 806이 된다(트레이스 사이클 1과 같은 값).
     expect(root.scrollTop).toBe(835);
+  });
+
+  it("붙들어 둔 #root 높이는 창구가 끝나기 전에 다시 열려도 남지 않는다 — 인라인 height 누수", async () => {
+    // 리뷰가 커버리지 0으로 실증한 구멍: 이펙트 cleanup의 unpinHeight()를 통째로 지워도
+    // 전체 스위트가 초록이었다. 그런데 그게 새면 #root에 인라인 height가 **영구히** 남고,
+    // 그때부터 이 스크롤 호스트는 100dvh를 따르지 않는다(인라인이 이긴다) — 주소창이
+    // 접히거나 화면을 돌려도 높이가 그대로라, 키보드와 무관한 자리에서 레이아웃이 깨진다.
+    // 창구는 120ms뿐이지만 그 안에 다시 여는 건 흔한 조작이다(잘못 닫고 곧장 다시 탭).
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 1059 });
+    const viewport = installFakeVisualViewport(1060);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 50);
+    installClampingScrollRoot(root, 1997, 1060);
+
+    textarea.focus();
+    viewport.openKeyboard(407);
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(true));
+
+    viewport.closeKeyboard();
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(false));
+    expect(root.style.height).not.toBe("");   // 전제: 지금은 붙들려 있어야 한다(아니면 아래가 공허하다)
+
+    viewport.openKeyboard(407);   // KEYBOARD_INSET_SETTLE_MS(120ms)가 지나기 전에 다시 연다
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(true));
+
+    expect(root.style.height).toBe("");   // cleanup이 풀었다 — 인라인 height가 남지 않는다
   });
 
   it("맨 아래로 스크롤된 채 닫히는 순간 clientHeight가 실제보다 부풀려 읽혀도(실기기 dvh 재계산 트랜지션) 뷰포트가 움직이지 않는다 — 두 번의 열기/닫기 사이클 모두(C1, owner 실기기 트레이스)", async () => {
