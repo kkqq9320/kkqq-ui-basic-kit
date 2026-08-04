@@ -578,5 +578,40 @@ describe("Select", () => {
       fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });
       expect(screen.queryByRole("listbox")).toBeNull();
     });
+
+    // jsdom은 <button>의 keydown이 click으로 이어지는 브라우저 합성을 재현하지 않으므로,
+    // "메뉴가 열린다"는 증상 자체는 여기서 관찰할 수 없다 — 대신 원인인 preventDefault
+    // 누락을 직접 관찰한다. 실기기/실브라우저에서는: 선택 가능한 옵션이 하나도 없어
+    // initial===null로 handleKeyDown이 일찍 return하면, 막지 않은 Enter keydown이
+    // <button>의 네이티브 click으로 바뀌어 트리거의 onClick(setOpen(true))이 대신
+    // 메뉴를 열어버린다 — 활성 옵션도 포커스도 없는 죽은 드롭다운. fireEvent 대신 직접
+    // KeyboardEvent를 만들어 dispatch해야 event.defaultPrevented를 사후에 읽을 수 있다.
+    it("옵션이 전부 disabled면 Enter가 기본 동작을 막는다 — 못 막으면 네이티브 click이 대신 메뉴를 연다", () => {
+      const allDisabled = [{ value: "a", label: "첫째", disabled: true }];
+      render(<Select ariaLabel="항목" value="" options={allDisabled} onChange={() => undefined} />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+
+      const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+      trigger.dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(screen.queryByRole("listbox")).toBeNull();
+    });
+
+    // 클릭으로 열 때도 키보드로 열 때와 같은 값을 시드해야 네이티브 <select>처럼
+    // 방향키가 "지금 선택된 값"에서 이어간다. OPTIONS = a(첫째), b(둘째), c(disabled,셋째).
+    // value="b"인 채로 클릭해서 열고 ↑를 누르면 b 바로 앞인 a(첫째)로 가야 한다.
+    // 시드가 없으면(activeValue=null) stepEnabledValue가 "활성이 없다"로 보고 ↑를
+    // 끝(마지막 선택 가능한 옵션 = b, 둘째)에서 시작시켜 제자리에 머문다 — 고친 코드가
+    // 아니면 이 값이 첫째가 아니라 둘째가 된다.
+    it("마우스로 열면 현재 선택값에서 방향키가 이어진다 — 네이티브 select처럼", () => {
+      render(<ControlledSelect initialValue="b" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+
+      fireEvent.click(trigger);
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "ArrowUp" });
+
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "첫째" }));
+    });
   });
 });

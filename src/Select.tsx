@@ -286,11 +286,16 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
 
     if (!open) {
       if (key !== "ArrowDown" && key !== "ArrowUp" && key !== "Enter" && key !== " ") return;
+      // <button>은 Enter를 keydown에서, Space를 keyup에서 click으로 바꿉니다.
+      // 여기서 막지 않으면 그 click이 트리거의 onClick과 겹쳐 (연 직후) 곧바로 다시
+      // 닫아버립니다(토글이 두 번 겹치는 셈). 이 네 키로 열려는 시도임이 확정된 지금
+      // 곧바로 막아야 합니다 — 아래 initial===null 가드보다 뒤에 두면, 선택 가능한
+      // 옵션이 하나도 없어 그냥 return할 때는 이 keydown이 막히지 않은 채 남아
+      // <button>이 그걸 네이티브 click으로 바꾸고, 그 click이 트리거의 onClick을 대신
+      // 실행해 (활성 옵션도 포커스도 없는 죽은) 메뉴를 열어버립니다 — 의도와 정반대입니다.
+      event.preventDefault();
       const initial = initialActiveValue(options, value);
       if (initial === null) return;   // 선택 가능한 옵션이 하나도 없다 — 열지 않습니다
-      // <button>은 Enter를 keydown에서, Space를 keyup에서 click으로 바꿉니다.
-      // 여기서 막지 않으면 그 click이 트리거의 onClick과 겹쳐 곧바로 다시 닫습니다.
-      event.preventDefault();
       setActiveValue(initial);
       setOpen(true);
       return;
@@ -357,6 +362,10 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
   return <div className={`app-select dropdown-align-${align} ${open ? "open" : ""} ${openAbove ? "drop-up" : ""} ${className}`.trim()} ref={rootRef}>
     <button ref={triggerRef} type="button" className="app-select-trigger" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} disabled={disabled} onKeyDown={handleKeyDown} onClick={() => {
       if (suppressReopenRef.current) { suppressReopenRef.current = false; return; }   // 유령 click 삼키기 — 토글하지 않는다
+      // 마우스로 열 때도 키보드 경로와 같은 값으로 시드합니다 — 네이티브 <select>처럼
+      // 방향키가 지금 선택된 값에서 이어가게 하려면(§ 위 initialActiveValue), 닫혀 있을
+      // 때만(=지금 열려는 참일 때만) 시드해야 닫는 클릭에서 activeValue를 건드리지 않습니다.
+      if (!open) setActiveValue(initialActiveValue(options, value));
       setOpen((current) => !current);
     }}><span>{selected?.label || placeholder}</span><i className="dropdown-chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></i></button>
     {open && (portal ? (position ? createPortal(menu, document.body) : null) : menu)}
