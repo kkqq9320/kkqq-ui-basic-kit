@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Select, scrollActiveOptionIntoView } from "../src/Select";
 import selectCssSource from "../css/select.css?raw";
+import surfacesCssSource from "../css/surfaces.css?raw";
 
 afterEach(cleanup);
 
@@ -497,6 +498,24 @@ describe("Select", () => {
     });
   });
 
+  describe("descendant 모드의 .active 하이라이트가 CSS에도 있다 — jsdom은 캐스케이드를 계산하지 않으므로 소스 텍스트로 고정", () => {
+    // descendant 모드는 포커스를 옵션으로 옮기지 않으므로 :focus-visible이 옵션에서
+    // 절대 맞지 않는다 — .active가 :is(...) 목록에서 빠지면 하이라이트가 조용히
+    // 사라진다(런타임 에러도, 실패하는 다른 테스트도 없다). 두 규칙(기본 + reduced
+    // motion)을 각각 고정한다 — 위 disabled 블록과 같은 idiom.
+    it("호버/포커스 규칙의 :is(...) 목록에 .active가 있다", () => {
+      expect(surfacesCssSource.length).toBeGreaterThan(500);
+      expect(surfacesCssSource).toMatch(/:where\(\.app-select-menu\) button:is\([^)]*\.active[^)]*\):not\(:disabled\)\s*\{[^}]*transform:\s*scale\(var\(--dropdown-option-hover-scale\)\)/);
+    });
+
+    it("prefers-reduced-motion 블록에도 .active가 있다 — 없으면 reduced-motion 사용자에게 transform이 되돌아온다", () => {
+      expect(surfacesCssSource.length).toBeGreaterThan(500);
+      const reducedMotionBlock = surfacesCssSource.match(/@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\n\}/);
+      expect(reducedMotionBlock).not.toBeNull();
+      expect(reducedMotionBlock![0]).toMatch(/:is\([^)]*\.active[^)]*\):not\(:disabled\)\s*\{\s*transform:\s*none;\s*\}/);
+    });
+  });
+
   describe("키보드로 조작한다", () => {
     it("닫힌 상태에서 ↓를 누르면 열리고 현재 값이 활성이 된다", () => {
       render(<ControlledSelect initialValue="b" />);
@@ -682,6 +701,23 @@ describe("Select", () => {
       fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });
 
       expect(screen.getByRole("option", { name: "첫째" }).className).toContain("active");
+    });
+
+    // Escape·Tab·바깥 클릭·앵커 이동 스크롤은 전부 setOpen(false)만 하고 activeValue를
+    // null로 되돌리지 않는다(choose()만 그렇게 한다) — 그래서 aria-activedescendant의
+    // `&& open` 항이 없으면, 닫힌 뒤에도 activeIndex가 그대로 남아 이미 언마운트된
+    // 옵션 id를 계속 가리키게 된다. 이 테스트는 그 가드 하나만 검증한다.
+    it("descendant 모드에서 Escape로 닫으면 aria-activedescendant가 사라진다 — 언마운트된 id를 계속 가리키면 안 된다", () => {
+      render(<Select ariaLabel="항목" value="a" options={OPTIONS} onChange={() => undefined} keyboardActiveMode="descendant" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      trigger.focus();
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+      expect(trigger.getAttribute("aria-activedescendant")).toBeTruthy();   // 열려 있는 동안은 가리킨다
+
+      fireEvent.keyDown(document, { key: "Escape" });
+
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(trigger.getAttribute("aria-activedescendant")).toBeNull();
     });
   });
 });
