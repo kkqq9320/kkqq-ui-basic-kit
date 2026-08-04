@@ -353,6 +353,15 @@ type FrameTraceSpec = {
   abortLine: string;
   /** 창구가 정상 종료한 뒤 한 줄 더 남기고 싶을 때(개창의 최종 over= 등). */
   afterEnd?: () => void;
+  /** 참이 되면 창구를 기다리지 않고 그 프레임에 정상 종료한다. 남은 프레임을 태우지
+   * 않으려는 것뿐이고, **판정 줄을 유효하게 만드는 건 아래 settled 쪽 일이다.** */
+  endEarly?: () => boolean;
+  /** 첫 변화가 있은 뒤 이만큼 연속으로 아무것도 안 움직이면 궤적이 멎은 것으로 보고
+   * settled를 **한 번만** 부른다. 첫 변화 전은 세지 않는다 — 트리거와 실제 움직임
+   * 사이에 몇 프레임 비는 게 정상이라(실기기: 첫 변화가 +47ms) 그걸 "멎었다"로
+   * 오판하면 판정을 시작 지오메트리로 찍게 된다. */
+  settleFrames?: number;
+  settled?: (sample: ReleaseSample) => void;
 };
 
 /** 같은 이름의 트레이스는 겹쳐 걸지 않는다. 이름이 다르면(개창 vs 닫힘) 겹쳐도 된다 —
@@ -396,6 +405,9 @@ function runFrameTrace(spec: FrameTraceSpec) {
   let lines = 0;
   let maxFrameInset = 0;
   let maxFrameScroll = 0;
+  let sawFirstChange = false;
+  let stillFrames = 0;
+  let settledFired = false;
 
   function frame() {
     if (aborted) return;   // 워치독이 이미 이 실행을 끝냈다 — 깨어나도 아무것도 남기지 않는다.
@@ -403,6 +415,8 @@ function runFrameTrace(spec: FrameTraceSpec) {
     frames += 1;
     if (spec.moved(now, previous)) {
       changed += 1;
+      sawFirstChange = true;
+      stillFrames = 0;
       const dInset = now.inset - previous.inset;
       const dScroll = now.st - previous.st;
       if (Math.abs(dInset) > Math.abs(maxFrameInset)) maxFrameInset = dInset;
@@ -411,9 +425,18 @@ function runFrameTrace(spec: FrameTraceSpec) {
         lines += 1;
         append(spec.frameLine(now, previous, first));
       }
+    } else if (sawFirstChange) {
+      stillFrames += 1;
+      if (!settledFired && spec.settleFrames !== undefined && stillFrames >= spec.settleFrames) {
+        settledFired = true;
+        spec.settled?.(now);
+      }
     }
     previous = now;
-    if (now.t - first.t < spec.windowMs) {
+    // endEarly는 창구 검사보다 **먼저** 본다 — 이 프레임이 아직 창구 안이더라도, 주제가
+    // 끝났으면(개창 트레이스인데 키보드가 닫혔으면) 여기서 끝내야 end/final이 아직
+    // 유효한 지오메트리로 찍힌다. 뒤에 두면 한 프레임 늦어 그 사이 뷰포트가 복원된다.
+    if (now.t - first.t < spec.windowMs && !spec.endEarly?.()) {
       requestAnimationFrame(frame);
       return;
     }
@@ -483,9 +506,19 @@ function startReleaseTrace() {
  * 때만 `reason=refocus`로 새로 시작한다. 이 줄을 못 봤다고 재조준 경로가 안 돈다고
  * 결론 내리지 말 것. */
 function startOpenTrace(reason: string) {
+  // 창구가 다 돌기 전에 키보드가 닫혔는가. endEarly에서 세우고 endLine이 읽는다 —
+  // endLine은 endEarly가 참을 돌려준 뒤에 불리므로 순서는 보장된다.
+  let closedEarly = false;
+  // 판정 줄(kbopen final)을 열린 상태에서 실제로 찍었는가. 못 찍었으면 afterEnd가
+  // 그 사실을 명시한다 — 줄이 그냥 없으면 읽는 쪽이 누락으로 오해한다.
+  let finalLogged = false;
   runFrameTrace({
     name: "kbopen",
     windowMs: OPEN_TRACE_MS,
+    // 키보드가 닫히면 이 트레이스의 주제는 끝났다. 창구(900ms)를 끝까지 기다리면
+    // final이 복원된 뷰포트로 찍혀 over=가 완전히 다른 뜻이 된다(2026-08-04 캡처에서
+    // 5개 중 3개가 그랬다). 닫힘 자체는 kbrelease가 따로 받는다.
+    endEarly: () => { if (!kitKeyboardOpen()) closedEarly = true; return closedEarly; },
     startLine: (f) => `kbopen start  reason=${reason}  reduce=${reduceMotionState()}  vpTop=${f.vpTop} vpH=${f.vpH}  inset=${f.inset} pad=${f.pad} st=${f.st} sh=${f.sh} ch=${f.ch} pin=${f.pin} max=${f.max}`,
     // 닫힘과 달리 vpTop/vpH도 본다 — 안드로이드에서 개창의 절반은 킷이 아니라 팬이
     // 만들고(vpTop 0→407), st만 보면 그 구간이 통째로 "아무 일도 없음"으로 접힌다.
@@ -499,10 +532,28 @@ function startOpenTrace(reason: string) {
       // 막혔다"로 읽힌다 — 시도한 적조차 없는데. atMax는 옛 clamp=를 대신하는 필드라
       // 그 오독이 그대로 진단으로 이어진다. 스크롤 여지가 있을 때만 판정한다.
       + `  st ${first.st}->${n.st} (Δ${n.st - first.st})  maxΔst=${s.maxScrollStep}  max=${n.max} atMax=${n.max > 0 ? (n.st >= n.max - 1 ? "Y" : "N") : "n/a"}`
+      + `${closedEarly ? "  closedEarly=Y(키보드가 창구 안에 닫혀 여기서 끊음 — final은 열린 상태 값이다)" : ""}`
       + `${s.dropped > 0 ? `  (${s.dropped}줄 생략)` : ""}`,
     abortLine: "kbopen abort  rAF가 창구 안에 끝나지 않았다(탭 백그라운드 등) — 다음 개창은 정상 기록된다",
-    // 팬도 트윈도 끝난 뒤의 최종 판정 — 이 한 줄의 over=가 "결과가 맞았나"에 답한다.
-    afterEnd: () => logKeyboardSnapshot("kbopen final"),
+    // **판정 줄은 창구 끝이 아니라 "궤적이 멎은 순간"에 찍는다.**
+    // 2026-08-04 캡처가 이걸 강제했다: 창구는 900ms인데 사용자가 그보다 빨리 키보드를
+    // 닫으면, 그 캡처의 5개 중 3개처럼 final이 `op=N vpH=1060`인 채로 `over=-407`을
+    // 보여준다 — "과보정됐다"가 아니라 그냥 "키보드가 없다"인데 over=는 이 트레이스의
+    // 판정 필드라 그대로 오독이 된다.
+    // "킷이 닫혔다고 하면 끊기"로는 안 된다 — 같은 캡처에 순서가 찍혀 있다:
+    //     +3960ms viewport resize height=1060   (뷰포트가 먼저 복원되고)
+    //     +3962ms kbrelease start               (킷의 닫힘 통지는 그 뒤)
+    // 즉 "킷은 열림인데 뷰포트는 아직 키보드 크기"인 순간이 없다. 그래서 닫힘을
+    // 기다리지 않고, 팬과 트윈이 다 멎은 그 자리에서(아직 열려 있을 때) 찍는다.
+    settleFrames: 5,   // ~80ms. 팬 단계 간격은 5~25ms라 이만큼 조용하면 팬도 트윈도 끝났다.
+    settled: () => {
+      if (!kitKeyboardOpen()) return;   // 이미 닫혔으면 찍어봐야 복원된 값이다
+      finalLogged = true;
+      logKeyboardSnapshot("kbopen final");
+    },
+    afterEnd: () => {
+      if (!finalLogged) append("kbopen final 없음 — 궤적이 멎기 전에 키보드가 닫혔다. 이 사이클은 개창 결과를 판정할 수 없다(over=를 찾지 말 것).");
+    },
   });
 }
 
@@ -606,8 +657,14 @@ export function installEventTrace() {
     // 프레임 줄은 RELEASE_TRACE_MAX_LINES=44로 상한). 한 캡처에 여러 사이클을 담아야
     // 하면 이 점을 감안할 것.
     const onViewportChange = (event: Event) => {
+      // `viewport` 줄도 같이 접는다 — height/offsetTop이 kbopen 줄의 vpH/vpTop과 **같은
+      // 값**이라 실기기 캡처에서 매 프레임 두 줄이 나란히 중복됐다:
+      //     viewport scroll  height=653  offsetTop=17
+      //     kbopen +103ms    vpTop=17(+13) vpH=653(+0) ...
+      // 남길 게 없다. menu= 하나가 다른데 그건 이 구간에 쓸 일이 없다(팝업 진단용).
+      if (activeTraces.has("kbopen")) return;
       append(`viewport ${event.type}  height=${Math.round(vv.height)}  offsetTop=${Math.round(vv.offsetTop)}  menu=${menuPresent()}`);
-      if (!activeTraces.has("kbopen")) logKeyboardSnapshot(event.type, undefined);
+      logKeyboardSnapshot(event.type, undefined);
     };
     vv.addEventListener("resize", onViewportChange);
     vv.addEventListener("scroll", onViewportChange);
