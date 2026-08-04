@@ -687,6 +687,18 @@ function useReleasableKeyboardInset(keyboard: VirtualKeyboard, scrollRootId = "r
    * 진행 중인 애니메이션의 "지금" 값을 항상 정확히 안다. */
   const displayedFloorRef = useRef(0);
   const releaseRafIdRef = useRef<number | null>(null);
+  /** 키보드가 열려 있는 동안 마지막으로 관측한 스크롤 호스트의 clientHeight — 아래
+   * C2의 핀이 "이 값보다 큰 높이는 절대 붙들지 않는다"는 상한으로 씁니다. 자세한
+   * 이유는 그 주석에. */
+  const lastOpenClientHeightRef = useRef(0);
+
+  useLayoutEffect(() => {
+    if (!keyboard.open) return;
+    const scrollRoot = document.getElementById(scrollRootId);
+    if (scrollRoot && scrollRoot.clientHeight > 0) lastOpenClientHeightRef.current = scrollRoot.clientHeight;
+    // keyboard.inset도 의존성에 넣습니다 — 안드로이드는 키보드를 여러 단계로 올리고,
+    // 그 사이 주소창이 접히며 clientHeight가 바뀔 수 있어 열림 순간 한 번만 재면 낡습니다.
+  }, [keyboard.open, keyboard.inset, scrollRootId]);
 
   useLayoutEffect(() => {
     displayedFloorRef.current = releaseFloor;
@@ -767,6 +779,44 @@ function useReleasableKeyboardInset(keyboard: VirtualKeyboard, scrollRootId = "r
     if (keyboard.open) return;
     const scrollRoot = document.getElementById(scrollRootId);
     if (!scrollRoot) return;
+
+    // **C2(owner 실기기 트레이스 2026-08-04) — 인셋을 붙드는 것만으로는 부족합니다.**
+    // C1(위)은 "--keyboard-inset이 안 바뀌면 scrollHeight도 안 바뀌니 clamp가 생길
+    // 여지가 없다"고 봤습니다. 그 전제가 반쪽이었습니다: 브라우저가 강제하는 상한은
+    // `scrollHeight - clientHeight`라, **scrollHeight를 고정해도 clientHeight가 부풀면
+    // 상한은 그대로 줄어듭니다.** 트레이스가 네 사이클 전부 ±1px로 확정했습니다 —
+    // 닫히는 한 프레임에 clientHeight가 1192로 읽히고(실제 1060/928) scrollTop이
+    // 정확히 `scrollHeight - 1192`로 깎입니다(사이클4는 이미 그 아래라 안 움직임 —
+    // 음성 대조군). 우리가 스크롤을 요청한 적은 없으므로 §16.2 위반입니다.
+    //
+    // 그리고 C1의 "마지막 열림 인셋을 유지한다"는 이 기기에서 **유지할 게 없습니다**:
+    // 안드로이드는 리사이즈가 아니라 비주얼 뷰포트를 팬하므로(트레이스 vpTop 0→407)
+    // covered가 키보드가 올라와 있는 동안 이미 0으로 빠지고, lastOpenInsetRef도 0입니다.
+    //
+    // **고침: 거짓말하는 값 자체를 그 창구 동안 붙듭니다.** 부풀림의 크기(1192)를
+    // 예측할 필요가 없다는 게 이 방식의 요점입니다 — 지금 clientHeight는 아직 옳으므로
+    // (트레이스: 닫히는 렌더 +3ms에 1060, 부풀림은 +32ms) 그 값을 인라인 height로 못
+    // 박으면 `100dvh`(tokens.css:134)가 재계산돼도 레이아웃이 흔들리지 않습니다.
+    // 지금 scrollTop은 지금 clientHeight 기준으로 이미 합법이므로, 그 값을 그대로
+    // 고정하는 것은 정의상 새 clamp를 만들 수 없습니다.
+    //
+    // 푸는 시점은 아래 settle 타이머(120ms)입니다. 풀면 clientHeight가 진짜 값(928)으로
+    // 내려가는데, 그건 상한을 **늘리는** 방향이라 그 자체로는 clamp가 날 수 없습니다.
+    // 실측 자기교정이 22ms이므로 120ms는 넉넉합니다(77f28fa가 같은 이유로 고른 값).
+    // **부푼 값을 붙들지 않도록 known-good과 min을 취합니다.** owner 기기에서는 순서가
+    // 유리했습니다 — 닫히는 렌더(+3ms)에는 아직 1060으로 옳았고 부풀림은 +32ms였습니다.
+    // 그 순서는 보장되지 않습니다: 이 이펙트가 도는 순간 이미 부풀어 있었다면 그 값을
+    // 그대로 못 박아 창구 내내(120ms) 손상을 유지하게 됩니다. 열려 있는 동안 관측한
+    // clientHeight를 상한으로 두면 그 경로가 막힙니다. min은 언제나 안전한 방향입니다 —
+    // 더 작은 높이는 상한(scrollHeight - clientHeight)을 **키우므로** 그 자체로는 clamp를
+    // 만들 수 없습니다. (AppShell.test.tsx의 C1 테스트가 정확히 이 순서, 즉 부풀림이 닫힘보다
+    // 먼저 오는 경우를 재현합니다.)
+    const observedHeight = scrollRoot.clientHeight;
+    const knownGoodHeight = lastOpenClientHeightRef.current;
+    const pinnedHeight = knownGoodHeight > 0 ? Math.min(observedHeight, knownGoodHeight) : observedHeight;
+    if (pinnedHeight > 0) scrollRoot.style.height = `${pinnedHeight}px`;
+    function unpinHeight() { scrollRoot!.style.height = ""; }
+
     function recompute() {
       const current = displayedFloorRef.current;
       if (current === 0) return;
@@ -779,10 +829,13 @@ function useReleasableKeyboardInset(keyboard: VirtualKeyboard, scrollRootId = "r
       animateFloorTo(next);
     }
     scrollRoot.addEventListener("scroll", recompute, { passive: true });
-    const settleTimer = window.setTimeout(recompute, KEYBOARD_INSET_SETTLE_MS);
+    // 푼 "다음에" 잰다 — recompute()는 지오메트리가 안정된 진짜 clientHeight를 봐야 하고,
+    // 붙들어 둔 값으로 재면 naturalMax를 실제보다 작게 봐 필요 이상으로 남깁니다.
+    const settleTimer = window.setTimeout(() => { unpinHeight(); recompute(); }, KEYBOARD_INSET_SETTLE_MS);
     return () => {
       scrollRoot.removeEventListener("scroll", recompute);
       window.clearTimeout(settleTimer);
+      unpinHeight();   // 창구가 끝나기 전에 다시 열리거나 언마운트돼도 인라인 height를 남기지 않는다.
       cancelReleaseAnimation();
     };
   }, [keyboard.open, scrollRootId]);

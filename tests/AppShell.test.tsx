@@ -32,6 +32,9 @@ afterEach(() => {
   cleanup();
   delete (window as { visualViewport?: unknown }).visualViewport;
   delete (window as { matchMedia?: unknown }).matchMedia;
+  // jsdom 기본값으로 되돌린다 — 팬 방식 기기 테스트가 innerHeight를 1059로 덮어쓰므로,
+  // 안 되돌리면 뒤따르는 테스트가 그 값을 물려받아 조용히 다른 산수를 하게 된다.
+  Object.defineProperty(window, "innerHeight", { configurable: true, value: 768 });
   delete (window as { ResizeObserver?: unknown }).ResizeObserver;
   fakeResizeObserverEntries.length = 0;
   freshObservationLog.length = 0;
@@ -275,7 +278,19 @@ function installClampingScrollRoot(root: HTMLElement, baseContentHeight: number,
   const { simulateTransitionLag = false } = options;
   let content = baseContentHeight;
   let visibleHeight = clientHeight;
-  Object.defineProperty(root, "clientHeight", { configurable: true, get: () => visibleHeight });
+  /** 인라인 height가 있으면 그게 이긴다. 실제 브라우저에서 `#root{height:100dvh}`
+   * (tokens.css:134) 위에 `style="height:...px"`를 얹으면 레이아웃을 정하는 건 dvh가
+   * 아니라 인라인이다. 이 모델이 없으면 "닫히는 창구 동안 높이를 붙든다"는 고침이
+   * 스텁에는 전혀 보이지 않아, 고침 전후가 똑같이 통과하는 무의미한 테스트가 된다. */
+  function inlineHeightPx(): number | null {
+    const parsed = parseFloat(root.style.height);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  /** clientHeight 게터와 currentMax()가 **반드시 같은 값**을 봐야 한다. 한쪽만 인라인
+   * 핀을 반영하면 "높이는 붙들렸는데 상한은 안 붙들린" 실제 브라우저에 없는 상태가
+   * 만들어져, 고침이 제대로 걸렸는데도 테스트가 계속 빨갛다(실제로 한 번 그랬다). */
+  function effectiveHeight(): number { return inlineHeightPx() ?? visibleHeight; }
+  Object.defineProperty(root, "clientHeight", { configurable: true, get: effectiveHeight });
   function shellEl(): HTMLElement | null {
     return root.querySelector(".app-shell") as HTMLElement | null;
   }
@@ -297,7 +312,7 @@ function installClampingScrollRoot(root: HTMLElement, baseContentHeight: number,
     return renderedInset;   // 트랜지션이 걸린 상태 — 아직 이전 값에 머문다(최대 400ms 지연 재현).
   }
   function currentMax(): number {
-    return Math.max(0, content + currentInset() - visibleHeight);
+    return Math.max(0, content + currentInset() - effectiveHeight());
   }
   Object.defineProperty(root, "scrollHeight", { configurable: true, get: () => content + currentInset() });
   let raw = 0;
@@ -1303,6 +1318,58 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     viewport.closeKeyboard();
     await waitFor(() => expect(keyboardInsetOf(root)).toBe("0px"));   // 지오메트리 가드로 즉시 0(지연 해제 불필요)
     expect(shellHasHoldingMarker(root)).toBe(false);   // floor가 0이므로 마커도 없다 — 트랜지션이 정상적으로 걸린다.
+  });
+
+  it("예약 여백이 0인 팬 방식 기기에서도, 닫히는 한 프레임의 clientHeight 부풀림이 뷰포트를 깎지 못한다 — owner 실기기 트레이스 2026-08-04", async () => {
+    // 트레이스가 확정한 값들을 그대로 쓴다(네 사이클, 산술이 ±1px로 일치):
+    //   #root는 height:100dvh(tokens.css:134). 닫히는 한 프레임에 dvh가 더 큰 뷰포트
+    //   기준으로 재계산돼 clientHeight가 1192로 읽힌다(실제 1060/928). 그 순간 브라우저가
+    //   scrollTop <= scrollHeight - 1192를 강제한다:
+    //     사이클1 sh=1997 st 835->806  (1997-1192=805, +1은 서브픽셀 반올림)
+    //     사이클2 sh=2002 st 875->811  (810)
+    //     사이클3 sh=2007 st 878->816  (815)
+    //     사이클4 sh=1997 st 758 그대로 (758이 이미 805 아래 — 음성 대조군)
+    //
+    // C1(아래 테스트)이 이걸 못 잡은 이유가 두 가지다. (1) C1은 --keyboard-inset이 안
+    // 바뀌면 scrollHeight도 안 바뀌니 안전하다고 봤지만, max는 scrollHeight-clientHeight라
+    // clientHeight만 부풀어도 줄어든다. (2) 예전 스텁은 scrollTop에 접근할 때만 clamp해서
+    // C1은 부풀림을 되돌린 "뒤"에 읽는 것으로 통과할 수 있었다 — 실제 브라우저는 읽든 말든
+    // 레이아웃 시점에 깎는다(setClientHeight 주석 참고).
+    //
+    // 예약 여백이 0인 이유도 트레이스에 있다: 안드로이드는 리사이즈가 아니라 비주얼
+    // 뷰포트를 팬한다(vpTop 0->407). --keyboard-inset은
+    // covered = innerHeight - (offsetTop + height)를 따르므로 키보드가 아직 올라와 있는
+    // 동안 0으로 빠지고, lastOpenInsetRef가 붙들 게 남지 않는다. 그래서 "닫힐 때 인셋을
+    // 유지한다"(77f28fa)는 이 기기에서 아무것도 유지하지 못한다.
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 1059 });
+    const viewport = installFakeVisualViewport(1060);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 50);   // 이미 잘 보인다 — reposition()의 스크롤을 섞지 않고 clamp만 격리한다
+    const CH_WHILE_OPEN = 1060;
+    const CH_CLOSING_SPIKE = 1192;   // 실측값
+    const CONTENT = 1997;            // 실측 scrollHeight(인셋 0)
+    const scrollRoot = installClampingScrollRoot(root, CONTENT, CH_WHILE_OPEN);
+
+    textarea.focus();
+    viewport.openKeyboard(407);
+    (window.visualViewport as unknown as { offsetTop: number }).offsetTop = 407;   // 팬
+    window.visualViewport!.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(true));
+    expect(parseFloat(keyboardInsetOf(root))).toBe(0);   // 팬 때문에 예약이 0 — 이 테스트의 전제
+
+    root.scrollTop = 835;
+    expect(root.scrollTop).toBe(835);
+
+    (window.visualViewport as unknown as { offsetTop: number }).offsetTop = 0;
+    viewport.closeKeyboard();
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(false));   // 닫히는 렌더가 커밋됐다
+
+    scrollRoot.setClientHeight(CH_CLOSING_SPIKE);   // 트레이스의 그 한 프레임(+32ms)
+
+    // 불변식: 킷은 스크롤을 요청한 적이 없다(reqΔ=0). 그러니 achΔ도 0이어야 한다.
+    // 고침 전에는 1997-1192=805로 깎여 806이 된다(트레이스 사이클 1과 같은 값).
+    expect(root.scrollTop).toBe(835);
   });
 
   it("맨 아래로 스크롤된 채 닫히는 순간 clientHeight가 실제보다 부풀려 읽혀도(실기기 dvh 재계산 트랜지션) 뷰포트가 움직이지 않는다 — 두 번의 열기/닫기 사이클 모두(C1, owner 실기기 트레이스)", async () => {
