@@ -103,6 +103,9 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
   const menuRef = useRef<HTMLDivElement>(null);
   const selectionScrollRef = useRef<ScrollSnapshot>([]);
   const scrolledToSelectionRef = useRef(false);
+  // roving 포커스를 이미 적용한 활성값. 아래 roving 이펙트가 멱등해야 하는 이유는
+  // 그 이펙트의 주석에 있습니다.
+  const appliedActiveRef = useRef<string | null>(null);
   // 실기기 트레이스(온스크린 이벤트 추적 패널)로 확인된 유령 click 대응. 논-포털
   // 메뉴에서 옵션을 탭하면, 옵션 자신의 click(menu=yes) 다음에 mousedown/mouseup
   // 없이 트리거를 겨냥한 click이 또 온다(관측 간격 24ms, menu=no — 이미 닫힌 뒤).
@@ -114,10 +117,44 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
   // 조상 스크롤이 트리거를 움직여도 닫기 판정에서 제외합니다 — 아래 closeIfAnchorMoved 참고.
   const pointerDownInsideMenuRef = useRef(false);
   const selected = options.find((option) => option.value === value);
+  // 고를 수 있는 옵션이 하나도 없으면(전부 disabled이거나 목록이 비었으면) 이 컨트롤은
+  // 사실상 조작할 수 없습니다 — 그래서 disabled로 렌더합니다.
+  //
+  // 왜 "열리되 아무것도 못 고르는" 상태로 두지 않는가: 그 상태에서는 열기 경로가 서로
+  // 갈렸습니다. 아래 handleKeyDown은 initial===null이면 열지 않는데 트리거의 onClick에는
+  // 같은 가드가 없어, 키보드로는 안 열리고 마우스로는 활성 옵션도 포커스도 없는 메뉴가
+  // 열렸습니다. 한쪽에 맞추는 것보다 뿌리를 없애는 편이 낫습니다 — 클릭만 막으면 버튼이
+  // 고장 난 것처럼 보이고, 키보드도 열게 하면 포커스가 갈 곳 없는 메뉴가 남습니다.
+  // 흐린 처리 + not-allowed 커서는 킷이 이미 쓰는 어휘라 "왜 안 되는지"가 바로 보입니다.
+  //
+  // 부수 효과로 options=[]도 같이 닫힙니다 — 조건이 같아서(firstEnabledValue가 null),
+  // 내용 없는 빈 메뉴가 열리던 것이 사라집니다.
+  const hasEnabledOption = firstEnabledValue(options) !== null;
+  const inoperable = disabled || !hasEnabledOption;
+
+  /**
+   * roving tabindex가 포커스를 메뉴 안으로 옮기기 때문에, **메뉴를 닫는 모든 경로는
+   * 포커스를 회수해야 합니다.** 안 그러면 포커스한 옵션이 언마운트되며 포커스가 body로
+   * 떨어지고, 그 다음 Tab이 문서 처음부터 시작합니다(다이얼로그 안이라면 포커스 스코프
+   * 밖으로 나갑니다). roving 이전에는 포커스가 트리거를 떠난 적이 없어 무해했습니다.
+   *
+   * 포커스가 실제로 메뉴 안에 있을 때만 회수합니다 — 우리가 옮긴 포커스만 되돌리고,
+   * 사용자가 그 사이 다른 곳을 눌러 옮긴 포커스는 뺏지 않습니다. 바깥 클릭이 이
+   * 처리를 안 받는 이유도 같습니다: 포커스 불가능한 자리를 mousedown하면 브라우저가
+   * 이미 body로 블러시키므로 roving과 무관하게 원래 그랬습니다.
+   */
+  function closeAndReclaimFocus() {
+    const menu = menuRef.current;
+    if (menu && document.activeElement && menu.contains(document.activeElement)) {
+      triggerRef.current?.focus({ preventScroll: true });
+    }
+    setOpen(false);
+  }
+
   // 뒤로가기로 메뉴만 닫습니다. 표식이 스택이라, 다이얼로그 안에서 열린 메뉴는
   // 뒤로가기 한 번에 메뉴만 닫히고 다이얼로그는 남습니다. 이게 없으면 뒤로가기가
   // 다이얼로그를 통째로 닫아 입력하던 내용이 날아갑니다.
-  useBackToClose(open, () => setOpen(false));
+  useBackToClose(open, closeAndReclaimFocus);
   // 겹쳐 있으면 가장 안쪽만 닫힙니다 — 다이얼로그 안에서 열렸을 때 다이얼로그까지 닫으면 안 됩니다.
   useEscapeToClose(open, () => { setOpen(false); triggerRef.current?.focus({ preventScroll: true }); });
 
@@ -205,7 +242,7 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
       const trigger = triggerRef.current;
       if (!trigger) return;
       const rect = trigger.getBoundingClientRect();
-      if (Math.abs(rect.top - anchorTop) > 1 || Math.abs(rect.left - anchorLeft) > 1) setOpen(false);
+      if (Math.abs(rect.top - anchorTop) > 1 || Math.abs(rect.left - anchorLeft) > 1) closeAndReclaimFocus();
     }
     document.addEventListener("scroll", closeIfAnchorMoved, true);
     return () => { document.removeEventListener("scroll", closeIfAnchorMoved, true); };
@@ -269,15 +306,30 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
   //
   // 대안이었던 aria-activedescendant(포커스를 트리거에 두고 id로 활성 옵션을 가리키는
   // 방식)는 기기 측정으로 기각됐습니다 — 근거는 PRINCIPLES.md §11 참고.
+  //
+  // **position이 의존성에 있어야 하는 이유(포털):** 위 배치 이펙트가 position을 정하기
+  // 전까지 포털 메뉴는 DOM에 없습니다. open이 켜지는 커밋에서는 menuRef가 null이고,
+  // 다음 커밋에는 open·activeValue·options가 그대로라 이 이펙트가 다시 돌지 않아
+  // **포커스가 영영 안 갔습니다**(닫을 때 position이 null로 돌아가므로 매 개창마다).
+  // 바로 위 선택-스크롤 이펙트가 같은 이유로 이미 position을 의존성에 두고 있습니다.
+  //
+  // **그런데 position만 넣으면 안 됩니다.** 포털은 스크롤·리사이즈마다 새 position
+  // 객체를 만들고, options도 소비자가 인라인 배열을 넘기면 렌더마다 새 신원입니다 —
+  // 그때마다 다시 돌면 사용자가 손으로 스크롤해 둔 메뉴를 활성 옵션으로 되끌어옵니다.
+  // 그래서 "이미 이 활성값에 적용했는가"를 ref로 들고 멱등하게 만듭니다. 활성값이
+  // 실제로 바뀔 때만 일합니다.
   useLayoutEffect(() => {
-    if (!open || activeValue === null) return;
+    if (!open) { appliedActiveRef.current = null; return; }
+    if (activeValue === null) return;
     const menu = menuRef.current;
-    if (!menu) return;
+    if (!menu) return;   // portal: position이 아직 없어 메뉴가 마운트되지 않음 — 정해지면 다시 온다
+    if (appliedActiveRef.current === activeValue) return;
     const activeIndex = options.findIndex((option) => option.value === activeValue);
     if (activeIndex === -1) return;
+    appliedActiveRef.current = activeValue;
     (menu.children[activeIndex] as HTMLElement | undefined)?.focus({ preventScroll: true });
     scrollActiveOptionIntoView(menu, activeIndex);
-  }, [open, activeValue, options]);
+  }, [open, activeValue, options, position]);
 
   /**
    * 트리거와 메뉴 **양쪽에** 붙는 하나의 핸들러입니다. 열려 있는 동안에는 포커스가
@@ -387,7 +439,7 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
       aria-haspopup="listbox"
       aria-expanded={open}
       aria-controls={open ? menuId : undefined}
-      disabled={disabled}
+      disabled={inoperable}
       onKeyDown={handleKeyDown}
       onClick={() => {
         if (suppressReopenRef.current) { suppressReopenRef.current = false; return; }   // 유령 click 삼키기 — 토글하지 않는다
