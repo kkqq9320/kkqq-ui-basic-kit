@@ -11,6 +11,8 @@
  */
 import type { ReactNode, Ref } from "react";
 
+import { useBackToClose } from "./hooks";
+
 export type SidebarNavItem = {
   id: string;
   label: ReactNode;
@@ -73,6 +75,20 @@ function NavEntry({ item, onNavigate }: { item: SidebarNavItem; onNavigate?: () 
 
 export function Sidebar({ brand, sections, slot, footer, collapsed = false, onToggleCollapse, mobileOpen = false, onMobileClose, labels: labelOverrides }: SidebarProps) {
   const labels = { ...DEFAULT_SIDEBAR_LABELS, ...labelOverrides };
+  // 모바일 드로어는 화면을 덮는 오버레이이므로 안드로이드 뒤로가기로 닫혀야 합니다 —
+  // Dialog·Select·DateWheelPicker가 전부 갖고 있는 계약인데 여기만 없었습니다.
+  //
+  // **AppShell이 아니라 여기에 있는 이유:** 두 컴포넌트가 모두 `mobileOpen`을 받고
+  // 보통 소비자는 양쪽에 같은 상태를 넘깁니다(README의 예시도 그렇습니다). 양쪽에서
+  // 부르면 한 번 열 때 표식이 두 개 쌓여, 서랍 하나를 닫는 데 뒤로가기를 두 번 눌러야
+  // 합니다 — 사용자에게는 첫 번째가 먹통으로 보입니다. 닫히는 대상 자신인 이쪽에만
+  // 두면 `Sidebar`를 `AppShell` 없이 단독으로 써도 계약이 따라옵니다.
+  //
+  // 데스크톱 폭에서는 서랍을 열 버튼이 CSS로 숨겨지지만(css/sidebar.css:179),
+  // 열어둔 채 창을 넓히면 `mobileOpen`이 true로 남을 수 있습니다. 그때도 표식을
+  // 밀어 넣습니다 — 뒤로가기 한 번이 보이지 않는 서랍을 닫는 데 쓰이지만, 상태는
+  // 실제로 닫힌 것이 맞고, 킷이 CSS 미디어 쿼리를 JS에 복제하지 않아도 됩니다.
+  useBackToClose(mobileOpen && onMobileClose !== undefined, () => onMobileClose?.());
   return <aside className={mobileOpen ? "sidebar mobile-open" : "sidebar"}>
     <div className="sidebar-brand">
       {brand.icon && <span>{brand.icon}</span>}
