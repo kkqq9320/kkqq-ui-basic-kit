@@ -49,6 +49,7 @@
 }
 .date-wheel-step { width: 100%; min-width: 0; height: 30px; min-height: 30px; max-height: 30px; display: grid; place-items: center; padding: 0; border: 0; color: var(--muted); background: transparent; }
 .date-wheel-step:hover:not(:disabled) { color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 65%, transparent); }
+.date-wheel-step:focus-visible:not(:disabled) { color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 65%, transparent); outline: none; }
 .date-wheel-step:disabled { opacity: .25; cursor: default; }
 .date-wheel-step svg { width: 14px; height: 14px; pointer-events: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 

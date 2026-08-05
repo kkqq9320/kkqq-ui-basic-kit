@@ -51,7 +51,7 @@
    * 아예 없어 브라우저 기본 링이 그대로 떴습니다. 한 곳으로 모읍니다.
    * 세기를 따로 뺀 이유: 어두운 표면(사이드바 슬롯 #26273e) 위에서는 옅은 알파가
    * 사실상 안 보이므로, 밝은 면과 어두운 면의 절충을 한 곳에서 조정해야 합니다. */
-  --focus-ring-strength: 35%;
+  --focus-ring-strength: 14%;
   --focus-ring: 3px solid color-mix(in srgb, var(--accent) var(--focus-ring-strength), transparent);
   --motion-fast: 140ms;
   /* "재배치" 성격의 전환(키보드가 닫히며 예약해 둔 여백이 줄거나, 다이얼로그 백드롭이

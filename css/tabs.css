@@ -63,6 +63,9 @@
   .settings-tabs > .mobile-tab-card > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 700; }
   .settings-tabs > .mobile-tab-card > i { width: 16px; height: 16px; display: grid; place-items: center; transform: rotate(0deg); transform-origin: center; transition: transform 160ms ease; }
   .settings-tabs > .mobile-tab-card svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  /* 이 카드는 테두리도 배경도 없이 글자색 하나로 상태를 말합니다(바로 아래 열림 규칙과
+   * 같은 값). 포커스도 같은 언어로 말하게 하고 브라우저 기본 링은 끕니다. */
+  .settings-tabs > .mobile-tab-card:focus-visible { color: var(--text); outline: none; }
   .settings-tabs.mobile-open > .mobile-tab-card { color: var(--text); }
   .settings-tabs.mobile-open > .mobile-tab-card > i { transform: rotate(180deg); }
   .settings-tabs > .settings-tab-options {
@@ -121,6 +124,7 @@
   }
   .mobile-page-tabs-button { width: 64px; height: 60px; display: grid; place-items: center; align-content: center; gap: 3px; padding: 4px 6px; border-radius: 30px; color: var(--muted); font-size: 11px; }
   .mobile-page-tabs-button:hover { color: var(--text); background: color-mix(in srgb, var(--surface) 34%, transparent); }
+  .mobile-page-tabs-button:focus-visible { color: var(--text); background: color-mix(in srgb, var(--surface) 34%, transparent); outline: none; }
   .mobile-page-tabs-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
   .mobile-page-tabs-button > span:last-child { font-size: 11px; }
   .mobile-quick-tab-menu {

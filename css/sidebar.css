@@ -40,6 +40,9 @@
 .sidebar-brand > strong { flex: 1 1 auto; max-width: var(--sidebar-label-max); overflow: hidden; white-space: nowrap; transition: max-width var(--sidebar-motion) var(--sidebar-ease), opacity calc(var(--sidebar-motion) * .55) var(--sidebar-ease); }
 .sidebar-collapse-button, .mobile-sidebar-close { flex: 0 0 auto; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; color: #aaaac3; background: transparent; transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease; }
 .sidebar-collapse-button:hover { color: #fff; background: rgba(255,255,255,.09); }
+/* 어두운 면에서는 옅은 강조색 아웃라인이 거의 안 보입니다(실기기 관측: "너무 연하네").
+ * 바로 아래 .sidebar-icon-button(:156)과 같은 처리를 씁니다 — 이 면의 공용 언어입니다. */
+.sidebar-collapse-button:focus-visible, .mobile-sidebar-close:focus-visible { color: #fff; background: rgba(255,255,255,.09); outline: none; }
 .sidebar-collapse-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: transform var(--sidebar-motion) var(--sidebar-ease); }
 .mobile-sidebar-close { display: none; color: #fff; font-size: 24px; }
 
