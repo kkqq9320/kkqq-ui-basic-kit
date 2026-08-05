@@ -512,6 +512,23 @@ describe("Select", () => {
       expect(selectedRule![0]).toMatch(/:not\(:disabled\)/);
     });
 
+    // 킷의 다른 컨트롤은 전부 hover/focus-visible 짝을 갖는데(page.css, sidebar.css,
+    // theme-editor.css, date-picker.css) Select 트리거만 빠져 있어서, 데스크톱에서
+    // 드롭다운만 마우스를 올려도 아무 반응이 없었다. 날짜 필드와 **같은 값**인지까지
+    // 본다 — 둘은 같은 41px 티어의 팝오버 트리거라 갈라지면 그게 결함이다.
+    it("트리거가 hover·focus·열림에 반응한다 — 날짜 필드와 같은 값으로", () => {
+      expect(selectCssSource.length).toBeGreaterThan(1000);
+      const stateRule = selectCssSource.match(/\.app-select-trigger:hover[^{]*\{[^}]*\}/);
+      expect(stateRule).not.toBeNull();
+      expect(stateRule![0]).toMatch(/border-color:\s*var\(--accent\)/);
+      expect(stateRule![0]).toMatch(/outline:\s*3px solid color-mix\(in srgb, var\(--accent\) 12%, transparent\)/);
+      // 세 상태가 한 규칙에 같이 있어야 한 곳만 고쳐도 셋이 함께 움직인다.
+      expect(stateRule![0]).toMatch(/:focus-visible/);
+      expect(stateRule![0]).toMatch(/\.app-select\.open/);
+      // disabled는 빠져야 한다 — :hover는 disabled에도 매칭된다.
+      expect(stateRule![0]).toMatch(/:hover:not\(:disabled\)/);
+    });
+
     // 이게 없어서 비활성 드롭다운이 멀쩡한 것과 똑같이 보였다 — controls.css:22는
     // 액션 버튼 세 종류만 다뤘고 드롭다운 트리거는 빠져 있었다. 흐린 처리가 메뉴
     // 옵션에만 있었던 셈이라, 정작 "이 컨트롤 자체를 못 쓴다"는 신호가 없었다.
