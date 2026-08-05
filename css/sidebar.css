@@ -99,11 +99,30 @@
   transform: translateY(-50%);
   transition: height 280ms cubic-bezier(.2, .9, .25, 1);
 }
-.sidebar nav :is(a, button):hover::before { opacity: .5; transform: scaleX(1); transition-duration: 120ms, 200ms; }
+/* :hover를 (hover: hover)로 감싸는 이유 — 터치 기기는 탭한 요소에 :hover를 **다음 탭까지
+ * 붙여둔다.** 가드가 없으면 눌렀다 뗀 항목이 계속 강조된 채로 남아 "선택된 항목"처럼
+ * 보인다(실기기 관측: 빠른 바의 메뉴 버튼이 서랍을 닫은 뒤에도 accent로 남아 있었다).
+ * 좁은 데스크톱 창은 (hover: hover)를 만족하므로 마우스 호버는 그대로 동작한다.
+ *
+ * **@media를 자리에서 감싸는 것이 중요하다.** 이 세 줄은 아래 .active 규칙과 소스
+ * 순서로 우열이 갈린다 — :hover::before(.5)가 .active::before(1)보다 **앞에** 있어야
+ * 활성 항목이 이긴다. 미디어 쿼리는 특이도를 더하지 않으므로, 블록을 아래로 옮기면
+ * 호버가 활성을 덮어써 활성 표시가 흐려진다(16f528a가 낸 사고와 같은 계열).
+ * 그래서 한 블록으로 합치지 않고 원래 위치를 각각 지킨다. */
+@media (hover: hover) {
+  .sidebar nav :is(a, button):hover::before { opacity: .5; transform: scaleX(1); transition-duration: 120ms, 200ms; }
+}
+/* 키보드 포커스는 호버와 같은 모양으로 보여주되 브라우저 기본 링은 끈다 — 바로 아래
+ * .sidebar-icon-button(:156)이 이미 쓰는 짝이다. 이게 없어서 Tab으로 nav 항목에 가면
+ * 킷 스타일 없이 흰 링만 떴다. 포커스는 터치에서 들러붙지 않으므로 가드가 필요 없다. */
+.sidebar nav :is(a, button):focus-visible::before { opacity: .5; transform: scaleX(1); transition-duration: 120ms, 200ms; }
 .sidebar nav :is(a, button).active { color: #fff; }
 .sidebar nav :is(a, button).active::before { opacity: 1; transform: scaleX(1); }
 .sidebar nav :is(a, button).active::after { height: 18px; }
-.sidebar nav :is(a, button):hover { color: #fff; }
+@media (hover: hover) {
+  .sidebar nav :is(a, button):hover { color: #fff; }
+}
+.sidebar nav :is(a, button):focus-visible { color: #fff; outline: none; }
 /* 선택되는 순간 아이콘이 한 번 튕깁니다 */
 .sidebar nav :is(a, button).active svg { animation: sidebar-nav-pop 320ms cubic-bezier(.2, 1.12, .35, 1); }
 .sidebar nav :is(a, button) svg, .mobile-quick-bar svg { width: 20px; height: 20px; flex: 0 0 20px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
@@ -234,7 +253,15 @@
   }
   .mobile-quick-bar > button { width: 64px; min-width: 0; height: 50px; display: grid; place-items: center; align-content: center; gap: 2px; padding: 3px 6px; border: 0; border-radius: 25px; color: var(--muted); background: transparent; font-size: 12px; transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease; }
   .mobile-quick-bar > button > span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mobile-quick-bar > button:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  /* 터치에서 :hover가 들러붙는 문제 — 위 nav 규칙의 주석 참고. 이 바는 터치 전용
+   * 표면이라 증상이 가장 잘 보였다: 서랍을 열고 뒤로가기로 닫아도 메뉴 버튼이
+   * accent로 남아 "지금 선택된 항목"으로 읽혔다(.active는 흰 글자 + 30% 알약이라
+   * 실제 활성 표시와도 다르다). 좁은 데스크톱 창에서는 마우스 호버가 그대로 동작한다. */
+  @media (hover: hover) {
+    .mobile-quick-bar > button:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  }
+  /* 키보드 포커스 짝 — 없으면 Tab으로 왔을 때 브라우저 기본 링만 뜬다. */
+  .mobile-quick-bar > button:focus-visible { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); outline: none; }
   .mobile-quick-bar > button.active {
     color: #fff;
     background: color-mix(in srgb, var(--accent) 30%, transparent);
