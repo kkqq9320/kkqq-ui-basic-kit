@@ -85,6 +85,9 @@ const SHORT_OPTIONS = [
   { value: "eur", label: "유로 (EUR)", disabled: true },
 ];
 
+// 고를 수 있는 옵션이 0개인 두 경우. disabled prop 없이도 비활성으로 렌더돼야 합니다.
+const ALL_DISABLED_OPTIONS = SHORT_OPTIONS.map((option) => ({ ...option, disabled: true }));
+
 const LONG_OPTIONS = Array.from({ length: 24 }, (_, index) => ({ value: `item-${index}`, label: `${index + 1}번 항목 — 아래 공간이 좁으면 위로 열립니다` }));
 
 // 긴 다이얼로그용 필드 목록. 화면보다 길어야 "넘칠 때" 동작을 볼 수 있고,
@@ -205,6 +208,11 @@ function Demo() {
             <label>가운데 정렬<Select ariaLabel="가운데 정렬 통화" align="center" value={centered} options={SHORT_OPTIONS} onChange={setCentered} /></label>
             <label>긴 목록 (위로 열림 확인)<Select ariaLabel="긴 목록" value={long} options={LONG_OPTIONS} onChange={setLong} /></label>
             <label>비활성<Select ariaLabel="비활성 드롭다운" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} disabled /></label>
+            {/* 아래 둘은 disabled prop을 주지 않았는데도 비활성으로 보여야 합니다 —
+                고를 수 있는 옵션이 하나도 없으면 컨트롤 자체가 비활성입니다(PRINCIPLES §3).
+                왼쪽의 "비활성"과 나란히 두어 셋이 같아 보이는지 확인하세요. */}
+            <label>옵션이 전부 비활성<Select ariaLabel="전부 비활성 드롭다운" value="krw" options={ALL_DISABLED_OPTIONS} onChange={setCurrency} /></label>
+            <label>옵션이 없음<Select ariaLabel="빈 드롭다운" value="" options={[]} onChange={setCurrency} /></label>
           </div>
         </Panel>
         <Panel title="날짜 피커" hint="DATE WHEEL">

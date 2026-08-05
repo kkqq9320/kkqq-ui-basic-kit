@@ -361,7 +361,7 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
     }
 
     if (key === "Tab") {
-      // 기본 동작(다음 요소로 이동)은 막지 않습니다. 다만 변형 A에서는 포커스가
+      // 기본 동작(다음 요소로 이동)은 막지 않습니다. 다만 roving tabindex라 포커스가
       // 옵션(포털이면 body 끝)에 있어서, 그냥 닫으면 포커스한 요소가 언마운트되며
       // 포커스가 body로 떨어지고 Tab이 문서 처음부터 시작합니다. keydown은 기본 Tab
       // 동작보다 먼저 실행되므로, 여기서 트리거로 옮겨 두면 브라우저가 트리거 기준으로
@@ -444,7 +444,7 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
       onClick={() => {
         if (suppressReopenRef.current) { suppressReopenRef.current = false; return; }   // 유령 click 삼키기 — 토글하지 않는다
         // 마우스로 열 때도 키보드 경로와 같은 값으로 시드합니다 — 네이티브 <select>처럼
-        // 방향키가 지금 선택된 값에서 이어가게 하려면(§ 위 initialActiveValue), 닫혀 있을
+        // 방향키가 지금 선택된 값에서 이어가게 하려면(위 initialActiveValue 참고), 닫혀 있을
         // 때만(=지금 열려는 참일 때만) 시드해야 닫는 클릭에서 activeValue를 건드리지 않습니다.
         if (!open) setActiveValue(initialActiveValue(options, value));
         setOpen((current) => !current);
