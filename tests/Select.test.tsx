@@ -4,7 +4,9 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Select } from "../src/Select";
+import { Select, scrollActiveOptionIntoView } from "../src/Select";
+import selectCssSource from "../css/select.css?raw";
+import surfacesCssSource from "../css/surfaces.css?raw";
 
 afterEach(cleanup);
 
@@ -87,6 +89,21 @@ describe("Select", () => {
     expect(screen.getByRole("option", { name: "첫째" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("option", { name: "첫째" }).className).toContain("selected");
     expect(screen.getByRole("option", { name: "셋째" })).toHaveProperty("disabled", true);
+  });
+
+  // aria-haspopup·aria-expanded는 "리스트박스를 여는 버튼이고 지금 열려 있다"까지만
+  // 말해 주고 어느 요소인지는 말하지 않는다. portal 모드에서는 메뉴가 body 끝으로
+  // 나가 DOM 상 트리거 근처에 있지도 않으므로, aria-controls가 그 둘을 잇는 유일한
+  // 연결이다.
+  it("트리거의 aria-controls가 열린 리스트박스를 가리킨다", () => {
+    render(<ControlledSelect />);
+    const trigger = screen.getByRole("button", { name: "항목" });
+
+    fireEvent.click(trigger);
+
+    const controlsId = trigger.getAttribute("aria-controls");
+    expect(controlsId).toBeTruthy();
+    expect(document.getElementById(controlsId!)).toBe(screen.getByRole("listbox"));
   });
 
   it("closes on Escape and on an outside click", () => {
@@ -269,6 +286,72 @@ describe("Select", () => {
       expect(scrollIntoView).not.toHaveBeenCalled();
       delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
     });
+
+    it("활성 옵션이 아래로 벗어나면 아래쪽 끝에만 맞춘다 — 가운데로 튀지 않는다", () => {
+      stubMenuLayout(MANY_OPTIONS.length);
+      const menu = document.createElement("div");
+      menu.className = "app-select-menu";
+      for (const option of MANY_OPTIONS) {
+        const button = document.createElement("button");
+        button.setAttribute("role", "option");
+        menu.appendChild(button);
+      }
+      document.body.appendChild(menu);
+      menu.scrollTop = 0;
+
+      // 인덱스 10은 MENU_CAP 아래에 있다. 가운데 정렬이면 훨씬 크게 움직인다.
+      // stubMenuLayout의 offsetTop은 MENU_PADDING + index * ROW_HEIGHT다 —
+      // MENU_PADDING을 빼먹으면 6px 어긋난다.
+      scrollActiveOptionIntoView(menu as HTMLDivElement, 10);
+      const expected = MENU_PADDING + 11 * ROW_HEIGHT - MENU_CAP;   // 6 + 374 - 320 = 60
+      expect(menu.scrollTop).toBe(60);
+      expect(expected).toBe(60);   // 산술이 상수와 어긋나면 여기서 먼저 걸린다
+
+      menu.remove();
+    });
+
+    it("활성 옵션이 이미 보이면 스크롤을 건드리지 않는다", () => {
+      stubMenuLayout(MANY_OPTIONS.length);
+      const menu = document.createElement("div");
+      menu.className = "app-select-menu";
+      for (const option of MANY_OPTIONS) {
+        const button = document.createElement("button");
+        button.setAttribute("role", "option");
+        menu.appendChild(button);
+      }
+      document.body.appendChild(menu);
+      menu.scrollTop = 0;
+
+      scrollActiveOptionIntoView(menu as HTMLDivElement, 0);
+      expect(menu.scrollTop).toBe(0);
+
+      menu.remove();
+    });
+
+    // 방향키 위(Task 4)가 정확히 이 분기(optionTop < menu.scrollTop)에 의존한다.
+    // 위 두 테스트는 전부 menu.scrollTop = 0에서 시작하므로 이 분기가 한 번도
+    // 실행되지 않는다 — 위쪽 끝에 맞추는 줄을 `menu.scrollTop = optionTop - 100;`으로
+    // 바꿔도 전체 테스트가 그대로 통과한다(계측으로 확인). 화면 아래쪽으로 충분히
+    // 스크롤한 채로 맨 위(index 0)로 올라가면, offsetTop(=MENU_PADDING=6)에
+    // 정확히 맞춰야 한다.
+    it("활성 옵션이 위로 벗어나면 위쪽 끝에만 맞춘다", () => {
+      stubMenuLayout(MANY_OPTIONS.length);
+      const menu = document.createElement("div");
+      menu.className = "app-select-menu";
+      for (const option of MANY_OPTIONS) {
+        const button = document.createElement("button");
+        button.setAttribute("role", "option");
+        menu.appendChild(button);
+      }
+      document.body.appendChild(menu);
+      menu.scrollTop = 500;   // 목록 아래쪽 — 목록 끝보다는 한참 위, index 0의 offsetTop보다는 한참 아래
+
+      scrollActiveOptionIntoView(menu as HTMLDivElement, 0);
+      expect(menu.scrollTop).toBe(6);
+      expect(MENU_PADDING).toBe(6);   // 산술이 상수와 어긋나면 여기서 먼저 걸린다
+
+      menu.remove();
+    });
   });
 
   describe("스크롤로 트리거가 화면에서 멀어지면 닫힌다 (DateWheelPicker와 같은 동작 — §16.4)", () => {
@@ -405,5 +488,405 @@ describe("Select", () => {
 
       expect(screen.queryByRole("listbox")).toBeNull();   // 억제되지 않아 정상적으로 닫힌다
     });
+  });
+
+  describe("disabled 옵션은 눈으로 구분된다", () => {
+    // jsdom은 CSS 캐스케이드를 계산하지 않으므로(레이아웃 엔진이 없다) 이 계약은
+    // 소스 텍스트로 고정한다 — AppShell.test.tsx·Dialog.test.tsx의 같은 idiom.
+    // 빈 문자열 가드가 없으면 .css?raw가 ""로 목킹되는 날 이 테스트들이 통째로
+    // 공허하게 통과한다(이 저장소에서 실제로 있었던 결함).
+    it("disabled 옵션에 시각 처리가 있다", () => {
+      expect(selectCssSource.length).toBeGreaterThan(1000);
+      expect(selectCssSource).toMatch(/\.app-select-menu button:disabled\s*\{[^}]*opacity:\s*\.55/);
+      expect(selectCssSource).toMatch(/\.app-select-menu button:disabled\s*\{[^}]*cursor:\s*not-allowed/);
+    });
+
+    // 특이도 함정: .selected 규칙이 (0,5,1)로 :disabled 규칙 (0,2,1)을 이긴다.
+    // 값이 disabled 옵션을 가리키면 강조색이 disabled 표시를 덮어써서, 고를 수 없는
+    // 항목이 "선택된 항목"처럼 보인다. 특이도를 올려 이기는 대신 .selected가
+    // disabled를 아예 매칭하지 않게 한다 — 의미가 맞는 쪽이다.
+    it(".selected 규칙이 disabled를 제외한다", () => {
+      expect(selectCssSource.length).toBeGreaterThan(1000);
+      const selectedRule = selectCssSource.match(/\.app-select-menu button\.selected[^{]*\{/);
+      expect(selectedRule).not.toBeNull();
+      expect(selectedRule![0]).toMatch(/:not\(:disabled\)/);
+    });
+
+    // 킷의 다른 컨트롤은 전부 hover/focus-visible 짝을 갖는데(page.css, sidebar.css,
+    // theme-editor.css, date-picker.css) Select 트리거만 빠져 있어서, 데스크톱에서
+    // 드롭다운만 마우스를 올려도 아무 반응이 없었다. 날짜 필드와 **같은 값**인지까지
+    // 본다 — 둘은 같은 41px 티어의 팝오버 트리거라 갈라지면 그게 결함이다.
+    it("트리거가 hover·focus·열림에 반응한다 — 날짜 필드와 같은 값으로", () => {
+      expect(selectCssSource.length).toBeGreaterThan(1000);
+      const stateRule = selectCssSource.match(/\.app-select-trigger:hover[^{]*\{[^}]*\}/);
+      expect(stateRule).not.toBeNull();
+      expect(stateRule![0]).toMatch(/border-color:\s*var\(--accent\)/);
+      expect(stateRule![0]).toMatch(/outline:\s*3px solid color-mix\(in srgb, var\(--accent\) 12%, transparent\)/);
+      // 세 상태가 한 규칙에 같이 있어야 한 곳만 고쳐도 셋이 함께 움직인다.
+      expect(stateRule![0]).toMatch(/:focus-visible/);
+      expect(stateRule![0]).toMatch(/\.app-select\.open/);
+      // disabled는 빠져야 한다 — :hover는 disabled에도 매칭된다.
+      expect(stateRule![0]).toMatch(/:hover:not\(:disabled\)/);
+    });
+
+    // 이게 없어서 비활성 드롭다운이 멀쩡한 것과 똑같이 보였다 — controls.css:22는
+    // 액션 버튼 세 종류만 다뤘고 드롭다운 트리거는 빠져 있었다. 흐린 처리가 메뉴
+    // 옵션에만 있었던 셈이라, 정작 "이 컨트롤 자체를 못 쓴다"는 신호가 없었다.
+    // 값이 controls.css와 같은지까지 본다 — 킷 전체가 "못 쓴다"를 한 모양으로만
+    // 말해야 하므로, 여기만 다른 숫자를 쓰면 그게 결함이다.
+    it("비활성 트리거에 시각 처리가 있다 — 액션 버튼과 같은 값", () => {
+      expect(selectCssSource.length).toBeGreaterThan(1000);
+      const triggerRule = selectCssSource.match(/\.app-select-trigger:disabled\s*\{[^}]*\}/);
+      expect(triggerRule).not.toBeNull();
+      expect(triggerRule![0]).toMatch(/opacity:\s*\.55/);
+      expect(triggerRule![0]).toMatch(/cursor:\s*not-allowed/);
+    });
+
+    // roving tabindex의 짝: 활성 옵션은 진짜 포커스를 받으므로 :focus-visible이 맞고,
+    // 이 규칙이 물러나야 강조 전체를 surfaces.css의 공용 규칙 하나가 그린다.
+    // initialActiveValue가 메뉴를 열 때마다 활성을 현재 값으로 시딩하므로
+    // active===selected는 드문 경우가 아니라 "열자마자 보는" 기본값이다 — 이걸 빼면
+    // 매번 강조색·굵기는 select.css에서, transform은 surfaces.css에서 오는 잡종이 된다.
+    it(".selected 규칙이 :focus-visible도 제외한다 — 방향키로 짚은 옵션의 강조를 공용 규칙에 넘기려면", () => {
+      expect(selectCssSource.length).toBeGreaterThan(1000);
+      const selectedRule = selectCssSource.match(/\.app-select-menu button\.selected[^{]*\{/);
+      expect(selectedRule).not.toBeNull();
+      expect(selectedRule![0]).toMatch(/:not\(:focus-visible\)/);
+    });
+  });
+
+  // 이 파일을 읽는 테스트가 **하나도 없던** 구간이 있었다: descendant 변형을 지우면서
+  // .active를 검사하던 두 테스트를 같이 지웠는데, 그게 surfaces.css의 유일한 독자였다.
+  // 규칙 블록을 통째로 지워도 전 스위트가 초록이었다(뮤테이션으로 확인).
+  // 하필 이 브랜치가 이 규칙을 하이라이트의 **유일한 출처**로 만들었다 — select.css의
+  // .selected는 :not(:focus-visible)로 스스로 물러나고, initialActiveValue는 열 때마다
+  // 활성을 선택값으로 시딩한다. 그래서 :focus-visible이 :is() 목록에서 빠지면 열자마자
+  // 보이는 옵션에 아무 강조도 남지 않는다. PRINCIPLES §11이 명시하는 계약이다.
+  describe("roving 하이라이트의 출처가 surfaces.css에 있다", () => {
+    it("호버/포커스 규칙의 :is(...) 목록에 :focus-visible이 있다", () => {
+      expect(surfacesCssSource.length).toBeGreaterThan(500);
+      expect(surfacesCssSource).toMatch(/:where\(\.app-select-menu\) button:is\([^)]*:focus-visible[^)]*\):not\(:disabled\)\s*\{[^}]*transform:\s*scale\(var\(--dropdown-option-hover-scale\)\)/);
+    });
+
+    it("prefers-reduced-motion 블록에도 :focus-visible이 있다 — 없으면 reduced-motion 사용자에게 transform이 되돌아온다", () => {
+      expect(surfacesCssSource.length).toBeGreaterThan(500);
+      const reducedMotionBlock = surfacesCssSource.match(/@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\n\}/);
+      expect(reducedMotionBlock).not.toBeNull();
+      expect(reducedMotionBlock![0]).toMatch(/:is\([^)]*:focus-visible[^)]*\):not\(:disabled\)\s*\{\s*transform:\s*none;\s*\}/);
+    });
+  });
+
+  describe("키보드로 조작한다", () => {
+    // ↑를 한 번 더 눌러 활성을 선택값에서 떼어 놓는 이유: initialValue="b"로 열면
+    // 활성(둘째)과 선택(둘째)이 같은 요소라, roving 이펙트를 activeValue 대신 value를
+    // 따라가게 바꿔도 이 단언이 통과한다(뮤테이션으로 확인). 이 파일에서 같은 모양의
+    // 함정이 이미 두 번 나왔다.
+    it("닫힌 상태에서 ↓를 누르면 열리고 현재 값이 활성이 된다", () => {
+      render(<ControlledSelect initialValue="b" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+
+      expect(screen.getByRole("listbox")).toBeTruthy();
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "둘째" }));
+
+      // 활성만 첫째로 옮긴다 — 선택은 여전히 둘째다.
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "ArrowUp" });
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "첫째" }));
+      expect(screen.getByRole("option", { name: "둘째" }).className).toContain("selected");
+    });
+
+    it("선택값이 없으면 첫 선택 가능한 옵션이 활성이 된다", () => {
+      render(<ControlledSelect />);
+      fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });
+
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "첫째" }));
+    });
+
+    it("↓가 disabled 옵션을 건너뛴다", () => {
+      render(<ControlledSelect initialValue="a" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+
+      // OPTIONS = a, b, c(disabled). a에서 ↓는 b로.
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "ArrowDown" });
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "둘째" }));
+
+      // b에서 ↓는 c가 disabled라 갈 곳이 없다 — 제자리.
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "ArrowDown" });
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "둘째" }));
+    });
+
+    it("Home과 End가 양 끝의 선택 가능한 옵션으로 간다", () => {
+      render(<ControlledSelect initialValue="b" />);
+      fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });
+
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "Home" });
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "첫째" }));
+
+      // 마지막(셋째)은 disabled라 End는 둘째로 간다.
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "End" });
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "둘째" }));
+    });
+
+    it("Enter가 활성 옵션을 고르고 닫고 포커스를 트리거로 돌려준다", () => {
+      render(<ControlledSelect initialValue="a" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "ArrowDown" });
+
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "Enter" });
+
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(trigger.textContent).toBe("둘째");
+    });
+
+    // Space는 PRINCIPLES §11 표에 두 줄(열기·선택)로 적혀 있는데 테스트가 없었다.
+    // `key !== " "`를 열기 조건에서 빼도, 선택 분기를 `key === "Enter"`로 좁혀도
+    // 전 스위트가 초록이었다(뮤테이션으로 확인). Enter와 같은 분기를 타지만 같은
+    // 분기라는 사실 자체가 검증 대상이다 — 한쪽만 남기는 회귀가 실제로 통과했다.
+    it("Space가 닫힌 메뉴를 연다", () => {
+      render(<ControlledSelect initialValue="a" />);
+      fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: " " });
+
+      expect(screen.getByRole("listbox")).toBeTruthy();
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "첫째" }));
+    });
+
+    it("Space가 활성 옵션을 고른다", () => {
+      render(<ControlledSelect initialValue="a" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "ArrowDown" });
+
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: " " });
+
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(trigger.textContent).toBe("둘째");
+    });
+
+    // choose()는 포커스 복원을 requestAnimationFrame 안에서 한다 — 그래서 이름이
+    // "포커스를 트리거로 돌려준다"인 위 Enter 테스트가 activeElement를 아예 안 봤고,
+    // restoreFocusWithoutScroll 호출을 통째로 없애도 전 스위트가 초록이었다.
+    // rAF를 흘려보낸 뒤에 봐야 한다.
+    it("고르고 나면 포커스가 트리거로 돌아온다 — rAF를 흘려보낸 뒤에 본다", async () => {
+      render(<ControlledSelect initialValue="a" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "첫째" }));
+
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "Enter" });
+      // choose()는 rAF 두 겹을 쓴다(안쪽은 유령 click 억제 해제용).
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    // "메뉴가 안 열린다"만 보면 가드를 `{ event.preventDefault(); return; }`로 바꿔도
+    // 통과한다 — 그러면 컴포넌트가 브라우저 단축키를 삼킨다. 이름이 약속하는 절반이
+    // 검증되지 않고 있었다.
+    it("Ctrl+↓와 Meta+↓는 무시한다 — 브라우저 단축키를 뺏지 않는다", () => {
+      render(<ControlledSelect />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+
+      const ctrl = new KeyboardEvent("keydown", { key: "ArrowDown", ctrlKey: true, bubbles: true, cancelable: true });
+      trigger.dispatchEvent(ctrl);
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(ctrl.defaultPrevented).toBe(false);   // 기본 동작을 그대로 브라우저에 넘긴다
+
+      const meta = new KeyboardEvent("keydown", { key: "ArrowDown", metaKey: true, bubbles: true, cancelable: true });
+      trigger.dispatchEvent(meta);
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(meta.defaultPrevented).toBe(false);
+    });
+
+    // 방향키가 페이지를 스크롤하지 않게 막는 줄은 지워도 전 스위트가 초록이었다.
+    it("열린 메뉴에서 방향키는 페이지 스크롤을 막는다", () => {
+      render(<ControlledSelect initialValue="a" />);
+      fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });
+
+      const event = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });
+      screen.getByRole("listbox").dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    // 포털 메뉴는 배치 이펙트가 position을 정하기 전까지 DOM에 없다. open이 켜지는
+    // 커밋에서는 menuRef가 null이고, 다음 커밋에는 open·activeValue·options가 그대로라
+    // roving 이펙트가 다시 돌지 않아 **포커스가 영영 안 갔다**. 닫을 때 position이
+    // null로 돌아가므로 매 개창마다 났다. 사이드바와 긴 다이얼로그가 전부 포털이다.
+    // 비포털을 대조군으로 함께 둔다 — 이 테스트만 보면 "roving이 아예 안 된다"와
+    // "포털에서만 안 된다"를 구분할 수 없다.
+    it("포털 메뉴에서도 활성 옵션이 포커스를 받는다", () => {
+      render(<ControlledPortalSelect />);
+      fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });
+
+      const active = screen.getByRole("option", { name: "첫째" });
+      expect(active.getAttribute("tabindex")).toBe("0");   // 렌더 시점 계산 — 두 모드 공통
+      expect(document.activeElement).toBe(active);          // 이펙트가 실제로 돌았는가
+    });
+
+    // roving이 포커스를 메뉴 안으로 옮기므로, 닫는 경로가 포커스를 회수하지 않으면
+    // 포커스한 옵션이 언마운트되며 body로 떨어진다 — 다음 Tab이 문서 처음부터
+    // 시작하고, 다이얼로그 안이라면 포커스 스코프 밖으로 나간다. Escape·Tab·선택은
+    // 원래 회수했지만 앵커 이동 스크롤과 뒤로가기는 안 했다.
+    it("앵커가 움직여 닫힐 때 포커스를 트리거로 회수한다", () => {
+      render(<ControlledSelect initialValue="a" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "첫째" }));
+
+      // 트리거를 화면 밖으로 옮겨 closeIfAnchorMoved를 발동시킨다.
+      trigger.getBoundingClientRect = () => ({ top: -9999, bottom: -9950, left: 0, right: 50, width: 50, height: 49, x: 0, y: -9999, toJSON: () => ({}) }) as DOMRect;
+      fireEvent.scroll(document, {});
+
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    });
+  });
+
+  // 고를 수 있는 옵션이 0개면 컨트롤 자체를 disabled로 렌더한다. 이 규칙 전에는 열기
+  // 경로가 갈렸다 — handleKeyDown은 initial===null이면 열지 않는데 트리거의 onClick에는
+  // 같은 가드가 없어, 키보드로는 안 열리고 마우스로는 활성 옵션도 포커스도 없는 메뉴가
+  // 열렸다. 한쪽에 맞추는 대신 뿌리를 없앤다.
+  describe("고를 수 있는 옵션이 없으면 컨트롤이 disabled다", () => {
+    const ALL_DISABLED = [
+      { value: "a", label: "첫째", disabled: true },
+      { value: "b", label: "둘째", disabled: true },
+    ];
+
+    it("옵션이 전부 disabled면 트리거가 disabled로 렌더된다", () => {
+      render(<Select ariaLabel="항목" value="a" options={ALL_DISABLED} onChange={vi.fn()} />);
+      expect(screen.getByRole("button", { name: "항목" })).toHaveProperty("disabled", true);
+    });
+
+    it("옵션 목록이 비어도 트리거가 disabled로 렌더된다 — 내용 없는 빈 메뉴가 열리지 않는다", () => {
+      render(<Select ariaLabel="항목" value="" options={[]} onChange={vi.fn()} />);
+      expect(screen.getByRole("button", { name: "항목" })).toHaveProperty("disabled", true);
+    });
+
+    // 갈려 있던 그 경로를 직접 고정한다. disabled 버튼에는 브라우저가 click을 보내지
+    // 않지만 fireEvent는 그 필터를 흉내 내지 않으므로, 이 단언은 "disabled라서 막혔다"에
+    // 기대지 않고 두 경로가 실제로 같은 결과를 내는지를 본다.
+    it("클릭해도 열리지 않는다 — 키보드 경로와 같다", () => {
+      render(<Select ariaLabel="항목" value="a" options={ALL_DISABLED} onChange={vi.fn()} />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+
+      fireEvent.click(trigger);
+      expect(screen.queryByRole("listbox")).toBeNull();
+
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+      expect(screen.queryByRole("listbox")).toBeNull();
+    });
+
+    it("고를 수 있는 옵션이 하나라도 있으면 그대로 쓸 수 있다 — 대조군", () => {
+      const oneEnabled = [{ value: "a", label: "첫째", disabled: true }, { value: "b", label: "둘째" }];
+      render(<Select ariaLabel="항목" value="b" options={oneEnabled} onChange={vi.fn()} />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+
+      expect(trigger).toHaveProperty("disabled", false);
+      fireEvent.click(trigger);
+      expect(screen.getByRole("listbox")).toBeTruthy();
+    });
+
+    it("Alt+↓는 ↓와 똑같이 연다 — 네이티브 select 습관", () => {
+      render(<ControlledSelect />);
+      fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown", altKey: true });
+
+      expect(screen.getByRole("listbox")).toBeTruthy();
+    });
+
+    it("선택 가능한 옵션이 없으면 방향키가 아무것도 하지 않는다", () => {
+      const allDisabled = [{ value: "a", label: "첫째", disabled: true }];
+      render(<Select ariaLabel="항목" value="" options={allDisabled} onChange={() => undefined} />);
+
+      fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });
+      expect(screen.queryByRole("listbox")).toBeNull();
+    });
+
+    // jsdom은 <button>의 keydown이 click으로 이어지는 브라우저 합성을 재현하지 않으므로,
+    // "메뉴가 열린다"는 증상 자체는 여기서 관찰할 수 없다 — 대신 원인인 preventDefault
+    // 누락을 직접 관찰한다. 실기기/실브라우저에서는: 선택 가능한 옵션이 하나도 없어
+    // initial===null로 handleKeyDown이 일찍 return하면, 막지 않은 Enter keydown이
+    // <button>의 네이티브 click으로 바뀌어 트리거의 onClick(setOpen(true))이 대신
+    // 메뉴를 열어버린다 — 활성 옵션도 포커스도 없는 죽은 드롭다운. fireEvent 대신 직접
+    // KeyboardEvent를 만들어 dispatch해야 event.defaultPrevented를 사후에 읽을 수 있다.
+    it("옵션이 전부 disabled면 Enter가 기본 동작을 막는다 — 못 막으면 네이티브 click이 대신 메뉴를 연다", () => {
+      const allDisabled = [{ value: "a", label: "첫째", disabled: true }];
+      render(<Select ariaLabel="항목" value="" options={allDisabled} onChange={() => undefined} />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+
+      const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+      trigger.dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(screen.queryByRole("listbox")).toBeNull();
+    });
+
+    // 클릭으로 열 때도 키보드로 열 때와 같은 값을 시드해야 네이티브 <select>처럼
+    // 방향키가 "지금 선택된 값"에서 이어간다. OPTIONS = a(첫째), b(둘째), c(disabled,셋째).
+    // value="b"인 채로 클릭해서 열고 ↑를 누르면 b 바로 앞인 a(첫째)로 가야 한다.
+    // 시드가 없으면(activeValue=null) stepEnabledValue가 "활성이 없다"로 보고 ↑를
+    // 끝(마지막 선택 가능한 옵션 = b, 둘째)에서 시작시켜 제자리에 머문다 — 고친 코드가
+    // 아니면 이 값이 첫째가 아니라 둘째가 된다.
+    it("마우스로 열면 현재 선택값에서 방향키가 이어진다 — 네이티브 select처럼", () => {
+      render(<ControlledSelect initialValue="b" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+
+      fireEvent.click(trigger);
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "ArrowUp" });
+
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "첫째" }));
+    });
+
+    it("Tab은 메뉴를 닫고 포커스를 트리거에 남긴다 — 문서 처음으로 튀지 않게", () => {
+      render(<ControlledSelect initialValue="a" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "첫째" }));
+
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "Tab" });
+
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    it("옵션은 tab 순서에서 빠진다 — 활성 하나만 0이고 나머지는 -1", () => {
+      // ARIA listbox 계약: 옵션이 개별적으로 tab 순서에 들어가면 안 된다.
+      // 이게 깨지면 옵션 50개짜리 Select에서 다음 필드까지 Tab을 50번 눌러야 한다.
+      // 여는 것만으로는 활성 옵션과 선택된 옵션이 같은 값(a/첫째)이라, tabIndex가
+      // activeValue를 추적하는지 value(선택값)를 추적하는지 구분이 안 된다 — 두 로직이
+      // 우연히 같은 카운트를 만든다. ↓를 한 번 더 눌러 활성을 둘째로 옮겨 둘을
+      // 갈라놓아야, 0을 든 옵션이 실제로 활성(둘째)인지 확인할 수 있다.
+      render(<ControlledSelect initialValue="a" />);
+      fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "ArrowDown" });
+
+      const allOptions = screen.getAllByRole("option");
+      const tabIndexes = allOptions.map((option) => option.getAttribute("tabindex"));
+      expect(tabIndexes.filter((value) => value === "0")).toHaveLength(1);
+      expect(tabIndexes.filter((value) => value === "-1")).toHaveLength(OPTIONS.length - 1);
+
+      // 개수만이 아니라 "누가" 0을 들고 있는지를 요소 동일성으로 확정한다 — 인덱스가
+      // 아니라 실제 tabindex="0" 요소를 찾아, 그것이 활성 옵션(둘째)이어야지 선택된
+      // 옵션(첫째)이면 안 된다고 못박는다.
+      const activeOption = allOptions.find((option) => option.getAttribute("tabindex") === "0");
+      expect(activeOption).toBe(screen.getByRole("option", { name: "둘째" }));
+    });
+
+    it("Escape는 값을 바꾸지 않고 닫으며 포커스를 트리거로 돌려준다", () => {
+      const onChange = vi.fn();
+      render(<Select ariaLabel="항목" value="a" options={OPTIONS} onChange={onChange} />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "ArrowDown" });
+
+      fireEvent.keyDown(document, { key: "Escape" });
+
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(onChange).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(trigger);
+    });
+
   });
 });

@@ -9,6 +9,7 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DateWheelPicker } from "../src/DateWheelPicker";
+import datePickerCssSource from "../css/date-picker.css?raw";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
@@ -235,5 +236,30 @@ describe("DateWheelPicker year-month mode (fields)", () => {
     fireEvent.click(screen.getByRole("button", { name: "회계 연도" }));
     fireEvent.click(screen.getByRole("button", { name: "연도 다음" }));
     expect(onChange).toHaveBeenLastCalledWith("2027-01-01");   // 월·일 모두 01로 정규화
+  });
+
+  // jsdom은 캐스케이드를 계산하지 않으므로 소스 텍스트로 고정한다 — Select.test.tsx의 같은 idiom.
+  describe("CSS 계약", () => {
+    // 포커스 링은 shell이 그린다(:26). 안쪽 버튼의 기본 아웃라인을 끄지 않으면 브라우저가
+    // 자기 링을 그 안에 하나 더 그려 두 겹이 된다 — Tab으로 옮겨 다닐 때 드롭다운은
+    // 강조색 링 하나, 날짜만 링 두 개가 나왔다. 실기기 관측: "하얀색 링이 보여".
+    it("트리거 버튼의 기본 포커스 아웃라인을 끈다 — 링은 shell이 그린다", () => {
+      expect(datePickerCssSource.length).toBeGreaterThan(500);
+      // shell이 실제로 링을 그리고 있어야 이 규칙이 정당하다 — 둘을 함께 본다.
+      // `[^)]*`를 쓰면 안 된다 — 선택자 안의 `:not(:disabled)`가 먼저 `)`로 끝나서
+      // `:focus-visible`까지 못 간다. 실제로 그렇게 썼다가 베이스라인에서 걸렸다.
+      expect(datePickerCssSource).toMatch(/\.date-wheel-trigger-shell:has\([^{]*:focus-visible[^{]*\{[^}]*outline:\s*3px solid/);
+      const suppressRule = datePickerCssSource.match(/\.date-wheel-trigger:focus-visible[^{]*\{[^}]*\}/);
+      expect(suppressRule).not.toBeNull();
+      expect(suppressRule![0]).toMatch(/outline:\s*none/);
+      expect(suppressRule![0]).toMatch(/\.date-wheel-today:focus-visible/);   // 안쪽 두 버튼 모두
+    });
+
+    // :hover는 비활성 요소에도 매칭되므로, 빼지 않으면 흐려진 필드가 마우스만 올려도
+    // 강조 테두리로 살아난다.
+    it("비활성 필드가 hover에 살아나지 않는다", () => {
+      expect(datePickerCssSource).toMatch(/\.date-wheel-trigger-shell:has\(:hover:not\(:disabled\)/);
+      expect(datePickerCssSource).toMatch(/\.date-wheel-trigger-shell:has\(\.date-wheel-trigger:disabled\)\s*\{[^}]*opacity:\s*\.55/);
+    });
   });
 });
