@@ -9,7 +9,7 @@
 button, input, select, textarea, option, optgroup { font-family: var(--font-family-base); font-size: inherit; }
 button { cursor: pointer; }
 input, select, textarea { width: 100%; border: 1px solid var(--line); border-radius: 7px; background: var(--input); padding: 10px 11px; color: var(--text); }
-input:focus, select:focus, textarea:focus { outline: 3px solid color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); }
+input:focus, select:focus, textarea:focus { outline: var(--focus-ring); border-color: var(--accent); }
 textarea { resize: vertical; line-height: 1.45; }
 label { display: grid; gap: 6px; color: var(--muted); font-size: var(--font-size-body); font-weight: 600; }
 
@@ -26,6 +26,36 @@ label { display: grid; gap: 6px; color: var(--muted); font-size: var(--font-size
 .button-row button:not(.primary) { border: 1px solid var(--line); color: var(--text); background: var(--surface); }
 .text-button { padding: 8px 0 0; color: #aaaaf2; border: 0; background: transparent; font-size: 13px; }
 .link-button { text-decoration: none; }
+
+/* 킷이 렌더하는 나머지 포커스 가능 컨트롤의 링. PRINCIPLES §11은 "3px 강조색
+ * 아웃라인"을 계약으로 갖고 있었지만 아래 나열된 것들에는 **규칙이 아예 없어서**
+ * 브라우저 기본 링(어두운 면에서는 흰색)이 그대로 떴습니다. 실기기 관측: 사이드바의
+ * 접기 버튼과 "새로 만들기"(.text-button)에 흰 링.
+ *
+ * 컴포넌트 파일마다 흩어 놓지 않고 한 규칙으로 두는 이유: 목록에서 컨트롤을 빠뜨리는
+ * 것이 지금까지의 실패 방식이었습니다(포커스 링을 세 번 따로 고쳤습니다). 세기는
+ * --focus-ring 하나만 봅니다.
+ *
+ * outline-offset을 주는 이유: 이 버튼들은 트리거·입력과 달리 테두리를 강조색으로
+ * 바꾸지 않으므로, 링이 요소에 딱 붙으면 자기 배경과 섞여 잘 안 읽힙니다.
+ *
+ * :where()를 쓰지 않는 이유: 특이도가 0이 되면 뒤에 임포트되는 파일(sidebar.css 등)의
+ * 평범한 클래스 규칙에도 밀립니다 — css/index.css의 임포트 순서가 캐스케이드를
+ * 정하므로 여기서는 클래스 특이도를 그대로 갖고 있어야 합니다. */
+.primary:focus-visible,
+.secondary-button:focus-visible,
+.danger-button:focus-visible,
+.file-button:focus-visible,
+.link-button:focus-visible,
+.text-button:focus-visible,
+.sidebar-collapse-button:focus-visible,
+.mobile-sidebar-close:focus-visible,
+.date-wheel-step:focus-visible,
+.mobile-page-tabs-button:focus-visible,
+.mobile-tab-card:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
 
 .error { padding: 11px 13px; border-radius: 7px; color: #9f3f2d; background: #fff0ed; font-size: 13px; }
 .success { margin-top: 12px; padding: 11px 13px; border-radius: 7px; color: #17665e; background: #e8f6f2; font-size: 13px; }

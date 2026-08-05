@@ -48,6 +48,16 @@
 .sidebar-slot { max-height: 240px; margin-bottom: 24px; padding: 13px; overflow: hidden; border-radius: 9px; background: rgba(255,255,255,.07); transition: max-height var(--sidebar-motion) var(--sidebar-ease), margin-bottom var(--sidebar-motion) var(--sidebar-ease), padding var(--sidebar-motion) var(--sidebar-ease), opacity calc(var(--sidebar-motion) * .5) var(--sidebar-ease); }
 .sidebar-slot > small { display: block; margin-bottom: 7px; color: #9c9cb8; white-space: nowrap; }
 .sidebar-slot .app-select-trigger { color: #fff; border-color: rgba(255,255,255,.15); background-color: #26273e; }
+/* 위 줄이 호버·포커스·열림의 강조색 테두리를 덮어쓰고 있었습니다 — 특이도가 (0,2,0)로
+ * 같은데 css/index.css가 select.css **다음에** sidebar.css를 임포트해서 나중 것이
+ * 이겼습니다. 그래서 사이드바 안에서만 테두리 강조가 죽고 아웃라인만 남아, 다른
+ * 곳보다 포커스가 눈에 띄게 약했습니다(실기기 관측: "작업공간에 셀렉트도 포커스가
+ * 약해"). 어두운 배경이라 차이가 더 컸습니다.
+ * 원래 규칙을 옮기는 대신 여기서 되돌려 줍니다 — select.css는 자기 컨트롤의 계약을
+ * 그대로 들고 있고, 이 파일이 만든 예외를 이 파일이 책임집니다. */
+.sidebar-slot .app-select-trigger:hover:not(:disabled),
+.sidebar-slot .app-select-trigger:focus-visible,
+.sidebar-slot .app-select.open > .app-select-trigger { border-color: var(--accent); }
 
 .sidebar nav { display: grid; gap: 4px; }
 

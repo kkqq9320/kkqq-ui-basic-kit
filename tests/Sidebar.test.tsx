@@ -6,7 +6,9 @@
 
 import { describe, expect, it } from "vitest";
 
+import controlsCssSource from "../css/controls.css?raw";
 import sidebarCssSource from "../css/sidebar.css?raw";
+import tokensCssSource from "../css/tokens.css?raw";
 
 describe("터치에서 들러붙는 호버", () => {
   // 터치 기기는 탭한 요소에 :hover를 다음 탭까지 붙여둔다. 가드가 없으면 눌렀다 뗀
@@ -60,5 +62,40 @@ describe("키보드 포커스 표시", () => {
   it("포커스 규칙은 (hover: hover) 안에 있으면 안 된다", () => {
     const guarded = sidebarCssSource.match(/@media \(hover: hover\) \{[^}]*\}[^}]*\}/g) ?? [];
     for (const block of guarded) expect(block).not.toMatch(/:focus-visible/);
+  });
+});
+
+// 포커스 링을 세 번 따로 고친 뒤에야 전수 조사를 했다. 그때 나온 목록이 이 계약이다 —
+// 액션 버튼 전체를 포함해 11개 컨트롤에 규칙이 **아예 없었고**, 있는 것들도 값이
+// 갈라져 있었다(입력 16%, 드롭다운·날짜 12%). 목록에서 컨트롤을 빠뜨리는 것이 지금까지의
+// 실패 방식이므로 개별 이름으로 고정한다 — 하나가 빠지면 그 이름으로 실패한다.
+describe("포커스 링은 토큰 하나가 정한다", () => {
+  const NEEDS_RING = [
+    "primary", "secondary-button", "danger-button", "file-button", "link-button", "text-button",
+    "sidebar-collapse-button", "mobile-sidebar-close", "date-wheel-step",
+    "mobile-page-tabs-button", "mobile-tab-card",
+  ];
+
+  it("토큰이 정의돼 있고 3px 강조색이다 — PRINCIPLES §11", () => {
+    expect(tokensCssSource.length).toBeGreaterThan(500);
+    expect(tokensCssSource).toMatch(/--focus-ring-strength:\s*\d+%/);
+    expect(tokensCssSource).toMatch(/--focus-ring:\s*3px solid color-mix\(in srgb, var\(--accent\) var\(--focus-ring-strength\), transparent\)/);
+  });
+
+  it.each(NEEDS_RING)("%s에 포커스 링이 있다", (name) => {
+    expect(controlsCssSource.length).toBeGreaterThan(1000);
+    const rule = controlsCssSource.match(/\.primary:focus-visible,[\s\S]*?\}/);
+    expect(rule).not.toBeNull();
+    expect(rule![0]).toContain(`.${name}:focus-visible`);
+    expect(rule![0]).toMatch(/outline:\s*var\(--focus-ring\)/);
+  });
+
+  // 사이드바 슬롯이 select.css의 강조색 테두리를 덮어쓰고 있었다 — 특이도가 같은데
+  // css/index.css가 select.css 다음에 sidebar.css를 임포트해서 나중 것이 이겼다.
+  // 그래서 사이드바 안에서만 포커스가 아웃라인 하나로 줄어 눈에 띄게 약했다.
+  it("사이드바 슬롯이 드롭다운의 강조색 테두리를 되돌려 준다", () => {
+    const rule = sidebarCssSource.match(/\.sidebar-slot \.app-select-trigger:focus-visible[\s\S]*?\{[^}]*\}/);
+    expect(rule).not.toBeNull();
+    expect(rule![0]).toMatch(/border-color:\s*var\(--accent\)/);
   });
 });

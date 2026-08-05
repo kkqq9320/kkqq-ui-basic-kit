@@ -124,6 +124,10 @@ function Demo() {
   const [currency, setCurrency] = useState("krw");
   const [centered, setCentered] = useState("krw");
   const [long, setLong] = useState("item-0");
+  // 포커스 링 세기 A/B — 소유자가 고르면 이 토글과 함께 지웁니다. tokens.css의
+  // --focus-ring-strength 하나만 바꾸므로, 링을 쓰는 모든 컨트롤이 같이 움직입니다.
+  const [ringStrength, setRingStrength] = useState("35%");
+  useEffect(() => { document.documentElement.style.setProperty("--focus-ring-strength", ringStrength); }, [ringStrength]);
   const [date, setDate] = useState("2026-07-23");
   const [optionalDate, setOptionalDate] = useState("");
   const [memo, setMemo] = useState("");
@@ -202,6 +206,15 @@ function Demo() {
       {tab === "controls" && <>
         {historyProbeEnabled() && <HistoryLogPanel />}
         <SectionHeading title="컨트롤" description="입력·드롭다운·날짜는 41px, 표준 액션은 38px, 조밀한 액션은 32px입니다. 같은 문맥의 버튼은 반드시 같은 높이를 씁니다." />
+        {/* 임시 — 포커스 링 세기를 고르면 이 패널을 지웁니다. */}
+        <Panel title="포커스 링 세기 (임시 비교)" hint="A/B">
+          <p className="muted-copy">Tab으로 아래 컨트롤들을 훑으면서 두 값을 비교하세요. <strong>사이드바를 열고 그 안의 “작업 공간” 드롭다운과 접기 버튼까지 보셔야 합니다</strong> — 어두운 면이 판단을 가릅니다.</p>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 10 }}>
+            <button type="button" className="secondary-button" aria-pressed={ringStrength === "14%"} onClick={() => setRingStrength("14%")}>A: 지금 세기 (14%)</button>
+            <button type="button" className="secondary-button" aria-pressed={ringStrength === "35%"} onClick={() => setRingStrength("35%")}>B: 진하게 (35%)</button>
+            <span className="muted-copy" style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }}>지금: {ringStrength}</span>
+          </div>
+        </Panel>
         <Panel title="드롭다운" hint="SELECT">
           <div className="demo-grid">
             <label>왼쪽 정렬 (기본)<Select ariaLabel="통화" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} /></label>
