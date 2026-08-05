@@ -94,6 +94,34 @@ describe("포커스 링은 토큰 하나가 정한다", () => {
     expect(all).toContain(`.${name}:focus-visible`);
   });
 
+  // 탭 세 종류는 클래스 하나로 안 잡혀서 위 목록에 못 넣는다(자손 선택자다).
+  // 셋 다 base가 **투명 테두리를 자리로 갖고** 있고 .active가 그 색을 채우므로,
+  // 포커스는 같은 자리에 더 옅은 색을 채운다 — 크기가 변하지 않아 탭 줄이 안 흔들린다.
+  it.each([
+    [".settings-tabs button:focus-visible", "border-bottom-color"],
+    [".settings-tabs > .settings-tab-options > button:focus-visible", "border-color"],
+    [".mobile-quick-tab-menu > button:focus-visible", "border-color"],
+  ])("%s가 테두리 색으로 포커스를 말한다", (selector, property) => {
+    expect(tabsCssSource).toContain(selector);
+    const rule = tabsCssSource.slice(tabsCssSource.indexOf(selector));
+    const body = rule.slice(rule.indexOf("{"), rule.indexOf("}") + 1);
+    expect(body).toContain(property);
+    expect(body).toMatch(/color-mix\(in srgb, var\(--accent\) 45%, transparent\)/);
+  });
+
+  // 활성 항목이 포커스보다 진해야 한다. 특이도가 같으므로 소스 순서가 유일한 판정
+  // 기준이다 — 사이드바 nav에서 이미 같은 함정을 겪었다.
+  it.each([
+    ".settings-tabs > .settings-tab-options > button",
+    ".mobile-quick-tab-menu > button",
+  ])("%s의 포커스 규칙이 .active보다 앞선다", (base) => {
+    const focusAt = tabsCssSource.indexOf(`${base}:focus-visible`);
+    const activeAt = tabsCssSource.indexOf(`${base}.active`);
+    expect(focusAt).toBeGreaterThan(-1);
+    expect(activeAt).toBeGreaterThan(-1);
+    expect(focusAt).toBeLessThan(activeAt);
+  });
+
   // 기본 링을 끄기만 하고 대체 표시를 안 주면 포커스가 아예 안 보인다 — PRINCIPLES §11이
   // 명시적으로 금지하는 코드다. 예외는 **부모가 대신 그려 주는 경우** 하나뿐이고,
   // 지금 그런 곳은 날짜 필드뿐이다(shell이 :has(:focus-visible)로 링을 그린다).
