@@ -1,0 +1,149 @@
+// @vitest-environment jsdom
+//
+// 사이드바·빠른 바의 CSS 계약. jsdom은 캐스케이드를 계산하지 않으므로(레이아웃 엔진이
+// 없다) 소스 텍스트로 고정한다 — Select.test.tsx·Dialog.test.tsx의 같은 idiom.
+// 빈 문자열 가드가 없으면 .css?raw가 ""로 목킹되는 날 통째로 공허하게 통과한다.
+
+import { describe, expect, it } from "vitest";
+
+import controlsCssSource from "../css/controls.css?raw";
+import datePickerCssSource from "../css/date-picker.css?raw";
+import sidebarCssSource from "../css/sidebar.css?raw";
+import tabsCssSource from "../css/tabs.css?raw";
+import tokensCssSource from "../css/tokens.css?raw";
+
+describe("터치에서 들러붙는 호버", () => {
+  // 터치 기기는 탭한 요소에 :hover를 다음 탭까지 붙여둔다. 가드가 없으면 눌렀다 뗀
+  // 항목이 계속 강조돼 "지금 선택된 항목"처럼 보인다. 실기기 관측: 서랍을 뒤로가기로
+  // 닫은 뒤에도 빠른 바의 메뉴 버튼이 accent로 남아 있었다.
+  it("빠른 바 버튼의 :hover가 (hover: hover) 안에 있다", () => {
+    expect(sidebarCssSource.length).toBeGreaterThan(1000);
+    expect(sidebarCssSource).toMatch(/@media \(hover: hover\) \{\s*\.mobile-quick-bar > button:hover \{/);
+  });
+
+  it("사이드바 nav 항목의 :hover 두 규칙이 모두 (hover: hover) 안에 있다", () => {
+    expect(sidebarCssSource.length).toBeGreaterThan(1000);
+    expect(sidebarCssSource).toMatch(/@media \(hover: hover\) \{\s*\.sidebar nav :is\(a, button\):hover::before \{/);
+    expect(sidebarCssSource).toMatch(/@media \(hover: hover\) \{\s*\.sidebar nav :is\(a, button\):hover \{/);
+  });
+
+  // 가드를 넣으면서 규칙을 한 블록으로 모으고 싶어지는데, 그러면 소스 순서가 바뀐다.
+  // :hover::before(opacity .5)가 .active::before(opacity 1)보다 **앞에** 있어야 활성
+  // 항목이 이긴다 — 미디어 쿼리는 특이도를 더하지 않으므로 순서가 유일한 판정 기준이다.
+  // 블록을 아래로 옮기면 호버가 활성을 덮어써 활성 표시가 흐려진다. 16f528a가 낸
+  // 사고와 같은 계열이라 명시적으로 고정한다.
+  it("호버 규칙이 .active 규칙보다 소스에서 앞선다 — 활성 표시가 이겨야 한다", () => {
+    const hoverBefore = sidebarCssSource.indexOf(".sidebar nav :is(a, button):hover::before");
+    const activeBefore = sidebarCssSource.indexOf(".sidebar nav :is(a, button).active::before");
+    expect(hoverBefore).toBeGreaterThan(-1);
+    expect(activeBefore).toBeGreaterThan(-1);
+    expect(hoverBefore).toBeLessThan(activeBefore);
+  });
+});
+
+describe("키보드 포커스 표시", () => {
+  // 호버 스타일만 있고 포커스 짝이 없으면 Tab으로 왔을 때 킷 스타일 없이 브라우저
+  // 기본 링만 뜬다. 바로 아래 .sidebar-icon-button(:156)이 이미 쓰는 짝이다.
+  // 포커스는 터치에서 들러붙지 않으므로 (hover: hover) 가드를 씌우면 안 된다 —
+  // 씌우면 터치 기기의 외장 키보드 사용자가 포커스 표시를 잃는다.
+  it("사이드바 nav 항목에 :focus-visible 짝이 있고 기본 링을 끈다", () => {
+    const rule = sidebarCssSource.match(/^\.sidebar nav :is\(a, button\):focus-visible \{[^}]*\}/m);
+    expect(rule).not.toBeNull();
+    expect(rule![0]).toMatch(/color:\s*#fff/);
+    expect(rule![0]).toMatch(/outline:\s*none/);
+    expect(sidebarCssSource).toMatch(/^\.sidebar nav :is\(a, button\):focus-visible::before \{/m);
+  });
+
+  it("빠른 바 버튼에 :focus-visible 짝이 있고 기본 링을 끈다", () => {
+    const rule = sidebarCssSource.match(/\.mobile-quick-bar > button:focus-visible \{[^}]*\}/);
+    expect(rule).not.toBeNull();
+    expect(rule![0]).toMatch(/outline:\s*none/);
+  });
+
+  // 포커스 규칙이 (hover: hover) 안에 갇히면 터치 기기 + 외장 키보드에서 표시가 사라진다.
+  it("포커스 규칙은 (hover: hover) 안에 있으면 안 된다", () => {
+    const guarded = sidebarCssSource.match(/@media \(hover: hover\) \{[^}]*\}[^}]*\}/g) ?? [];
+    for (const block of guarded) expect(block).not.toMatch(/:focus-visible/);
+  });
+});
+
+// 포커스 링을 세 번 따로 고친 뒤에야 전수 조사를 했다. 그때 나온 목록이 이 계약이다 —
+// 액션 버튼 전체를 포함해 11개 컨트롤에 규칙이 **아예 없었고**, 있는 것들도 값이
+// 갈라져 있었다(입력 16%, 드롭다운·날짜 12%). 목록에서 컨트롤을 빠뜨리는 것이 지금까지의
+// 실패 방식이므로 개별 이름으로 고정한다 — 하나가 빠지면 그 이름으로 실패한다.
+describe("포커스 링은 토큰 하나가 정한다", () => {
+  const NEEDS_RING = [
+    "primary", "secondary-button", "danger-button", "file-button", "link-button", "text-button",
+    "sidebar-collapse-button", "mobile-sidebar-close", "date-wheel-step",
+    "mobile-page-tabs-button", "mobile-tab-card",
+  ];
+
+  it("토큰이 정의돼 있고 3px 강조색이다 — PRINCIPLES §11", () => {
+    expect(tokensCssSource.length).toBeGreaterThan(500);
+    expect(tokensCssSource).toMatch(/--focus-ring-strength:\s*\d+%/);
+    expect(tokensCssSource).toMatch(/--focus-ring:\s*3px solid color-mix\(in srgb, var\(--accent\) var\(--focus-ring-strength\), transparent\)/);
+  });
+
+  // 처리는 컨트롤마다 다르다 — 테두리를 가진 버튼은 테두리 색을 바꾸고, .primary는
+  // 안쪽 링, 글자 버튼은 밑줄, 어두운 면의 아이콘 버튼은 배경. 링을 덧대는 것은
+  // 테두리를 강조색으로 바꾸는 컨트롤에만 남겼다(소유자 결정). 그래서 "어떤 처리인지"가
+  // 아니라 **"처리가 있는가"** 를 이름별로 고정한다.
+  it.each(NEEDS_RING)("%s에 포커스 처리가 있다", (name) => {
+    const all = controlsCssSource + sidebarCssSource + datePickerCssSource + tabsCssSource;
+    expect(all.length).toBeGreaterThan(4000);
+    expect(all).toContain(`.${name}:focus-visible`);
+  });
+
+  // 탭 세 종류는 클래스 하나로 안 잡혀서 위 목록에 못 넣는다(자손 선택자다).
+  // 셋 다 base가 **투명 테두리를 자리로 갖고** 있고 .active가 그 색을 채우므로,
+  // 포커스는 같은 자리에 더 옅은 색을 채운다 — 크기가 변하지 않아 탭 줄이 안 흔들린다.
+  it.each([
+    [".settings-tabs button:focus-visible", "border-bottom-color"],
+    [".settings-tabs > .settings-tab-options > button:focus-visible", "border-color"],
+    [".mobile-quick-tab-menu > button:focus-visible", "border-color"],
+  ])("%s가 테두리 색으로 포커스를 말한다", (selector, property) => {
+    expect(tabsCssSource).toContain(selector);
+    const rule = tabsCssSource.slice(tabsCssSource.indexOf(selector));
+    const body = rule.slice(rule.indexOf("{"), rule.indexOf("}") + 1);
+    expect(body).toContain(property);
+    expect(body).toMatch(/color-mix\(in srgb, var\(--accent\) 45%, transparent\)/);
+  });
+
+  // 활성 항목이 포커스보다 진해야 한다. 특이도가 같으므로 소스 순서가 유일한 판정
+  // 기준이다 — 사이드바 nav에서 이미 같은 함정을 겪었다.
+  it.each([
+    ".settings-tabs > .settings-tab-options > button",
+    ".mobile-quick-tab-menu > button",
+  ])("%s의 포커스 규칙이 .active보다 앞선다", (base) => {
+    const focusAt = tabsCssSource.indexOf(`${base}:focus-visible`);
+    const activeAt = tabsCssSource.indexOf(`${base}.active`);
+    expect(focusAt).toBeGreaterThan(-1);
+    expect(activeAt).toBeGreaterThan(-1);
+    expect(focusAt).toBeLessThan(activeAt);
+  });
+
+  // 기본 링을 끄기만 하고 대체 표시를 안 주면 포커스가 아예 안 보인다 — PRINCIPLES §11이
+  // 명시적으로 금지하는 코드다. 예외는 **부모가 대신 그려 주는 경우** 하나뿐이고,
+  // 지금 그런 곳은 날짜 필드뿐이다(shell이 :has(:focus-visible)로 링을 그린다).
+  // 예외를 정규식에서 조용히 빼지 않고 이름으로 적어 둔다 — 새로 생기면 여기서 실패하고,
+  // 그때 "이것도 부모가 그려 주는가"를 사람이 판단하게 된다.
+  it("outline: none만 남기고 끝나는 규칙은 부모가 대신 그려 주는 곳뿐이다 — §11", () => {
+    const all = controlsCssSource + sidebarCssSource + datePickerCssSource + tabsCssSource;
+    const bare = (all.match(/[^{}]*:focus-visible[^{]*\{\s*outline:\s*none;\s*\}/g) ?? [])
+      .map((rule) => rule.slice(rule.lastIndexOf("*/") + 2).trim());
+    expect(bare).toEqual([
+      ".date-wheel-trigger:focus-visible, .date-wheel-today:focus-visible { outline: none; }",
+    ]);
+    // 그 예외가 성립하려면 부모가 실제로 링을 그려야 한다.
+    expect(datePickerCssSource).toMatch(/\.date-wheel-trigger-shell:has\([^{]*:focus-visible[^{]*\{[^}]*outline:\s*var\(--focus-ring\)/);
+  });
+
+  // 사이드바 슬롯이 select.css의 강조색 테두리를 덮어쓰고 있었다 — 특이도가 같은데
+  // css/index.css가 select.css 다음에 sidebar.css를 임포트해서 나중 것이 이겼다.
+  // 그래서 사이드바 안에서만 포커스가 아웃라인 하나로 줄어 눈에 띄게 약했다.
+  it("사이드바 슬롯이 드롭다운의 강조색 테두리를 되돌려 준다", () => {
+    const rule = sidebarCssSource.match(/\.sidebar-slot \.app-select-trigger:focus-visible[\s\S]*?\{[^}]*\}/);
+    expect(rule).not.toBeNull();
+    expect(rule![0]).toMatch(/border-color:\s*var\(--accent\)/);
+  });
+});

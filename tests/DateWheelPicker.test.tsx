@@ -248,7 +248,7 @@ describe("DateWheelPicker year-month mode (fields)", () => {
       // shell이 실제로 링을 그리고 있어야 이 규칙이 정당하다 — 둘을 함께 본다.
       // `[^)]*`를 쓰면 안 된다 — 선택자 안의 `:not(:disabled)`가 먼저 `)`로 끝나서
       // `:focus-visible`까지 못 간다. 실제로 그렇게 썼다가 베이스라인에서 걸렸다.
-      expect(datePickerCssSource).toMatch(/\.date-wheel-trigger-shell:has\([^{]*:focus-visible[^{]*\{[^}]*outline:\s*3px solid/);
+      expect(datePickerCssSource).toMatch(/\.date-wheel-trigger-shell:has\([^{]*:focus-visible[^{]*\{[^}]*outline:\s*var\(--focus-ring\)/);
       const suppressRule = datePickerCssSource.match(/\.date-wheel-trigger:focus-visible[^{]*\{[^}]*\}/);
       expect(suppressRule).not.toBeNull();
       expect(suppressRule![0]).toMatch(/outline:\s*none/);

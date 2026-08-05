@@ -294,6 +294,12 @@ labels={{
 > 붙듭니다. 프롭으로 끄거나 대체할 수 없습니다. (이 문서는 한동안 "상태는 전부
 > controlled"라고 적고 있었는데, 그 보정이 들어온 뒤로 사실이 아니었습니다.)
 
+> 모바일 서랍은 **안드로이드 뒤로가기로 닫힙니다.** 여는 순간 `Sidebar`가 history에
+> 표식을 하나 남기고, 뒤로가기가 그걸 소비해 `onMobileClose`를 부릅니다 — 다이얼로그·
+> 드롭다운과 같은 방식입니다. 아래 예시처럼 `mobileOpen`을 `AppShell`과 `Sidebar`
+> 양쪽에 넘겨도 표식은 **하나만** 쌓입니다(미는 쪽은 `Sidebar`뿐입니다). 서랍을 직접
+> 닫으면 그 표식을 걷어내므로 뒤로가기 횟수가 밀리지 않습니다.
+
 ```tsx
 const [collapsed, setCollapsed] = useState(() => localStorage.getItem("sidebarCollapsed") === "true");
 const [mobileOpen, setMobileOpen] = useState(false);

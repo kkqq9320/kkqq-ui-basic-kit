@@ -7,7 +7,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { StrictMode, useLayoutEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { Dialog, Select } from "../src";
+import { AppShell, Dialog, Select, Sidebar } from "../src";
 import { takeUnlandedBackCountForTest } from "../src/hooks";
 
 const STACK_KEY = "__dsPopupStack";
@@ -81,6 +81,77 @@ function Harness({ wrapper: Wrapper = ({ children }: { children: React.ReactNode
   }
   return <Wrapper><Inner /></Wrapper>;
 }
+
+// 모바일 드로어는 킷에서 가장 큰 오버레이인데(position:fixed, z-index 60, 자기 백드롭까지
+// 있다) 뒤로가기 계약만 없었다. Dialog·Select·DateWheelPicker 셋은 전부 갖고 있다.
+describe("모바일 사이드바 드로어 뒤로가기", () => {
+  const BRAND = { title: "테스트" };
+  const SECTIONS = [{ items: [{ id: "home", label: "홈" }] }];
+
+  /** 데모와 같은 배선 — Sidebar와 AppShell **둘 다** mobileOpen을 받는다.
+   * 표식이 두 번 쌓이는지 보려면 이 구조 그대로 렌더해야 한다. */
+  function Drawer({ onClose }: { onClose?: () => void }) {
+    const [open, setOpen] = useState(true);
+    const close = () => { setOpen(false); onClose?.(); };
+    return <AppShell mobileOpen={open} onMobileClose={close}
+      sidebar={<Sidebar brand={BRAND} sections={SECTIONS} mobileOpen={open} onMobileClose={close} />}>
+      <p>본문</p>
+    </AppShell>;
+  }
+
+  it("드로어가 열려 있으면 history에 표식을 남긴다", () => {
+    expect(stack()).toHaveLength(0);
+    render(<Drawer />);
+    expect(document.querySelector(".sidebar.mobile-open")).toBeTruthy();
+    expect(stack()).toHaveLength(1);
+  });
+
+  // 이게 이 묶음의 핵심이다. Sidebar와 AppShell이 **둘 다** mobileOpen을 받으므로
+  // 양쪽에 훅을 걸면 한 번 열 때 표식이 두 개 쌓이고, 서랍을 닫는 데 뒤로가기를 두 번
+  // 눌러야 한다 — 사용자에게는 첫 번째 뒤로가기가 먹통으로 보인다. B2가 같은 계열의
+  // 사고였다. 개수를 세는 대신 "정확히 한 번의 뒤로가기로 닫히는가"까지 본다.
+  it("표식은 정확히 하나만 쌓인다 — 뒤로가기 한 번에 닫힌다", () => {
+    render(<Drawer />);
+    expect(stack()).toHaveLength(1);
+
+    pressBack();
+    expect(document.querySelector(".sidebar.mobile-open")).toBeNull();
+    expect(stack()).toHaveLength(0);
+  });
+
+  it("뒤로가기를 누르면 페이지가 아니라 드로어가 닫힌다", () => {
+    const onClose = vi.fn();
+    render(<Drawer onClose={onClose} />);
+
+    pressBack();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(document.querySelector(".sidebar.mobile-open")).toBeNull();
+  });
+
+  it("오버레이로 직접 닫으면 남긴 표식을 걷어낸다 — 뒤로가기 횟수가 밀리지 않는다", () => {
+    vi.useFakeTimers();
+    render(<Drawer />);
+    expect(stack()).toHaveLength(1);
+
+    // 이름으로는 못 고른다 — AppShell의 백드롭과 Sidebar 자신의 닫기 버튼이 접근성
+    // 이름을 공유한다("사이드바 닫기"). 둘 다 같은 일을 하지만 별개의 요소다.
+    const overlay = document.querySelector<HTMLElement>(".mobile-sidebar-overlay");
+    expect(overlay).not.toBeNull();
+    fireEvent.click(overlay!);
+    expect(document.querySelector(".sidebar.mobile-open")).toBeNull();
+    expect(backSpy).not.toHaveBeenCalled();   // 즉시가 아니라 예약된다
+    vi.advanceTimersByTime(1);
+    expect(backSpy).toHaveBeenCalledOnce();
+  });
+
+  it("닫힌 채로 렌더되면 표식을 남기지 않는다 — 대조군", () => {
+    render(<AppShell mobileOpen={false} onMobileClose={() => undefined}
+      sidebar={<Sidebar brand={BRAND} sections={SECTIONS} mobileOpen={false} onMobileClose={() => undefined} />}>
+      <p>본문</p>
+    </AppShell>);
+    expect(stack()).toHaveLength(0);
+  });
+});
 
 describe("다이얼로그 뒤로가기", () => {
   it("열리면 history에 표식을 하나 남긴다", () => {

@@ -521,7 +521,9 @@ describe("Select", () => {
       const stateRule = selectCssSource.match(/\.app-select-trigger:hover[^{]*\{[^}]*\}/);
       expect(stateRule).not.toBeNull();
       expect(stateRule![0]).toMatch(/border-color:\s*var\(--accent\)/);
-      expect(stateRule![0]).toMatch(/outline:\s*3px solid color-mix\(in srgb, var\(--accent\) 12%, transparent\)/);
+      // 링의 세기는 --focus-ring 토큰 하나가 정한다(tokens.css). 리터럴을 다시 적으면
+      // 토큰을 바꿔도 여기만 안 따라와 갈라진다 — 이 컨트롤이 갈라져 있던 게 원래 결함이다.
+      expect(stateRule![0]).toMatch(/outline:\s*var\(--focus-ring\)/);
       // 세 상태가 한 규칙에 같이 있어야 한 곳만 고쳐도 셋이 함께 움직인다.
       expect(stateRule![0]).toMatch(/:focus-visible/);
       expect(stateRule![0]).toMatch(/\.app-select\.open/);
