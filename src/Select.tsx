@@ -32,10 +32,6 @@ export type SelectProps = {
   portal?: boolean;
   /** portal일 때 모바일에서 하단 고정 바를 피하려고 비워둘 높이. */
   mobileBottomInset?: number;
-  /** **임시 prop — A/B 비교가 끝나면 삭제됩니다.** 활성 옵션을 어떻게 나타낼지:
-   * `"roving"`은 옵션에 진짜 포커스를 주고(기본), `"descendant"`는 포커스를 트리거에
-   * 두고 `aria-activedescendant`로 가리킵니다. 소비 앱에서 쓰지 마세요. */
-  keyboardActiveMode?: "roving" | "descendant";
 };
 
 /** 옵션 한 줄 34px + 메뉴 패딩 12px. 메뉴가 아직 없을 때 높이 추정에 씁니다. */
@@ -91,22 +87,17 @@ export function scrollActiveOptionIntoView(menu: HTMLDivElement, activeIndex: nu
 
 type MenuPosition = { top: number; left: number; width: number; maxHeight: number };
 
-export function Select({ value, options, onChange, ariaLabel, placeholder = "선택하세요", align = "left", className = "", disabled = false, portal = false, mobileBottomInset = 78, keyboardActiveMode = "roving" }: SelectProps) {
+export function Select({ value, options, onChange, ariaLabel, placeholder = "선택하세요", align = "left", className = "", disabled = false, portal = false, mobileBottomInset = 78 }: SelectProps) {
   const [open, setOpen] = useState(false);
   const [openAbove, setOpenAbove] = useState(false);
   const [position, setPosition] = useState<MenuPosition | null>(null);
   // 지금 방향키로 짚고 있는 옵션의 value. 닫혀 있으면 null입니다.
   const [activeValue, setActiveValue] = useState<string | null>(null);
-  const optionIdBase = useId();
-  // 인덱스로 만듭니다 — value에는 선택자·id에서 escape가 필요한 문자가 올 수 있고,
-  // 옵션은 options 순서 그대로 렌더되므로 인덱스가 안정적입니다.
-  const optionId = (index: number) => `${optionIdBase}-${index}`;
-  // aria-activedescendant(트리거에 있음)가 가리키는 옵션은 트리거의 서브트리 안에
-  // 있지 않습니다(옵션은 메뉴 쪽에, portal 모드면 body 끝에 따로 있습니다) — ARIA는
-  // 이런 경우 참조하는 요소가 활성 옵션을 담은 컨테이너를 aria-controls/aria-owns로
-  // 가리키도록 요구합니다. 그 컨테이너(리스트박스)에 안정적인 id를 줘야 트리거가
-  // 가리킬 수 있습니다.
-  const menuId = `${optionIdBase}-menu`;
+  // 트리거의 aria-controls가 가리킬 리스트박스 id. portal 모드에서는 메뉴가 body 끝으로
+  // 나가 트리거와의 포함 관계가 끊기므로, 어느 요소를 여는 버튼인지 보조기술에 알리는
+  // 유일한 연결이 이 id입니다.
+  const idBase = useId();
+  const menuId = `${idBase}-menu`;
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -271,30 +262,27 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
     scrollSelectedOptionIntoView(menu);
   }, [open, position]);
 
-  // 변형 A(roving tabindex): 활성 옵션에 **진짜 포커스**를 준다. 기존 :focus-visible
-  // 하이라이트(surfaces.css:24)가 그대로 동작하므로 CSS를 건드리지 않는다.
-  // preventScroll을 쓰는 이유는 restoreFocusWithoutScroll과 같다 — 네이티브 포커스
-  // 스크롤은 조상까지 움직인다. 메뉴 안 스크롤은 아래에서 직접 한다.
+  // roving tabindex: 활성 옵션에 **진짜 포커스**를 줍니다. 기존 :focus-visible
+  // 하이라이트(surfaces.css:24)가 그대로 동작하므로 CSS를 건드리지 않습니다.
+  // preventScroll을 쓰는 이유는 restoreFocusWithoutScroll과 같습니다 — 네이티브 포커스
+  // 스크롤은 조상까지 움직입니다. 메뉴 안 스크롤은 아래에서 직접 합니다.
   //
-  // 변형 B(aria-activedescendant)는 keyboardActiveMode="descendant"로 같은 이펙트를
-  // 공유한다 — activeValue·스크롤 계산이 완전히 같고, 다른 건 포커스를 옮기느냐뿐이다.
+  // 대안이었던 aria-activedescendant(포커스를 트리거에 두고 id로 활성 옵션을 가리키는
+  // 방식)는 기기 측정으로 기각됐습니다 — 근거는 PRINCIPLES.md §11 참고.
   useLayoutEffect(() => {
     if (!open || activeValue === null) return;
     const menu = menuRef.current;
     if (!menu) return;
     const activeIndex = options.findIndex((option) => option.value === activeValue);
     if (activeIndex === -1) return;
-    // descendant 모드에서는 포커스를 옮기지 않습니다 — 트리거에 머무는 것이 그 변형의
-    // 요점입니다. 스크롤은 두 모드 모두 필요합니다.
-    if (keyboardActiveMode === "roving") (menu.children[activeIndex] as HTMLElement | undefined)?.focus({ preventScroll: true });
+    (menu.children[activeIndex] as HTMLElement | undefined)?.focus({ preventScroll: true });
     scrollActiveOptionIntoView(menu, activeIndex);
-  }, [open, activeValue, options, keyboardActiveMode]);
+  }, [open, activeValue, options]);
 
   /**
-   * 트리거와 메뉴 **양쪽에** 붙는 하나의 핸들러입니다. 변형 A(roving tabindex)에서는
-   * 열려 있는 동안 포커스가 옵션에 있으므로 이벤트가 메뉴에서 버블링돼 오고, 닫혀
-   * 있으면 트리거에서 옵니다. 둘 중 포커스를 가진 쪽만 이벤트를 받으므로 중복 처리는
-   * 일어나지 않습니다.
+   * 트리거와 메뉴 **양쪽에** 붙는 하나의 핸들러입니다. 열려 있는 동안에는 포커스가
+   * 옵션에 있으므로 이벤트가 메뉴에서 버블링돼 오고, 닫혀 있으면 트리거에서 옵니다.
+   * 둘 중 포커스를 가진 쪽만 이벤트를 받으므로 중복 처리는 일어나지 않습니다.
    */
   function handleKeyDown(event: React.KeyboardEvent) {
     // Ctrl·Meta가 눌린 키는 건드리지 않습니다 — 브라우저·OS 단축키입니다.
@@ -366,11 +354,6 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
     });
   }
 
-  // 트리거의 aria-activedescendant에 쓸 인덱스. 옵션마다 findIndex를 부르면 옵션 수의
-  // 제곱이 되므로 렌더 앞에서 한 번만 구한다 — options.map의 index는 그대로 옵션
-  // 렌더에 쓴다.
-  const activeIndex = activeValue === null ? -1 : options.findIndex((option) => option.value === activeValue);
-
   const menu = <div
     ref={menuRef}
     id={menuId}
@@ -381,13 +364,14 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
     onPointerDownCapture={() => { selectionScrollRef.current = captureScrollSnapshot(); }}
     onKeyDown={handleKeyDown}
   >
-    {options.map((option, index) => <button
+    {options.map((option) => <button
       type="button"
       role="option"
-      id={optionId(index)}
       aria-selected={option.value === value}
-      tabIndex={keyboardActiveMode === "roving" && option.value === activeValue ? 0 : -1}
-      className={`${option.value === value ? "selected" : ""}${keyboardActiveMode === "descendant" && option.value === activeValue ? " active" : ""}`.trim()}
+      // roving tabindex: 활성 옵션 하나만 tab 순서에 있습니다. 옵션이 개별적으로 tab
+      // 순서에 들어가면 옵션 50개짜리 Select에서 다음 필드까지 Tab을 50번 눌러야 합니다.
+      tabIndex={option.value === activeValue ? 0 : -1}
+      className={option.value === value ? "selected" : ""}
       disabled={option.disabled}
       key={option.value}
       onClick={() => choose(option.value)}
@@ -403,7 +387,6 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
       aria-haspopup="listbox"
       aria-expanded={open}
       aria-controls={open ? menuId : undefined}
-      aria-activedescendant={keyboardActiveMode === "descendant" && open && activeIndex !== -1 ? optionId(activeIndex) : undefined}
       disabled={disabled}
       onKeyDown={handleKeyDown}
       onClick={() => {

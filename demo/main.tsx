@@ -1,7 +1,7 @@
 /* 데모 겸 CSS 누락 확인용 페이지. 다른 프로젝트로 복사할 때는 필요 없습니다.
  * 실행: design-system 폴더에서 node_modules/.bin/vite → http://localhost:5273
  */
-import { StrictMode, useEffect, useRef, useState } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import "../css/index.css";
@@ -51,224 +51,6 @@ function HistoryLogPanel() {
     <p className="muted-copy">뒤로가기로 페이지를 나갔다 돌아와도 남아 있습니다. 아래 내용을 그대로 붙여 주세요.</p>
     <pre className="demo-log">{lines.length ? lines.join("\n") : "(아직 기록 없음)"}</pre>
   </Panel>;
-}
-
-type KeyboardInspectorSnapshot = { focus: string; focusVisible: string; rule: string; background: string };
-
-/** 지금 열려 있는 Select 트리거 하나를 찾는다. 메뉴가 아니라 **트리거**를 기준으로
- * 삼는 이유: 포털 모드 메뉴는 body 맨 끝에 따로 렌더되어 document 순서가 "실제로
- * 열려 있는 것"과 무관하지만, 트리거는 열려 있는 동안만 aria-expanded="true"를
- * 달기 때문에(Select.tsx:404) 자기 상태를 스스로 증명한다. */
-function findOpenSelectTrigger(): HTMLElement | null {
-  return document.querySelector<HTMLElement>('[aria-haspopup="listbox"][aria-expanded="true"]');
-}
-
-/** 트리거의 aria-controls가 그 트리거의 메뉴 id를 가리킨다(Select.tsx:405) — 이걸
- * 따라가면 portal 여부와 무관하게 정확히 그 Select의 메뉴를 얻는다. */
-function findOpenSelectMenu(trigger: HTMLElement): HTMLElement | null {
-  const menuId = trigger.getAttribute("aria-controls");
-  return menuId ? document.getElementById(menuId) : null;
-}
-
-/** 활성 옵션을 키트 내부 로직을 베끼지 않고 DOM에 이미 나와 있는 표식으로만 찾는다:
- * roving 변형은 tabindex="0", descendant 변형은 .active 클래스, 혹은 트리거의
- * aria-activedescendant가 가리키는 요소 — Select.tsx가 실제로 쓰는 세 가지 표식 그대로다. */
-function findActiveOption(menu: HTMLElement, trigger: HTMLElement): HTMLElement | null {
-  const descendantId = trigger.getAttribute("aria-activedescendant");
-  if (descendantId) {
-    const byId = document.getElementById(descendantId);
-    if (byId) return byId;
-  }
-  return menu.querySelector<HTMLElement>('[tabindex="0"]') ?? menu.querySelector<HTMLElement>(".active");
-}
-
-/** :focus-visible과 마찬가지로, 오래된 엔진은 다른 가상클래스도 모르는 채로
- * matches()에서 던질 수 있다. rule= 판정에 쓰는 matches() 호출을 전부 이 헬퍼로
- * 감싸서 "지원 안 함(null)"과 "매칭 안 됨(false)"을 구분한다. */
-function matchesSafe(element: Element, selector: string): boolean | null {
-  try {
-    return element.matches(selector);
-  } catch {
-    return null;
-  }
-}
-
-/** activeOption이 실제로 어느 CSS 규칙에 걸려 강조되는지 "이름"으로 판정한다 —
- * 계산된 배경색이 아니라 클래스 소속·가상클래스 매칭이라는 사실 그 자체로.
- *
- * 왜 색 대신 이름인가(Critical 리뷰 항목 (a)): .app-select-menu button의
- * background-color는 var(--motion-fast)(140ms, css/tokens.css:49) 동안
- * 트랜지션한다(css/surfaces.css:22). 이 계측기는 200ms마다 폴링하므로, 표본이 그
- * 140ms 트랜지션 창 안에 들어가면 보간 중인 색을 그대로 붙잡을 수 있다. 게다가
- * Chromium은 보간 도중 직렬화 표기법 자체를 바꾼다 — 정지 상태는
- * color(srgb …), 보간 중에는 oklab(…) — 그래서 실제 상태는 전혀 안 바뀌었는데도
- * in-flight 표본이 정지 표본과 완전히 달라 보일 수 있다.
- *
- * 이게 그냥 이론이 아니라 실제로 오독을 냈다: 이전 리포트의 "roving, ArrowDown
- * 이후 — 더 밝아짐" 관찰값은 oklab(0.307752 0.0121395 -0.0646284 / 0.78)이었는데,
- * 이 값의 밝기(L)와 알파(0.78)는 바로 직전의 "어두운" 판독값
- * color(srgb 0.164706 0.168627 0.313726 / 0.78)과 완전히 같다 — 즉 둘 다 어두운
- * --accent-soft 78%(css/select.css:54)이고, 하나는 그저 트랜지션 t≈0 시점에
- * 잡힌 것뿐이다. 진짜 강조색은 rgb(87, 91, 212)(--accent)이며, 이건 descendant
- * 모드 판독에서만 나타났다. 색만 보고 "더 밝아졌다"고 판단한 것 자체가 오독이었다.
- *
- * 반면 클래스 소속(.active/.selected)과 :focus-visible 매칭 여부는 보간되지
- * 않는다 — 트랜지션 중 어느 순간에 붙잡혀도 항상 그 순간의 진짜 값이다. 그래서
- * rule=이 소유자가 읽어야 할 1차 신호가 된다. */
-function computeHighlightRule(activeOption: HTMLElement, focusVisible: string): string {
-  const disabled = matchesSafe(activeOption, ":disabled");
-  if (disabled === null) return "?";
-  if (!disabled) {
-    // css/surfaces.css:26의 :is(:hover, :focus-visible, .active):not(:disabled)가
-    // css/select.css:54의 옅은 .selected 규칙보다 항상 이긴다(캐스케이드에서 더
-    // 뒤에 오고 특이도도 밀리지 않는다) — 그래서 이 셋을 .selected보다 먼저 본다.
-    if (focusVisible === "?") return "?";
-    if (focusVisible === "true") return "focus-visible";
-    if (activeOption.classList.contains("active")) return "active";
-    const hover = matchesSafe(activeOption, ":hover");
-    if (hover === null) return "?";
-    if (hover) return "hover";
-    if (activeOption.classList.contains("selected")) return "selected(dim)";
-  }
-  return "none";
-}
-
-/** foc/fv/rule과 활성 옵션 DOM 참조 — 배경색과 달리 보간되지 않으므로 폴링마다
- * 즉시 계산해도 안전하다(computeHighlightRule의 주석 참고). */
-function readKeyboardInstantFacts(): { focus: string; focusVisible: string; rule: string; activeOption: HTMLElement | null } {
-  const trigger = findOpenSelectTrigger();
-  const menu = trigger ? findOpenSelectMenu(trigger) : null;
-  if (!trigger || !menu) return { focus: "-", focusVisible: "-", rule: "-", activeOption: null };
-  const activeOption = findActiveOption(menu, trigger);
-
-  const activeElement = document.activeElement;
-  let focus: string;
-  if (activeElement === trigger) focus = "trigger";
-  else if (activeOption && activeElement === activeOption) focus = "option";
-  else if (activeElement === document.body) focus = "body";
-  // 표식이 가리키는 옵션과는 다르지만 포커스가 메뉴 안에 있는 경우 — 표식과 실제
-  // 포커스가 어긋났다는 뜻이라 "other"로 뭉개지 않고 따로 알린다. 이게 바로 이
-  // 계측기가 잡아내야 할 종류의 드리프트다.
-  else if (activeElement && menu.contains(activeElement)) focus = "option*";
-  else focus = "other";
-
-  // 오래된 엔진은 :focus-visible 자체를 모르는 가상 클래스로 보고 matches()에서 던진다 — "?"로 보고한다.
-  let focusVisible = "-";
-  if (activeOption) {
-    try {
-      focusVisible = String(activeOption.matches(":focus-visible"));
-    } catch {
-      focusVisible = "?";
-    }
-  }
-
-  const rule = activeOption ? computeHighlightRule(activeOption, focusVisible) : "-";
-
-  return { focus, focusVisible, rule, activeOption };
-}
-
-/** bg= 안정화 상태. foc/fv/rule 조합 또는 활성 옵션 DOM 참조가 마지막으로 바뀐
- * 시점(since)을 들고 있는다. */
-type BackgroundStability = { key: string; activeOption: HTMLElement | null; since: number };
-
-// 140ms 트랜지션(css/tokens.css:49의 --motion-fast)을 확실히 넘기는 값 — "적어도
-// 200ms 동안 상태 변화 없음"을 요구하면 트랜지션이 끝난 뒤에만 읽게 된다.
-const BACKGROUND_SETTLE_MS = 200;
-
-/** 벽시계로 200ms가 지났다는 것과 "트랜지션이 실제로 끝났다"는 것은 별개다 — 탭이
- * 화면에 그려지지 않으면(백그라운드 탭, iOS 저전력 모드, 앱 전환 후 복귀) 렌더링
- * 자체가 멎어 트랜지션 시계가 t=0 근처에 멈춘 채로 벽시계만 흐를 수 있다. 소유자가
- * 이 계측기를 읽는 곳이 바로 폰이므로 이 경우를 놓치면 안 된다. getAnimations()로
- * 이 요소에 아직 진행 중(running)인 CSS 트랜지션이 있는지 직접 물어서 벽시계 판정을
- * 보강한다 — 지원하지 않는 엔진에서는 null(판정 불가)을 반환해 기존 벽시계 판정만
- * 쓰게 한다(구버전 엔진에서 동작을 절대 더 나쁘게 만들지 않기 위해). */
-function hasRunningTransition(element: HTMLElement): boolean | null {
-  if (typeof element.getAnimations !== "function") return null;
-  try {
-    return element.getAnimations().some((animation) => animation.playState === "running");
-  } catch {
-    return null;
-  }
-}
-
-/** Critical 리뷰 항목 (b): bg=를 지우는 대신 믿을 수 있게 만든다. foc/fv/rule/활성
- * 옵션 중 하나라도 바뀌면 그 순간부터 다시 BACKGROUND_SETTLE_MS를 기다렸다가만
- * getComputedStyle을 읽는다 — 그 전에 읽으면 위 computeHighlightRule 주석에 적은
- * "더 밝아짐" 오독을 그대로 반복하게 된다. 게다가 벽시계만으로는 부족하다는 게 이
- * 수정을 검증하는 과정에서 실제로 드러났다 — 200ms가 지났다고 판단한 뒤에도
- * getComputedStyle이 여전히 rule=focus-visible의 진짜 값(rgb(87, 91, 212))이 아니라
- * 어두운 .selected 값과 같은 L·알파를 가진 oklab(…) 보간값을 계속 돌려준 사례가
- * 있었다(getAnimations()로 확인하니 해당 요소의 트랜지션이 playState="running",
- * currentTime=0에 멈춰 있었다) — 그래서 getAnimations()로 실제 트랜지션 종료
- * 여부까지 같이 확인한다. 안정될 때까지는 값 대신 "…settling"을 보여줘서, 지금
- * 읽고 있는 게 확정된 값인지 트랜지션 중간인지 소유자가 헷갈리지 않게 한다.
- * stability는 폴링 콜백 하나에서만 갱신되는 가변 ref라 여기서 직접 써도 안전하다. */
-function readSettledBackground(
-  facts: { focus: string; focusVisible: string; rule: string; activeOption: HTMLElement | null },
-  stability: { current: BackgroundStability },
-): string {
-  if (!facts.activeOption) {
-    stability.current = { key: "", activeOption: null, since: Date.now() };
-    return "-";
-  }
-
-  const key = `${facts.focus}|${facts.focusVisible}|${facts.rule}`;
-  const now = Date.now();
-  const prev = stability.current;
-  const changed = prev.key !== key || prev.activeOption !== facts.activeOption;
-  const since = changed ? now : prev.since;
-  stability.current = { key, activeOption: facts.activeOption, since };
-
-  if (now - since < BACKGROUND_SETTLE_MS) return "…settling";
-  // "=== true"인 경우에만 막는다 — null(판정 불가)까지 막으면 구버전 엔진에서
-  // bg=가 영영 "…settling"에 머무를 수 있으므로, 모를 때는 기존 벽시계 판정만 믿는다.
-  if (hasRunningTransition(facts.activeOption) === true) return "…settling";
-  return getComputedStyle(facts.activeOption).backgroundColor; // 안정된 뒤에는 원본 문자열 그대로
-}
-
-function readKeyboardInspectorSnapshot(stability: { current: BackgroundStability }): KeyboardInspectorSnapshot {
-  const facts = readKeyboardInstantFacts();
-  const background = readSettledBackground(facts, stability);
-  return { focus: facts.focus, focusVisible: facts.focusVisible, rule: facts.rule, background };
-}
-
-/** 키보드 변형 A/B 계측 판독기 — 데모 전용, A/B 스위치 옆에 작게 붙인다.
- *
- * 이게 왜 필요한가: 폰에서는 메뉴를 여는 동작이 항상 탭이고, roving 변형(A)은 그
- * 클릭 핸들러가 실행한 useLayoutEffect 안에서 활성 옵션에 **프로그램적으로**
- * 포커스를 준다(Select.tsx:274-291). Chromium과 WebKit은 스크립트로 준 포커스에는
- * :focus-visible을 잘 안 붙이는 경향이 있어서, 그 결과 A가 실제로는 옅은 .selected
- * 스타일로만 보이고 descendant 변형(B, .active — React가 모달리티와 무관하게 직접
- * 붙이는 클래스)만 또렷하게 보일 수 있다. 이 차이는 두 아키텍처의 본질이 아니라
- * 브라우저 휴리스틱이 만든 착시일 수 있다 — 소유자가 눈으로만 보고 고르면 이 착시를
- * "B가 더 낫다"로 오해할 수 있다. 그래서 눈이 아니라 계측으로 판단하도록, 지금
- * 포커스가 어디 있는지·:focus-visible이 실제로 맞는지·어떤 하이라이트 규칙이 이겨서
- * 실제로 적용됐는지를 그대로 보여준다. 열린 메뉴가 없으면 "-"로 비워 둔다.
- *
- * rule=과 bg=의 역할 분담(Critical 리뷰 수정): bg=는 계산된 배경색을 그대로 보여줘
- * 왔지만, 그 색은 140ms 트랜지션 중간에 캡처되면 실제 상태와 무관하게 다른 값으로
- * 보일 수 있다는 게 밝혀졌다(computeHighlightRule 주석 참고 — 이전 리포트의 "더
- * 밝아짐" 관찰이 바로 이 착시였다). 그래서 이제 rule=이 소유자가 읽어야 할 1차
- * 신호다 — 클래스 소속과 :focus-visible 매칭은 보간되지 않으므로 언제 붙잡혀도
- * 항상 진짜 값이다. bg=는 폐기하지 않고 "안정된 뒤에만" 읽어 rule=을 보강하는
- * 2차 신호로 남긴다(readSettledBackground 참고) — 안정되기 전에는 값 대신
- * "…settling"을 보여준다.
- */
-function KeyboardModeInspector() {
-  const stabilityRef = useRef<BackgroundStability>({ key: "", activeOption: null, since: Date.now() });
-  const [snapshot, setSnapshot] = useState<KeyboardInspectorSnapshot>(() => readKeyboardInspectorSnapshot(stabilityRef));
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setSnapshot(readKeyboardInspectorSnapshot(stabilityRef)), 200);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  return <span style={{ display: "flex", gap: 8, fontSize: 11, fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace", color: "var(--muted)" }}>
-    <span>foc={snapshot.focus}</span>
-    <span>fv={snapshot.focusVisible}</span>
-    <span>rule={snapshot.rule}</span>
-    <span>bg={snapshot.background}</span>
-  </span>;
 }
 
 function Glyph({ d }: { d: string[] }) {
@@ -339,8 +121,6 @@ function Demo() {
   const [currency, setCurrency] = useState("krw");
   const [centered, setCentered] = useState("krw");
   const [long, setLong] = useState("item-0");
-  // A/B 비교용 임시 토글 — 소유자가 고르면 이것과 진 변형을 같이 지웁니다.
-  const [keyboardActiveMode, setKeyboardActiveMode] = useState<"roving" | "descendant">("roving");
   const [date, setDate] = useState("2026-07-23");
   const [optionalDate, setOptionalDate] = useState("");
   const [memo, setMemo] = useState("");
@@ -383,7 +163,7 @@ function Demo() {
         slot={<>
           <small>작업 공간</small>
           {/* 슬롯이 접기 애니메이션 때문에 overflow를 자르므로 portal 필수 */}
-          <Select ariaLabel="작업 공간" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} portal keyboardActiveMode={keyboardActiveMode} />
+          <Select ariaLabel="작업 공간" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} portal />
           <button type="button" className="text-button">+ 새로 만들기</button>
         </>}
         sections={[
@@ -420,17 +200,11 @@ function Demo() {
         {historyProbeEnabled() && <HistoryLogPanel />}
         <SectionHeading title="컨트롤" description="입력·드롭다운·날짜는 41px, 표준 액션은 38px, 조밀한 액션은 32px입니다. 같은 문맥의 버튼은 반드시 같은 높이를 씁니다." />
         <Panel title="드롭다운" hint="SELECT">
-          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-            <strong style={{ fontSize: 12 }}>키보드 변형</strong>
-            <button type="button" onClick={() => setKeyboardActiveMode("roving")} aria-pressed={keyboardActiveMode === "roving"}>A: roving</button>
-            <button type="button" onClick={() => setKeyboardActiveMode("descendant")} aria-pressed={keyboardActiveMode === "descendant"}>B: descendant</button>
-            <KeyboardModeInspector />
-          </div>
           <div className="demo-grid">
-            <label>왼쪽 정렬 (기본)<Select ariaLabel="통화" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} keyboardActiveMode={keyboardActiveMode} /></label>
-            <label>가운데 정렬<Select ariaLabel="가운데 정렬 통화" align="center" value={centered} options={SHORT_OPTIONS} onChange={setCentered} keyboardActiveMode={keyboardActiveMode} /></label>
-            <label>긴 목록 (위로 열림 확인)<Select ariaLabel="긴 목록" value={long} options={LONG_OPTIONS} onChange={setLong} keyboardActiveMode={keyboardActiveMode} /></label>
-            <label>비활성<Select ariaLabel="비활성 드롭다운" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} disabled keyboardActiveMode={keyboardActiveMode} /></label>
+            <label>왼쪽 정렬 (기본)<Select ariaLabel="통화" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} /></label>
+            <label>가운데 정렬<Select ariaLabel="가운데 정렬 통화" align="center" value={centered} options={SHORT_OPTIONS} onChange={setCentered} /></label>
+            <label>긴 목록 (위로 열림 확인)<Select ariaLabel="긴 목록" value={long} options={LONG_OPTIONS} onChange={setLong} /></label>
+            <label>비활성<Select ariaLabel="비활성 드롭다운" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} disabled /></label>
           </div>
         </Panel>
         <Panel title="날짜 피커" hint="DATE WHEEL">
@@ -507,7 +281,7 @@ function Demo() {
       <p className="muted-copy">입력칸을 눌러 키보드를 올린 채 위아래로 스크롤해 보세요.</p>
       {LONG_DIALOG_FIELDS.map((field, index) => {
         const key = `${field.kind}-${index}`;
-        if (field.kind === "select") return <label key={key}>{field.label}<Select ariaLabel={field.label} value={currency} options={SHORT_OPTIONS} onChange={setCurrency} portal keyboardActiveMode={keyboardActiveMode} /></label>;
+        if (field.kind === "select") return <label key={key}>{field.label}<Select ariaLabel={field.label} value={currency} options={SHORT_OPTIONS} onChange={setCurrency} portal /></label>;
         if (field.kind === "date") return <label key={key}>{field.label}<DateWheelPicker ariaLabel={field.label} value={date} onChange={setDate} /></label>;
         if (field.kind === "memo") return <label key={key}>{field.label}<AutoGrowTextarea value={memo} onChange={setMemo} maxLength={500} ariaLabel={field.label} placeholder={field.placeholder} /></label>;
         return <label key={key}>{field.label}<input inputMode={field.numeric ? "numeric" : undefined} placeholder={field.placeholder} /></label>;
