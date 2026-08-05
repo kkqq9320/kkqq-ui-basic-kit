@@ -223,6 +223,9 @@ function Demo() {
             <label>연·월만 (fields)<DateWheelPicker ariaLabel="예산 월" value={date} onChange={setDate} fields={["year", "month"]} /></label>
             <label>연도만 (fields)<DateWheelPicker ariaLabel="회계 연도" value={date} onChange={setDate} fields={["year"]} /></label>
             <label>영어 라벨<DateWheelPicker ariaLabel="Date" value={date} onChange={setDate} labels={{ placeholder: "Pick a date", hint: "Scroll or swipe", today: "Today", clear: "Clear", done: "Done", setToday: "set to today", previous: "previous", next: "next", select: "picker", weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], units: { year: "Year", month: "Month", day: "Day" } }} /></label>
+            {/* 비활성 예시가 없어서 이 상태를 아무도 본 적이 없었습니다 — 드롭다운의
+                "비활성"과 나란히 놓고 같은 흐리기인지 확인하세요. */}
+            <label>비활성<DateWheelPicker ariaLabel="비활성 날짜" value={date} onChange={setDate} disabled /></label>
           </div>
         </Panel>
         <Panel title="텍스트와 버튼" hint="CONTROLS">

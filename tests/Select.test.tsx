@@ -512,6 +512,19 @@ describe("Select", () => {
       expect(selectedRule![0]).toMatch(/:not\(:disabled\)/);
     });
 
+    // 이게 없어서 비활성 드롭다운이 멀쩡한 것과 똑같이 보였다 — controls.css:22는
+    // 액션 버튼 세 종류만 다뤘고 드롭다운 트리거는 빠져 있었다. 흐린 처리가 메뉴
+    // 옵션에만 있었던 셈이라, 정작 "이 컨트롤 자체를 못 쓴다"는 신호가 없었다.
+    // 값이 controls.css와 같은지까지 본다 — 킷 전체가 "못 쓴다"를 한 모양으로만
+    // 말해야 하므로, 여기만 다른 숫자를 쓰면 그게 결함이다.
+    it("비활성 트리거에 시각 처리가 있다 — 액션 버튼과 같은 값", () => {
+      expect(selectCssSource.length).toBeGreaterThan(1000);
+      const triggerRule = selectCssSource.match(/\.app-select-trigger:disabled\s*\{[^}]*\}/);
+      expect(triggerRule).not.toBeNull();
+      expect(triggerRule![0]).toMatch(/opacity:\s*\.55/);
+      expect(triggerRule![0]).toMatch(/cursor:\s*not-allowed/);
+    });
+
     // roving tabindex의 짝: 활성 옵션은 진짜 포커스를 받으므로 :focus-visible이 맞고,
     // 이 규칙이 물러나야 강조 전체를 surfaces.css의 공용 규칙 하나가 그린다.
     // initialActiveValue가 메뉴를 열 때마다 활성을 현재 값으로 시딩하므로
