@@ -151,8 +151,9 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     day: { sequence: 0, direction: "next" },
   });
   const [activeUnit, setActiveUnit] = useState<DateWheelUnit>(fields[0] ?? "year");
-  // 지금 치고 있는 열과 그 자릿수. 확정되면 비웁니다. 열을 떠날 때(Tab·화살표·휠·행
-  // 클릭)의 비우기/확정 처리는 아직 배선하지 않았습니다 — Task 7이 담당합니다.
+  // 지금 치고 있는 열과 그 자릿수. 자릿수가 차면 typeDigit이 곧바로 확정하고 비웁니다.
+  // 덜 찬 채로 열을 떠나면(Tab·화살표·Enter·포인터·팝오버 닫힘) flushTyping이 해석해
+  // 확정하고 비웁니다 — Escape만 확정 없이 버립니다.
   const [typing, setTyping] = useState<{ unit: DateWheelUnit; digits: string } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
