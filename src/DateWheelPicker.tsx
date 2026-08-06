@@ -170,10 +170,11 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 버립니다. 그 안전망은 아래 포커스 이펙트의 `!open` 분기에 있습니다.)
   const [typing, setTyping] = useState<{ unit: DateWheelUnit; digits: string } | null>(null);
   // 완료 피드백(css/surfaces.css .dropdown-value-commit) 커밋 카운터 — commitAndClose에서만,
-  // 그것도 확정된 값이 진입 시점 value와 실제로 다를 때만 올립니다. 0에서 시작해 첫
-  // 마운트는 애니메이션이 돌지 않고, 화살표·휠·타이핑 자체(자릿수가 차서 즉시 확정되는
-  // 경우 포함)·오늘·비우기 같은 다른 값 변경 경로는 건드리지 않습니다 — 그 경로들은
-  // "완료"가 아니라 매 조작마다 반짝이면 신호가 아니라 소음이 됩니다. 계약은 PRINCIPLES.md §12.
+  // 그것도 확정된 값이 **이 세션이 열렸을 때의 값**(sessionStartValueRef, 아래)과 실제로
+  // 다를 때만 올립니다. 0에서 시작해 첫 마운트는 애니메이션이 돌지 않고, 화살표·휠·
+  // 타이핑 자체(자릿수가 차서 즉시 확정되는 경우 포함)·오늘·비우기 같은 다른 값 변경
+  // 경로는 건드리지 않습니다 — 그 경로들은 "완료"가 아니라 매 조작마다 반짝이면 신호가
+  // 아니라 소음이 됩니다. 계약은 PRINCIPLES.md §12.
   const [commitPulse, setCommitPulse] = useState(0);
   // 이번에 팝오버를 연 뒤 비우기·Delete로 값을 지운 적이 있는가. commitAndClose의
   // "비어 있으면 baseValue로 채운다" 되살림 분기(아래)를 막는 유일한 용도입니다 — 이게
@@ -183,6 +184,16 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 안 건드리고 완료를 누르면, 원래 의도(휠에 보이는 날짜를 확정)대로 다시 동작해야
   // 하기 때문입니다.
   const clearedRef = useRef(false);
+  // 이 팝오버가 열렸을 때 value가 무엇이었는지. commitAndClose의 펄스 조건은 이 값과
+  // 비교합니다(커밋 시점의 value가 아니라) — 이 컨트롤은 화살표 한 번, 휠 한 칸마다도
+  // onChange를 불러 value를 바로 바꿉니다. 그래서 "커밋 시점 값 vs 그 순간 value"로
+  // 비교하면, 화살표로 옮긴 뒤 완료를 눌러도 그 사이 value가 이미 옮겨진 값으로
+  // 갱신돼 있어 "안 바뀌었다"고 잘못 읽습니다(오너가 실측: 화살표 → 완료인데 신호가
+  // 전혀 안 뜸). 세션이 시작될 때의 값과 비교해야 "이번에 연 뒤로 실제로 뭔가
+  // 바뀌었는가"를 제대로 묻는 것이 됩니다. Select는 방향키가 onChange를 부르지 않고
+  // 고를 때 한 번만 커밋하므로 이 차이가 안 나지만, 두 컴포넌트가 같은 규칙 하나로
+  // 설명되도록 나란히 둡니다.
+  const sessionStartValueRef = useRef(value);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -211,13 +222,22 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 뒤로가기로 닫습니다. 포커스를 팝오버 안으로 옮기므로 회수도 함께 합니다.
   useBackToClose(open, closeAndReclaimFocus);
 
-  // 팝오버를 열 때마다 "지운 적 있음" 기억을 리셋합니다 — clearedRef 선언부 참고.
-  // 이 기억은 "한 번 열림~닫힘" 세션에만 유효해야 합니다. 별도 이펙트로 두는 이유:
-  // 아래쪽 포커스 이펙트는 resolvedActiveUnit·position이 바뀔 때마다도 다시 돌아
-  // 열려 있는 동안 여러 번 실행될 수 있으므로, 거기 얹으면 세션 중간에 리셋될
-  // 위험이 있습니다. 이 이펙트는 open 하나에만 의존해 열리는 순간 한 번만 돕니다.
+  // 팝오버를 열 때마다 "지운 적 있음" 기억을 리셋하고, sessionStartValueRef를 그
+  // 순간의 value로 다시 찍습니다 — clearedRef·sessionStartValueRef 선언부 참고. 둘 다
+  // "한 번 열림~닫힘" 세션에만 유효해야 합니다. 별도 이펙트로 두는 이유: 아래쪽 포커스
+  // 이펙트는 resolvedActiveUnit·position이 바뀔 때마다도 다시 돌아 열려 있는 동안
+  // 여러 번 실행될 수 있으므로, 거기 얹으면 세션 중간에 리셋될 위험이 있습니다. 이
+  // 이펙트는 open 하나에만 의존해 열리는 순간 한 번만 돕니다.
+  //
+  // 의존성 배열에 value를 일부러 넣지 않습니다. 넣으면 열려 있는 동안 화살표·휠로
+  // value가 바뀔 때마다 이 이펙트가 다시 돌아 sessionStartValueRef를 그 새 값으로
+  // 덮어써, "세션 시작 값"이 아니라 "방금 값"이 되어 버립니다 — 그러면 화살표로 옮긴
+  // 뒤 완료를 눌러도 다시 "안 바뀌었다"고 읽는, 이번에 고치려는 결함으로 되돌아갑니다.
   useEffect(() => {
-    if (open) clearedRef.current = false;
+    if (open) {
+      clearedRef.current = false;
+      sessionStartValueRef.current = value;
+    }
   }, [open]);
 
   // 남은 최소 단위로만 비교합니다(연·월 픽커면 "월" 단위). 함수 선언이라 baseValue보다
@@ -422,11 +442,15 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     }
     // Tab으로 떠나거나 바깥을 클릭해도 값은 남지만, 그건 "완료"를 누른 게 아니므로
     // 여기서만 올립니다 — Enter와 완료 버튼만 이 함수를 거칩니다. 그리고 확정된 값이
-    // 진입 시점 value와 실제로 다를 때만 올립니다 — 이미 있던 값 그대로 완료하면
-    // (예: 오늘 눌러 이미 오늘인 값을 다시 완료) 아무 신호도 없는 게 의도입니다. 이
-    // 경로로 "오늘이 이미 선택돼 있으면 오늘을 눌러도 아무 반응이 없다"는 결과가
-    // 나오는 것도 같은 이유이고, 오너에게 확인받은 의도된 동작입니다 — 보완하지 않습니다.
-    if (committed !== value) setCommitPulse((n) => n + 1);
+    // **이 세션이 열렸을 때의 값**(sessionStartValueRef)과 실제로 다를 때만 올립니다.
+    // 이 순간의 `value`와 비교하면 안 됩니다 — 이 컨트롤은 화살표 한 번, 휠 한 칸마다도
+    // onChange로 value를 곧바로 바꾸므로, 완료를 누르는 시점엔 이미 committed와 value가
+    // 같아져 있어 "화살표로 옮긴 뒤 완료"가 항상 "안 바뀌었다"로 잘못 읽힙니다(오너가
+    // 실측: 화살표 → 완료인데 신호가 전혀 안 뜸). 세션 시작 값과 비교해야 "이번에 연
+    // 뒤로 뭔가 바뀌었는가"를 묻는 것이 됩니다. 이미 있던 값 그대로 완료하면(예: 오늘
+    // 눌러 이미 오늘인 값을 다시 완료, 또는 아무것도 안 건드리고 완료) 아무 신호도
+    // 없는 게 의도입니다 — 오너에게 확인받은 동작이고, 보완하지 않습니다.
+    if (committed !== sessionStartValueRef.current) setCommitPulse((n) => n + 1);
     setOpen(false);
     requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
   }

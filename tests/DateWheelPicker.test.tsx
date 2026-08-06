@@ -1074,7 +1074,10 @@ describe("DateWheelPicker 완료 피드백(커밋 애니메이션)", () => {
     expect(hasCommitClass(trigger)).toBe(true);
   });
 
-  // 리뷰 아이템 2 — 확정된 값이 진입 시점 value와 같으면(아무것도 안 바꾸고 완료) 신호가 없다.
+  // 리뷰 아이템 2 — 확정된 값이 세션 시작 값(팝오버가 열렸을 때의 value)과 같으면
+  // (아무것도 안 바꾸고 완료) 신호가 없다. 이 테스트는 세션 시작 값과 커밋 시점 값이
+  // 우연히 같은 경우라, sessionStartValueRef가 제대로 채워지는지까지는 증명하지
+  // 못한다(둘 다 "2026-07-12"이므로) — 그 증명은 뮤테이션 표의 별도 뮤테이션이 한다.
   it("아무것도 바꾸지 않고 완료하면(값이 그대로면) 커밋 클래스가 붙지 않는다", () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
     const trigger = screen.getByRole("button", { name: "거래 날짜" });
@@ -1095,6 +1098,22 @@ describe("DateWheelPicker 완료 피드백(커밋 애니메이션)", () => {
     fireEvent.keyDown(year, { key: "ArrowUp" });
 
     expect(hasCommitClass(trigger)).toBe(false);
+  });
+
+  // 오너가 실측으로 잡은 결함(fix round 1) — 화살표는 즉시 onChange를 부르므로, 완료를
+  // 누르는 순간엔 이미 value가 화살표로 옮긴 값으로 갱신돼 있다. 커밋 시점 value와
+  // 비교했다면 "안 바뀌었다"고 잘못 읽어 이 케이스에서 신호가 영영 안 떴다 — 세션
+  // 시작 값(팝오버가 열렸을 때의 value)과 비교해야 잡힌다.
+  it("화살표로 값을 옮긴 뒤 완료하면(세션 시작 값과 달라지면) 커밋 클래스가 붙는다", async () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const year = await screen.findByRole("group", { name: /^연도/ });
+    fireEvent.keyDown(year, { key: "ArrowUp" });   // commitShift — value가 곧바로 2025-07-12로 바뀐다
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+
+    expect(hasCommitClass(trigger)).toBe(true);
   });
 
   it("휠을 굴리면 커밋 클래스가 붙지 않는다", async () => {
