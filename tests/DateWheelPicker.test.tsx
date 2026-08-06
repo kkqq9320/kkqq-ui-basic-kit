@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DateWheelPicker } from "../src/DateWheelPicker";
+import { DateWheelPicker, type DateWheelUnit } from "../src/DateWheelPicker";
 import datePickerCssSource from "../css/date-picker.css?raw";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -16,6 +16,16 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 function ControlledDateWheel({ initialValue, allowClear }: { initialValue: string; allowClear?: boolean }) {
   const [value, setValue] = useState(initialValue);
   return <DateWheelPicker ariaLabel="거래 날짜" value={value} onChange={setValue} allowClear={allowClear} />;
+}
+
+// 리뷰 Finding 1 — 소비자가 런타임에 fields를 바꿀 수 있다(일간/월간 토글 등).
+// 팝오버가 열린 채로 열이 하나 사라지는 상황을 만드는 헬퍼다.
+function DateWheelFieldsShrink() {
+  const [fields, setFields] = useState<DateWheelUnit[]>(["year", "month", "day"]);
+  return <>
+    <button type="button" onClick={() => setFields(["year", "month"])}>일 열 제거</button>
+    <DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} fields={fields} />
+  </>;
 }
 
 describe("DateWheelPicker", () => {
@@ -433,6 +443,74 @@ describe("DateWheelPicker 열 이동", () => {
   });
 });
 
+describe("DateWheelPicker 리뷰 Finding 1 — activeUnit 시드와 클램프", () => {
+  // 트리거의 onClick은 activeUnit을 건드리지 않고 setOpen만 토글했다. 키보드 진입
+  // (handleTriggerKeyDown)은 열 때마다 activeUnit을 fields[0]으로 되돌리는데, 마우스
+  // 진입은 그러지 않아 두 경로가 갈렸다 — Select.tsx:449가 마우스·키보드를 같은
+  // 값으로 시딩하는 것과 같은 이유다. 월 열에 가 있던 채로 닫았다가 마우스로 다시
+  // 열면, 시드가 없으면 포커스가 여전히 월로 간다.
+  it("마우스로 다시 열면 키보드로 연 것과 같은 첫 열에 포커스가 간다", async () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "연도 2026" })));
+    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "월 07" })));
+    fireEvent.keyDown(screen.getByRole("group", { name: "월 07" }), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
+
+    fireEvent.click(trigger);   // 마우스로 다시 연다 — activeUnit 상태는 여전히 "month"다
+
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "연도 2026" })));
+  });
+
+  // columnRefs.current.get(activeUnit)이 undefined가 되는 경로 — fields가 열려 있는
+  // 동안 줄어들어 activeUnit이 가리키던 열이 통째로 사라진다. 클램프가 없으면 render의
+  // `activeUnit === unit` 비교가 어느 열과도 맞지 않아 active 클래스가 아무 데도 안
+  // 붙는다. 포커스 이펙트(§6.3)의 흔들리기 쉬운 jsdom 디테일에 기대지 않는, 순수
+  // 렌더 결과 하나로 클램프 자체를 고정한다.
+  it("fields가 열린 채로 줄어 activeUnit이 사라진 열을 가리키면 남은 첫 열이 active를 받는다", async () => {
+    render(<DateWheelFieldsShrink />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "연도 2026" })));
+    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
+    const month = await screen.findByRole("group", { name: "월 07" });
+    await waitFor(() => expect(document.activeElement).toBe(month));
+    fireEvent.keyDown(month, { key: "ArrowRight" });
+    const day = await screen.findByRole("group", { name: /^일 12/ });
+    await waitFor(() => expect(document.activeElement).toBe(day));   // activeUnit == "day"
+
+    fireEvent.click(screen.getByRole("button", { name: "일 열 제거" }));   // fields가 열린 채로 바뀐다
+
+    expect(screen.getByRole("group", { name: "연도 2026" }).classList.contains("active")).toBe(true);
+  });
+
+  // 위와 같은 시나리오지만 진짜 DOM 포커스로 본다 — jsdom은 포커스된 노드가 DOM에서
+  // 제거되면 포커스를 body로 떨어뜨린다(직접 확인했다). 클램프가 포커스 이펙트의
+  // 의존성까지 갱신하지 않으면(즉 이펙트가 다시 안 돌면) 포커스는 body에 머물고
+  // 방향키가 죽는다 — 리뷰가 지적한 "마우스 전용"이 이 상태다.
+  it("fields가 열린 채로 줄어 activeUnit이 사라진 열을 가리키면 포커스가 남은 첫 열로 돌아온다", async () => {
+    render(<DateWheelFieldsShrink />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "연도 2026" })));
+    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
+    const month = await screen.findByRole("group", { name: "월 07" });
+    await waitFor(() => expect(document.activeElement).toBe(month));
+    fireEvent.keyDown(month, { key: "ArrowRight" });
+    const day = await screen.findByRole("group", { name: /^일 12/ });
+    await waitFor(() => expect(document.activeElement).toBe(day));
+
+    fireEvent.click(screen.getByRole("button", { name: "일 열 제거" }));
+
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "연도 2026" })));
+  });
+});
+
 describe("DateWheelPicker tab 순서", () => {
   async function openPicker() {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
@@ -579,6 +657,71 @@ describe("DateWheelPicker 타이핑", () => {
     fireEvent.keyDown(year, { key: "2" });
     fireEvent.keyDown(year, { key: "0" });
     expect(year.querySelector(".date-wheel-values .selected")?.textContent).toBe("20");
+  });
+});
+
+describe("DateWheelPicker 리뷰 Finding 2 — §4.3 확정할 때 값을 다루는 규칙", () => {
+  // §4.3 — 휠은 범위 밖 행을 "—"로 그리고 ± 버튼을 비활성화해 애초에 누를 수 없는
+  // 자리를 만들지만, 타이핑엔 "누를 수 없는 자리"가 없다. min/max 밖을 치면 경계값
+  // 으로 자르는 것이 유일하게 가능한 처리다 — commitTyped가 clampToRange를 거치지
+  // 않으면 이 경계가 조용히 사라진다(min 없는 값이 그대로 onChange로 나간다).
+  it("타이핑한 값이 min 밖이면 경계값으로 자른다", async () => {
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" min="2026-01-01" onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    const year = screen.getByRole("group", { name: "연도 2026" });
+    for (const digit of ["1", "9", "8", "5"]) fireEvent.keyDown(year, { key: digit });
+    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith("2026-01-01"));
+  });
+
+  // §4.3 — 빠진 열은 01로 채운다는 규칙은 휠·타이핑 모두 같다(새로 만들지 않는다).
+  // 연도만 있는 픽커에서 연도를 타이핑해 확정하면 월·일이 각각 01로 정규화된
+  // 값이 나가야 한다 — 값 형식은 항상 YYYY-MM-DD다.
+  it("연도만 있는 픽커에서 연도를 타이핑하면 월·일이 01로 정규화된다", () => {
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="회계 연도" value="2026-07-12" fields={["year"]} onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "회계 연도" }));
+    const year = screen.getByRole("group", { name: "연도 2026" });
+    for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(year, { key: digit });
+    expect(onChange).toHaveBeenLastCalledWith("2031-01-01");
+  });
+});
+
+describe("DateWheelPicker 리뷰 Finding 3 — shiftDateValue의 말일 계산과 연도 폭주", () => {
+  // shiftDateValue의 day/year/month 세 분기가 모두 new Date(Date.UTC(year, ...))로
+  // 말일을 구했다. 이 API는 0~99년을 1900년대로 재매핑하므로(ECMA-262), 연도
+  // 0(윤년)을 1900년(평년)으로 잘못 읽어 2/29를 2/28로 잘라낸다.
+  // dateWheelTyping.ts의 lastDayOf(setUTCFullYear 3-인자 호출)는 이 재매핑을
+  // 하지 않는다 — withUnitValue는 이미 이걸 쓰고, shiftDateValue는 몰랐다.
+  // 타이핑으로 연도 네 자리를 곧장 쳐 넣을 수 있게 되면서, 예전엔 화살표 수천
+  // 번이 필요하던 이 값에 몇 키만으로 닿는다.
+  it("연도 0000에서 월을 다음으로 옮기면 윤년 2/29를 안다", () => {
+    render(<ControlledDateWheel initialValue="0000-01-29" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "월 다음" }));
+    expect(trigger.textContent).toBe("0000. 02. 29.");
+  });
+
+  // 연도가 10000 이상이 되면 Date#toISOString()이 확장 ISO 표기
+  // (+010000-07-12)로 바뀐다. shiftDateValue의 .slice(0, 10)은 그 표기의 앞
+  // 10글자("+010000-07")만 자르고, normalizeToFields가 이걸 "-"로 쪼개면 세
+  // 번째 조각(일)이 undefined가 되어 "+010000-07-undefined"가 onChange로
+  // 나간다. shiftedFrom이 validDateValue로 이 결과를 걸러내지 않으면, 연도
+  // 9999에서 네 자리를 타이핑한 뒤 ↓ 한 번만으로 소비자에게 깨진 문자열이
+  // 전달된다. 고친 뒤에는 그 걸음이 그냥 막힌 걸음(no-op)이어야 한다 —
+  // §3.4.3처럼 "누를 수 없는 자리"를 만드는 대신, 이미 있는 "쓸 수 없는 값"
+  // 신호(shiftedFrom의 null)를 그대로 쓴다.
+  it("연도 9999에서 ↓를 누르면 10000으로 새지 않고 값이 그대로다", async () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    fireEvent.click(trigger);
+    const year = screen.getByRole("group", { name: "연도 2026" });
+    for (const digit of ["9", "9", "9", "9"]) fireEvent.keyDown(year, { key: digit });
+    await waitFor(() => expect(trigger.textContent).toBe("9999. 07. 12."));
+
+    fireEvent.keyDown(year, { key: "ArrowDown" });
+    expect(trigger.textContent).toBe("9999. 07. 12.");
   });
 });
 
@@ -893,6 +1036,29 @@ describe("DateWheelPicker 단축키", () => {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} />);
     fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
     const heading = screen.getByRole("dialog", { name: "거래 날짜 선택" }).querySelector(".date-wheel-heading span");
-    expect(heading?.textContent).toBe("휠·스와이프·방향키·숫자 입력");
+    expect(heading?.textContent).toBe("휠·스와이프·방향키·숫자 입력 · Ctrl+; 오늘");
+  });
+
+  // 리뷰 Finding 4 — title은 마우스 hover에만 뜬다. 단축키가 필요한 사람(키보드
+  // 전용 사용자, 스크린리더 사용자)에게는 title이 안 보인다. aria-keyshortcuts는
+  // 이 문제를 위해 만들어진 ARIA 속성이다. 값을 문자열로 고정해, "Control+;"가
+  // "Semicolon" 같은 다른 표기로 새지 않게 한다. 버튼 셋이 각자 독립된 결함
+  // 표면이므로(하나가 죽어도 나머지의 킬력을 증명할 수 있어야 한다) 나눈다.
+  it("오늘 버튼의 aria-keyshortcuts가 고정돼 있다", () => {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} />);
+    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    expect(screen.getByRole("button", { name: "오늘" }).getAttribute("aria-keyshortcuts")).toBe("Control+; Meta+;");
+  });
+
+  it("비우기 버튼의 aria-keyshortcuts가 고정돼 있다", () => {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} allowClear />);
+    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    expect(screen.getByRole("button", { name: "비우기" }).getAttribute("aria-keyshortcuts")).toBe("Delete");
+  });
+
+  it("완료 버튼의 aria-keyshortcuts가 고정돼 있다", () => {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} />);
+    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    expect(screen.getByRole("button", { name: "완료" }).getAttribute("aria-keyshortcuts")).toBe("Enter");
   });
 });

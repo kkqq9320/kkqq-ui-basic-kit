@@ -69,8 +69,12 @@ export function flushBuffer(unit: DateWheelUnit, buffer: string): number | null 
   return typed >= 1 ? typed : null;   // 0월·0일은 없습니다
 }
 
-/** 연도를 다루면서 0~99를 1900년대로 옮기지 않는 안전한 말일 계산. */
-function lastDayOf(year: number, monthIndex: number) {
+/** 연도를 다루면서 0~99를 1900년대로 옮기지 않는 안전한 말일 계산.
+ *  DateWheelPicker.tsx의 shiftDateValue(±1 이동)도 이 함수를 씁니다 — 그쪽이
+ *  한때 `new Date(Date.UTC(year, ...))`로 직접 계산해 같은 0~99 재매핑 함정에
+ *  빠졌었습니다(0년을 1900년으로 읽어 윤년 판정이 틀림). 말일 계산은 이 파일에
+ *  하나만 둡니다. */
+export function lastDayOf(year: number, monthIndex: number) {
   const probe = new Date(0);
   probe.setUTCFullYear(year, monthIndex + 1, 0);
   return probe.getUTCDate();

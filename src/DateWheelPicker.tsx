@@ -13,7 +13,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type WheelEvent as ReactWheelEvent } from "react";
 import { createPortal } from "react-dom";
 
-import { flushBuffer, typeDigit, withUnitValue } from "./dateWheelTyping";
+import { flushBuffer, lastDayOf, typeDigit, withUnitValue } from "./dateWheelTyping";
 import { useBackToClose, useEscapeToClose } from "./hooks";
 import { dropdownViewportSpace, isPrimaryButton } from "./positioning";
 
@@ -41,7 +41,7 @@ export type DateWheelLabels = {
 
 export const DEFAULT_DATE_WHEEL_LABELS: DateWheelLabels = {
   placeholder: "날짜 선택",
-  hint: "휠·스와이프·방향키·숫자 입력",
+  hint: "휠·스와이프·방향키·숫자 입력 · Ctrl+; 오늘",
   today: "오늘",
   clear: "비우기",
   done: "완료",
@@ -62,17 +62,19 @@ function shiftDateValue(value: string, unit: DateWheelUnit, direction: number) {
   const year = date.getUTCFullYear();
   const month = date.getUTCMonth();
   const day = date.getUTCDate();
+  // 말일은 dateWheelTyping.ts의 lastDayOf로 구합니다 — new Date(Date.UTC(year, ...))는
+  // 0~99년을 1900년대로 재매핑해 연도 0(윤년)을 1900년(평년)으로 잘못 읽습니다.
   if (unit === "day") {
-    const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    const lastDay = lastDayOf(year, month);
     const targetDay = ((day - 1 + direction) % lastDay + lastDay) % lastDay + 1;
     date.setUTCFullYear(year, month, targetDay);
   } else if (unit === "year") {
     const targetYear = year + direction;
-    const lastDay = new Date(Date.UTC(targetYear, month + 1, 0)).getUTCDate();
+    const lastDay = lastDayOf(targetYear, month);
     date.setUTCFullYear(targetYear, month, Math.min(day, lastDay));
   } else {
     const targetMonth = ((month + direction) % 12 + 12) % 12;
-    const lastDay = new Date(Date.UTC(year, targetMonth + 1, 0)).getUTCDate();
+    const lastDay = lastDayOf(year, targetMonth);
     date.setUTCFullYear(year, targetMonth, Math.min(day, lastDay));
   }
   return date.toISOString().slice(0, 10);
@@ -151,6 +153,12 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     day: { sequence: 0, direction: "next" },
   });
   const [activeUnit, setActiveUnit] = useState<DateWheelUnit>(fields[0] ?? "year");
+  // activeUnit은 소비자가 런타임에 fields를 바꿀 수 있어(예: 일간/월간 토글) fields
+  // 밖의 열을 계속 가리킬 수 있습니다. 그 원본 상태를 그대로 믿지 않고, 매 렌더
+  // fields 안으로 클램프한 값을 씁니다 — 그렇지 않으면 columnRefs.current.get(activeUnit)이
+  // undefined가 되어 아래 포커스 이펙트가 조용히 멈추고, 팝오버가 마우스로만 조작
+  // 가능해집니다(방향키가 죽습니다).
+  const resolvedActiveUnit = fields.includes(activeUnit) ? activeUnit : (fields[0] ?? "year");
   // 지금 치고 있는 열과 그 자릿수. 자릿수가 차면 typeDigit이 곧바로 확정하고 비웁니다.
   // 덜 찬 채로 열을 떠날 때는 경로에 따라 갈립니다:
   //   · 확정(flushTyping/commitAndClose가 해석해 값에 반영하고 비웁니다):
@@ -280,15 +288,22 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     // 이 이펙트의 의존성 배열에도 `typing`은 들어 있지 않아, typing을 바꿔도 이
     // 이펙트가 다시 실행되지는 않습니다.
     if (!open) { focusedColumnRef.current = null; setTyping(null); return; }
-    if (focusedColumnRef.current === activeUnit) return;
-    const column = columnRefs.current.get(activeUnit);
+    if (focusedColumnRef.current === resolvedActiveUnit) return;
+    const column = columnRefs.current.get(resolvedActiveUnit);
     if (!column) return;   // 좌표가 아직 없어 마운트 전 — 정해지면 다시 온다
-    focusedColumnRef.current = activeUnit;
+    focusedColumnRef.current = resolvedActiveUnit;
     column.focus({ preventScroll: true });
-  }, [open, activeUnit, position]);
+  }, [open, resolvedActiveUnit, position]);
 
   function shiftedFrom(sourceValue: string, unit: DateWheelUnit, amount: number) {
     const next = normalizeToFields(shiftDateValue(sourceValue, unit, amount), fields);
+    // 연도가 10000 이상(또는 음수)이 되면 Date#toISOString()이 확장 표기
+    // (+010000-07-12)로 바뀌고, 그 뒤 slice(0, 10)·normalizeToFields를 거치며
+    // "+010000-07-undefined" 같은 깨진 문자열이 된다. validDateValue는 이미
+    // 컴포넌트 전체가 "쓸 수 없는 값"의 신호로 쓰는 판정이므로, 여기서도 그대로
+    // null을 돌려줍니다 — outOfRange 판정으로는 min/max가 없는 필드에서 이 값을
+    // 걸러내지 못합니다.
+    if (!validDateValue(next)) return null;
     if (outOfRange(next)) return null;
     return next;
   }
@@ -574,11 +589,17 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   }
 
   return <div className={open ? "date-wheel-picker open" : "date-wheel-picker"} ref={rootRef}>
-    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)} onKeyDown={handleTriggerKeyDown}><span className={value ? "" : "placeholder"}>{formatDateTrigger(value, labels.placeholder, fields)}</span><i className="date-wheel-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm2-2v4m10-4v4M3 9h18" /></svg></i></button></div>
+    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => {
+      // 마우스로 열 때도 키보드 경로(handleTriggerKeyDown)와 같은 열로 시드합니다 —
+      // Select.tsx:449의 마우스-키보드 일치 시딩과 같은 이유입니다. 닫혀 있을 때만
+      // (=지금 열려는 참일 때만) 시드해야 닫는 클릭에서 activeUnit을 건드리지 않습니다.
+      if (!open) setActiveUnit(fields[0] ?? "year");
+      setOpen((current) => !current);
+    }} onKeyDown={handleTriggerKeyDown}><span className={value ? "" : "placeholder"}>{formatDateTrigger(value, labels.placeholder, fields)}</span><i className="date-wheel-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm2-2v4m10-4v4M3 9h18" /></svg></i></button></div>
     {open && position && createPortal(<div ref={popoverRef} className="date-wheel-popover dropdown-menu-surface" role="dialog" aria-modal="false" aria-label={`${ariaLabel} ${labels.select}`} style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
       <div className="date-wheel-heading"><strong>{ariaLabel}</strong><span>{labels.hint}</span></div>
       <div className="date-wheel-columns" data-fields={fields.length}>
-        {fields.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${activeUnit === unit ? " active" : ""}${motion.sequence ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${dateWheelLabel(baseValue, unit, labels.weekdays)}`} role="group" tabIndex={0} ref={(node) => { if (node) columnRefs.current.set(unit, node); else columnRefs.current.delete(unit); }} onFocus={() => setActiveUnit(unit)} onKeyDown={(event) => handleColumnKey(event, unit)} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); event.currentTarget.focus({ preventScroll: true }); suppressColumnClickRef.current = false; swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue }; if (typeof event.currentTarget.setPointerCapture === "function") event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {fields.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${motion.sequence ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${dateWheelLabel(baseValue, unit, labels.weekdays)}`} role="group" tabIndex={0} ref={(node) => { if (node) columnRefs.current.set(unit, node); else columnRefs.current.delete(unit); }} onFocus={() => setActiveUnit(unit)} onKeyDown={(event) => handleColumnKey(event, unit)} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); event.currentTarget.focus({ preventScroll: true }); suppressColumnClickRef.current = false; swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue }; if (typeof event.currentTarget.setPointerCapture === "function") event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
@@ -591,7 +612,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
           이 버튼들은 그 단축키의 동등물이므로(title에 단축키를 적어 뒀다), 버퍼를 안 지우면
           같은 뜻의 단축키와 버튼이 다르게 굴며, 남은 버퍼가 이 버튼이 방금 설정한 값을
           나중에(예: 다음 Tab) 도로 덮어쓸 수 있다. */}
-      <div className="date-wheel-actions"><button type="button" tabIndex={-1} title={`${labels.today} (Ctrl+;)`} onClick={() => { setTyping(null); onChange(clampToRange(todayIn(timeZone))); }}>{labels.today}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} onClick={() => { setTyping(null); onChange(""); }}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" onClick={commitAndClose}>{labels.done}</button></div>
+      <div className="date-wheel-actions"><button type="button" tabIndex={-1} title={`${labels.today} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" onClick={() => { setTyping(null); onChange(clampToRange(todayIn(timeZone))); }}>{labels.today}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" onClick={() => { setTyping(null); onChange(""); }}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" aria-keyshortcuts="Enter" onClick={commitAndClose}>{labels.done}</button></div>
     </div>, document.body)}
   </div>;
 }
