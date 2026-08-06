@@ -41,7 +41,7 @@ export type DateWheelLabels = {
 
 export const DEFAULT_DATE_WHEEL_LABELS: DateWheelLabels = {
   placeholder: "날짜 선택",
-  hint: "휠 또는 스와이프로 조정",
+  hint: "휠·스와이프·방향키·숫자 입력",
   today: "오늘",
   clear: "비우기",
   done: "완료",
@@ -401,7 +401,35 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     return true;
   }
 
+  /**
+   * 열림·닫힘 양쪽에서 같게 동작하는 단축키. 여기서만 Ctrl/Meta를 봅니다 —
+   * PRINCIPLES §11의 "Ctrl·Meta가 눌린 키는 처리하지 않는다"에 대한 명시적
+   * 예외이고, 근거는 그 조항 옆에 적혀 있습니다.
+   *
+   * 문자가 아니라 `code`로 판정하는 이유: 배열에 따라 `;`가 Shift 조합이 되는
+   * 키보드가 있어 `key`로 보면 새는 곳이 생깁니다.
+   */
+  function handleShortcut(event: ReactKeyboardEvent) {
+    if ((event.ctrlKey || event.metaKey) && event.code === "Semicolon") {
+      event.preventDefault();
+      setTyping(null);
+      onChange(clampToRange(todayIn(timeZone)));
+      return true;
+    }
+    if (event.ctrlKey || event.metaKey) return false;
+    if (event.key === "Delete" && allowClear) {
+      event.preventDefault();
+      setTyping(null);
+      onChange("");
+      return true;
+    }
+    return false;
+  }
+
   function handleColumnKey(event: ReactKeyboardEvent, unit: DateWheelUnit) {
+    // handleShortcut이 이 가드보다 반드시 앞에 와야 합니다 — 뒤에 두면 Ctrl+;가
+    // 여기 걸려 handleShortcut에 영영 닿지 않습니다.
+    if (handleShortcut(event)) return;
     // Ctrl·Meta가 눌린 키는 건드리지 않습니다 — 브라우저·OS 단축키입니다.
     if (event.ctrlKey || event.metaKey) return;
     const key = event.key;
@@ -474,7 +502,11 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     // 비활성 트리거는 포커스를 받을 수 없어 실제 브라우저에서는 키가 오지 않지만,
     // 테스트처럼 이벤트를 직접 디스패치하면 그 관문을 건너뜁니다.
     if (disabled) return;
-    // Ctrl·Meta가 눌린 키는 건드리지 않습니다 — 브라우저·OS 단축키입니다.
+    // disabled 검사가 handleShortcut보다 앞에 옵니다 — 비활성 필드는 어떤 키에도
+    // 반응하지 않는다는 기존 불변식을 Delete/Ctrl+;도 지켜야 합니다.
+    if (handleShortcut(event)) return;
+    // handleShortcut이 이 가드보다 반드시 앞에 와야 합니다 — 뒤에 두면 Ctrl+;가
+    // 여기 걸려 handleShortcut에 영영 닿지 않습니다.
     if (event.ctrlKey || event.metaKey) return;
     if (open) return;
     const key = event.key;
@@ -555,7 +587,11 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.next}`} disabled={!shifted(unit, 1)} onClick={() => applyShift(unit, 1)}><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></button>
         </section>; })}
       </div>
-      <div className="date-wheel-actions"><button type="button" tabIndex={-1} title={`${labels.today} (Ctrl+;)`} onClick={() => onChange(clampToRange(todayIn(timeZone)))}>{labels.today}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} onClick={() => onChange("")}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" onClick={commitAndClose}>{labels.done}</button></div>
+      {/* setTyping(null)을 먼저 부르는 이유는 handleShortcut의 Ctrl+;/Delete 분기와 같다 —
+          이 버튼들은 그 단축키의 동등물이므로(title에 단축키를 적어 뒀다), 버퍼를 안 지우면
+          같은 뜻의 단축키와 버튼이 다르게 굴며, 남은 버퍼가 이 버튼이 방금 설정한 값을
+          나중에(예: 다음 Tab) 도로 덮어쓸 수 있다. */}
+      <div className="date-wheel-actions"><button type="button" tabIndex={-1} title={`${labels.today} (Ctrl+;)`} onClick={() => { setTyping(null); onChange(clampToRange(todayIn(timeZone))); }}>{labels.today}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} onClick={() => { setTyping(null); onChange(""); }}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" onClick={commitAndClose}>{labels.done}</button></div>
     </div>, document.body)}
   </div>;
 }

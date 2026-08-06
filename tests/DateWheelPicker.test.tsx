@@ -13,9 +13,9 @@ import datePickerCssSource from "../css/date-picker.css?raw";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
-function ControlledDateWheel({ initialValue }: { initialValue: string }) {
+function ControlledDateWheel({ initialValue, allowClear }: { initialValue: string; allowClear?: boolean }) {
   const [value, setValue] = useState(initialValue);
-  return <DateWheelPicker ariaLabel="거래 날짜" value={value} onChange={setValue} />;
+  return <DateWheelPicker ariaLabel="거래 날짜" value={value} onChange={setValue} allowClear={allowClear} />;
 }
 
 describe("DateWheelPicker", () => {
@@ -777,5 +777,122 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
     fireEvent.keyDown(month, { key: "1" });
     fireEvent.keyDown(month, { key: "Tab", shiftKey: true });
     await waitFor(() => expect(trigger.textContent).toBe("2026. 01. 12."));
+  });
+});
+
+describe("DateWheelPicker 단축키", () => {
+  // 원래 한 테스트였다 — allowClear 케이스와 non-allowClear 케이스는 서로 다른
+  // 결함이다(하나는 "지운다"를 증명하고 하나는 "allowClear 없이는 안 지운다"는
+  // 게이트를 증명한다). expect()는 첫 실패에서 던지므로 함께 두면 뒤쪽 결함의
+  // 킬력을 증명할 수 없다. 각자 분리한다.
+  it("Delete가 allowClear일 때 값을 비운다", () => {
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="종료일" value="2026-07-12" onChange={onChange} allowClear />);
+    const trigger = screen.getByRole("button", { name: "종료일" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "Delete" });
+    expect(onChange).toHaveBeenCalledWith("");
+  });
+
+  // 주의: 이 테스트는 Delete를 아예 처리하지 않는 구현에서도 우연히 통과한다
+  // (onChange가 애초에 안 불리므로). 이 assert 하나만으로는 "allowClear 게이트가
+  // 실제로 동작한다"는 것을 증명하지 못한다 — 그 증명은 handleShortcut의 Delete
+  // 분기에서 `&& allowClear`를 떼어내는 뮤테이션으로 한다(리포트의 뮤테이션 표 참고).
+  it("Delete는 allowClear가 아니면 무시된다", () => {
+    const blocked = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={blocked} />);
+    fireEvent.keyDown(screen.getByRole("button", { name: "거래 날짜" }), { key: "Delete" });
+    expect(blocked).not.toHaveBeenCalled();
+  });
+
+  it("비활성이면 Delete도 무시한다", () => {
+    // handleShortcut을 disabled 검사보다 앞에 두면(브리프의 "맨 앞"을 문자 그대로
+    // 따르면) 비활성 필드도 Delete에 반응하게 된다. 이 저장소의 기존 불변식(비활성은
+    // 어떤 키에도 반응하지 않는다 — "비활성이면 어느 키로도 열리지 않는다")과 어긋나므로
+    // disabled 검사를 그대로 맨 앞에 두고 handleShortcut을 그다음에 부른다.
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={onChange} allowClear disabled />);
+    fireEvent.keyDown(screen.getByRole("button", { name: "거래 날짜" }), { key: "Delete" });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("Ctrl+; 가 오늘로 설정한다 — 닫혀 있을 때도", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-12T03:00:00Z"));
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-01-01" onChange={onChange} />);
+    fireEvent.keyDown(screen.getByRole("button", { name: "거래 날짜" }), { key: ";", code: "Semicolon", ctrlKey: true });
+    expect(onChange).toHaveBeenCalledWith("2026-07-12");
+  });
+
+  it("Ctrl+; 는 문자가 아니라 키 위치로 판정한다", () => {
+    // 배열에 따라 `;`가 Shift 조합이 되는 키보드가 있다.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-12T03:00:00Z"));
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-01-01" onChange={onChange} />);
+    fireEvent.keyDown(screen.getByRole("button", { name: "거래 날짜" }), { key: "Unidentified", code: "Semicolon", ctrlKey: true });
+    expect(onChange).toHaveBeenCalledWith("2026-07-12");
+  });
+
+  // 브리프의 두 테스트는 트리거(닫힘 상태, handleTriggerKeyDown)로만 Ctrl+;를 쏜다.
+  // 그런데 스펙 §3은 "닫힘·열림" 둘 다라고 명시하고, Step 4는 handleColumnKey에도
+  // 같은 순서 함정이 있다고 콕 짚는다 — handleColumnKey 쪽만 순서가 틀려도 트리거
+  // 테스트 두 개는 계속 통과한다. 열 쪽 경로를 직접 쏴서 그 결함도 잡는다.
+  it("Ctrl+;는 팝오버가 열려 있을 때 열에서도 동작한다", () => {
+    // 이 파일의 다른 가짜 타이머 테스트와 같은 동기 관용구를 쓴다(예: "팝오버의 오늘
+    // 버튼이…") — fireEvent.click + 동기 쿼리. await waitFor/findByRole을 가짜
+    // 타이머와 섞으면 RTL 버전에 따라 어긋날 수 있다.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-12T03:00:00Z"));
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-01-01" onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    const year = screen.getByRole("group", { name: "연도 2026" });
+    fireEvent.keyDown(year, { key: ";", code: "Semicolon", ctrlKey: true });
+    expect(onChange).toHaveBeenCalledWith("2026-07-12");
+  });
+
+  // 이월 finding(Task 7 끝) — 오늘·비우기 버튼의 onClick은 handleShortcut과 달리
+  // setTyping(null)을 안 불러, 같은 뜻의 단축키와 버튼이 다르게 굴었다. 버퍼를 안
+  // 지우면 버튼이 방금 설정한 값 위에 옛 버퍼가 화면에 남는다 — 이후 Tab 등으로
+  // 그 버퍼가 해석되면 버튼이 방금 맞춘 값을 도로 덮어쓸 수 있다.
+  it("오늘 버튼을 누르면 치던 숫자를 버린다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-12T03:00:00Z"));   // 서울 기준 오늘 = 2026-07-12
+    render(<ControlledDateWheel initialValue="2020-01-01" />);
+    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    const year = screen.getByRole("group", { name: "연도 2020" });
+    fireEvent.keyDown(year, { key: "3" });   // 버퍼 "3" — 연도는 네 자리라야 확정된다
+
+    fireEvent.click(screen.getByRole("button", { name: "오늘" }));
+
+    // 버퍼가 안 지워지면 이 행은 여전히 버퍼 "3"을 보여준다(buffered ?? ... 가 "3"에서
+    // 멈춘다). 지워지면 방금 설정된 값의 연도 "2026"이 보인다.
+    expect(year.querySelector(".date-wheel-values .selected")?.textContent).toBe("2026");
+  });
+
+  it("비우기 버튼을 누르면 치던 숫자를 버린다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-12T03:00:00Z"));   // 서울 기준 오늘 = 2026-07-12
+    render(<ControlledDateWheel initialValue="2020-01-01" allowClear />);
+    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    const year = screen.getByRole("group", { name: "연도 2020" });
+    fireEvent.keyDown(year, { key: "3" });
+
+    fireEvent.click(screen.getByRole("button", { name: "비우기" }));
+
+    // 비우기는 값을 ""로 만들고, baseValue는 값이 비어 있으면 오늘로 대체된다(:203) —
+    // 버퍼가 안 지워지면 이 행은 여전히 버퍼 "3"을 보여준다.
+    expect(year.querySelector(".date-wheel-values .selected")?.textContent).toBe("2026");
+  });
+
+  // labels.hint의 기본값이 타이핑을 포함해 바뀐다(PRINCIPLES §11 문서화 대상) —
+  // 소스만 바꾸고 테스트가 없으면 다음 사람이 조용히 되돌려도 아무도 모른다.
+  it("팝오버 안내 문구 기본값이 타이핑까지 안내한다", () => {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} />);
+    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    const heading = screen.getByRole("dialog", { name: "거래 날짜 선택" }).querySelector(".date-wheel-heading span");
+    expect(heading?.textContent).toBe("휠·스와이프·방향키·숫자 입력");
   });
 });

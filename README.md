@@ -276,13 +276,42 @@ Next.js App Router처럼 마운트 지점을 직접 정할 수 없는 환경이�
 
 ```tsx
 labels={{
-  placeholder: "Pick a date", hint: "Scroll or swipe",
+  placeholder: "Pick a date", hint: "Scroll, swipe, arrow keys, or type digits",
   today: "Today", clear: "Clear", done: "Done",
   previous: "previous", next: "next", select: "picker",
   weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
   units: { year: "Year", month: "Month", day: "Day" },
 }}
 ```
+
+#### 키보드
+
+네이티브 `<input type="date">`처럼 동작합니다. 연·월·일은 각각 세그먼트이고, 숫자를
+치면 그 세그먼트에 들어가며 자릿수가 차면 다음 세그먼트로 저절로 넘어갑니다. 열
+개수는 `fields`에 따라 1~3개로 달라지므로 아래 표는 "연·월·일"이 아니라 **첫 열 /
+마지막 열**로 규칙을 씁니다.
+
+| 상태 | 키 | 동작 |
+|---|---|---|
+| 닫힘 | `↓` `↑` `Enter` `Space` | 열고 포커스를 **첫 열**로 |
+| 열림 | `Tab` | 다음 열. **마지막 열에서는 닫고, 포커스가 트리거를 거쳐 다음 요소로** |
+| 열림 | `Shift+Tab` | 이전 열. **첫 열에서는 닫고 포커스를 트리거로** |
+| 열림 | `→` | 다음 열. **마지막 열에서는 제자리** |
+| 열림 | `←` | 이전 열. **첫 열에서는 제자리** |
+| 열림 | `0`~`9` | 그 열에 입력 |
+| 열림 | `Backspace` | 입력 버퍼에서 한 자리 지우기 |
+| 열림 | `↑` `↓` | 그 열의 값 ±1 |
+| 열림 | `Enter` | 완료 — 값 확정, 닫고 포커스를 트리거로 |
+| 열림 | `Escape` | 값을 바꾸지 않고 닫고 포커스를 트리거로 |
+| 닫힘·열림 | `Delete` | 값 전체 비우기. **`allowClear`일 때만** |
+| 닫힘·열림 | `Ctrl+;` (macOS `Cmd+;`, 미검증) | 오늘로 설정 |
+
+드롭다운과 다르게 `Tab`이 팝오버를 바로 닫지 않고 세그먼트를 옮깁니다 — 이유는
+PRINCIPLES §11 참고. `Ctrl+;`는 주요 브라우저에서 비어 있다는 관례에 기댄
+단축키입니다. **자동화 브라우저 하나(Chromium/Windows)에서 페이지까지 키 이벤트가
+전달되고 탭·주소 이동이 없다는 것만 확인했고, 다른 브라우저와 macOS `Cmd+;`는 아직
+실기기 검증 전입니다.** 판정은 `event.code === "Semicolon"`입니다 — 배열에 따라
+`;`가 Shift 조합이 되는 키보드가 있어 문자로 보면 새는 곳이 생깁니다.
 
 ### AppShell + Sidebar
 
