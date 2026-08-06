@@ -16,7 +16,7 @@ import { createPortal } from "react-dom";
 import { useBackToClose, useEscapeToClose } from "./hooks";
 import { dropdownViewportSpace, isPrimaryButton } from "./positioning";
 
-type DateWheelUnit = "year" | "month" | "day";
+export type DateWheelUnit = "year" | "month" | "day";
 
 /** 기본은 연·월·일 3열. 상수로 둬서 기본값일 때 매 렌더 새 배열이 생기지 않게 합니다. */
 const DEFAULT_DATE_WHEEL_FIELDS: DateWheelUnit[] = ["year", "month", "day"];
