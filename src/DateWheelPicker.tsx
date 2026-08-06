@@ -13,6 +13,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type WheelEvent as ReactWheelEvent } from "react";
 import { createPortal } from "react-dom";
 
+import { typeDigit, withUnitValue } from "./dateWheelTyping";
 import { useBackToClose, useEscapeToClose } from "./hooks";
 import { dropdownViewportSpace, isPrimaryButton } from "./positioning";
 
@@ -147,6 +148,8 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     day: { sequence: 0, direction: "next" },
   });
   const [activeUnit, setActiveUnit] = useState<DateWheelUnit>(fields[0] ?? "year");
+  // 지금 치고 있는 열과 그 자릿수. 열이 바뀌거나 확정되면 비웁니다.
+  const [typing, setTyping] = useState<{ unit: DateWheelUnit; digits: string } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -298,6 +301,18 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     commitShift(baseValue, unit, amount);
   }
 
+  /**
+   * 타이핑으로 값을 확정합니다. **`commitShift`를 타면 안 됩니다** —
+   * 그쪽은 `markColumnMotion`이 열의 sequence를 올리고, 값 컨테이너의 key가
+   * `${unit}-${sequence}`라서 행 일곱 개가 통째로 리마운트되며 휠 이동
+   * 애니메이션이 재생됩니다. 숫자 하나마다 210ms 전환이 도는 셈입니다.
+   * 타이핑은 휠 이동이 아닙니다.
+   */
+  function commitTyped(unit: DateWheelUnit, amount: number) {
+    const next = clampToRange(withUnitValue(baseValue, unit, amount));
+    onChange(next);
+  }
+
   /* 여기서 event.preventDefault()를 부르지 마세요.
    * React는 wheel/touchstart/touchmove를 루트(와 포털 컨테이너)에 passive로
    * 등록하므로 합성 이벤트에서의 preventDefault는 효과가 없고, 콘솔에
@@ -323,6 +338,26 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     // Ctrl·Meta가 눌린 키는 건드리지 않습니다 — 브라우저·OS 단축키입니다.
     if (event.ctrlKey || event.metaKey) return;
     const key = event.key;
+
+    if (key >= "0" && key <= "9" && key.length === 1) {
+      event.preventDefault();
+      const buffer = typing?.unit === unit ? typing.digits : "";
+      const step = typeDigit(unit, buffer, key);
+      if (step.commit !== null) {
+        setTyping(null);
+        commitTyped(unit, step.commit);
+        if (step.advance) moveColumn(unit, 1);
+      } else {
+        setTyping({ unit, digits: step.digits });
+      }
+      return;
+    }
+
+    if (key === "Backspace") {
+      event.preventDefault();
+      if (typing?.unit === unit && typing.digits) setTyping({ unit, digits: typing.digits.slice(0, -1) });
+      return;
+    }
 
     if (key === "Tab") {
       // 떠나는 키. 기본 동작(다음 요소로)은 막지 않는다 — 포커스를 트리거로 옮겨
@@ -429,7 +464,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
               컨테이너의 key가 바뀌어 행이 통째로 리마운트되므로 포커스를 둘 수도 없습니다. */}
-          <div className="date-wheel-viewport"><div className="date-wheel-values" key={`${unit}-${motion.sequence}`}>{DATE_WHEEL_OFFSETS.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === 3; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={() => rowValue && applyShift(unit, offset)} key={offset}>{rowValue ? dateWheelLabel(rowValue, unit, labels.weekdays) : "—"}</button>; })}</div></div>
+          <div className="date-wheel-viewport"><div className="date-wheel-values" key={`${unit}-${motion.sequence}`}>{DATE_WHEEL_OFFSETS.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === 3; const buffered = offset === 0 && typing?.unit === unit ? typing.digits : null; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={() => rowValue && applyShift(unit, offset)} key={offset}>{buffered ?? (rowValue ? dateWheelLabel(rowValue, unit, labels.weekdays) : "—")}</button>; })}</div></div>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.next}`} disabled={!shifted(unit, 1)} onClick={() => applyShift(unit, 1)}><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></button>
         </section>; })}
       </div>

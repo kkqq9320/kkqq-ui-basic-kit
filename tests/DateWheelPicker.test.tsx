@@ -474,3 +474,81 @@ describe("DateWheelPicker tab 순서", () => {
     expect(today.hasAttribute("aria-hidden")).toBe(false);
   });
 });
+
+describe("DateWheelPicker 타이핑", () => {
+  async function openAt(initialValue: string) {
+    render(<ControlledDateWheel initialValue={initialValue} />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    return trigger;
+  }
+
+  // 원래 한 테스트였다 — 트리거 문구(값 계산)와 포커스 이동(자동 전진)은 서로 다른
+  // 결함이다. expect()는 첫 실패에서 던지므로 함께 두면 뒤쪽 결함의 킬력을 증명할 수
+  // 없다. 각자 분리한다.
+  it("연도 네 자리를 치면 확정된다", async () => {
+    await openAt("2026-07-12");
+    const year = screen.getByRole("group", { name: "연도 2026" });
+    for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(year, { key: digit });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "거래 날짜" }).textContent).toBe("2031. 07. 12."));
+  });
+
+  it("연도 네 자리를 치면 월 열로 넘어간다", async () => {
+    await openAt("2026-07-12");
+    const year = screen.getByRole("group", { name: "연도 2026" });
+    for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(year, { key: digit });
+
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "월 07" })));
+  });
+
+  // 제목이 "일 열로 넘어간다"까지 말하지 않는 이유: 월의 한 자리 즉시확정 경로(soloFloor)는
+  // 연도의 4자리 경로와 다른 분기라 advance 전파를 따로 증명해야 하는데, 이 테스트는
+  // 값 확정만 본다. 브리프 원문의 단언 그대로다.
+  it("월에서 5를 치면 곧바로 5월로 확정한다", async () => {
+    await openAt("2026-07-12");
+    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
+    const month = await screen.findByRole("group", { name: "월 07" });
+    fireEvent.keyDown(month, { key: "5" });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "거래 날짜" }).textContent).toBe("2026. 05. 12."));
+  });
+
+  it("타이핑은 휠 이동 애니메이션을 재생하지 않는다", async () => {
+    // markColumnMotion을 타면 숫자 하나마다 행 7개가 리마운트되고 210ms 전환이
+    // 재생된다. 값만 확인하면 이 결함을 못 잡으므로 경로 자체를 고정한다.
+    await openAt("2026-07-12");
+    const year = screen.getByRole("group", { name: "연도 2026" });
+    const rowsBefore = year.querySelector(".date-wheel-values");
+    for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(year, { key: digit });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "거래 날짜" }).textContent).toBe("2031. 07. 12."));
+    const yearAfter = screen.getByRole("group", { name: "연도 2031" });
+    expect(yearAfter.querySelector(".date-wheel-values")).toBe(rowsBefore);   // 리마운트되지 않았다
+    expect(yearAfter.classList.contains("moving-next")).toBe(false);
+  });
+
+  it("Backspace가 버퍼에서 한 자리만 지운다", async () => {
+    await openAt("2026-07-12");
+    const year = screen.getByRole("group", { name: "연도 2026" });
+    fireEvent.keyDown(year, { key: "2" });
+    fireEvent.keyDown(year, { key: "0" });
+    fireEvent.keyDown(year, { key: "Backspace" });
+    fireEvent.keyDown(year, { key: "3" });
+    fireEvent.keyDown(year, { key: "1" });
+    // "20" -> Backspace -> "2" -> "231"... 네 자리가 아직 아니므로 확정되지 않았다
+    expect(screen.getByRole("button", { name: "거래 날짜" }).textContent).toBe("2026. 07. 12.");
+    fireEvent.keyDown(year, { key: "9" });   // "2319" 네 자리
+    await waitFor(() => expect(screen.getByRole("button", { name: "거래 날짜" }).textContent).toBe("2319. 07. 12."));
+  });
+
+  it("치는 동안 선택 행에 친 숫자가 그대로 보인다", async () => {
+    await openAt("2026-07-12");
+    const year = screen.getByRole("group", { name: "연도 2026" });
+    fireEvent.keyDown(year, { key: "2" });
+    fireEvent.keyDown(year, { key: "0" });
+    expect(year.querySelector(".date-wheel-values .selected")?.textContent).toBe("20");
+  });
+});
