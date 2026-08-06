@@ -8,8 +8,8 @@
 .date-wheel-picker.open { z-index: 80; }
 
 /* 트리거: 41px로 다른 입력 컨트롤과 높이를 맞춥니다. */
-.date-wheel-trigger-shell { width: 100%; height: 41px; display: grid; grid-template-columns: minmax(0, 1fr); border: 1px solid var(--line); border-radius: 7px; background: var(--input); }
-.date-wheel-trigger { min-width: 0; height: 39px; padding: 0 var(--dropdown-inline-padding); border: 0; border-radius: 7px 0 0 7px; color: var(--text); background: transparent; font-size: var(--font-size-control); text-align: left; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.date-wheel-trigger-shell { width: 100%; height: 41px; border: 1px solid var(--line); border-radius: 7px; background: var(--input); }
+.date-wheel-trigger { min-width: 0; height: 39px; padding: 0 var(--dropdown-inline-padding); border: 0; border-radius: 7px; color: var(--text); background: transparent; font-size: var(--font-size-control); text-align: left; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .date-wheel-trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .date-wheel-trigger .placeholder { color: var(--muted); }
 /* 비활성 날짜 필드 — select.css의 비활성 트리거와 같은 값, 같은 이유.
@@ -17,7 +17,7 @@
  * 안쪽 버튼에 opacity를 주면 shell 테두리만 또렷하게 남아 어중간해진다. */
 .date-wheel-trigger-shell:has(.date-wheel-trigger:disabled) { opacity: .55; }
 .date-wheel-trigger:disabled { cursor: not-allowed; -webkit-tap-highlight-color: transparent; }
-.date-wheel-trigger-icon { display: grid; place-items: center; width: 20px; color: var(--muted); pointer-events: none; }
+.date-wheel-trigger-icon { display: grid; place-items: center; width: 20px; flex: none; color: var(--muted); pointer-events: none; }
 .date-wheel-trigger-icon svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 /* :hover는 disabled 요소에도 매칭되므로 명시적으로 뺀다 — 안 그러면 흐려진 필드가
  * 마우스만 올려도 강조 테두리로 살아난다. :focus-visible은 disabled가 포커스를 못
