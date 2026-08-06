@@ -271,3 +271,47 @@ describe("DateWheelPicker year-month mode (fields)", () => {
     });
   });
 });
+
+describe("DateWheelPicker 키보드 진입", () => {
+  it("↓로 열고 포커스가 첫 열에 간다", async () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    trigger.focus();
+
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+
+    // 개수가 아니라 신원으로 확인한다 — 어느 열인지가 계약이다.
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "연도 2026" })));
+  });
+
+  it("↑ Enter Space로도 열린다", () => {
+    for (const key of ["ArrowUp", "Enter", " "]) {
+      render(<ControlledDateWheel initialValue="2026-07-12" />);
+      const trigger = screen.getByRole("button", { name: "거래 날짜" });
+      fireEvent.keyDown(trigger, { key });
+      expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it("비활성이면 어느 키로도 열리지 않는다", () => {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} disabled />);
+    fireEvent.keyDown(screen.getByRole("button", { name: "거래 날짜" }), { key: "ArrowDown" });
+    expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull();
+  });
+
+  it("뒤로가기로 닫으면 포커스가 트리거로 돌아온다", async () => {
+    // 포커스가 팝오버 안에 있는 채로 열이 언마운트되면 포커스가 body로 떨어지고
+    // 다음 Tab이 문서 처음부터 시작한다. Escape·완료는 이미 회수하고 있었다.
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "연도 2026" })));
+
+    fireEvent.popState(window, { state: null });
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+  });
+});

@@ -138,7 +138,6 @@ export type DateWheelPickerProps = {
 export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DATE_WHEEL_FIELDS, allowClear = false, ariaLabel = "날짜", id, disabled = false, labels: labelOverrides, timeZone = "Asia/Seoul", mobileBottomInset = 78 }: DateWheelPickerProps) {
   const labels = { ...DEFAULT_DATE_WHEEL_LABELS, ...labelOverrides, units: { ...DEFAULT_DATE_WHEEL_LABELS.units, ...labelOverrides?.units } };
   const [open, setOpen] = useState(false);
-  useBackToClose(open, () => setOpen(false));
   // 겹쳐 있으면 가장 안쪽만 닫힙니다 — 다이얼로그 안에서 열렸을 때 다이얼로그까지 닫으면 안 됩니다.
   useEscapeToClose(open, () => { setOpen(false); triggerRef.current?.focus({ preventScroll: true }); });
   const [position, setPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
@@ -153,6 +152,28 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   const popoverRef = useRef<HTMLDivElement>(null);
   const swipeRef = useRef<{ unit: DateWheelUnit; y: number; pointerId: number; value: string } | null>(null);
   const suppressColumnClickRef = useRef(false);
+  const columnRefs = useRef(new Map<DateWheelUnit, HTMLElement>());
+  // 이미 이 열에 포커스를 적용했는가 — 아래 포커스 이펙트를 멱등하게 만든다.
+  const focusedColumnRef = useRef<DateWheelUnit | null>(null);
+
+  /**
+   * 포커스가 팝오버 안에 있을 때만 회수한 뒤 닫습니다. 포커스가 열 안에 있는 채로
+   * 팝오버가 언마운트되면 포커스가 body로 떨어지고 다음 Tab이 문서 처음부터
+   * 시작합니다(다이얼로그 안이라면 포커스 스코프 밖으로 나갑니다).
+   *
+   * "포커스가 실제로 안에 있을 때만"인 이유: 우리가 옮긴 포커스만 되돌리고,
+   * 사용자가 그 사이 다른 곳을 눌러 옮긴 포커스는 뺏지 않습니다.
+   */
+  function closeAndReclaimFocus() {
+    const popover = popoverRef.current;
+    if (popover && document.activeElement && popover.contains(document.activeElement)) {
+      triggerRef.current?.focus({ preventScroll: true });
+    }
+    setOpen(false);
+  }
+
+  // 뒤로가기로 닫습니다. 포커스를 팝오버 안으로 옮기므로 회수도 함께 합니다.
+  useBackToClose(open, closeAndReclaimFocus);
 
   // 남은 최소 단위로만 비교합니다(연·월 픽커면 "월" 단위). 함수 선언이라 baseValue보다
   // 아래에 있어도 호출 시점엔 keyLen이 이미 초기화돼 있습니다.
@@ -223,6 +244,29 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     };
   }, [open, mobileBottomInset]);
 
+  /**
+   * 팝오버가 열리면 활성 열에 진짜 포커스를 줍니다.
+   *
+   * **`position`이 의존성에 있어야 하는 이유:** 팝오버는 좌표가 정해진 뒤에야
+   * 마운트됩니다(`open && position &&`). `open`이 켜지는 커밋에는 팝오버가 DOM에
+   * 없으므로 그때만 시도하면 포커스가 영영 가지 않습니다.
+   *
+   * **그런데 `position`만 넣으면 안 됩니다.** 좌표는 스크롤·리사이즈마다 새 객체가
+   * 되고, 그때마다 다시 돌면 사용자가 옮겨 둔 포커스를 되끌어옵니다. 그래서 "이미
+   * 이 열에 적용했는가"를 ref로 들고 멱등하게 만듭니다.
+   *
+   * `preventScroll`을 쓰는 이유는 이 파일의 다른 focus 복귀와 같습니다 — 네이티브
+   * 포커스 스크롤은 조상 스크롤 컨테이너까지 움직입니다.
+   */
+  useLayoutEffect(() => {
+    if (!open) { focusedColumnRef.current = null; return; }
+    if (focusedColumnRef.current === activeUnit) return;
+    const column = columnRefs.current.get(activeUnit);
+    if (!column) return;   // 좌표가 아직 없어 마운트 전 — 정해지면 다시 온다
+    focusedColumnRef.current = activeUnit;
+    column.focus({ preventScroll: true });
+  }, [open, activeUnit, position]);
+
   function shiftedFrom(sourceValue: string, unit: DateWheelUnit, amount: number) {
     const next = normalizeToFields(shiftDateValue(sourceValue, unit, amount), fields);
     if (outOfRange(next)) return null;
@@ -271,6 +315,23 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     event.preventDefault();
     setActiveUnit(unit);
     applyShift(unit, event.key === "ArrowDown" ? 1 : -1);
+  }
+
+  /** 닫혀 있을 때 트리거에서 받는 키. 여는 것 하나만 담당합니다. */
+  function handleTriggerKeyDown(event: ReactKeyboardEvent) {
+    // 비활성 트리거는 포커스를 받을 수 없어 실제 브라우저에서는 키가 오지 않지만,
+    // 테스트처럼 이벤트를 직접 디스패치하면 그 관문을 건너뜁니다.
+    if (disabled) return;
+    // Ctrl·Meta가 눌린 키는 건드리지 않습니다 — 브라우저·OS 단축키입니다.
+    if (event.ctrlKey || event.metaKey) return;
+    if (open) return;
+    const key = event.key;
+    if (key !== "ArrowDown" && key !== "ArrowUp" && key !== "Enter" && key !== " ") return;
+    // <button>은 Enter를 keydown에서, Space를 keyup에서 click으로 바꿉니다. 막지 않으면
+    // 그 click이 트리거의 onClick과 겹쳐 연 직후 곧바로 다시 닫습니다.
+    event.preventDefault();
+    setActiveUnit(fields[0] ?? "year");
+    setOpen(true);
   }
 
   /* 스와이프는 30px 경계를 넘을 때마다 즉시 한 칸 커밋하고 나머지 거리는 손가락을
@@ -329,11 +390,11 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   }
 
   return <div className={open ? "date-wheel-picker open" : "date-wheel-picker"} ref={rootRef}>
-    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)}><span className={value ? "" : "placeholder"}>{formatDateTrigger(value, labels.placeholder, fields)}</span><i className="date-wheel-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm2-2v4m10-4v4M3 9h18" /></svg></i></button></div>
+    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)} onKeyDown={handleTriggerKeyDown}><span className={value ? "" : "placeholder"}>{formatDateTrigger(value, labels.placeholder, fields)}</span><i className="date-wheel-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm2-2v4m10-4v4M3 9h18" /></svg></i></button></div>
     {open && position && createPortal(<div ref={popoverRef} className="date-wheel-popover dropdown-menu-surface" role="dialog" aria-modal="false" aria-label={`${ariaLabel} ${labels.select}`} style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
       <div className="date-wheel-heading"><strong>{ariaLabel}</strong><span>{labels.hint}</span></div>
       <div className="date-wheel-columns" data-fields={fields.length}>
-        {fields.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${activeUnit === unit ? " active" : ""}${motion.sequence ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${dateWheelLabel(baseValue, unit, labels.weekdays)}`} role="group" tabIndex={0} onFocus={() => setActiveUnit(unit)} onKeyDown={(event) => handleColumnKey(event, unit)} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { if (!isPrimaryButton(event)) return; setActiveUnit(unit); event.currentTarget.focus({ preventScroll: true }); suppressColumnClickRef.current = false; swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue }; if (typeof event.currentTarget.setPointerCapture === "function") event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {fields.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${activeUnit === unit ? " active" : ""}${motion.sequence ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${dateWheelLabel(baseValue, unit, labels.weekdays)}`} role="group" tabIndex={0} ref={(node) => { if (node) columnRefs.current.set(unit, node); else columnRefs.current.delete(unit); }} onFocus={() => setActiveUnit(unit)} onKeyDown={(event) => handleColumnKey(event, unit)} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { if (!isPrimaryButton(event)) return; setActiveUnit(unit); event.currentTarget.focus({ preventScroll: true }); suppressColumnClickRef.current = false; swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue }; if (typeof event.currentTarget.setPointerCapture === "function") event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <button type="button" className="date-wheel-step" aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
           <div className="date-wheel-viewport"><div className="date-wheel-values" key={`${unit}-${motion.sequence}`}>{DATE_WHEEL_OFFSETS.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === 3; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={preloadOnly ? -1 : 0} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={() => rowValue && applyShift(unit, offset)} key={offset}>{rowValue ? dateWheelLabel(rowValue, unit, labels.weekdays) : "—"}</button>; })}</div></div>
           <button type="button" className="date-wheel-step" aria-label={`${labels.units[unit]} ${labels.next}`} disabled={!shifted(unit, 1)} onClick={() => applyShift(unit, 1)}><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></button>
