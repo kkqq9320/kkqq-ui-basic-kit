@@ -320,6 +320,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   }
 
   function handleColumnKey(event: ReactKeyboardEvent, unit: DateWheelUnit) {
+    // Ctrl·Meta가 눌린 키는 건드리지 않습니다 — 브라우저·OS 단축키입니다.
     if (event.ctrlKey || event.metaKey) return;
     const key = event.key;
 

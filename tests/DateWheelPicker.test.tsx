@@ -326,6 +326,29 @@ describe("DateWheelPicker 열 이동", () => {
     return trigger;
   }
 
+  /** 연도 열에서 →를 두 번 눌러 마지막 열(일)까지 옮겨 놓은 상태를 만든다. */
+  async function openPickerAtLastColumn() {
+    const trigger = await openPicker();
+    const year = screen.getByRole("group", { name: "연도 2026" });
+    fireEvent.keyDown(year, { key: "ArrowRight" });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "월 07" })));
+    fireEvent.keyDown(screen.getByRole("group", { name: "월 07" }), { key: "ArrowRight" });
+    const day = await screen.findByRole("group", { name: /^일 12/ });
+    await waitFor(() => expect(document.activeElement).toBe(day));
+    return { trigger, day };
+  }
+
+  /** 열이 하나뿐인 픽커를 열어 그 열(첫 열이자 마지막 열)에 포커스를 둔다. */
+  async function openSoloYearPicker() {
+    render(<DateWheelPicker ariaLabel="회계 연도" value="2026-07-12" fields={["year"]} onChange={() => undefined} />);
+    const trigger = screen.getByRole("button", { name: "회계 연도" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const year = await screen.findByRole("group", { name: "연도 2026" });
+    await waitFor(() => expect(document.activeElement).toBe(year));
+    return year;
+  }
+
   it("→와 Tab이 다음 열로 옮긴다", async () => {
     await openPicker();
     const year = screen.getByRole("group", { name: "연도 2026" });
@@ -337,50 +360,75 @@ describe("DateWheelPicker 열 이동", () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: /^일 12/ })));
   });
 
-  it("마지막 열에서 →는 제자리, Tab은 닫고 나간다", async () => {
-    const trigger = await openPicker();
-    const year = screen.getByRole("group", { name: "연도 2026" });
-    fireEvent.keyDown(year, { key: "ArrowRight" });
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "월 07" })));
-    fireEvent.keyDown(screen.getByRole("group", { name: "월 07" }), { key: "ArrowRight" });
-    const day = await screen.findByRole("group", { name: /^일 12/ });
-    await waitFor(() => expect(document.activeElement).toBe(day));
-
-    // 방향키는 안에서만 움직인다 — 제자리
+  // 아래 세 개는 원래 "마지막 열에서 →는 제자리, Tab은 닫고 나간다" 한 개였다. 팝오버를
+  // 경계에서 닫아버리는 뮤테이션은 포커스-정체성 검사와 다이얼로그-열림 검사를 항상
+  // 같이 죽인다 — 포커스가 있던 노드가 언마운트되며 activeElement가 같이 떨어지기
+  // 때문이다. 한 it 안에서 그 둘을 순서대로 두면 앞 것이 먼저 던져 뒤 것은 한 번도
+  // 실행되지 못한 채 "통과"만 한다. 각 assert를 별도 실행으로 쪼갠다.
+  it("마지막 열에서 →는 포커스를 그대로 둔다", async () => {
+    const { day } = await openPickerAtLastColumn();
     fireEvent.keyDown(day, { key: "ArrowRight" });
     expect(document.activeElement).toBe(day);
-    expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();
+  });
 
+  it("마지막 열에서 →는 팝오버를 닫지 않는다", async () => {
+    const { day } = await openPickerAtLastColumn();
+    fireEvent.keyDown(day, { key: "ArrowRight" });
+    expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();
+  });
+
+  it("마지막 열에서 Tab은 닫고 트리거로 포커스를 넘긴다", async () => {
+    const { trigger, day } = await openPickerAtLastColumn();
     // Tab은 떠나는 키 — 닫고 포커스를 트리거로 넘긴다(브라우저가 그 다음을 계산한다)
     fireEvent.keyDown(day, { key: "Tab" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
     expect(document.activeElement).toBe(trigger);
   });
 
-  it("첫 열에서 ←는 제자리, Shift+Tab은 닫고 트리거로", async () => {
-    const trigger = await openPicker();
+  // 아래 세 개는 원래 "첫 열에서 ←는 제자리, Shift+Tab은 닫고 트리거로" 한 개였다.
+  // 위와 같은 이유로 포커스-정체성 검사와 다이얼로그-열림 검사를 분리한다.
+  it("첫 열에서 ←는 포커스를 그대로 둔다", async () => {
+    await openPicker();
     const year = screen.getByRole("group", { name: "연도 2026" });
-
     fireEvent.keyDown(year, { key: "ArrowLeft" });
     expect(document.activeElement).toBe(year);
-    expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();
+  });
 
+  it("첫 열에서 ←는 팝오버를 닫지 않는다", async () => {
+    await openPicker();
+    const year = screen.getByRole("group", { name: "연도 2026" });
+    fireEvent.keyDown(year, { key: "ArrowLeft" });
+    expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();
+  });
+
+  it("첫 열에서 Shift+Tab은 닫고 트리거로 포커스를 넘긴다", async () => {
+    const trigger = await openPicker();
+    const year = screen.getByRole("group", { name: "연도 2026" });
     fireEvent.keyDown(year, { key: "Tab", shiftKey: true });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
     expect(document.activeElement).toBe(trigger);
   });
 
-  it("연도만 있는 픽커는 첫 열이 곧 마지막 열이다", async () => {
-    render(<DateWheelPicker ariaLabel="회계 연도" value="2026-07-12" fields={["year"]} onChange={() => undefined} />);
-    const trigger = screen.getByRole("button", { name: "회계 연도" });
-    trigger.focus();
-    fireEvent.keyDown(trigger, { key: "ArrowDown" });
-    const year = await screen.findByRole("group", { name: "연도 2026" });
-    await waitFor(() => expect(document.activeElement).toBe(year));
-
+  // 아래 두 개는 원래 "연도만 있는 픽커는 첫 열이 곧 마지막 열이다" 한 개였다. →와
+  // ←는 같은 분기(ArrowRight/ArrowLeft)를 타므로 경계-닫힘 뮤테이션은 둘 다 깨뜨리는데,
+  // 한 it 안에 순서대로 두면 → 쪽 assert가 먼저 던져 ← 쪽은 실행되지 못한 채 통과한다.
+  // 각자 새로 렌더링해서 분리한다.
+  it("연도만 있는 픽커에서 →는 제자리다", async () => {
+    const year = await openSoloYearPicker();
     fireEvent.keyDown(year, { key: "ArrowRight" });
-    expect(document.activeElement).toBe(year);            // 제자리
+    expect(document.activeElement).toBe(year);
+  });
+
+  it("연도만 있는 픽커에서 ←는 제자리다", async () => {
+    const year = await openSoloYearPicker();
     fireEvent.keyDown(year, { key: "ArrowLeft" });
-    expect(document.activeElement).toBe(year);            // 제자리
+    expect(document.activeElement).toBe(year);
+  });
+
+  it("Ctrl이 눌린 방향키는 열을 옮기지 않는다", async () => {
+    await openPicker();
+    const year = screen.getByRole("group", { name: "연도 2026" });
+    fireEvent.keyDown(year, { key: "ArrowRight", ctrlKey: true });
+    expect(document.activeElement).toBe(year);
   });
 });
