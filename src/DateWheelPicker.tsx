@@ -152,8 +152,14 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   });
   const [activeUnit, setActiveUnit] = useState<DateWheelUnit>(fields[0] ?? "year");
   // 지금 치고 있는 열과 그 자릿수. 자릿수가 차면 typeDigit이 곧바로 확정하고 비웁니다.
-  // 덜 찬 채로 열을 떠나면(Tab·화살표·Enter·포인터·팝오버 닫힘) flushTyping이 해석해
-  // 확정하고 비웁니다 — Escape만 확정 없이 버립니다.
+  // 덜 찬 채로 열을 떠날 때는 경로에 따라 갈립니다:
+  //   · 확정(flushTyping/commitAndClose가 해석해 값에 반영하고 비웁니다):
+  //     Tab·Shift+Tab·←·→·↑·↓·Enter·완료 버튼.
+  //   · 폐기(해석하지 않고 그냥 비웁니다): Escape·휠·포인터(스와이프·행 클릭·컬럼
+  //     클릭)·바깥 클릭·뒤로가기 등 그 외의 이유로 팝오버가 닫힐 때.
+  // ("팝오버 닫힘은 flushTyping이 처리한다"는 예전 버전의 이 주석은 틀렸었습니다 —
+  // 완료 버튼을 뺀 나머지 닫힘 경로(바깥 클릭·뒤로가기)는 커밋하지 않고 그냥
+  // 버립니다. 그 안전망은 아래 포커스 이펙트의 `!open` 분기에 있습니다.)
   const [typing, setTyping] = useState<{ unit: DateWheelUnit; digits: string } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -335,6 +341,8 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 읽는 두 번째 `onChange`를 부르면(예: 예전 `applyShift`) 나중 호출이 그대로
    * 값을 덮어써 방금 확정한 값이 사라집니다 — moveSwipe/finishSwipe가 이미
    * `commitShift`에 출발 값을 명시로 넘겨 이 문제를 피하는 것과 같은 이유입니다.
+   * `commitAndClose`(Enter·완료 버튼이 공유)도 같은 함정을 피하려고 `value` prop
+   * 대신 이 반환값을 씁니다.
    */
   function flushTyping(unit: DateWheelUnit) {
     if (typing?.unit !== unit || !typing.digits) return null;
@@ -342,6 +350,29 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     setTyping(null);
     if (amount === null) return null;
     return commitTyped(unit, amount);
+  }
+
+  /**
+   * Enter와 완료 버튼이 공유하는 닫기 경로입니다. 원래 각자 따로 구현돼 있었는데
+   * 완료 버튼 쪽이 flushTyping을 부르지 않아 치던 숫자를 버렸습니다 — 하나로
+   * 합쳐 다시 갈라지지 못하게 합니다.
+   *
+   * 완료 버튼의 onClick에는 unit이 없습니다. 버퍼(`typing`) 자신이 자기 unit을
+   * 이미 들고 있으므로 인자로 받지 않고 상태에서 직접 읽습니다 — 버퍼가 없으면
+   * 아무것도 확정하지 않습니다.
+   *
+   * `flushed`가 null이면(버퍼가 없었거나 해석할 수 없었으면) `value`가 비어 있을
+   * 때만 baseValue로 채웁니다. flushed가 있으면 그 onChange가 이미 값을
+   * 확정했으므로 여기서 또 baseValue로 덮어쓰면 안 됩니다 — `value` prop은 이
+   * 렌더의 클로저에 갇혀 있어(리렌더 전) 방금 확정한 값을 반영하지 못한 채 여전히
+   * "비어 있다"고 잘못 읽어 되돌려버립니다. ArrowUp/ArrowDown에서 flushTyping이
+   * 이미 겪은 것과 같은 결함입니다.
+   */
+  function commitAndClose() {
+    const flushed = typing ? flushTyping(typing.unit) : null;
+    if (flushed === null && !value) onChange(baseValue);
+    setOpen(false);
+    requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
   }
 
   /* 여기서 event.preventDefault()를 부르지 마세요.
@@ -352,6 +383,11 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * { passive: false })이 담당합니다. 이 핸들러는 값 변경만 합니다. */
   function handleWheel(event: ReactWheelEvent, unit: DateWheelUnit) {
     if (!event.deltaY) return;
+    // 스펙: 휠은 스와이프·행 클릭과 같은 조작 계열이라 버퍼를 확정하지 않고 버립니다.
+    // 안 비우면, 같은 열에서 자릿수 하나만 치고 휠을 굴려 값을 옮긴 뒤 Tab으로
+    // 떠날 때 flushTyping이 그 묵은 숫자를 그대로 해석해 휠이 방금 맞춘 값을
+    // 조용히 덮어씁니다.
+    setTyping(null);
     setActiveUnit(unit);
     applyShift(unit, event.deltaY > 0 ? 1 : -1);
   }
@@ -397,12 +433,9 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     }
 
     if (key === "Enter") {
-      // 완료 버튼과 같은 동작 — 치던 숫자를 먼저 확정한 뒤 닫는다.
+      // 완료 버튼과 같은 동작 — commitAndClose가 치던 숫자를 먼저 확정한 뒤 닫는다.
       event.preventDefault();
-      flushTyping(unit);
-      if (!value) onChange(baseValue);
-      setOpen(false);
-      requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
+      commitAndClose();
       return;
     }
 
@@ -522,7 +555,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.next}`} disabled={!shifted(unit, 1)} onClick={() => applyShift(unit, 1)}><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></button>
         </section>; })}
       </div>
-      <div className="date-wheel-actions"><button type="button" tabIndex={-1} title={`${labels.today} (Ctrl+;)`} onClick={() => onChange(clampToRange(todayIn(timeZone)))}>{labels.today}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} onClick={() => onChange("")}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" onClick={() => { if (!value) onChange(baseValue); setOpen(false); requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true })); }}>{labels.done}</button></div>
+      <div className="date-wheel-actions"><button type="button" tabIndex={-1} title={`${labels.today} (Ctrl+;)`} onClick={() => onChange(clampToRange(todayIn(timeZone)))}>{labels.today}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} onClick={() => onChange("")}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" onClick={commitAndClose}>{labels.done}</button></div>
     </div>, document.body)}
   </div>;
 }
