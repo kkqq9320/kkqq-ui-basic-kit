@@ -735,4 +735,47 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
     fireEvent.pointerDown(year, { pointerId: 1, clientY: 80, buttons: 1 });
     expect(year.querySelector(".date-wheel-values .selected")?.textContent).toBe("2026");
   });
+
+  // 리뷰 finding — Tab 분기 맨 앞의 flushTyping(unit)이 실제 버퍼를 상대로 실행되는
+  // 테스트가 없었다. 기존 유일한 Tab keydown(휠 테스트 안)은 휠이 이미 typing을
+  // 비운 뒤라 그 호출이 no-op으로 지나간다. 여기서는 → 테스트와 같은 모양으로,
+  // 버퍼를 채운 채로 곧장 Tab을 눌러 flushTyping이 실제로 해석·확정하는지 본다.
+  it("Tab이 치던 숫자를 확정한다", async () => {
+    const { trigger, year } = await openAndType("2026-07-12", ["3", "1"]);
+    fireEvent.keyDown(year, { key: "Tab" });
+    await waitFor(() => expect(trigger.textContent).toBe("2031. 07. 12."));
+  });
+
+  // 위 테스트에 얹는다 — Tab은 팝오버를 닫지 않고 다음 열로 초점만 옮기므로,
+  // 확정 직후에도 방금 떠난 연도 열이 여전히 화면에 남아 있다. flushTyping이
+  // setTyping(null)로 버퍼를 비우지 않으면, 행 렌더의
+  // `buffered = offset === 0 && typing?.unit === unit ? typing.digits : null`가
+  // unit이 여전히 "year"인 낡은 버퍼를 얹어, 확정된 "2031" 대신 치던 숫자
+  // "31"을 그대로 보여준다. trigger.textContent는 `value` prop만 읽으므로 이
+  // 결함을 못 잡는다 — 남겨진 열 자신의 선택 행을 봐야 한다. 트리거 문구(값
+  // 계산)와 남겨진 열의 렌더(버퍼 정리)는 서로 다른 결함이므로 나눈다. 뮤테이션
+  // 이후에도 실패가 이 assert 줄 자체에서 나도록, 새로 role 조회를 하지 않고
+  // openAndType이 이미 쥐고 있는 `year` 노드 참조를 그대로 쓴다.
+  it("Tab으로 떠난 뒤 남겨진 연도 열은 버퍼가 아니라 확정된 값을 보여준다", async () => {
+    const { year } = await openAndType("2026-07-12", ["3", "1"]);
+    fireEvent.keyDown(year, { key: "Tab" });
+    expect(year.querySelector(".date-wheel-values .selected")?.textContent).toBe("2031");
+  });
+
+  // Shift+Tab은 어떤 테스트에서도 눌린 적이 없었다. 첫 열에서는 이동이 실패해
+  // (moveColumn이 false를 돌려줘) 팝오버를 닫아 버리므로, 버퍼 확정만 따로 보려면
+  // 이동이 성공하는 둘째 열(월)에서 시작해야 한다. 월의 첫 자리 "1"은 soloFloor(2)
+  // 미만이라 곧장 확정되지 않고 버퍼로 남는다(dateWheelTyping.ts의 typeDigit 참고).
+  it("Shift+Tab이 치던 숫자를 확정한다", async () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
+    const month = await screen.findByRole("group", { name: "월 07" });
+    fireEvent.keyDown(month, { key: "1" });
+    fireEvent.keyDown(month, { key: "Tab", shiftKey: true });
+    await waitFor(() => expect(trigger.textContent).toBe("2026. 01. 12."));
+  });
 });
