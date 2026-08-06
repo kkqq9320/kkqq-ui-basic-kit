@@ -315,3 +315,72 @@ describe("DateWheelPicker 키보드 진입", () => {
     expect(document.activeElement).toBe(trigger);
   });
 });
+
+describe("DateWheelPicker 열 이동", () => {
+  async function openPicker() {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "연도 2026" })));
+    return trigger;
+  }
+
+  it("→와 Tab이 다음 열로 옮긴다", async () => {
+    await openPicker();
+    const year = screen.getByRole("group", { name: "연도 2026" });
+
+    fireEvent.keyDown(year, { key: "ArrowRight" });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "월 07" })));
+
+    fireEvent.keyDown(screen.getByRole("group", { name: "월 07" }), { key: "Tab" });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: /^일 12/ })));
+  });
+
+  it("마지막 열에서 →는 제자리, Tab은 닫고 나간다", async () => {
+    const trigger = await openPicker();
+    const year = screen.getByRole("group", { name: "연도 2026" });
+    fireEvent.keyDown(year, { key: "ArrowRight" });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "월 07" })));
+    fireEvent.keyDown(screen.getByRole("group", { name: "월 07" }), { key: "ArrowRight" });
+    const day = await screen.findByRole("group", { name: /^일 12/ });
+    await waitFor(() => expect(document.activeElement).toBe(day));
+
+    // 방향키는 안에서만 움직인다 — 제자리
+    fireEvent.keyDown(day, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(day);
+    expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();
+
+    // Tab은 떠나는 키 — 닫고 포커스를 트리거로 넘긴다(브라우저가 그 다음을 계산한다)
+    fireEvent.keyDown(day, { key: "Tab" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("첫 열에서 ←는 제자리, Shift+Tab은 닫고 트리거로", async () => {
+    const trigger = await openPicker();
+    const year = screen.getByRole("group", { name: "연도 2026" });
+
+    fireEvent.keyDown(year, { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(year);
+    expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();
+
+    fireEvent.keyDown(year, { key: "Tab", shiftKey: true });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("연도만 있는 픽커는 첫 열이 곧 마지막 열이다", async () => {
+    render(<DateWheelPicker ariaLabel="회계 연도" value="2026-07-12" fields={["year"]} onChange={() => undefined} />);
+    const trigger = screen.getByRole("button", { name: "회계 연도" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const year = await screen.findByRole("group", { name: "연도 2026" });
+    await waitFor(() => expect(document.activeElement).toBe(year));
+
+    fireEvent.keyDown(year, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(year);            // 제자리
+    fireEvent.keyDown(year, { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(year);            // 제자리
+  });
+});

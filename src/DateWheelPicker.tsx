@@ -310,11 +310,40 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     applyShift(unit, event.deltaY > 0 ? 1 : -1);
   }
 
+  /** step 방향의 열로 포커스를 옮깁니다. 끝이면 아무것도 하지 않고 false를 돌려줍니다. */
+  function moveColumn(unit: DateWheelUnit, step: 1 | -1) {
+    const index = fields.indexOf(unit);
+    const nextIndex = index + step;
+    if (index === -1 || nextIndex < 0 || nextIndex >= fields.length) return false;
+    setActiveUnit(fields[nextIndex]);
+    return true;
+  }
+
   function handleColumnKey(event: ReactKeyboardEvent, unit: DateWheelUnit) {
-    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    if (event.ctrlKey || event.metaKey) return;
+    const key = event.key;
+
+    if (key === "Tab") {
+      // 떠나는 키. 기본 동작(다음 요소로)은 막지 않는다 — 포커스를 트리거로 옮겨
+      // 두면 브라우저가 트리거 기준으로 다음 tabbable을 계산한다. keydown은 기본
+      // Tab 동작보다 먼저 실행되므로 순서가 보장된다.
+      if (moveColumn(unit, event.shiftKey ? -1 : 1)) { event.preventDefault(); return; }
+      triggerRef.current?.focus({ preventScroll: true });
+      setOpen(false);
+      return;
+    }
+
+    // 방향키는 안에서만 움직인다 — 끝에서는 제자리이고 팝오버를 닫지 않는다.
+    if (key === "ArrowRight" || key === "ArrowLeft") {
+      event.preventDefault();
+      moveColumn(unit, key === "ArrowRight" ? 1 : -1);
+      return;
+    }
+
+    if (key !== "ArrowUp" && key !== "ArrowDown") return;
     event.preventDefault();
     setActiveUnit(unit);
-    applyShift(unit, event.key === "ArrowDown" ? 1 : -1);
+    applyShift(unit, key === "ArrowDown" ? 1 : -1);
   }
 
   /** 닫혀 있을 때 트리거에서 받는 키. 여는 것 하나만 담당합니다. */
