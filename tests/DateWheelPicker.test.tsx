@@ -432,3 +432,45 @@ describe("DateWheelPicker 열 이동", () => {
     expect(document.activeElement).toBe(year);
   });
 });
+
+describe("DateWheelPicker tab 순서", () => {
+  async function openPicker() {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const dialog = await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    return dialog;
+  }
+
+  it("팝오버 안에서 tab 순서에 있는 것은 열뿐이다", async () => {
+    const dialog = await openPicker();
+
+    const stops = [...dialog.querySelectorAll<HTMLElement>('[tabindex="0"], button:not([tabindex="-1"])')];
+    // 신원으로 고정한다 — 개수만 맞추면 엉뚱한 요소가 정거장이어도 통과한다.
+    expect(stops.map((node) => node.getAttribute("aria-label"))).toEqual([
+      "연도 2026", "월 07", "일 12 일",
+    ]);
+  });
+
+  // 아래 세 개는 원래 "tabindex·title·aria-hidden 확인" 한 개였다. expect()는 첫
+  // 실패에서 던지므로, 서로 다른 결함을 겨냥하는 뒤 두 assert는 앞 것이 통과해야만
+  // 실행된다 — 이러면 뒤쪽 assert의 킬력을 확인할 수 없다. 각자 분리한다.
+  it("단축키가 있는 동작 버튼은 tab 순서 밖이다", async () => {
+    await openPicker();
+    const today = screen.getByRole("button", { name: "오늘" });
+    expect(today.getAttribute("tabindex")).toBe("-1");
+  });
+
+  it("오늘 버튼의 title이 단축키를 보여준다", async () => {
+    await openPicker();
+    const today = screen.getByRole("button", { name: "오늘" });
+    expect(today.getAttribute("title")).toContain("Ctrl");
+  });
+
+  it("tabIndex={-1}이어도 접근성 트리에는 그대로 있다 — 지운 것이 아니다", async () => {
+    await openPicker();
+    const today = screen.getByRole("button", { name: "오늘" });
+    expect(today.hasAttribute("aria-hidden")).toBe(false);
+  });
+});
