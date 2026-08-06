@@ -169,6 +169,11 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 완료 버튼을 뺀 나머지 닫힘 경로(바깥 클릭·뒤로가기)는 커밋하지 않고 그냥
   // 버립니다. 그 안전망은 아래 포커스 이펙트의 `!open` 분기에 있습니다.)
   const [typing, setTyping] = useState<{ unit: DateWheelUnit; digits: string } | null>(null);
+  // 완료 피드백(임시 A/B, css/surfaces.css) 커밋 카운터 — commitAndClose에서만 올립니다.
+  // 0에서 시작해 첫 마운트는 애니메이션이 돌지 않고, 화살표·휠·타이핑 자체(자릿수가
+  // 차서 즉시 확정되는 경우 포함)·오늘·비우기 같은 다른 값 변경 경로는 건드리지
+  // 않습니다 — 그 경로들은 "완료"가 아니라 매 조작마다 반짝이면 신호가 아니라 소음이 됩니다.
+  const [commitPulse, setCommitPulse] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -386,6 +391,9 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   function commitAndClose() {
     const flushed = typing ? flushTyping(typing.unit) : null;
     if (flushed === null && !value) onChange(baseValue);
+    // Tab으로 떠나거나 바깥을 클릭해도 값은 남지만, 그건 "완료"를 누른 게 아니므로
+    // 여기서만 올립니다 — Enter와 완료 버튼만 이 함수를 거칩니다.
+    setCommitPulse((n) => n + 1);
     setOpen(false);
     requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
   }
@@ -595,7 +603,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       // (=지금 열려는 참일 때만) 시드해야 닫는 클릭에서 activeUnit을 건드리지 않습니다.
       if (!open) setActiveUnit(fields[0] ?? "year");
       setOpen((current) => !current);
-    }} onKeyDown={handleTriggerKeyDown}><span className={value ? "" : "placeholder"}>{formatDateTrigger(value, labels.placeholder, fields)}</span><i className="date-wheel-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm2-2v4m10-4v4M3 9h18" /></svg></i></button></div>
+    }} onKeyDown={handleTriggerKeyDown}><span className={`${value ? "" : "placeholder"}${commitPulse ? " dropdown-value-commit" : ""}`} key={commitPulse}>{formatDateTrigger(value, labels.placeholder, fields)}</span><i className="date-wheel-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm2-2v4m10-4v4M3 9h18" /></svg></i></button></div>
     {open && position && createPortal(<div ref={popoverRef} className="date-wheel-popover dropdown-menu-surface" role="dialog" aria-modal="false" aria-label={`${ariaLabel} ${labels.select}`} style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
       <div className="date-wheel-heading"><strong>{ariaLabel}</strong><span>{labels.hint}</span></div>
       <div className="date-wheel-columns" data-fields={fields.length}>

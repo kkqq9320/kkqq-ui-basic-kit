@@ -31,7 +31,53 @@
   font-weight: 700;
 }
 
+/* 완료 피드백(커밋 애니메이션) — 임시 A/B, 소유자가 고르면 진 변형과 이 블록 전체를
+ * 지웁니다. "적용은 되는데 바뀌는 순간이 티가 안 난다"(Select·DateWheelPicker 공통
+ * 피드백 — 완료 아니고서는 어떤 값 변경도 이 신호를 켜지 않습니다: 화살표·휠·오늘·
+ * 비우기는 제외).
+ *
+ * Select.choose()와 DateWheelPicker.commitAndClose()가 커밋마다 카운터를 올리고, 그
+ * 값을 트리거 값 <span>의 key로 써서 리마운트시킵니다 — date-wheel-values가
+ * `${unit}-${motion.sequence}`로 이미 쓰는 것과 같은 관용구(date-picker.css:67,613).
+ * <html data-commit-feedback="c"|"a">로 어느 변형이 재생될지 고릅니다(demo/main.tsx).
+ *
+ * .dropdown-value-commit 클래스는 그 카운터가 0보다 클 때만(=첫 마운트가 아니라 실제
+ * 커밋 이후에만) 붙습니다 — 처음부터 붙어 있으면 첫 마운트 자체가 DOM 삽입이라 열자마자
+ * 애니메이션이 돕니다.
+ */
+html[data-commit-feedback="c"] .dropdown-value-commit {
+  /* date-wheel-selected-pop과 같은 커브(230ms cubic-bezier(.18, 1.15, .35, 1),
+   * date-picker.css:74,103-107)를 그대로 써서 휠의 선택 팝과 같은 계열로 읽히게 합니다. */
+  animation: dropdown-commit-c 230ms cubic-bezier(.18, 1.15, .35, 1);
+}
+html[data-commit-feedback="a"] .dropdown-value-commit {
+  /* --motion-fast(140ms) 그대로면 색이 바뀌는 게 눈에 걸리기도 전에 끝나고, 2배(280ms)
+   * 까지 늘리면 색 페이드가 길어져 신호가 아니라 버그처럼 보입니다 — 그 중간인 200ms로 잡았습니다. */
+  animation: dropdown-commit-a 200ms ease-out;
+}
+@keyframes dropdown-commit-c {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* reduced-motion 전용 대체 키프레임 — transform 없이 opacity만. */
+@keyframes dropdown-commit-c-reduced {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes dropdown-commit-a {
+  from { color: var(--accent); }
+  to { color: inherit; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   :where(.app-select-menu) button { transition: none; }
   :where(.app-select-menu) button:is(:hover, :focus-visible):not(:disabled) { transform: none; }
+  /* PRINCIPLES §12: 이동·확대는 없애되 피드백 자체는 남깁니다. C는 이동(translateY)이
+   * 있으므로 opacity만 남긴 대체 키프레임으로 바꿉니다. A는 색 변화라 전정기관 자극이
+   * 아니므로(§12는 움직임·확대·시차 대상이지 색은 아닙니다) 그대로 둡니다 — 그래서 이
+   * 블록에 dropdown-commit-a용 규칙이 없습니다. 이 규칙이 위 base 규칙보다 소스 순서상
+   * 뒤에 있어야(같은 파일 안에서 나중에) 이깁니다 — animation-name만 다시 선언해도
+   * animation-duration·timing-function은 위 shorthand에서 이미 캐스케이드된 값이
+   * 유지됩니다(둘 다 같은 선택자, 같은 특이도이므로 소스 순서가 승부를 가릅니다). */
+  html[data-commit-feedback="c"] .dropdown-value-commit { animation-name: dropdown-commit-c-reduced; }
 }
