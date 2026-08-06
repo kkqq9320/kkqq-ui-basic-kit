@@ -705,8 +705,29 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
-    const reopenedYear = screen.getByRole("group", { name: "연도 2031" });
+    // 정확한 이름("연도 2031")으로 찾으면, 확정이 아예 안 됐을 때(연도가 여전히 2026일 때)
+    // getByRole이 "못 찾음"으로 던져 버려 아래 .selected 단언까지 못 가고 죽는다 — 그러면
+    // 뮤테이션이 이 줄이 아니라 쿼리에서 죽어, 이 단언 자체는 실패해 본 적이 없는 게 된다.
+    // 느슨한 정규식으로 찾아, 실패가 항상 .selected 텍스트 비교에서 나게 한다.
+    const reopenedYear = screen.getByRole("group", { name: /^연도/ });
     expect(reopenedYear.querySelector(".date-wheel-values .selected")?.textContent).toBe("2031");
+  });
+
+  // 완료 버튼이 이제 flushTyping을 거치므로, 완료 테스트만으로는 포커스 이펙트의
+  // `!open` 분기(:282)가 버퍼를 비우는지 더 이상 증명하지 못한다 — 완료 경로는
+  // commitAndClose 자신이 이미 버퍼를 비운다. 바깥 클릭·뒤로가기는 flushTyping을
+  // 전혀 거치지 않는 유일한 닫힘 경로라 :282의 안전망이 실제로 켜지는지는 이걸로만
+  // 확인할 수 있다.
+  it("바깥을 클릭해 닫으면 남아 있던 버퍼가 사라진다", async () => {
+    const { trigger } = await openAndType("2026-07-12", ["3", "1"]);
+    fireEvent.pointerDown(document.body);   // 팝오버 밖에서 시작한 포인터 — closeOutside가 닫는다
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
+
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    const reopenedYear = screen.getByRole("group", { name: /^연도/ });
+    expect(reopenedYear.querySelector(".date-wheel-values .selected")?.textContent).toBe("2026");
   });
 
   it("포인터로 컬럼을 누르면 버퍼를 버린다", async () => {
