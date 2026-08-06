@@ -127,10 +127,15 @@ describe("DateWheelPicker", () => {
 
   it("accepts a partial label override and keeps Korean defaults for the rest", () => {
     render(<DateWheelPicker ariaLabel="날짜" value="" onChange={() => undefined} labels={{ placeholder: "미정" }} />);
-    expect(screen.getByRole("button", { name: "날짜" }).textContent).toBe("미정");
+    const trigger = screen.getByRole("button", { name: "날짜" });
+    expect(trigger.textContent).toBe("미정");
     // 트리거 안의 달력 아이콘은 장식이다 — 누를 수 있는 요소가 아니고 이름도 없다.
     expect(screen.queryByRole("button", { name: /오늘로 설정/ })).toBeNull();
     expect(screen.getAllByRole("button")).toHaveLength(1);   // 트리거 하나뿐
+    // 아이콘은 트리거 버튼 안에 있어야 한다 — 클릭 타깃이 하나, 죽은 영역이 없다.
+    const icon = trigger.querySelector(".date-wheel-trigger-icon");
+    expect(icon).not.toBeNull();
+    expect(icon?.getAttribute("aria-hidden")).toBe("true");
   });
 
   it("완료 버튼으로 닫으면 트리거로 포커스를 되돌리되 스크롤 위치는 건드리지 않는다 (preventScroll)", async () => {
