@@ -132,7 +132,7 @@ describe("포커스 링은 토큰 하나가 정한다", () => {
     const bare = (all.match(/[^{}]*:focus-visible[^{]*\{\s*outline:\s*none;\s*\}/g) ?? [])
       .map((rule) => rule.slice(rule.lastIndexOf("*/") + 2).trim());
     expect(bare).toEqual([
-      ".date-wheel-trigger:focus-visible, .date-wheel-today:focus-visible { outline: none; }",
+      ".date-wheel-trigger:focus-visible { outline: none; }",
     ]);
     // 그 예외가 성립하려면 부모가 실제로 링을 그려야 한다.
     expect(datePickerCssSource).toMatch(/\.date-wheel-trigger-shell:has\([^{]*:focus-visible[^{]*\{[^}]*outline:\s*var\(--focus-ring\)/);

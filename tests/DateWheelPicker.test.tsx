@@ -19,15 +19,15 @@ function ControlledDateWheel({ initialValue }: { initialValue: string }) {
 }
 
 describe("DateWheelPicker", () => {
-  it("sets today directly when the calendar icon is clicked", () => {
+  it("팝오버의 오늘 버튼이 시간대 기준 오늘로 설정한다", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 6, 12, 12));
     const onChange = vi.fn();
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-06-01" onChange={onChange} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "거래 날짜 오늘로 설정" }));
+    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    fireEvent.click(screen.getByRole("button", { name: "오늘" }));
     expect(onChange).toHaveBeenCalledWith("2026-07-12");
-    expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull();
   });
 
   it("moves the year, month, and day by one with the step buttons", () => {
@@ -105,7 +105,6 @@ describe("DateWheelPicker", () => {
       today: "Today",
       clear: "Clear",
       done: "Done",
-      setToday: "set to today",
       previous: "previous",
       next: "next",
       select: "picker",
@@ -116,7 +115,6 @@ describe("DateWheelPicker", () => {
 
     const trigger = screen.getByRole("button", { name: "Date" });
     expect(trigger.textContent).toBe("Pick a date");
-    expect(screen.getByRole("button", { name: "Date set to today" })).toBeTruthy();
 
     fireEvent.click(trigger);
     expect(screen.getByRole("dialog", { name: "Date picker" })).toBeTruthy();
@@ -130,8 +128,9 @@ describe("DateWheelPicker", () => {
   it("accepts a partial label override and keeps Korean defaults for the rest", () => {
     render(<DateWheelPicker ariaLabel="날짜" value="" onChange={() => undefined} labels={{ placeholder: "미정" }} />);
     expect(screen.getByRole("button", { name: "날짜" }).textContent).toBe("미정");
-    // 나머지는 기본값 그대로
-    expect(screen.getByRole("button", { name: "날짜 오늘로 설정" })).toBeTruthy();
+    // 트리거 안의 달력 아이콘은 장식이다 — 누를 수 있는 요소가 아니고 이름도 없다.
+    expect(screen.queryByRole("button", { name: /오늘로 설정/ })).toBeNull();
+    expect(screen.getAllByRole("button")).toHaveLength(1);   // 트리거 하나뿐
   });
 
   it("완료 버튼으로 닫으면 트리거로 포커스를 되돌리되 스크롤 위치는 건드리지 않는다 (preventScroll)", async () => {
@@ -155,13 +154,16 @@ describe("DateWheelPicker", () => {
     // 2026-07-12T20:00Z → 서울은 이미 13일, UTC는 아직 12일
     vi.setSystemTime(new Date("2026-07-12T20:00:00Z"));
     const seoul = vi.fn();
-    const utc = vi.fn();
     render(<DateWheelPicker ariaLabel="서울" value="2026-01-01" onChange={seoul} />);
-    render(<DateWheelPicker ariaLabel="UTC" value="2026-01-01" onChange={utc} timeZone="UTC" />);
-
-    fireEvent.click(screen.getByRole("button", { name: "서울 오늘로 설정" }));
-    fireEvent.click(screen.getByRole("button", { name: "UTC 오늘로 설정" }));
+    fireEvent.click(screen.getByRole("button", { name: "서울" }));
+    fireEvent.click(screen.getByRole("button", { name: "오늘" }));
     expect(seoul).toHaveBeenCalledWith("2026-07-13");
+    cleanup();
+
+    const utc = vi.fn();
+    render(<DateWheelPicker ariaLabel="UTC" value="2026-01-01" onChange={utc} timeZone="UTC" />);
+    fireEvent.click(screen.getByRole("button", { name: "UTC" }));
+    fireEvent.click(screen.getByRole("button", { name: "오늘" }));
     expect(utc).toHaveBeenCalledWith("2026-07-12");
   });
 });
@@ -208,12 +210,13 @@ describe("DateWheelPicker year-month mode (fields)", () => {
     expect(screen.getByRole("button", { name: "월 이전" }).hasAttribute("disabled")).toBe(true);   // 7월 막힘
   });
 
-  it("sets today's month with day 01 from the calendar icon", () => {
+  it("팝오버의 오늘 버튼이 연·월 모드에서 일=01로 정규화한다", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-12T03:00:00Z"));   // 서울 2026-07-12 정오
     const onChange = vi.fn();
     render(<DateWheelPicker ariaLabel="예산 월" value="2026-05-01" fields={["year", "month"]} onChange={onChange} />);
-    fireEvent.click(screen.getByRole("button", { name: "예산 월 오늘로 설정" }));
+    fireEvent.click(screen.getByRole("button", { name: "예산 월" }));
+    fireEvent.click(screen.getByRole("button", { name: "오늘" }));
     expect(onChange).toHaveBeenCalledWith("2026-07-01");
   });
 
@@ -252,7 +255,7 @@ describe("DateWheelPicker year-month mode (fields)", () => {
       const suppressRule = datePickerCssSource.match(/\.date-wheel-trigger:focus-visible[^{]*\{[^}]*\}/);
       expect(suppressRule).not.toBeNull();
       expect(suppressRule![0]).toMatch(/outline:\s*none/);
-      expect(suppressRule![0]).toMatch(/\.date-wheel-today:focus-visible/);   // 안쪽 두 버튼 모두
+      // (`.date-wheel-today:focus-visible` 단언은 삭제 — 그 버튼이 없어졌다)
     });
 
     // :hover는 비활성 요소에도 매칭되므로, 빼지 않으면 흐려진 필드가 마우스만 올려도

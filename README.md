@@ -277,7 +277,7 @@ Next.js App Router처럼 마운트 지점을 직접 정할 수 없는 환경이�
 ```tsx
 labels={{
   placeholder: "Pick a date", hint: "Scroll or swipe",
-  today: "Today", clear: "Clear", done: "Done", setToday: "set to today",
+  today: "Today", clear: "Clear", done: "Done",
   previous: "previous", next: "next", select: "picker",
   weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
   units: { year: "Year", month: "Month", day: "Day" },

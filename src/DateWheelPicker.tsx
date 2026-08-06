@@ -29,8 +29,6 @@ export type DateWheelLabels = {
   today: string;
   clear: string;
   done: string;
-  /** 트리거 옆 달력 아이콘 버튼의 이름 */
-  setToday: string;
   previous: string;
   next: string;
   /** 팝오버 자체의 접근성 이름에 붙는 접미사 */
@@ -46,7 +44,6 @@ export const DEFAULT_DATE_WHEEL_LABELS: DateWheelLabels = {
   today: "오늘",
   clear: "비우기",
   done: "완료",
-  setToday: "오늘로 설정",
   previous: "이전",
   next: "다음",
   select: "선택",
@@ -332,7 +329,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   }
 
   return <div className={open ? "date-wheel-picker open" : "date-wheel-picker"} ref={rootRef}>
-    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)}><span className={value ? "" : "placeholder"}>{formatDateTrigger(value, labels.placeholder, fields)}</span></button><button type="button" className="date-wheel-today" aria-label={`${ariaLabel} ${labels.setToday}`} title={labels.setToday} disabled={disabled} onClick={() => { onChange(clampToRange(todayIn(timeZone))); setOpen(false); }}><svg viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm2-2v4m10-4v4M3 9h18" /></svg></button></div>
+    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)}><span className={value ? "" : "placeholder"}>{formatDateTrigger(value, labels.placeholder, fields)}</span><i className="date-wheel-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm2-2v4m10-4v4M3 9h18" /></svg></i></button></div>
     {open && position && createPortal(<div ref={popoverRef} className="date-wheel-popover dropdown-menu-surface" role="dialog" aria-modal="false" aria-label={`${ariaLabel} ${labels.select}`} style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
       <div className="date-wheel-heading"><strong>{ariaLabel}</strong><span>{labels.hint}</span></div>
       <div className="date-wheel-columns" data-fields={fields.length}>
