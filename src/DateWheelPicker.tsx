@@ -148,7 +148,8 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     day: { sequence: 0, direction: "next" },
   });
   const [activeUnit, setActiveUnit] = useState<DateWheelUnit>(fields[0] ?? "year");
-  // 지금 치고 있는 열과 그 자릿수. 열이 바뀌거나 확정되면 비웁니다.
+  // 지금 치고 있는 열과 그 자릿수. 확정되면 비웁니다. 열을 떠날 때(Tab·화살표·휠·행
+  // 클릭)의 비우기/확정 처리는 아직 배선하지 않았습니다 — Task 7이 담당합니다.
   const [typing, setTyping] = useState<{ unit: DateWheelUnit; digits: string } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -355,7 +356,13 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
 
     if (key === "Backspace") {
       event.preventDefault();
-      if (typing?.unit === unit && typing.digits) setTyping({ unit, digits: typing.digits.slice(0, -1) });
+      if (typing?.unit === unit && typing.digits) {
+        // 버퍼가 없다는 상태는 항상 null 하나로만 표현합니다 — 빈 문자열 버퍼를
+        // 살려두면 읽는 쪽마다 ""를 "없음"으로 따로 알아야 하고, 그 결과가 바로
+        // 아래 렌더의 `??`가 빈 문자열을 걸러내지 못해 행이 통째로 비어 버리는 결함입니다.
+        const digits = typing.digits.slice(0, -1);
+        setTyping(digits ? { unit, digits } : null);
+      }
       return;
     }
 
