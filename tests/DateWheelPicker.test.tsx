@@ -466,32 +466,18 @@ describe("DateWheelPicker 리뷰 Finding 1 — activeUnit 시드와 클램프", 
   });
 
   // columnRefs.current.get(activeUnit)이 undefined가 되는 경로 — fields가 열려 있는
-  // 동안 줄어들어 activeUnit이 가리키던 열이 통째로 사라진다. 클램프가 없으면 render의
-  // `activeUnit === unit` 비교가 어느 열과도 맞지 않아 active 클래스가 아무 데도 안
-  // 붙는다. 포커스 이펙트(§6.3)의 흔들리기 쉬운 jsdom 디테일에 기대지 않는, 순수
-  // 렌더 결과 하나로 클램프 자체를 고정한다.
-  it("fields가 열린 채로 줄어 activeUnit이 사라진 열을 가리키면 남은 첫 열이 active를 받는다", async () => {
-    render(<DateWheelFieldsShrink />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
-    trigger.focus();
-    fireEvent.keyDown(trigger, { key: "ArrowDown" });
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "연도 2026" })));
-    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
-    const month = await screen.findByRole("group", { name: "월 07" });
-    await waitFor(() => expect(document.activeElement).toBe(month));
-    fireEvent.keyDown(month, { key: "ArrowRight" });
-    const day = await screen.findByRole("group", { name: /^일 12/ });
-    await waitFor(() => expect(document.activeElement).toBe(day));   // activeUnit == "day"
-
-    fireEvent.click(screen.getByRole("button", { name: "일 열 제거" }));   // fields가 열린 채로 바뀐다
-
-    expect(screen.getByRole("group", { name: "연도 2026" }).classList.contains("active")).toBe(true);
-  });
-
-  // 위와 같은 시나리오지만 진짜 DOM 포커스로 본다 — jsdom은 포커스된 노드가 DOM에서
-  // 제거되면 포커스를 body로 떨어뜨린다(직접 확인했다). 클램프가 포커스 이펙트의
-  // 의존성까지 갱신하지 않으면(즉 이펙트가 다시 안 돌면) 포커스는 body에 머물고
-  // 방향키가 죽는다 — 리뷰가 지적한 "마우스 전용"이 이 상태다.
+  // 동안 줄어들어 activeUnit이 가리키던 열이 통째로 사라진다. jsdom은 포커스된
+  // 노드가 DOM에서 제거되면 포커스를 body로 떨어뜨린다(직접 확인했다). 클램프가
+  // 포커스 이펙트의 의존성까지 갱신하지 않으면(즉 이펙트가 다시 안 돌면) 포커스는
+  // body에 머물고 방향키가 죽는다 — 리뷰가 지적한 "마우스 전용"이 이 상태다.
+  //
+  // (렌더의 `resolvedActiveUnit === unit`(활성 클래스) 쪽도 처음엔 별도로 테스트를
+  // 뒀었다. 그런데 각 열의 `onFocus={() => setActiveUnit(unit)}`가 있어, 이 포커스
+  // 이펙트가 클램프된 열에 진짜 focus()를 걸면 그 focus 이벤트가 즉시 activeUnit
+  // 원본 상태까지 클램프값으로 되먹임한다 — 그래서 렌더 줄만 되돌리는 뮤테이션은
+  // act()가 다 정리된 뒤에는 관찰되지 않는다(직접 뮤테이션해 확인했다). 렌더 줄은
+  // 방어적으로 남겨 두되(원칙상 렌더가 fields 밖 상태를 믿으면 안 된다), 독립적으로
+  // 증명 가능한 채널은 이 포커스 이펙트 쪽뿐이라 테스트도 여기 하나만 둔다.)
   it("fields가 열린 채로 줄어 activeUnit이 사라진 열을 가리키면 포커스가 남은 첫 열로 돌아온다", async () => {
     render(<DateWheelFieldsShrink />);
     const trigger = screen.getByRole("button", { name: "거래 날짜" });
