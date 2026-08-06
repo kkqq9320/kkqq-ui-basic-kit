@@ -124,10 +124,10 @@ function Demo() {
   const [currency, setCurrency] = useState("krw");
   const [centered, setCentered] = useState("krw");
   const [long, setLong] = useState("item-0");
-  // 완료 피드백 A/B 비교용 임시 토글 — 소유자가 고르면 이것과 진 변형을 css/surfaces.css
-  // 에서 함께 지웁니다(2aecf7e가 Select 키보드 변형에 했던 것과 같은 패턴). 기본은
-  // 소유자가 선호한다고 밝힌 C(값이 올라오며 나타남)입니다.
-  const [commitFeedback, setCommitFeedback] = useState<"c" | "a">("c");
+  // 완료 피드백 A/B/D 비교용 임시 토글 — 소유자가 고르면 이것과 진 변형들을
+  // css/surfaces.css에서 함께 지웁니다(2aecf7e가 Select 키보드 변형에 했던 것과 같은
+  // 패턴). 기본은 소유자가 선호한다고 밝힌 C(값이 올라오며 나타남)입니다.
+  const [commitFeedback, setCommitFeedback] = useState<"c" | "a" | "d">("c");
   const [date, setDate] = useState("2026-07-23");
   const [optionalDate, setOptionalDate] = useState("");
   const [memo, setMemo] = useState("");
@@ -147,7 +147,7 @@ function Demo() {
 
   useEffect(() => { localStorage.setItem("sidebarCollapsed", String(collapsed)); }, [collapsed]);
 
-  // css/surfaces.css의 html[data-commit-feedback="c"|"a"] 규칙이 이 속성을 읽습니다.
+  // css/surfaces.css의 html[data-commit-feedback="c"|"a"|"d"] 규칙이 이 속성을 읽습니다.
   useEffect(() => { document.documentElement.dataset.commitFeedback = commitFeedback; }, [commitFeedback]);
 
   const navItem = (id: string, label: string, icon: keyof typeof ICONS, badge?: number) => ({
@@ -209,13 +209,14 @@ function Demo() {
       {tab === "controls" && <>
         {historyProbeEnabled() && <HistoryLogPanel />}
         <SectionHeading title="컨트롤" description="입력·드롭다운·날짜는 41px, 표준 액션은 38px, 조밀한 액션은 32px입니다. 같은 문맥의 버튼은 반드시 같은 높이를 씁니다." />
-        {/* 완료 피드백 A/B 비교용 임시 패널. 드롭다운과 날짜 피커 둘 다에 적용되므로 두
+        {/* 완료 피드백 A/B/D 비교용 임시 패널. 드롭다운과 날짜 피커 둘 다에 적용되므로 두
             Panel보다 위에 한 번만 둡니다. 소유자가 고르면 이 블록 전체와 css/surfaces.css의
-            진 변형 규칙을 함께 지웁니다. */}
+            진 변형 규칙들을 함께 지웁니다. */}
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-          <strong style={{ fontSize: 12 }}>완료 피드백 (임시 A/B)</strong>
+          <strong style={{ fontSize: 12 }}>완료 피드백 (임시 A/B/D)</strong>
           <button type="button" onClick={() => setCommitFeedback("c")} aria-pressed={commitFeedback === "c"}>C: 값이 올라오며 나타남</button>
           <button type="button" onClick={() => setCommitFeedback("a")} aria-pressed={commitFeedback === "a"}>A: 강조색으로 반짝</button>
+          <button type="button" onClick={() => setCommitFeedback("d")} aria-pressed={commitFeedback === "d"}>D: 둘 다 (한 타임라인)</button>
           <span style={{ fontSize: 11, color: "var(--muted)" }}>지금: {commitFeedback.toUpperCase()} — 드롭다운을 고르거나 날짜에서 완료를 눌러 확인하세요</span>
         </div>
         <Panel title="드롭다운" hint="SELECT">
