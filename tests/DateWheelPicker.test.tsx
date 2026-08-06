@@ -581,3 +581,92 @@ describe("DateWheelPicker 타이핑", () => {
     expect(year.querySelector(".date-wheel-values .selected")?.textContent).toBe("20");
   });
 });
+
+describe("DateWheelPicker 버퍼 확정과 폐기", () => {
+  async function openAndType(initialValue: string, keys: string[]) {
+    render(<ControlledDateWheel initialValue={initialValue} />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    const year = screen.getByRole("group", { name: /^연도/ });
+    for (const key of keys) fireEvent.keyDown(year, { key });
+    return { trigger, year };
+  }
+
+  it("연도 두 자리만 치고 →를 누르면 2000년대로 확정된다", async () => {
+    const { trigger, year } = await openAndType("2026-07-12", ["3", "1"]);
+    fireEvent.keyDown(year, { key: "ArrowRight" });
+    await waitFor(() => expect(trigger.textContent).toBe("2031. 07. 12."));
+  });
+
+  // 원래 한 테스트였다 — "숫자가 확정된다"(값 계산)와 "팝오버가 닫힌다"(Enter의 새
+  // 분기)는 서로 다른 결함이다. expect()는 첫 실패에서 던지므로 함께 두면 뒤쪽
+  // 결함의 킬력을 증명할 수 없다. 각자 분리한다.
+  //
+  // 초기값을 2026이 아니라 2020으로 둔다 — "26"을 쳤을 때 flushBuffer가 2000년대로
+  // 읽어 2026이 되는 것이 이 테스트의 요점이다. 초기값이 이미 2026이면 flushTyping
+  // 호출을 통째로 지워도(버퍼를 무시해도) 우연히 같은 값이 나와 이 assert가 죽지 않는다.
+  it("Enter로 완료하면 치던 숫자가 확정된다", async () => {
+    const { trigger, year } = await openAndType("2020-07-12", ["2", "6"]);
+    fireEvent.keyDown(year, { key: "Enter" });
+    await waitFor(() => expect(trigger.textContent).toBe("2026. 07. 12."));
+  });
+
+  it("Enter를 누르면 팝오버가 닫힌다", async () => {
+    const { year } = await openAndType("2020-07-12", ["2", "6"]);
+    fireEvent.keyDown(year, { key: "Enter" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
+  });
+
+  it("Escape는 치던 숫자를 버리고 값을 그대로 둔다", async () => {
+    // Escape의 뜻은 "값을 바꾸지 않고 닫기"다. 치다 만 숫자를 확정하면 그 뜻과 어긋난다.
+    const { trigger, year } = await openAndType("2026-07-12", ["3", "1"]);
+    fireEvent.keyDown(year, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
+    expect(trigger.textContent).toBe("2026. 07. 12.");
+  });
+
+  it("↑는 버퍼를 확정한 뒤 그 값에서 한 칸 움직인다", async () => {
+    // 이 컴포넌트에서 ArrowUp은 -1이다(handleColumnKey의 ArrowUp/ArrowDown 분기).
+    // 버퍼를 무시하고 옛 값에서 움직이면 2025가 되므로 둘이 확실히 갈린다.
+    const { trigger, year } = await openAndType("2026-07-12", ["3", "1"]);
+    fireEvent.keyDown(year, { key: "ArrowUp" });
+    await waitFor(() => expect(trigger.textContent).toBe("2030. 07. 12."));   // 2031로 확정한 뒤 -1
+  });
+
+  it("월의 0 단독은 확정할 수 없으므로 버린다", async () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
+    const month = await screen.findByRole("group", { name: "월 07" });
+    fireEvent.keyDown(month, { key: "0" });
+    fireEvent.keyDown(month, { key: "ArrowRight" });
+    expect(trigger.textContent).toBe("2026. 07. 12.");
+  });
+
+  // 리뷰에서 지적된 결함 — 열을 안 떠나고 팝오버 자체를 닫아도(완료 버튼, 바깥
+  // 클릭 등) 버퍼가 다음 열림까지 살아남았다. 닫힘은 "열을 떠난다"의 상위 집합이므로
+  // 포커스 이펙트의 !open 분기에서 버퍼를 비워야 한다. 완료 버튼은 flushTyping을
+  // 부르지 않으므로 이 경로는 그 !open 분기가 아니면 잡히지 않는다.
+  it("팝오버를 닫았다 다시 열면 남아 있던 버퍼가 사라진다", async () => {
+    const { trigger } = await openAndType("2026-07-12", ["3", "1"]);
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
+
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    const reopenedYear = screen.getByRole("group", { name: "연도 2026" });
+    expect(reopenedYear.querySelector(".date-wheel-values .selected")?.textContent).toBe("2026");
+  });
+
+  it("포인터로 컬럼을 누르면 버퍼를 버린다", async () => {
+    const { year } = await openAndType("2026-07-12", ["3"]);
+    fireEvent.pointerDown(year, { pointerId: 1, clientY: 80, buttons: 1 });
+    expect(year.querySelector(".date-wheel-values .selected")?.textContent).toBe("2026");
+  });
+});

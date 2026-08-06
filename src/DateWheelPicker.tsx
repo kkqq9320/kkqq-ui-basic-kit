@@ -13,7 +13,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type WheelEvent as ReactWheelEvent } from "react";
 import { createPortal } from "react-dom";
 
-import { typeDigit, withUnitValue } from "./dateWheelTyping";
+import { flushBuffer, typeDigit, withUnitValue } from "./dateWheelTyping";
 import { useBackToClose, useEscapeToClose } from "./hooks";
 import { dropdownViewportSpace, isPrimaryButton } from "./positioning";
 
@@ -140,7 +140,10 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   const labels = { ...DEFAULT_DATE_WHEEL_LABELS, ...labelOverrides, units: { ...DEFAULT_DATE_WHEEL_LABELS.units, ...labelOverrides?.units } };
   const [open, setOpen] = useState(false);
   // 겹쳐 있으면 가장 안쪽만 닫힙니다 — 다이얼로그 안에서 열렸을 때 다이얼로그까지 닫으면 안 됩니다.
-  useEscapeToClose(open, () => { setOpen(false); triggerRef.current?.focus({ preventScroll: true }); });
+  // Escape는 이 파일 전체에서 "값을 바꾸지 않고 닫기"를 뜻합니다 — flushTyping을
+  // 부르지 않고 버퍼만 버립니다. 다른 모든 떠나는 경로(Tab·화살표·Enter)와의
+  // 유일한 예외입니다.
+  useEscapeToClose(open, () => { setTyping(null); setOpen(false); triggerRef.current?.focus({ preventScroll: true }); });
   const [position, setPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const [columnMotion, setColumnMotion] = useState<Record<DateWheelUnit, DateWheelMotion>>({
     year: { sequence: 0, direction: "next" },
@@ -263,7 +266,13 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 포커스 스크롤은 조상 스크롤 컨테이너까지 움직입니다.
    */
   useLayoutEffect(() => {
-    if (!open) { focusedColumnRef.current = null; return; }
+    // 완료 버튼·바깥 클릭처럼 열을 거치지 않고 팝오버 자체가 닫히는 경로도 있습니다.
+    // 닫힘은 "열을 떠난다"의 상위 집합이므로 여기서도 버퍼를 비워, 다음에 열었을 때
+    // 지난 버퍼가 남아 있지 않게 합니다. `typing`이 이미 null이면 React가 같은 값의
+    // setState를 걸러내 리렌더를 건너뛰므로(bail-out) 무한 렌더로 이어지지 않습니다 —
+    // 이 이펙트의 의존성 배열에도 `typing`은 들어 있지 않아, typing을 바꿔도 이
+    // 이펙트가 다시 실행되지는 않습니다.
+    if (!open) { focusedColumnRef.current = null; setTyping(null); return; }
     if (focusedColumnRef.current === activeUnit) return;
     const column = columnRefs.current.get(activeUnit);
     if (!column) return;   // 좌표가 아직 없어 마운트 전 — 정해지면 다시 온다
@@ -312,6 +321,26 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   function commitTyped(unit: DateWheelUnit, amount: number) {
     const next = clampToRange(withUnitValue(baseValue, unit, amount));
     onChange(next);
+    return next;
+  }
+
+  /**
+   * 열을 떠날 때 버퍼를 해석해 확정합니다. 확정할 수 없으면 조용히 버립니다.
+   *
+   * 반환값(방금 확정한 새 값)을 호출부가 받아 써야 하는 경우가 있습니다 —
+   * ArrowUp/ArrowDown처럼 확정 뒤 그 값에서 한 칸 더 움직이는 경로가 그렇습니다.
+   * `commitTyped`의 `onChange`는 `baseValue`(이 렌더에서 고정된 값 prop)로 계산한
+   * 결과를 넘길 뿐, 그 자리에서 prop을 갱신하지 않습니다. 뒤이어 또 `baseValue`를
+   * 읽는 두 번째 `onChange`를 부르면(예: 예전 `applyShift`) 나중 호출이 그대로
+   * 값을 덮어써 방금 확정한 값이 사라집니다 — moveSwipe/finishSwipe가 이미
+   * `commitShift`에 출발 값을 명시로 넘겨 이 문제를 피하는 것과 같은 이유입니다.
+   */
+  function flushTyping(unit: DateWheelUnit) {
+    if (typing?.unit !== unit || !typing.digits) return null;
+    const amount = flushBuffer(unit, typing.digits);
+    setTyping(null);
+    if (amount === null) return null;
+    return commitTyped(unit, amount);
   }
 
   /* 여기서 event.preventDefault()를 부르지 마세요.
@@ -366,10 +395,21 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       return;
     }
 
+    if (key === "Enter") {
+      // 완료 버튼과 같은 동작 — 치던 숫자를 먼저 확정한 뒤 닫는다.
+      event.preventDefault();
+      flushTyping(unit);
+      if (!value) onChange(baseValue);
+      setOpen(false);
+      requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
+      return;
+    }
+
     if (key === "Tab") {
       // 떠나는 키. 기본 동작(다음 요소로)은 막지 않는다 — 포커스를 트리거로 옮겨
       // 두면 브라우저가 트리거 기준으로 다음 tabbable을 계산한다. keydown은 기본
       // Tab 동작보다 먼저 실행되므로 순서가 보장된다.
+      flushTyping(unit);
       if (moveColumn(unit, event.shiftKey ? -1 : 1)) { event.preventDefault(); return; }
       triggerRef.current?.focus({ preventScroll: true });
       setOpen(false);
@@ -379,6 +419,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     // 방향키는 안에서만 움직인다 — 끝에서는 제자리이고 팝오버를 닫지 않는다.
     if (key === "ArrowRight" || key === "ArrowLeft") {
       event.preventDefault();
+      flushTyping(unit);
       moveColumn(unit, key === "ArrowRight" ? 1 : -1);
       return;
     }
@@ -386,7 +427,12 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     if (key !== "ArrowUp" && key !== "ArrowDown") return;
     event.preventDefault();
     setActiveUnit(unit);
-    applyShift(unit, key === "ArrowDown" ? 1 : -1);
+    // 버퍼가 있으면 먼저 확정하고, 그 값에서 이어서 한 칸 움직인다. applyShift는
+    // baseValue(이 렌더에서 고정된 옛 값)를 읽으므로 여기서 그대로 쓰면 방금
+    // commitTyped가 넘긴 값을 뒤이은 onChange가 덮어써 버퍼 확정이 무효가 된다 —
+    // flushTyping의 주석 참고.
+    const flushed = flushTyping(unit);
+    commitShift(flushed ?? baseValue, unit, key === "ArrowDown" ? 1 : -1);
   }
 
   /** 닫혀 있을 때 트리거에서 받는 키. 여는 것 하나만 담당합니다. */
@@ -466,7 +512,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     {open && position && createPortal(<div ref={popoverRef} className="date-wheel-popover dropdown-menu-surface" role="dialog" aria-modal="false" aria-label={`${ariaLabel} ${labels.select}`} style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
       <div className="date-wheel-heading"><strong>{ariaLabel}</strong><span>{labels.hint}</span></div>
       <div className="date-wheel-columns" data-fields={fields.length}>
-        {fields.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${activeUnit === unit ? " active" : ""}${motion.sequence ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${dateWheelLabel(baseValue, unit, labels.weekdays)}`} role="group" tabIndex={0} ref={(node) => { if (node) columnRefs.current.set(unit, node); else columnRefs.current.delete(unit); }} onFocus={() => setActiveUnit(unit)} onKeyDown={(event) => handleColumnKey(event, unit)} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { if (!isPrimaryButton(event)) return; setActiveUnit(unit); event.currentTarget.focus({ preventScroll: true }); suppressColumnClickRef.current = false; swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue }; if (typeof event.currentTarget.setPointerCapture === "function") event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {fields.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${activeUnit === unit ? " active" : ""}${motion.sequence ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${dateWheelLabel(baseValue, unit, labels.weekdays)}`} role="group" tabIndex={0} ref={(node) => { if (node) columnRefs.current.set(unit, node); else columnRefs.current.delete(unit); }} onFocus={() => setActiveUnit(unit)} onKeyDown={(event) => handleColumnKey(event, unit)} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); event.currentTarget.focus({ preventScroll: true }); suppressColumnClickRef.current = false; swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue }; if (typeof event.currentTarget.setPointerCapture === "function") event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
