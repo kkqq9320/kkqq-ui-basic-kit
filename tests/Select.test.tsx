@@ -891,4 +891,73 @@ describe("Select", () => {
     });
 
   });
+
+  // 오너가 A/B/D로 비교하던 완료 피드백(css/surfaces.css .dropdown-value-commit)이
+  // 실제 동작으로 착지했다. 계약은 PRINCIPLES.md §12 "완료(커밋) 피드백".
+  describe("완료 피드백(커밋 애니메이션)", () => {
+    it("옵션을 골라 값이 바뀌면 트리거 값에 커밋 클래스가 붙는다", () => {
+      render(<ControlledSelect initialValue="a" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      fireEvent.click(trigger);
+      fireEvent.click(screen.getByRole("option", { name: "둘째" }));
+
+      // key={commitPulse}가 커밋마다 트리거 안 span을 리마운트하므로 커밋 이후 새로
+      // 조회한다 — 커밋 전에 잡아 둔 참조는 떨어져 나간 옛 노드를 계속 가리킨다.
+      const span = trigger.querySelector("span");
+      expect(span?.classList.contains("dropdown-value-commit")).toBe(true);
+    });
+
+    // 리뷰 아이템 2 — 확정된 값이 이미 있던 값과 같으면(이미 선택된 옵션을 다시 고름)
+    // 실제로 바뀐 게 없으므로 신호를 켜지 않는다.
+    it("이미 선택된 옵션을 다시 골라도(값이 안 바뀌면) 커밋 클래스가 붙지 않는다", () => {
+      render(<ControlledSelect initialValue="a" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      fireEvent.click(trigger);
+      fireEvent.click(screen.getByRole("option", { name: "첫째" }));   // 이미 선택된 값(a)과 같다
+
+      const span = trigger.querySelector("span");
+      expect(span?.classList.contains("dropdown-value-commit")).toBe(false);
+    });
+
+    // "완료"가 아니라 훑는 동작(방향키로 활성 옵션만 옮김, 아직 고르지 않음)이다 —
+    // 매 방향키마다 반짝이면 신호가 아니라 소음이 된다(PRINCIPLES §12).
+    it("메뉴 안에서 방향키로 활성 옵션만 옮기면(고르지 않으면) 커밋 클래스가 붙지 않는다", () => {
+      render(<ControlledSelect initialValue="a" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "ArrowDown" });
+
+      const span = trigger.querySelector("span");
+      expect(span?.classList.contains("dropdown-value-commit")).toBe(false);
+    });
+  });
+
+  // CSS 쪽 계약은 Select·DateWheelPicker 공통(css/surfaces.css)이라 여기 한 번만 둔다 —
+  // 클래스가 언제 붙는지는 각 컴포넌트 테스트가, 붙었을 때 무엇이 재생되는지는 여기가 맡는다.
+  describe("완료 피드백 CSS 계약 — css/surfaces.css (Select·DateWheelPicker 공통)", () => {
+    it("실험용 data-commit-feedback 속성이 남아 있지 않다", () => {
+      expect(surfacesCssSource.length).toBeGreaterThan(500);
+      expect(surfacesCssSource).not.toMatch(/data-commit-feedback/);
+    });
+
+    it(".dropdown-value-commit 기본 규칙이 변형 게이트 없이 무조건 걸린다", () => {
+      const baseRule = surfacesCssSource.match(/\.dropdown-value-commit\s*\{[^}]*\}/);
+      expect(baseRule).not.toBeNull();
+      expect(baseRule![0]).toMatch(/animation:\s*dropdown-commit\s+230ms\s+cubic-bezier\(\.18,\s*1\.15,\s*\.35,\s*1\)/);
+    });
+
+    it("reduced-motion 대체 키프레임은 opacity·color는 남기고 transform은 뺀다", () => {
+      const reducedKeyframes = surfacesCssSource.match(/@keyframes dropdown-commit-reduced\s*\{[\s\S]*?\n\}/);
+      expect(reducedKeyframes).not.toBeNull();
+      expect(reducedKeyframes![0]).toMatch(/opacity:\s*0/);
+      expect(reducedKeyframes![0]).toMatch(/color:\s*var\(--accent\)/);
+      expect(reducedKeyframes![0]).not.toMatch(/transform/);
+    });
+
+    it("reduced-motion 블록이 animation-name만 바꿔 낀다", () => {
+      const reducedMotionBlock = surfacesCssSource.match(/@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\n\}/);
+      expect(reducedMotionBlock).not.toBeNull();
+      expect(reducedMotionBlock![0]).toMatch(/\.dropdown-value-commit\s*\{\s*animation-name:\s*dropdown-commit-reduced;\s*\}/);
+    });
+  });
 });

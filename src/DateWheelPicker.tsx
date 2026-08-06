@@ -169,11 +169,20 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 완료 버튼을 뺀 나머지 닫힘 경로(바깥 클릭·뒤로가기)는 커밋하지 않고 그냥
   // 버립니다. 그 안전망은 아래 포커스 이펙트의 `!open` 분기에 있습니다.)
   const [typing, setTyping] = useState<{ unit: DateWheelUnit; digits: string } | null>(null);
-  // 완료 피드백(임시 A/B, css/surfaces.css) 커밋 카운터 — commitAndClose에서만 올립니다.
-  // 0에서 시작해 첫 마운트는 애니메이션이 돌지 않고, 화살표·휠·타이핑 자체(자릿수가
-  // 차서 즉시 확정되는 경우 포함)·오늘·비우기 같은 다른 값 변경 경로는 건드리지
-  // 않습니다 — 그 경로들은 "완료"가 아니라 매 조작마다 반짝이면 신호가 아니라 소음이 됩니다.
+  // 완료 피드백(css/surfaces.css .dropdown-value-commit) 커밋 카운터 — commitAndClose에서만,
+  // 그것도 확정된 값이 진입 시점 value와 실제로 다를 때만 올립니다. 0에서 시작해 첫
+  // 마운트는 애니메이션이 돌지 않고, 화살표·휠·타이핑 자체(자릿수가 차서 즉시 확정되는
+  // 경우 포함)·오늘·비우기 같은 다른 값 변경 경로는 건드리지 않습니다 — 그 경로들은
+  // "완료"가 아니라 매 조작마다 반짝이면 신호가 아니라 소음이 됩니다. 계약은 PRINCIPLES.md §12.
   const [commitPulse, setCommitPulse] = useState(0);
+  // 이번에 팝오버를 연 뒤 비우기·Delete로 값을 지운 적이 있는가. commitAndClose의
+  // "비어 있으면 baseValue로 채운다" 되살림 분기(아래)를 막는 유일한 용도입니다 — 이게
+  // 없으면 "값 없이 처음 연 픽커"와 "방금 막 지운 픽커"를 구분할 수 없어, 완료가 방금
+  // 지운 값을 도로 살려냅니다(오너가 실측으로 재현: 오늘 → 비우기 → 완료). 여는 순간
+  // 리셋해야 합니다 — 아래 리셋 이펙트 참고. 지우지 않고 닫았다가 다시 열어 아무것도
+  // 안 건드리고 완료를 누르면, 원래 의도(휠에 보이는 날짜를 확정)대로 다시 동작해야
+  // 하기 때문입니다.
+  const clearedRef = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -201,6 +210,15 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
 
   // 뒤로가기로 닫습니다. 포커스를 팝오버 안으로 옮기므로 회수도 함께 합니다.
   useBackToClose(open, closeAndReclaimFocus);
+
+  // 팝오버를 열 때마다 "지운 적 있음" 기억을 리셋합니다 — clearedRef 선언부 참고.
+  // 이 기억은 "한 번 열림~닫힘" 세션에만 유효해야 합니다. 별도 이펙트로 두는 이유:
+  // 아래쪽 포커스 이펙트는 resolvedActiveUnit·position이 바뀔 때마다도 다시 돌아
+  // 열려 있는 동안 여러 번 실행될 수 있으므로, 거기 얹으면 세션 중간에 리셋될
+  // 위험이 있습니다. 이 이펙트는 open 하나에만 의존해 열리는 순간 한 번만 돕니다.
+  useEffect(() => {
+    if (open) clearedRef.current = false;
+  }, [open]);
 
   // 남은 최소 단위로만 비교합니다(연·월 픽커면 "월" 단위). 함수 선언이라 baseValue보다
   // 아래에 있어도 호출 시점엔 keyLen이 이미 초기화돼 있습니다.
@@ -381,19 +399,34 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 이미 들고 있으므로 인자로 받지 않고 상태에서 직접 읽습니다 — 버퍼가 없으면
    * 아무것도 확정하지 않습니다.
    *
-   * `flushed`가 null이면(버퍼가 없었거나 해석할 수 없었으면) `value`가 비어 있을
-   * 때만 baseValue로 채웁니다. flushed가 있으면 그 onChange가 이미 값을
-   * 확정했으므로 여기서 또 baseValue로 덮어쓰면 안 됩니다 — `value` prop은 이
-   * 렌더의 클로저에 갇혀 있어(리렌더 전) 방금 확정한 값을 반영하지 못한 채 여전히
-   * "비어 있다"고 잘못 읽어 되돌려버립니다. ArrowUp/ArrowDown에서 flushTyping이
-   * 이미 겪은 것과 같은 결함입니다.
+   * `flushed`가 null이면(버퍼가 없었거나 해석할 수 없었으면) `value`가 비어 있고
+   * **이번에 연 뒤 비우기·Delete로 지운 적이 없을 때만** baseValue로 채웁니다. 지운
+   * 적이 있으면(clearedRef.current) 이 분기를 건너뛰어, 완료가 방금 지운 값을 되살리지
+   * 않습니다 — clearedRef 선언부에 이 결함(오너가 실측: 오늘 → 비우기 → 완료)의 배경이
+   * 있습니다. flushed가 있으면 그 onChange가 이미 값을 확정했으므로 여기서 또
+   * baseValue로 덮어쓰면 안 됩니다 — `value` prop은 이 렌더의 클로저에 갇혀 있어(리렌더
+   * 전) 방금 확정한 값을 반영하지 못한 채 여전히 "비어 있다"고 잘못 읽어 되돌려버립니다.
+   * ArrowUp/ArrowDown에서 flushTyping이 이미 겪은 것과 같은 결함입니다.
    */
   function commitAndClose() {
     const flushed = typing ? flushTyping(typing.unit) : null;
-    if (flushed === null && !value) onChange(baseValue);
+    // 이 함수가 최종적으로 확정하는 값. 아래에서 실제로 바뀐 값이 있으면만 갱신합니다 —
+    // 아무것도 안 바뀌면(예: 이미 오늘인 값 그대로 완료) committed는 value와 같은
+    // 채로 남아 커밋 신호가 켜지지 않습니다.
+    let committed = value;
+    if (flushed !== null) {
+      committed = flushed;
+    } else if (!value && !clearedRef.current) {
+      onChange(baseValue);
+      committed = baseValue;
+    }
     // Tab으로 떠나거나 바깥을 클릭해도 값은 남지만, 그건 "완료"를 누른 게 아니므로
-    // 여기서만 올립니다 — Enter와 완료 버튼만 이 함수를 거칩니다.
-    setCommitPulse((n) => n + 1);
+    // 여기서만 올립니다 — Enter와 완료 버튼만 이 함수를 거칩니다. 그리고 확정된 값이
+    // 진입 시점 value와 실제로 다를 때만 올립니다 — 이미 있던 값 그대로 완료하면
+    // (예: 오늘 눌러 이미 오늘인 값을 다시 완료) 아무 신호도 없는 게 의도입니다. 이
+    // 경로로 "오늘이 이미 선택돼 있으면 오늘을 눌러도 아무 반응이 없다"는 결과가
+    // 나오는 것도 같은 이유이고, 오너에게 확인받은 의도된 동작입니다 — 보완하지 않습니다.
+    if (committed !== value) setCommitPulse((n) => n + 1);
     setOpen(false);
     requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
   }
@@ -443,6 +476,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     if (event.key === "Delete" && allowClear) {
       event.preventDefault();
       setTyping(null);
+      clearedRef.current = true;   // commitAndClose가 이 값을 baseValue로 되살리지 않도록 기억
       onChange("");
       return true;
     }
@@ -626,7 +660,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
           이 버튼들은 그 단축키의 동등물이므로(title에 단축키를 적어 뒀다), 버퍼를 안 지우면
           같은 뜻의 단축키와 버튼이 다르게 굴며, 남은 버퍼가 이 버튼이 방금 설정한 값을
           나중에(예: 다음 Tab) 도로 덮어쓸 수 있다. */}
-      <div className="date-wheel-actions"><button type="button" tabIndex={-1} title={`${labels.today} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" onClick={() => { setTyping(null); onChange(clampToRange(todayIn(timeZone))); }}>{labels.today}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" onClick={() => { setTyping(null); onChange(""); }}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" aria-keyshortcuts="Enter" onClick={commitAndClose}>{labels.done}</button></div>
+      <div className="date-wheel-actions"><button type="button" tabIndex={-1} title={`${labels.today} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" onClick={() => { setTyping(null); onChange(clampToRange(todayIn(timeZone))); }}>{labels.today}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" onClick={() => { setTyping(null); clearedRef.current = true; onChange(""); }}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" aria-keyshortcuts="Enter" onClick={commitAndClose}>{labels.done}</button></div>
     </div>, document.body)}
   </div>;
 }

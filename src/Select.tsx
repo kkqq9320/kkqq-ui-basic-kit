@@ -116,9 +116,11 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
   // 메뉴 안에서 시작된(아직 떼지 않은) 포인터 제스처 동안, 그 제스처가 만드는 체이닝된
   // 조상 스크롤이 트리거를 움직여도 닫기 판정에서 제외합니다 — 아래 closeIfAnchorMoved 참고.
   const pointerDownInsideMenuRef = useRef(false);
-  // 완료 피드백(임시 A/B, css/surfaces.css) 커밋 카운터 — choose()에서만 올립니다.
-  // 0에서 시작해 첫 마운트는 애니메이션이 돌지 않고, 메뉴를 열기만 하거나 방향키로
-  // 훑는 동작은 건드리지 않습니다 — DateWheelPicker.tsx의 commitPulse와 같은 이유입니다.
+  // 완료 피드백(css/surfaces.css .dropdown-value-commit) 커밋 카운터 — choose()에서만,
+  // 그것도 고른 값이 현재 value와 실제로 다를 때만 올립니다(이미 선택된 옵션을 다시
+  // 골라도 아무 신호가 없어야 합니다). 0에서 시작해 첫 마운트는 애니메이션이 돌지
+  // 않고, 메뉴를 열기만 하거나 방향키로 훑는 동작은 건드리지 않습니다 —
+  // DateWheelPicker.tsx의 commitPulse와 같은 이유입니다. 계약은 PRINCIPLES.md §12.
   const [commitPulse, setCommitPulse] = useState(0);
   const selected = options.find((option) => option.value === value);
   // 고를 수 있는 옵션이 하나도 없으면(전부 disabled이거나 목록이 비었으면) 이 컨트롤은
@@ -398,7 +400,10 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
     onChange(nextValue);
     setOpen(false);
     setActiveValue(null);
-    setCommitPulse((n) => n + 1);
+    // 고른 값이 이미 있던 값과 같으면(예: 열린 옵션을 다시 클릭) 실제로 바뀐 게
+    // 없으므로 커밋 신호를 켜지 않습니다 — 값 자체가 같은데 반짝이면 "뭔가 바뀌었다"는
+    // 신호가 거짓이 됩니다.
+    if (nextValue !== value) setCommitPulse((n) => n + 1);
     // 유령 click은 아래 rAF(포커스 복원)와 같은 프레임에서 나오는 것으로 보이므로,
     // 여기서 곧바로 풀면(같은 프레임) 아직 안 왔을 수 있다(실측 24ms). 한 프레임
     // 더 미뤄서 푼다 — 프레임 기준이라 느린 기기에서는 같이 늘어나 여유가 준다.

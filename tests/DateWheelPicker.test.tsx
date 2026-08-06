@@ -1048,3 +1048,124 @@ describe("DateWheelPicker 단축키", () => {
     expect(screen.getByRole("button", { name: "완료" }).getAttribute("aria-keyshortcuts")).toBe("Enter");
   });
 });
+
+// 오너가 A/B/D로 비교하던 완료 피드백(css/surfaces.css .dropdown-value-commit)이 실제
+// 동작으로 착지했다. 계약은 PRINCIPLES.md §12 "완료(커밋) 피드백". CSS 쪽 계약(재생
+// 내용·reduced-motion)은 tests/Select.test.tsx에 한 번만 있다 — 여기서는 "언제 클래스가
+// 붙는가"만 본다.
+describe("DateWheelPicker 완료 피드백(커밋 애니메이션)", () => {
+  // key={commitPulse}가 커밋마다 트리거 안 span을 리마운트하므로 매번 새로 조회한다 —
+  // 커밋 전에 잡아 둔 참조는 떨어져 나간 옛 노드를 계속 가리킨다.
+  function hasCommitClass(trigger: HTMLElement) {
+    return trigger.querySelector("span")?.classList.contains("dropdown-value-commit") ?? false;
+  }
+
+  it("타이핑한 값이 Enter로 확정되면(값이 바뀌면) 커밋 클래스가 붙는다", async () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const year = await screen.findByRole("group", { name: /^연도/ });
+    fireEvent.keyDown(year, { key: "3" });
+    fireEvent.keyDown(year, { key: "1" });
+    fireEvent.keyDown(year, { key: "Enter" });
+
+    await waitFor(() => expect(trigger.textContent).toBe("2031. 07. 12."));
+    expect(hasCommitClass(trigger)).toBe(true);
+  });
+
+  // 리뷰 아이템 2 — 확정된 값이 진입 시점 value와 같으면(아무것도 안 바꾸고 완료) 신호가 없다.
+  it("아무것도 바꾸지 않고 완료하면(값이 그대로면) 커밋 클래스가 붙지 않는다", () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+
+    expect(hasCommitClass(trigger)).toBe(false);
+  });
+
+  // "완료"가 아니라 훑는 동작이다 — 이 컨트롤은 화살표 한 번마다도 값을 커밋하므로
+  // (commitShift, commitAndClose가 아니다), 매번 반짝이면 신호가 아니라 소음이 된다(§12).
+  it("화살표로 값을 옮기면(완료를 누르지 않으면) 커밋 클래스가 붙지 않는다", async () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const year = await screen.findByRole("group", { name: /^연도/ });
+    fireEvent.keyDown(year, { key: "ArrowUp" });
+
+    expect(hasCommitClass(trigger)).toBe(false);
+  });
+
+  it("휠을 굴리면 커밋 클래스가 붙지 않는다", async () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const year = await screen.findByRole("group", { name: /^연도/ });
+    fireEvent.wheel(year, { deltaY: 100 });
+
+    expect(hasCommitClass(trigger)).toBe(false);
+  });
+});
+
+// 오너 실측(라이브 데모, allowClear 필드): 오늘 → 비우기 → 완료 순서로 누르면 트리거가
+// "2026. 08. 06." → "날짜 선택" → "2026. 08. 06."로, 지운 값이 완료에서 되살아났다.
+// 원인은 commitAndClose의 "비어 있으면 baseValue로 채운다" 폴백(:391 부근)이 "처음부터
+// 빈 값으로 열었다"와 "방금 지웠다"를 구분하지 못해서다 — main 브랜치에도 있던 결함
+// (git show main:src/DateWheelPicker.tsx의 같은 줄), 이 브랜치가 만든 회귀가 아니다.
+// 고친 방식은 보수적이다: 비우기는 그대로 팝오버를 닫지 않고, 대신 컴포넌트가 "이번에
+// 지웠다"를 기억해(clearedRef) 완료가 그 기억이 있으면 되살림 분기를 건너뛴다.
+describe("DateWheelPicker 비우기 뒤 완료가 지운 값을 되살리지 않는다", () => {
+  // 단언 하나만 둔다 — expect()는 첫 실패에서 던지므로, 오늘·비우기 단계에도 단언을
+  // 끼우면 가드를 제거하는 뮤테이션이 그 앞 줄에서 먼저 죽어 이 시퀀스가 실제로
+  // 증명하려는 마지막 단계("완료가 되살리지 않는다")를 못 증명한다 — 이 파일 :732-734가
+  // 이미 겪은 함정과 같다.
+  it("오늘 → 비우기 → 완료 순서로 눌러도(오너가 실측한 시퀀스) 지운 상태가 유지된다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-06T03:00:00Z"));   // 서울 기준 오늘 = 2026-08-06
+    render(<ControlledDateWheel initialValue="" allowClear />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "오늘" }));
+    fireEvent.click(screen.getByRole("button", { name: "비우기" }));
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+
+    expect(trigger.textContent).toBe("날짜 선택");
+  });
+
+  // 비우기 버튼과 나란한 두 번째 지우기 경로. 서로 다른 코드 줄(handleShortcut의 Delete
+  // 분기)이 같은 기억을 남기는지 별도로 증명한다 — 뮤테이션 표 참고.
+  it("Delete로 지운 경우도 완료가 값을 되살리지 않는다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-06T03:00:00Z"));
+    render(<ControlledDateWheel initialValue="" allowClear />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "오늘" }));
+    fireEvent.keyDown(screen.getByRole("group", { name: /^연도/ }), { key: "Delete" });
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+
+    expect(trigger.textContent).toBe("날짜 선택");
+  });
+
+  // "지운 기억"은 팝오버를 다시 열면 리셋돼야 한다 — 그래야 "값 없이 처음 연 픽커에서
+  // 완료를 누르면 휠에 보이는 날짜를 확정한다"는 폴백의 원래 의도가 살아남는다.
+  it("지우고 닫았다가 다시 열어 아무것도 안 건드리고 완료하면, 휠에 보이는 날짜를 다시 확정한다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-06T03:00:00Z"));
+    render(<ControlledDateWheel initialValue="" allowClear />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "비우기" }));
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));   // 닫힌다 — clearedRef가 true인 채
+
+    fireEvent.click(trigger);   // 다시 연다 — 리셋 이펙트가 clearedRef를 false로 되돌려야 한다
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));   // 아무것도 안 건드리고 바로 완료
+
+    expect(trigger.textContent).toBe("2026. 08. 06.");
+  });
+});
