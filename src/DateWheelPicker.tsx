@@ -249,11 +249,18 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // "컨트롤 안에서 옮겼다"를 구분하지 못하는 이벤트입니다. 찍기만 하고 버리지 않으면
   // 두 상태 모두에서 옳습니다(§6.4).
   //
-  // 의존성 배열에 value를 일부러 넣지 않습니다. 넣으면 value가 바뀔 때마다 이 이펙트가
-  // 다시 돌아 sessionStartValueRef가 "세션 시작 값"이 아니라 "방금 값"이 되어 버립니다 —
-  // 열려 있는 동안에는 화살표로 옮긴 뒤 완료해도 "안 바뀌었다"로 읽히고, 닫혀 있는
-  // 동안에는 Delete가 그 자리에서 clearedRef를 도로 false로 지워 위 결함이 그대로
-  // 돌아옵니다.
+  // 의존성 배열에 value를 일부러 넣지 않습니다. 넣으면 **닫혀 있는 동안** value가 바뀔
+  // 때마다 이 이펙트가 다시 돌고, Delete가 그 자리에서 clearedRef를 도로 false로 지워
+  // 위 결함이 그대로 돌아옵니다. 측정했습니다 — `[open, value]`로 바꾸면 "닫힌 채
+  // Delete" 테스트가 빨개집니다.
+  //
+  // **열려 있는 동안은 걱정할 것이 없습니다.** 가드가 `if (open) return;`이라 이펙트가
+  // 곧바로 빠져나가므로 세션 도중에 기준값이 덮어써질 수 없습니다. 이 자리에 한동안
+  // "열려 있는 동안 화살표로 옮긴 뒤 완료해도 안 바뀌었다고 읽힌다"가 적혀 있었는데,
+  // 그건 본문이 `if (open) { … }`이던 시절의 논거이고 가드를 뒤집은 순간 성립할 수 없게
+  // 됐습니다(측정: `[open, value]`에서도 화살표→완료 신호는 그대로 뜹니다). 성립할 수
+  // 없는 실패 모드를 근거로 남겨 두면 다음 사람이 반증하고 근거 전체를 못 믿게 되므로
+  // 지웠습니다.
   useEffect(() => {
     if (open) return;
     clearedRef.current = false;
@@ -677,13 +684,15 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
 
   return <div className={open ? "date-wheel-picker open" : "date-wheel-picker"} ref={rootRef}>
     {/* onFocus는 세션 기준값을 찍는 두 지점 중 나머지 하나입니다(다른 하나는 위의 닫힘
-        이펙트) — 설계 스펙 §6.4. React의 onFocus는 native focusin에 대응해 버블하므로
-        트리거 하나에만 붙이면 됩니다.
+        이펙트) — 설계 스펙 §6.4. React의 onFocus는 native focusin에 대응합니다.
 
-        **트리거 <button>에 붙어야 하고, 바깥 rootRef div에 붙이면 안 됩니다.** 팝오버는
-        포털이지만 React 트리에서는 그 div의 자식이라 합성 이벤트가 그리로 버블합니다 —
-        div에 붙이면 팝오버를 여는 순간 포커스 이펙트가 열에 준 focus가 곧바로 이 핸들러를
-        불러, "여는 순간에는 찍지 않는다"는 계약이 조용히 깨집니다. */}
+        **반드시 트리거 <button> 자신에 붙습니다. 바깥 rootRef div로 올리면 안 됩니다.**
+        focusin은 버블하고, 팝오버는 포털이지만 React 트리에서는 그 div의 자식이라 합성
+        이벤트가 그리로 올라갑니다 — div에 붙이면 팝오버를 여는 순간 포커스 이펙트가 열에
+        준 focus가 곧바로 이 핸들러를 불러 "여는 순간에는 찍지 않는다"가 조용히 깨집니다
+        (뮤테이션으로 실증: 핸들러를 div로 옮기면 "닫힌 채 Delete" 테스트가 빨개집니다).
+        버튼에 붙이면 버블이 문제가 되지 않습니다 — 버튼 자신이 포커스를 받고, 그 안의
+        <span>·<i>는 포커스를 받을 수 없기 때문입니다. */}
     <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onClick={() => {
       // 마우스로 열 때도 키보드 경로(handleTriggerKeyDown)와 같은 열로 시드합니다 —
       // Select.tsx:449의 마우스-키보드 일치 시딩과 같은 이유입니다. 닫혀 있을 때만

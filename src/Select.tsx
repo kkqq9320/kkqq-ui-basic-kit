@@ -128,6 +128,12 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
   // 한 번만 커밋하므로, 커밋 시점 value와 비교해도(이 컴포넌트 혼자였다면) 실제로는
   // 차이가 없습니다 — 그래도 두 컴포넌트가 "세션 시작 값과 비교한다"는 같은 규칙 하나로
   // 설명되게 하려고 여기도 세션 시작 값을 기준으로 씁니다.
+  //
+  // **공유하는 것은 그 규칙까지이고, 세션의 *시작* 정의는 이제 갈립니다.** 여기는 메뉴가
+  // 열린 순간이고, 날짜 피커는 트리거가 포커스를 얻은 순간과 팝오버가 닫힌 순간입니다
+  // (날짜 피커 설계 스펙 §6.4). 갈리는 이유는 하나입니다 — 닫힌 채로도 값이 바뀔 수 있는
+  // 쪽이 날짜 피커뿐입니다(Delete·Ctrl+;). Select는 트리거 포커스와 메뉴 열림이 사실상
+  // 같은 순간이라 옮길 이유가 없고, 스펙 §6.4도 Select는 그대로 두라고 명시합니다.
   const sessionStartValueRef = useRef(value);
   useEffect(() => {
     if (open) sessionStartValueRef.current = value;

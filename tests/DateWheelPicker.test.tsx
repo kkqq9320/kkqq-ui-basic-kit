@@ -1074,7 +1074,8 @@ describe("DateWheelPicker 완료 피드백(커밋 애니메이션)", () => {
     expect(hasCommitClass(trigger)).toBe(true);
   });
 
-  // 리뷰 아이템 2 — 확정된 값이 세션 시작 값(팝오버가 열렸을 때의 value)과 같으면
+  // 리뷰 아이템 2 — 확정된 값이 세션 시작 값(트리거가 포커스를 얻었거나 팝오버가 닫힌
+  // 마지막 순간의 value — 설계 스펙 §6.4)과 같으면
   // (아무것도 안 바꾸고 완료) 신호가 없다. 이 테스트는 세션 시작 값과 커밋 시점 값이
   // 우연히 같은 경우라, sessionStartValueRef가 제대로 채워지는지까지는 증명하지
   // 못한다(둘 다 "2026-07-12"이므로) — 그 증명은 뮤테이션 표의 별도 뮤테이션이 한다.
@@ -1103,7 +1104,8 @@ describe("DateWheelPicker 완료 피드백(커밋 애니메이션)", () => {
   // 오너가 실측으로 잡은 결함(fix round 1) — 화살표는 즉시 onChange를 부르므로, 완료를
   // 누르는 순간엔 이미 value가 화살표로 옮긴 값으로 갱신돼 있다. 커밋 시점 value와
   // 비교했다면 "안 바뀌었다"고 잘못 읽어 이 케이스에서 신호가 영영 안 떴다 — 세션
-  // 시작 값(팝오버가 열렸을 때의 value)과 비교해야 잡힌다.
+  // 시작 값(§6.4: 트리거 포커스·팝오버 닫힘에 찍힌다. 이 시퀀스에서는 trigger.focus()가
+  // 찍은 값)과 비교해야 잡힌다.
   it("화살표로 값을 옮긴 뒤 완료하면(세션 시작 값과 달라지면) 커밋 클래스가 붙는다", async () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
     const trigger = screen.getByRole("button", { name: "거래 날짜" });
@@ -1170,8 +1172,12 @@ describe("DateWheelPicker 비우기 뒤 완료가 지운 값을 되살리지 않
     expect(trigger.textContent).toBe("날짜 선택");
   });
 
-  // "지운 기억"은 팝오버를 다시 열면 리셋돼야 한다 — 그래야 "값 없이 처음 연 픽커에서
+  // "지운 기억"은 다음 세션까지 넘어가면 안 된다 — 그래야 "값 없이 처음 연 픽커에서
   // 완료를 누르면 휠에 보이는 날짜를 확정한다"는 폴백의 원래 의도가 살아남는다.
+  //
+  // **이 시퀀스의 리셋은 아래 두 번째 열기가 아니라 그 앞의 완료가 닫은 순간에 온다**
+  // (설계 스펙 §6.4 — 여는 순간에는 아무것도 리셋하지 않는다). 그래서 이 테스트는 이제
+  // 닫힘 쪽 clearedRef 리셋의 유일한 파수꾼이다.
   it("지우고 닫았다가 다시 열어 아무것도 안 건드리고 완료하면, 휠에 보이는 날짜를 다시 확정한다", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-06T03:00:00Z"));
@@ -1182,7 +1188,7 @@ describe("DateWheelPicker 비우기 뒤 완료가 지운 값을 되살리지 않
     fireEvent.click(screen.getByRole("button", { name: "비우기" }));
     fireEvent.click(screen.getByRole("button", { name: "완료" }));   // 닫힌다 — clearedRef가 true인 채
 
-    fireEvent.click(trigger);   // 다시 연다 — 리셋 이펙트가 clearedRef를 false로 되돌려야 한다
+    fireEvent.click(trigger);   // 다시 연다 — 이 클릭은 아무것도 리셋하지 않는다(위 완료가 이미 했다)
     fireEvent.click(screen.getByRole("button", { name: "완료" }));   // 아무것도 안 건드리고 바로 완료
 
     expect(trigger.textContent).toBe("2026. 08. 06.");
@@ -1213,12 +1219,18 @@ describe("DateWheelPicker 세션 수명", () => {
   // 재현된 결함(스펙 §6.4(2)): 닫힌 채 Delete로 지우면 clearedRef가 true가 되는데,
   // 곧이어 ↓로 열면 open을 보는 리셋 이펙트가 그것을 false로 되돌려, 완료가
   // "값 없이 처음 연 픽커"로 오인하고 지운 값을 baseValue(오늘)로 되살린다.
+  //
+  // `trigger.focus()`가 반드시 있어야 한다. 실제 키보드 사용자는 트리거에 포커스를 둔
+  // 채 Delete를 친다. 포커스가 없으면 팝오버가 열리며 포커스를 열로 가져가도 트리거에서
+  // focusout이 나지 않아, **스펙 §6.4가 이름 대고 금지한 focusout 리셋을 넣어도 이
+  // 테스트가 초록으로 남는다**(리뷰 뮤테이션 X14로 실측).
   it("닫힌 채 Delete로 지운 값을 완료가 되살리지 않는다", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-09T03:00:00Z"));   // 서울 기준 오늘 = 2026-08-09
     render(<ControlledDateWheelValue initialValue="2026-07-12" />);
     const trigger = screen.getByRole("button", { name: "거래 날짜" });
 
+    trigger.focus();                                   // 키보드 사용자의 실제 출발 상태
     fireEvent.keyDown(trigger, { key: "Delete" });      // 닫힌 채 지운다 — clearedRef = true
     fireEvent.keyDown(trigger, { key: "ArrowDown" });   // 연다 — 여기서 리셋되면 안 된다
     fireEvent.keyDown(screen.getByRole("group", { name: /^연도/ }), { key: "Enter" });
@@ -1286,6 +1298,31 @@ describe("DateWheelPicker 세션 수명", () => {
     expect(trigger.querySelector("span")).toBe(before);
   });
 
+  // 위 테스트의 **양성** 짝. 스펙 §6.4(1)이 겨냥한 결함 그 자체를 고정한다: 닫힌 채 값을
+  // 바꾼 사용자가 열어서 완료했을 때 확정 신호를 보는가.
+  //
+  // 이게 없으면 **닫힘 스탬프는 그대로 두고 여는 순간 sessionStartValueRef만 찍는**
+  // 뮤테이션이 스위트 전체를 통과한다(리뷰 뮤테이션 X2로 실측). 위 음성 테스트는 재진입
+  // 스탬프가 이미 열림 스탬프와 같은 값을 만들어 놓아 갈리지 않기 때문이다 — 여기서는
+  // 재진입 없이 곧바로 열어야 "여는 순간에는 찍지 않는다"만 남는다.
+  //
+  // 시간을 고정한다. 오늘이 하필 2026-07-12인 날에는 Ctrl+;가 값을 안 바꿔 신호가 안 뜨고
+  // 이 테스트가 그 하루만 빨개진다.
+  it("닫힌 채 Ctrl+;로 바꾼 값을 열어서 완료하면 확정 신호가 뜬다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-09T03:00:00Z"));
+    render(<ControlledDateWheelValue initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+
+    trigger.focus();                                                             // 기준값 = 2026-07-12
+    fireEvent.keyDown(trigger, { key: ";", code: "Semicolon", ctrlKey: true });   // 닫힌 채 오늘로
+    const before = trigger.querySelector("span");
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });                            // 연다 — 찍으면 안 된다
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+
+    expect(trigger.querySelector("span")).not.toBe(before);
+  });
+
   // 닫힘 쪽 스탬프가 왜 필요한가 — 안 찍으면 한 번 포커스한 동안 두 번째로 완료할 때
   // 아무것도 안 바꿨는데 신호가 뜬다(기준값이 아직 첫 진입 값이라서).
   //
@@ -1318,6 +1355,16 @@ describe("DateWheelPicker 세션 수명", () => {
     fireEvent.keyDown(screen.getByRole("group", { name: /^연도/ }), { key: "ArrowUp" });   // 2025로
     fireEvent.click(screen.getByRole("button", { name: "완료" }));   // 1회차 — 값이 바뀌었으므로 신호가 뜬다
     const afterFirst = trigger.querySelector("span");
+
+    // **전제 가드.** 이 테스트의 킬력은 "두 완료 사이에 rAF가 흐르지 않는다"에 통째로
+    // 걸려 있다(위 주석). 나중에 누가 await를 하나 끼우면 이 테스트는 조용히 초록으로
+    // 남으면서 아무것도 증명하지 않게 되므로, 그 전제가 깨지는 순간 시끄럽게 실패하도록
+    // 여기서 못박는다 — 완료 직후 rAF 전에는 포커스가 아직 트리거로 안 돌아와 있다.
+    //
+    // 단언이 둘이지만 단락 문제가 아니다. 이건 독립된 계약이 아니라 **아래 단언의
+    // 전제**이고, 이게 터지면 아래 단언은 어차피 아무 뜻이 없다. 순서도 시퀀스 중간이라
+    // 아래 단언은 전제가 성립하는 모든 세계에서 그대로 실행된다.
+    expect(document.activeElement).not.toBe(trigger);
 
     fireEvent.keyDown(trigger, { key: "ArrowDown" });                // 2회차 — 다시 연다
     fireEvent.click(screen.getByRole("button", { name: "완료" }));   // 아무것도 안 건드리고 완료
