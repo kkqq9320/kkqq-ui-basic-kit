@@ -176,23 +176,29 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 경로는 건드리지 않습니다 — 그 경로들은 "완료"가 아니라 매 조작마다 반짝이면 신호가
   // 아니라 소음이 됩니다. 계약은 PRINCIPLES.md §12.
   const [commitPulse, setCommitPulse] = useState(0);
-  // 이번에 팝오버를 연 뒤 비우기·Delete로 값을 지운 적이 있는가. commitAndClose의
+  // 이번 세션에 비우기·Delete로 값을 지운 적이 있는가. commitAndClose의
   // "비어 있으면 baseValue로 채운다" 되살림 분기(아래)를 막는 유일한 용도입니다 — 이게
   // 없으면 "값 없이 처음 연 픽커"와 "방금 막 지운 픽커"를 구분할 수 없어, 완료가 방금
-  // 지운 값을 도로 살려냅니다(오너가 실측으로 재현: 오늘 → 비우기 → 완료). 여는 순간
-  // 리셋해야 합니다 — 아래 리셋 이펙트 참고. 지우지 않고 닫았다가 다시 열어 아무것도
-  // 안 건드리고 완료를 누르면, 원래 의도(휠에 보이는 날짜를 확정)대로 다시 동작해야
-  // 하기 때문입니다.
+  // 지운 값을 도로 살려냅니다(오너가 실측으로 재현: 오늘 → 비우기 → 완료).
+  //
+  // 리셋 시점은 sessionStartValueRef와 똑같습니다 — 트리거 focusin과 팝오버 닫힘,
+  // **여는 순간에는 절대 리셋하지 않습니다**(설계 스펙 §6.4). 예전에는 여는 순간
+  // 리셋했고, 그래서 닫힌 채 Delete로 지운 기억이 ↓로 여는 순간 지워져 완료가 방금
+  // 지운 값을 오늘로 되살렸습니다(측정된 결함 — tests의 "세션 수명" 블록이 재현합니다).
+  // 지우지 않고 닫았다가 다시 열어 아무것도 안 건드리고 완료를 누르면 원래 의도(휠에
+  // 보이는 날짜를 확정)대로 동작해야 하므로, 닫힘에서의 리셋은 그대로 필요합니다.
   const clearedRef = useRef(false);
-  // 이 팝오버가 열렸을 때 value가 무엇이었는지. commitAndClose의 펄스 조건은 이 값과
+  // 이 세션이 시작될 때 value가 무엇이었는지 — 세션의 시작은 트리거가 포커스를 얻은
+  // 순간과 팝오버가 닫힌 순간입니다(§6.4). commitAndClose의 펄스 조건은 이 값과
   // 비교합니다(커밋 시점의 value가 아니라) — 이 컨트롤은 화살표 한 번, 휠 한 칸마다도
   // onChange를 불러 value를 바로 바꿉니다. 그래서 "커밋 시점 값 vs 그 순간 value"로
   // 비교하면, 화살표로 옮긴 뒤 완료를 눌러도 그 사이 value가 이미 옮겨진 값으로
   // 갱신돼 있어 "안 바뀌었다"고 잘못 읽습니다(오너가 실측: 화살표 → 완료인데 신호가
-  // 전혀 안 뜸). 세션이 시작될 때의 값과 비교해야 "이번에 연 뒤로 실제로 뭔가
+  // 전혀 안 뜸). 세션이 시작될 때의 값과 비교해야 "세션이 시작된 뒤로 실제로 뭔가
   // 바뀌었는가"를 제대로 묻는 것이 됩니다. Select는 방향키가 onChange를 부르지 않고
-  // 고를 때 한 번만 커밋하므로 이 차이가 안 나지만, 두 컴포넌트가 같은 규칙 하나로
-  // 설명되도록 나란히 둡니다.
+  // 고를 때 한 번만 커밋하므로 이 차이가 안 나고, 세션의 시작도 트리거 포커스와 메뉴
+  // 열림이 사실상 같은 순간이라 "열린 순간"으로 둡니다 — 두 컨트롤이 여기서만 갈리는
+  // 이유는 닫힌 채로도 값이 바뀔 수 있는 쪽이 날짜 피커뿐이기 때문입니다(§6.4).
   const sessionStartValueRef = useRef(value);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -222,22 +228,36 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 뒤로가기로 닫습니다. 포커스를 팝오버 안으로 옮기므로 회수도 함께 합니다.
   useBackToClose(open, closeAndReclaimFocus);
 
-  // 팝오버를 열 때마다 "지운 적 있음" 기억을 리셋하고, sessionStartValueRef를 그
-  // 순간의 value로 다시 찍습니다 — clearedRef·sessionStartValueRef 선언부 참고. 둘 다
-  // "한 번 열림~닫힘" 세션에만 유효해야 합니다. 별도 이펙트로 두는 이유: 아래쪽 포커스
-  // 이펙트는 resolvedActiveUnit·position이 바뀔 때마다도 다시 돌아 열려 있는 동안
-  // 여러 번 실행될 수 있으므로, 거기 얹으면 세션 중간에 리셋될 위험이 있습니다. 이
-  // 이펙트는 open 하나에만 의존해 열리는 순간 한 번만 돕니다.
+  // 세션 기준값을 찍는 두 지점 중 하나 — **팝오버가 닫힐 때**입니다(다른 하나는
+  // 트리거의 onFocus). 설계 스펙 §6.4의 계약: 기준값은 이 컨트롤이 마지막으로
+  // "조용해진" 순간에 찍고, **여는 순간에는 절대 찍지 않습니다.**
   //
-  // 의존성 배열에 value를 일부러 넣지 않습니다. 넣으면 열려 있는 동안 화살표·휠로
-  // value가 바뀔 때마다 이 이펙트가 다시 돌아 sessionStartValueRef를 그 새 값으로
-  // 덮어써, "세션 시작 값"이 아니라 "방금 값"이 되어 버립니다 — 그러면 화살표로 옮긴
-  // 뒤 완료를 눌러도 다시 "안 바뀌었다"고 읽는, 이번에 고치려는 결함으로 되돌아갑니다.
+  // 예전에는 `if (open)`이었습니다. 닫힌 상태가 조작 가능해지면(Delete·Ctrl+;는 이미
+  // 그렇습니다) 그 수명이 틀립니다 — 닫힌 채 지운 기억과 닫힌 채 바뀐 값이 여는 순간
+  // 통째로 지워집니다. 그 결함은 재현했고 테스트로 고정돼 있습니다("세션 수명" 블록).
+  //
+  // **닫힘 리셋이 commitAndClose보다 뒤에 와야 합니다.** commitAndClose가 clearedRef를
+  // 읽은 뒤에 지워져야 하는데, 이펙트는 상태 갱신이 커밋된 뒤에 돌므로 자연히 그렇게
+  // 됩니다. commitAndClose 안에서 직접 리셋하면 읽기 전에 지워질 수 있습니다.
+  //
+  // 마운트에서도 한 번 돕니다(open이 false이므로). 그래도 되는 정도가 아니라 그게
+  // 맞습니다 — 마운트 직후는 아직 아무 조작도 없었으므로 그 순간의 value가 곧 기준값입니다.
+  //
+  // **focusout에는 아무것도 하지 않습니다.** 버리고 싶어지지만, 지금은 팝오버를 여는
+  // 것 자체가 포커스를 열로 옮기므로(아래 포커스 이펙트) 트리거에서 focusout이 납니다 —
+  // 세션 도중에 기준값이 사라집니다. 더 근본적으로 focusout은 "컨트롤을 떠났다"와
+  // "컨트롤 안에서 옮겼다"를 구분하지 못하는 이벤트입니다. 찍기만 하고 버리지 않으면
+  // 두 상태 모두에서 옳습니다(§6.4).
+  //
+  // 의존성 배열에 value를 일부러 넣지 않습니다. 넣으면 value가 바뀔 때마다 이 이펙트가
+  // 다시 돌아 sessionStartValueRef가 "세션 시작 값"이 아니라 "방금 값"이 되어 버립니다 —
+  // 열려 있는 동안에는 화살표로 옮긴 뒤 완료해도 "안 바뀌었다"로 읽히고, 닫혀 있는
+  // 동안에는 Delete가 그 자리에서 clearedRef를 도로 false로 지워 위 결함이 그대로
+  // 돌아옵니다.
   useEffect(() => {
-    if (open) {
-      clearedRef.current = false;
-      sessionStartValueRef.current = value;
-    }
+    if (open) return;
+    clearedRef.current = false;
+    sessionStartValueRef.current = value;
   }, [open]);
 
   // 남은 최소 단위로만 비교합니다(연·월 픽커면 "월" 단위). 함수 선언이라 baseValue보다
@@ -420,7 +440,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 아무것도 확정하지 않습니다.
    *
    * `flushed`가 null이면(버퍼가 없었거나 해석할 수 없었으면) `value`가 비어 있고
-   * **이번에 연 뒤 비우기·Delete로 지운 적이 없을 때만** baseValue로 채웁니다. 지운
+   * **이번 세션에 비우기·Delete로 지운 적이 없을 때만** baseValue로 채웁니다. 지운
    * 적이 있으면(clearedRef.current) 이 분기를 건너뛰어, 완료가 방금 지운 값을 되살리지
    * 않습니다 — clearedRef 선언부에 이 결함(오너가 실측: 오늘 → 비우기 → 완료)의 배경이
    * 있습니다. flushed가 있으면 그 onChange가 이미 값을 확정했으므로 여기서 또
@@ -442,7 +462,8 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     }
     // Tab으로 떠나거나 바깥을 클릭해도 값은 남지만, 그건 "완료"를 누른 게 아니므로
     // 여기서만 올립니다 — Enter와 완료 버튼만 이 함수를 거칩니다. 그리고 확정된 값이
-    // **이 세션이 열렸을 때의 값**(sessionStartValueRef)과 실제로 다를 때만 올립니다.
+    // **이 세션이 시작될 때의 값**(sessionStartValueRef — 트리거가 포커스를 얻었거나
+    // 팝오버가 닫힌 마지막 순간의 값)과 실제로 다를 때만 올립니다.
     // 이 순간의 `value`와 비교하면 안 됩니다 — 이 컨트롤은 화살표 한 번, 휠 한 칸마다도
     // onChange로 value를 곧바로 바꾸므로, 완료를 누르는 시점엔 이미 committed와 value가
     // 같아져 있어 "화살표로 옮긴 뒤 완료"가 항상 "안 바뀌었다"로 잘못 읽힙니다(오너가
@@ -655,7 +676,15 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   }
 
   return <div className={open ? "date-wheel-picker open" : "date-wheel-picker"} ref={rootRef}>
-    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => {
+    {/* onFocus는 세션 기준값을 찍는 두 지점 중 나머지 하나입니다(다른 하나는 위의 닫힘
+        이펙트) — 설계 스펙 §6.4. React의 onFocus는 native focusin에 대응해 버블하므로
+        트리거 하나에만 붙이면 됩니다.
+
+        **트리거 <button>에 붙어야 하고, 바깥 rootRef div에 붙이면 안 됩니다.** 팝오버는
+        포털이지만 React 트리에서는 그 div의 자식이라 합성 이벤트가 그리로 버블합니다 —
+        div에 붙이면 팝오버를 여는 순간 포커스 이펙트가 열에 준 focus가 곧바로 이 핸들러를
+        불러, "여는 순간에는 찍지 않는다"는 계약이 조용히 깨집니다. */}
+    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onClick={() => {
       // 마우스로 열 때도 키보드 경로(handleTriggerKeyDown)와 같은 열로 시드합니다 —
       // Select.tsx:449의 마우스-키보드 일치 시딩과 같은 이유입니다. 닫혀 있을 때만
       // (=지금 열려는 참일 때만) 시드해야 닫는 클릭에서 activeUnit을 건드리지 않습니다.

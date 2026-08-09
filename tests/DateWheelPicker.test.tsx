@@ -1188,3 +1188,57 @@ describe("DateWheelPicker 비우기 뒤 완료가 지운 값을 되살리지 않
     expect(trigger.textContent).toBe("2026. 08. 06.");
   });
 });
+
+// 설계 스펙 §6.4 — 세션 기준값(sessionStartValueRef·clearedRef)의 수명.
+//
+// 계약: 기준값은 **트리거가 포커스를 얻을 때(focusin)**와 **팝오버가 닫힐 때** 두
+// 지점에서 찍는다. **여는 순간에는 절대 찍지 않는다.** focusout에는 아무것도 하지
+// 않는다 — 지금은 팝오버를 여는 것 자체가 포커스를 열로 옮기므로(포커스 이펙트),
+// focusout에서 버리면 세션 도중에 기준값이 사라진다.
+//
+// 이 블록의 테스트는 전부 "닫힌 채 조작 → 열기 → 완료" 순서를 거친다. 팝오버를 먼저
+// 여는 fixture로는 결함이 하나도 재현되지 않는다 — 리셋이 옳은 값으로 일어나기 때문이다.
+describe("DateWheelPicker 세션 수명", () => {
+  // 트리거 문구가 아니라 value 자체를 읽는다 — 되살아난 값이 실패 메시지에 그대로
+  // 찍히게 하려는 것이다. 바깥 버튼은 "포커스를 잃었다 되찾는" 경로를 만드는 용도다.
+  function ControlledDateWheelValue({ initialValue }: { initialValue: string }) {
+    const [value, setValue] = useState(initialValue);
+    return <>
+      <DateWheelPicker ariaLabel="거래 날짜" value={value} onChange={setValue} allowClear />
+      <button type="button">바깥</button>
+      <span data-testid="value">{value === "" ? "(빈값)" : value}</span>
+    </>;
+  }
+
+  // 재현된 결함(스펙 §6.4(2)): 닫힌 채 Delete로 지우면 clearedRef가 true가 되는데,
+  // 곧이어 ↓로 열면 open을 보는 리셋 이펙트가 그것을 false로 되돌려, 완료가
+  // "값 없이 처음 연 픽커"로 오인하고 지운 값을 baseValue(오늘)로 되살린다.
+  it("닫힌 채 Delete로 지운 값을 완료가 되살리지 않는다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-09T03:00:00Z"));   // 서울 기준 오늘 = 2026-08-09
+    render(<ControlledDateWheelValue initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+
+    fireEvent.keyDown(trigger, { key: "Delete" });      // 닫힌 채 지운다 — clearedRef = true
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });   // 연다 — 여기서 리셋되면 안 된다
+    fireEvent.keyDown(screen.getByRole("group", { name: /^연도/ }), { key: "Enter" });
+
+    expect(screen.getByTestId("value").textContent).toBe("(빈값)");
+  });
+
+  // 대조군 — 지우는 시점만 다르다(열고 나서 비우기). 이건 리셋 이펙트가 이미 돈
+  // 뒤에 지우는 경로라 고치기 전에도 통과한다. 이 짝이 있어야 "리셋 시점이 틀렸다"와
+  // "clearedRef 자체가 틀렸다"를 구분할 수 있다.
+  it("팝오버를 연 뒤 비우기로 지운 값도 완료가 되살리지 않는다 — 대조군", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-09T03:00:00Z"));
+    render(<ControlledDateWheelValue initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });   // 먼저 연다
+    fireEvent.click(screen.getByRole("button", { name: "비우기" }));
+    fireEvent.keyDown(screen.getByRole("group", { name: /^연도/ }), { key: "Enter" });
+
+    expect(screen.getByTestId("value").textContent).toBe("(빈값)");
+  });
+});
