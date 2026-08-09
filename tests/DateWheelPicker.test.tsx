@@ -1435,7 +1435,14 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     expect(segmentTexts(fieldOf("거래 날짜"))).toEqual(["2026", "07", "12"]);
   });
 
-  // 구두점은 장식이다 — 세그먼트로 쪼갠 뒤에도 스크린리더가 점을 하나하나 읽으면 안 된다.
+  // 구두점은 장식이다.
+  //
+  // **지금 이 순간 스크린리더가 이 점들을 읽고 있는 것은 아니다.** 트리거가 aria-label을
+  // 달고 있어 접근성 이름이 내용을 통째로 덮으므로, aria-hidden이 있든 없든 버튼은
+  // "거래 날짜"로만 읽힌다. 그래도 붙이고 고정하는 이유는 둘이다: 스펙 §4.5가 명시했고,
+  // **트리거가 aria-label을 놓는 날 내용이 곧바로 이름이 되기 때문**이다(스펙 §8이
+  // role="combobox" 이관을 구멍으로 열어 뒀다). 지금 없는 효과를 있다고 적지 않는다.
+  //
   // 텍스트와 aria-hidden을 한 문자열로 묶어 단언 하나로 본다(단락 없이 둘 다 본다).
   it("세그먼트 사이 구두점은 aria-hidden 장식이다", () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
@@ -1487,6 +1494,18 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
 
   it("값도 버퍼도 없으면 컨테이너에 placeholder 클래스가 붙는다", () => {
     render(<ControlledDateWheel initialValue="" />);
+    expect(container(fieldOf("거래 날짜")).classList.contains("placeholder")).toBe(true);
+  });
+
+  // 소비자가 형식에 안 맞는 값을 넘기는 경로 — `.superpowers/sdd/final-review-fixes-report.md:268`이
+  // 실제로 밟은 자리다(깨진 값이 validDateValue에 걸려 placeholder로 떨어진다).
+  //
+  // **여기가 예전 코드에서 두 판정이 갈리던 자리다.** 문구는 `!validDateValue(value)`로
+  // 정하는데 `.placeholder` 색은 `!value`로 정해서, 값이 비지 않았는데 형식이 깨진 경우
+  // placeholder 문구를 그리면서 색은 안 주는 상태가 있었다. 두 판정을 하나로 묶었고,
+  // 그 판단이 증명 없이 남지 않도록 여기서 고정한다.
+  it("형식이 깨진 값을 받으면 placeholder 문구와 그 색이 함께 나온다", () => {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="abc" onChange={() => undefined} />);
     expect(container(fieldOf("거래 날짜")).classList.contains("placeholder")).toBe(true);
   });
 
