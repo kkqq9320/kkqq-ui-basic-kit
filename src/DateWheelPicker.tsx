@@ -609,12 +609,19 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * **같은 계약을 두 곳이 각자 구현**하고 있었습니다. 이 킷에서 그렇게 복제된 규칙이
    * 갈라지지 않은 적이 없어 하나로 합쳤습니다(설계 스펙 §6.2).
    *
-   * 순서에 계약이 셋 박혀 있습니다. 바꾸지 마세요:
+   * 순서에 계약이 **넷** 박혀 있습니다. 바꾸지 마세요 — 넷 다 뮤테이션으로 빨개지는
+   * 것을 확인했습니다(괄호 안이 그때 빨개진 개수):
    *   1. `disabled`가 맨 앞 — 비활성 필드는 **어떤 키에도** 반응하지 않습니다.
-   *      Delete·Ctrl+;도 예외가 아니라서 `handleShortcut`보다 앞입니다.
+   *      Delete·Ctrl+;도 예외가 아니라서 `handleShortcut`보다 앞입니다. (1↔2 스왑: 1 red)
    *   2. `handleShortcut`이 Ctrl/Meta 가드보다 **앞** — 뒤에 두면 Ctrl+;가 그 가드에
-   *      걸려 `handleShortcut`에 영영 닿지 않습니다.
+   *      걸려 `handleShortcut`에 영영 닿지 않습니다. (2↔3 스왑: 4 red)
    *   3. 그 뒤의 Ctrl/Meta 가드 — 나머지 조합키는 브라우저·OS 몫입니다.
+   *   4. `handleShortcut`이 아래 `if (!open)` 갈림보다 **앞**. 이 넷째는 **합치기가
+   *      만들어 낸 것**입니다 — 합치기 전 `handleColumnKey`에는 `open` 갈림이 아예
+   *      없었고, `handleTriggerKeyDown`의 `if (open) return`은 아무 일도 안 하고
+   *      빠지는 분기였습니다. 지금은 `!open` 분기가 **`return`으로 끝나므로**, 그 위로
+   *      올리면 닫힌 상태의 Delete·Ctrl+;가 영영 안 닿습니다. (`!open` 블록을
+   *      `handleShortcut` 위로 올림: 6 red)
    *
    * **열은 인자로 옵니다 — `resolvedActiveUnit`을 읽지 않습니다.** 열은 자기 자신을,
    * 트리거는 `resolvedActiveUnit`을 넘깁니다. 계획서는 인자를 없애고 이 함수가
@@ -627,20 +634,41 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 지키는 감시자입니다** — 인자를 지우려는 사람은 그 테스트부터 보세요.
    */
   function handleFieldKey(event: ReactKeyboardEvent, unit: DateWheelUnit) {
-    // 비활성 트리거는 포커스를 받을 수 없어 실제 브라우저에서는 키가 오지 않지만,
-    // 테스트처럼 이벤트를 직접 디스패치하면 그 관문을 건너뜁니다.
+    // 이 가드는 **실사용자 키를 막습니다** — 테스트 편의용이 아닙니다. 지우지 마세요.
+    //
+    // 트리거만 이 핸들러를 쓰던 시절에는 "비활성 <button>은 포커스를 못 받으니 실제로는
+    // 안 오고, 테스트가 이벤트를 직접 디스패치할 때만 온다"가 맞았습니다. 지금은 **열도
+    // 같은 핸들러를 씁니다.** 열은 `disabled` 속성이 없는 `<section tabIndex={0}>`이라
+    // 진짜로 포커스를 받고 진짜로 키를 받습니다. 그리고 팝오버는 `disabled`를 안 봅니다
+    // (렌더 조건이 `open && position`뿐이라 열린 채 `disabled`가 켜져도 **아무도 안
+    // 닫습니다**) — 소비자가 제출 중에 폼을 잠그면 곧바로 그 상태가 됩니다.
+    // 그 상태를 tests의 "비활성 — 팝오버가 열려 있는 동안 켜지는 경우" 블록이 고정합니다.
     if (disabled) return;
     if (handleShortcut(event)) return;
     // Ctrl·Meta가 눌린 키는 건드리지 않습니다 — 브라우저·OS 단축키입니다.
     if (event.ctrlKey || event.metaKey) return;
     const key = event.key;
 
-    // 닫혀 있으면 여는 키만 봅니다 — 아래의 나머지 전부는 팝오버가 열려 있을 때의
-    // 계약입니다. 이 갈림은 합치기 전 `handleTriggerKeyDown`의 `if (open) return`을
-    // 그대로 옮긴 것입니다. 설계 스펙 §3의 키 계약표는 숫자·`Backspace`·`←`·`→`를
-    // "닫힘·열림" 양쪽으로 적고 있으므로 그것들은 결국 이 갈림 **위로** 올라와야
-    // 합니다 — 상태로 갈리는 키는 `↑`/`↓`와 `Enter`/`Space`뿐입니다. 아직 안 올린
-    // 이유는 그것이 동작 변경이고 이 합치기는 순수 리팩터이기 때문입니다.
+    // 닫혀 있으면 여는 키만 봅니다. 이 갈림은 합치기 전 `handleTriggerKeyDown`의
+    // `if (open) return`을 그대로 옮긴 것입니다.
+    //
+    // **여기 오는 것은 트리거뿐입니다.** 열은 `open && position`일 때만 렌더되므로
+    // `open === false`인 동안 존재하지 않습니다. 합치기 전 `handleColumnKey`는 `open`에
+    // 아무 의존이 없었으니, 이 의존은 **합치기가 새로 만든 것**이고 그 정확성은 저 렌더
+    // 조건 하나에 걸려 있습니다. ⚠️ **팝오버에 퇴장 애니메이션(닫은 뒤 언마운트 지연)을
+    // 넣으면 그 순간 깨집니다** — 닫히는 중인 열에 도착한 `↓`가 이 여는 분기를 타서
+    // 팝오버를 도로 열고 활성 열을 첫 열로 리셋합니다. 그 불변식은 tests가 이미 아홉 곳에서
+    // 지키고 있습니다(닫힘 뒤 `queryByRole("dialog")`가 null이라는 단언들 — 언마운트를
+    // 늦추는 뮤테이션에 9 red).
+    //
+    // 설계 스펙 §3은 `0`~`9`·`Backspace`·`←`·`→`·`Tab`/`Shift+Tab`·`Delete`·`Ctrl+;`를
+    // **"닫힘·열림" 양쪽**으로 적습니다. `Delete`·`Ctrl+;`는 이미 위 `handleShortcut`으로
+    // 이 갈림 **위에** 있고, 나머지는 아직 아래에 있어 닫힌 상태에서 안 먹습니다 —
+    // 그것들을 위로 올리는 것이 남은 일입니다. **`Tab`이 특히 빠지기 쉽습니다**: 스펙은
+    // 닫힘에서도 "버퍼를 확정하고 컨트롤을 떠남"이라고 적는데 지금은 아무 일도 안 합니다.
+    // 상태로 진짜 갈리는 것은 세 무리뿐입니다(`Enter`·`Space` / `↑`·`↓` / `Escape`) —
+    // 셋 다 "팝오버가 없으면 할 수 없는 일"이라 갈립니다. 아직 안 올린 이유는 그것이
+    // 동작 변경이고 이 합치기는 순수 리팩터이기 때문입니다.
     if (!open) {
       if (key !== "ArrowDown" && key !== "ArrowUp" && key !== "Enter" && key !== " ") return;
       // <button>은 Enter를 keydown에서, Space를 keyup에서 click으로 바꿉니다. 막지 않으면
@@ -782,7 +810,8 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         <span>·<i>는 포커스를 받을 수 없기 때문입니다. */}
     <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onClick={() => {
       // 마우스로 열 때도 키보드 경로(handleFieldKey의 `!open` 분기)와 같은 열로 시드합니다 —
-      // Select.tsx:449의 마우스-키보드 일치 시딩과 같은 이유입니다. 닫혀 있을 때만
+      // Select.tsx의 onClick이 `initialActiveValue`로 하는 마우스-키보드 일치 시딩과 같은
+      // 이유입니다(줄 번호로 적어 두었던 참조는 이미 틀려 있었습니다). 닫혀 있을 때만
       // (=지금 열려는 참일 때만) 시드해야 닫는 클릭에서 activeUnit을 건드리지 않습니다.
       if (!open) setActiveUnit(fields[0] ?? "year");
       setOpen((current) => !current);

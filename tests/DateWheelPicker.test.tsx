@@ -471,8 +471,8 @@ describe("DateWheelPicker 열 이동", () => {
 
 describe("DateWheelPicker 리뷰 Finding 1 — activeUnit 시드와 클램프", () => {
   // 트리거의 onClick은 activeUnit을 건드리지 않고 setOpen만 토글했다. 키보드 진입
-  // (handleTriggerKeyDown)은 열 때마다 activeUnit을 fields[0]으로 되돌리는데, 마우스
-  // 진입은 그러지 않아 두 경로가 갈렸다 — Select.tsx:449가 마우스·키보드를 같은
+  // (handleFieldKey의 `!open` 분기)은 열 때마다 activeUnit을 fields[0]으로 되돌리는데,
+  // 마우스 진입은 그러지 않아 두 경로가 갈렸다 — Select.tsx가 마우스·키보드를 같은
   // 값으로 시딩하는 것과 같은 이유다. 월 열에 가 있던 채로 닫았다가 마우스로 다시
   // 열면, 시드가 없으면 포커스가 여전히 월로 간다.
   it("마우스로 다시 열면 키보드로 연 것과 같은 첫 열에 포커스가 간다", async () => {
@@ -817,7 +817,7 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
   });
 
   it("↑는 버퍼를 확정한 뒤 그 값에서 한 칸 움직인다", async () => {
-    // 이 컴포넌트에서 ArrowUp은 -1이다(handleColumnKey의 ArrowUp/ArrowDown 분기).
+    // 이 컴포넌트에서 ArrowUp은 -1이다(handleFieldKey의 ArrowUp/ArrowDown 분기).
     // 버퍼를 무시하고 옛 값에서 움직이면 2025가 되므로 둘이 확실히 갈린다.
     const { trigger, year } = await openAndType("2026-07-12", ["3", "1"]);
     fireEvent.keyDown(year, { key: "ArrowUp" });
@@ -997,10 +997,11 @@ describe("DateWheelPicker 단축키", () => {
     expect(onChange).toHaveBeenCalledWith("2026-07-12");
   });
 
-  // 브리프의 두 테스트는 트리거(닫힘 상태, handleTriggerKeyDown)로만 Ctrl+;를 쏜다.
-  // 그런데 스펙 §3은 "닫힘·열림" 둘 다라고 명시하고, Step 4는 handleColumnKey에도
-  // 같은 순서 함정이 있다고 콕 짚는다 — handleColumnKey 쪽만 순서가 틀려도 트리거
-  // 테스트 두 개는 계속 통과한다. 열 쪽 경로를 직접 쏴서 그 결함도 잡는다.
+  // 브리프의 두 테스트는 닫힌 트리거로만 Ctrl+;를 쏜다. 그런데 스펙 §3은 "닫힘·열림"
+  // 둘 다라고 명시하고, 그 순서 함정은 열 쪽 경로에도 똑같이 있다 — 열 쪽만 순서가
+  // 틀려도 트리거 테스트 두 개는 계속 통과한다. 열 쪽 경로를 직접 쏴서 그 결함도 잡는다.
+  // (핸들러가 `handleColumnKey`·`handleTriggerKeyDown` 둘이던 시절의 이야기다. 지금은
+  //  `handleFieldKey` 하나이고, 그 순서 계약은 그 함수 머리말이 넷으로 세고 있다.)
   it("Ctrl+;는 팝오버가 열려 있을 때 열에서도 동작한다", () => {
     // 이 파일의 다른 가짜 타이머 테스트와 같은 동기 관용구를 쓴다(예: "팝오버의 오늘
     // 버튼이…") — fireEvent.click + 동기 쿼리. await waitFor/findByRole을 가짜
@@ -1079,6 +1080,41 @@ describe("DateWheelPicker 단축키", () => {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} />);
     fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
     expect(screen.getByRole("button", { name: "완료" }).getAttribute("aria-keyshortcuts")).toBe("Enter");
+  });
+});
+
+// "비활성 필드는 어떤 키에도 반응하지 않는다"는 이 저장소의 기존 불변식인데, 지금까지
+// 그것을 지키는 테스트는 전부 **닫힌** 트리거에만 키를 쐈다("비활성이면 어느 키로도
+// 열리지 않는다", "비활성이면 Delete도 무시한다"). 핸들러가 트리거 하나뿐이던 시절엔
+// 그걸로 충분했지만, 이제 열도 같은 핸들러를 쓰므로 **열려 있는 동안 disabled가 켜지는**
+// 경우가 그 불변식의 새 노출면이다.
+//
+// 소비자가 폼을 제출하는 동안 필드를 잠그는 흔한 패턴에서 실제로 만들어지는 상태다.
+describe("DateWheelPicker 비활성 — 팝오버가 열려 있는 동안 켜지는 경우", () => {
+  /** 연 다음 disabled를 켠다. 열 노드는 **켜기 전에** 잡아 둔다 — 아래 두 테스트가
+   *  보는 것이 "그 열이 키를 무시하는가"이지 "열을 찾을 수 있는가"가 아니기 때문이다. */
+  function openThenDisable(onChange: () => void) {
+    const view = render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={onChange} />);
+    fireEvent.keyDown(screen.getByRole("button", { name: "거래 날짜" }), { key: "ArrowDown" });
+    const year = screen.getByRole("group", { name: /^연도/ });
+    view.rerender(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={onChange} disabled />);
+    return year;
+  }
+
+  // 이 테스트가 아래 테스트의 **전제**다. disabled가 팝오버를 닫아 버리면 아래 테스트는
+  // "키가 막혔으니까"가 아니라 "열 노드가 떨어져 나가 이벤트가 React 트리에 안 닿아서"
+  // 초록이 된다 — 공허하게 통과한다. 그래서 상태가 실제로 만들어진다는 것을 따로 박는다.
+  it("disabled를 켜도 팝오버를 닫는 코드는 없다 — 이 상태가 실제로 만들어진다", () => {
+    openThenDisable(() => undefined);
+    expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).not.toBeNull();
+  });
+
+  it("그 상태에서 열이 받은 ↓도 값을 바꾸지 않는다", () => {
+    const onChange = vi.fn();
+    const year = openThenDisable(onChange);
+    onChange.mockClear();   // 여는 동안의 호출과 섞이지 않게
+    fireEvent.keyDown(year, { key: "ArrowDown" });
+    expect(onChange).not.toHaveBeenCalled();
   });
 });
 
