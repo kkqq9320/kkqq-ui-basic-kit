@@ -1241,4 +1241,87 @@ describe("DateWheelPicker 세션 수명", () => {
 
     expect(screen.getByTestId("value").textContent).toBe("(빈값)");
   });
+
+  // focusin 쪽 리셋 — 위 두 테스트로는 증명되지 않는다. jsdom에서 fireEvent.click은
+  // 포커스를 옮기지 않으므로 기존 테스트들의 리셋은 전부 "닫힘" 쪽에서 온다. 이건
+  // 컨트롤을 떠났다 돌아오는 경로라 닫힘이 한 번도 일어나지 않는다.
+  it("포커스를 잃었다 되찾으면 '지웠다' 기억이 리셋된다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-09T03:00:00Z"));
+    render(<ControlledDateWheelValue initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "Delete" });                   // 닫힌 채 지운다
+    screen.getByRole("button", { name: "바깥" }).focus();            // 컨트롤을 떠난다
+    trigger.focus();                                                 // 다시 들어온다 — 여기서 리셋
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });                // 연다
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));   // 아무것도 안 건드리고 완료
+
+    // 새 세션이므로 "값 없이 처음 연 픽커"의 원래 의도대로 휠에 보이는 날짜를 확정한다.
+    expect(screen.getByTestId("value").textContent).toBe("2026-08-09");
+  });
+
+  // focusin 쪽 기준값 스탬프. 마운트와 닫힘에서도 찍히므로, 그 둘로는 닿지 않는 값을
+  // 만들어야 갈린다 — 닫힌 채 Ctrl+;로 value를 바꾸면 마운트 스탬프(2026-07-12)와
+  // 지금 value(2026-08-09)가 갈라진다. 재진입이 기준값을 다시 찍어야 "재진입 뒤로는
+  // 아무것도 안 바꿨다"가 성립한다.
+  //
+  // 신호는 classList로 보지 않는다 — 이전 확정의 클래스가 남아 거짓 통과한다.
+  // key={commitPulse}가 바뀌면 span이 리마운트되므로 **노드 신원**으로 본다.
+  it("포커스를 되찾은 뒤 아무것도 바꾸지 않고 완료하면 확정 신호가 뜨지 않는다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-09T03:00:00Z"));
+    render(<ControlledDateWheelValue initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: ";", code: "Semicolon", ctrlKey: true });   // 닫힌 채 오늘로
+    screen.getByRole("button", { name: "바깥" }).focus();
+    trigger.focus();                                    // 기준값이 2026-08-09로 다시 찍혀야 한다
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });   // 연다
+    const before = trigger.querySelector("span");
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+
+    expect(trigger.querySelector("span")).toBe(before);
+  });
+
+  // 닫힘 쪽 스탬프가 왜 필요한가 — 안 찍으면 한 번 포커스한 동안 두 번째로 완료할 때
+  // 아무것도 안 바꿨는데 신호가 뜬다(기준값이 아직 첫 진입 값이라서).
+  //
+  // 아래 두 테스트는 같은 시퀀스의 두 단계를 각각 본다. 한 블록에 넣으면 첫 단언이
+  // 터질 때 두 번째가 실행조차 되지 않아, 정작 증명하려는 "두 번째 완료"를 못 본다.
+  //
+  // **await·waitFor를 넣지 마라.** commitAndClose는 requestAnimationFrame으로 트리거에
+  // 포커스를 되돌리고, 그 focus가 onFocus를 불러 기준값을 다시 찍는다 — 두 완료 사이에
+  // rAF가 흐르면 닫힘 스탬프를 지운 뮤테이션이 그 rAF에 구조돼 초록으로 남는다.
+  // 동기 블록 안에서는 rAF가 돌지 않는다.
+  it("한 번 포커스한 동안 첫 완료에는 확정 신호가 뜬다", () => {
+    render(<ControlledDateWheelValue initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const before = trigger.querySelector("span");
+    fireEvent.keyDown(screen.getByRole("group", { name: /^연도/ }), { key: "ArrowUp" });   // 2025로
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+
+    expect(trigger.querySelector("span")).not.toBe(before);
+  });
+
+  it("한 번 포커스한 동안 두 번째 완료에는 확정 신호가 뜨지 않는다", () => {
+    render(<ControlledDateWheelValue initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    fireEvent.keyDown(screen.getByRole("group", { name: /^연도/ }), { key: "ArrowUp" });   // 2025로
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));   // 1회차 — 값이 바뀌었으므로 신호가 뜬다
+    const afterFirst = trigger.querySelector("span");
+
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });                // 2회차 — 다시 연다
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));   // 아무것도 안 건드리고 완료
+
+    expect(trigger.querySelector("span")).toBe(afterFirst);
+  });
 });
