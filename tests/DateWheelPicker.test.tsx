@@ -1937,37 +1937,141 @@ describe("DateWheelPicker 단축키", () => {
 // "비활성 필드는 어떤 키에도 반응하지 않는다"는 이 저장소의 기존 불변식인데, 그것을
 // 지키던 테스트는 전부 **닫힌** 트리거에만 키를 쐈다("비활성이면 어느 키로도 열리지
 // 않는다", "비활성이면 Delete도 무시한다"). **열려 있는 동안 disabled가 켜지는** 경우가
-// 그 불변식의 나머지 노출면이고, 소비자가 폼을 제출하는 동안 필드를 잠그는 흔한 패턴에서
-// 실제로 만들어지는 상태다(팝오버 렌더 조건이 `open && position`뿐이라 아무도 안 닫는다).
+// 그 불변식의 나머지 노출면이었고, 그 상태에서 **키는 막히는데 휠·스와이프·± 버튼은
+// 여전히 값을 바꿨다** — 반쪽 잠금이다.
+//
+// **설계 스펙 §7.1이 그 상태 자체를 없앴다: `disabled`가 켜지면 팝오버를 닫는다.**
+// 포인터 경로를 하나씩 막는 안은 스펙이 이유와 함께 기각했다(막을 자리가 넷 이상이고,
+// 무엇보다 잠긴 필드 위에 조작 가능해 보이는 팝오버가 떠 있는 것 자체가 거짓말이다).
+//
+// ⚠️ **SEG Task 3이 여기 쓴 두 테스트는 그 상태를 전제로 했으므로 함께 다시 썼다.**
+//   · Task 3 #1("팝오버를 닫는 코드는 없다 — 이 상태가 실제로 만들어진다")은 **공허성
+//     가드로 남는다.** 가드하는 내용만 뒤집혔다: 이제 확인할 것은 "`disabled` 직전까지
+//     팝오버가 실제로 열려 있었다"이고, 그게 없으면 아래 부재 단언이 전부 "애초에 아무것도
+//     안 열려서" 초록이 된다. **§7.1 이펙트를 지워도 이 테스트는 초록이다 — 계약이 아니다**
+//     (뮤테이션으로 확인했다).
+//   · Task 3 #2("그 상태에서 ↓도 값을 바꾸지 않는다")는 **"비활성인 동안 ↓가 팝오버를
+//     다시 열지 못한다"로 바뀐다.** `handleFieldKey`의 `if (disabled) return`은 여전히 할
+//     일이 있고, 이제 그 일은 다시 열리는 것을 막는 것이다.
 //
 // ⚠️ **SEG Task 4에서 이 블록의 키 대상이 바뀌었다.** 초판은 키를 **열**로 쐈는데, 열이
 // `onKeyDown`을 잃으면서 그 이벤트는 어떤 핸들러에도 닿지 않게 됐다 — 그대로 뒀다면 이
 // 테스트는 "`if (disabled) return;`이 막아서"가 아니라 **"아무 데도 안 배선돼서"** 초록이
 // 되어, 가드를 통째로 지워도 안 빨개진다(공허한 초록). 트리거로 쏴야 그 가드를 실제로
 // 지나간다.
-describe("DateWheelPicker 비활성 — 팝오버가 열려 있는 동안 켜지는 경우", () => {
-  /** 연 다음 disabled를 켠다. 트리거 노드는 rerender를 건너서도 같은 노드다. */
-  function openThenDisable(onChange: () => void) {
+describe("DateWheelPicker 비활성 — 팝오버가 열려 있는 동안 켜지면 닫힌다 (스펙 §7.1)", () => {
+  /**
+   * 연 다음 `disabled`를 켠다. 트리거 노드는 rerender를 건너서도 같은 노드다.
+   *
+   * **팝오버 안의 조작 지점은 닫히기 전에 잡아 둔다.** 닫힌 뒤에 `getByRole`로 찾으면
+   * 쿼리가 던지는데, 쿼리 실패는 단언 실패가 아니라 **엉뚱한 줄에서 나는 죽음**이다
+   * (파일 상단 `fieldOf` 주석과 같은 이유). 잡아 둔 노드로 이벤트를 쏘면 고침 전에는
+   * 마운트된 채라 핸들러가 돌고(빨강), 고침 뒤에는 노드가 떨어져 나가 React 루트의
+   * 위임 리스너에 닿지 않는다(초록) — **초록의 이유가 "팝오버가 닫혔다" 하나다.**
+   */
+  function openThenDisable(onChange: (next: string) => void = () => undefined) {
     const view = render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={onChange} />);
     const field = fieldOf("거래 날짜");
     fireEvent.keyDown(field, { key: "ArrowDown" });
+    const column = screen.getByRole("group", { name: "연도 2026" });
+    const stepNext = screen.getByRole("button", { name: "연도 다음" });
+    const disable = () => view.rerender(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={onChange} disabled />);
+    return { field, column, stepNext, disable };
+  }
+
+  // **[공허성 가드 — 계약이 아니다]** 아래 부재 단언들이 "애초에 아무것도 안 열려서"
+  // 초록이 되는 것을 막는다. §7.1의 고침을 통째로 지워도 이 테스트는 초록이다.
+  it("[공허성 가드] disabled 직전까지 팝오버는 실제로 열려 있다", () => {
+    openThenDisable();
+    expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).not.toBeNull();
+  });
+
+  it("disabled가 켜지면 팝오버가 사라진다", () => {
+    const { disable } = openThenDisable();
+    disable();
+    expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull();
+  });
+
+  // **렌더 조건에 `!disabled`만 얹는 안과 갈리는 자리다.** 그 안은 `open` 상태를 true로
+  // 남기므로 트리거가 "펼쳐져 있다"고 계속 말한다 — 가리킬 다이얼로그가 없는데도.
+  // (`aria-controls`도 같은 이유로 사라진 id를 가리키게 된다.)
+  it("트리거의 aria-expanded가 false로 돌아간다", () => {
+    const { field, disable } = openThenDisable();
+    disable();
+    expect(field.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  // 아래 셋이 §7.1이 든 "반쪽 잠금"의 세 경로다. 고침 전에는 셋 다 값을 바꿨다.
+  it("휠이 값을 바꾸지 못한다", () => {
+    const onChange = vi.fn();
+    const { column, disable } = openThenDisable(onChange);
+    disable();
+    onChange.mockClear();
+    fireEvent.wheel(column, { deltaY: 1 });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // `pointer()` 헬퍼를 쓴다 — 이 jsdom에는 `PointerEvent` 생성자가 없어서
+  // `fireEvent.pointerMove`로는 `buttons`가 실리지 않고 `moveSwipe`의 첫 가드에서
+  // 되돌아 나간다(파일 상단 헬퍼 주석). 그러면 고침 전에도 초록이라 아무것도 못 잡는다.
+  it("스와이프가 값을 바꾸지 못한다", () => {
+    const onChange = vi.fn();
+    const { column, disable } = openThenDisable(onChange);
+    disable();
+    onChange.mockClear();
+    pointer("pointerDown", column, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", column, { pointerId: 7, clientY: 60, buttons: 1 });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("± 단계 버튼이 값을 바꾸지 못한다", () => {
+    const onChange = vi.fn();
+    const { stepNext, disable } = openThenDisable(onChange);
+    disable();
+    onChange.mockClear();
+    fireEvent.click(stepNext);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // 위 셋은 잡아 둔 노드로 쏘므로 "그 노드가 죽었다"만 말한다. 이것은 **누를 것이 하나도
+  // 안 남았다**를 말한다 — ± 6개, 값 행 21개, 오늘·비우기·완료까지 전부. 남는 버튼은
+  // 트리거 하나다(§5: 이 컨트롤의 tab 정거장은 트리거 하나).
+  it("팝오버의 조작 지점이 문서에 하나도 남지 않는다", () => {
+    const { disable } = openThenDisable();
+    disable();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+  });
+
+  // §7.1: 닫을 때 값을 확정하지 않는다. 비활성화는 소비자의 조작이지 사용자의 완료가
+  // 아니므로, 치던 버퍼는 §4.2의 "확정하지 않는 닫힘"으로 간다 — 버려진다.
+  function openTypeThenDisable(onChange: (next: string) => void) {
+    const view = render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={onChange} />);
+    const field = fieldOf("거래 날짜");
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    fireEvent.keyDown(field, { key: "3" });   // 트리거가 `3‒‒‒. 07. 12.`를 그린다
     view.rerender(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={onChange} disabled />);
     return field;
   }
 
-  // 이 테스트가 아래 테스트의 **전제**다. disabled가 팝오버를 닫아 버리면 아래 테스트는
-  // "키가 막혔으니까"가 아니라 "팝오버가 없어서 애초에 바뀔 것이 없어서" 초록이 된다.
-  it("disabled를 켜도 팝오버를 닫는 코드는 없다 — 이 상태가 실제로 만들어진다", () => {
-    openThenDisable(() => undefined);
-    expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).not.toBeNull();
+  it("치던 버퍼가 화면에서 사라진다", () => {
+    expect(openTypeThenDisable(() => undefined).textContent).toBe("2026. 07. 12.");
   });
 
-  it("그 상태에서 트리거가 받은 ↓도 값을 바꾸지 않는다", () => {
+  // 위와 나눠 둔다 — 한 `it`에 묶으면 앞 단언이 터졌을 때 이 단언은 **실행조차 안 된다.**
+  it("그 버퍼를 확정하지는 않는다", () => {
     const onChange = vi.fn();
-    const field = openThenDisable(onChange);
-    onChange.mockClear();   // 여는 동안의 호출과 섞이지 않게
-    fireEvent.keyDown(field, { key: "ArrowDown" });
+    openTypeThenDisable(onChange);
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // Task 3 #2의 자리. `handleFieldKey`의 `if (disabled) return`이 없으면 `↓`가
+  // `setOpen(true)`를 부르고, §7.1 이펙트는 `[disabled]`만 보므로 다시 안 돈다 —
+  // 팝오버가 되살아난다. 그 가드가 지금 지키는 것이 이것이다.
+  it("비활성인 동안 ↓는 팝오버를 다시 열지 못한다", () => {
+    const { field, disable } = openThenDisable();
+    disable();
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull();
   });
 });
 
