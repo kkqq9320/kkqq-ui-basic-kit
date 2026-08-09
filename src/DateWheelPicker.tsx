@@ -602,13 +602,54 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     return false;
   }
 
-  function handleColumnKey(event: ReactKeyboardEvent, unit: DateWheelUnit) {
-    // handleShortcut이 이 가드보다 반드시 앞에 와야 합니다 — 뒤에 두면 Ctrl+;가
-    // 여기 걸려 handleShortcut에 영영 닿지 않습니다.
+  /**
+   * 이 컨트롤이 받는 **유일한** 키 핸들러입니다. 트리거에도 열에도 같은 함수를 겁니다.
+   *
+   * 둘이었던 시절(`handleTriggerKeyDown`은 여는 것만, `handleColumnKey`는 나머지 전부)에는
+   * **같은 계약을 두 곳이 각자 구현**하고 있었습니다. 이 킷에서 그렇게 복제된 규칙이
+   * 갈라지지 않은 적이 없어 하나로 합쳤습니다(설계 스펙 §6.2).
+   *
+   * 순서에 계약이 셋 박혀 있습니다. 바꾸지 마세요:
+   *   1. `disabled`가 맨 앞 — 비활성 필드는 **어떤 키에도** 반응하지 않습니다.
+   *      Delete·Ctrl+;도 예외가 아니라서 `handleShortcut`보다 앞입니다.
+   *   2. `handleShortcut`이 Ctrl/Meta 가드보다 **앞** — 뒤에 두면 Ctrl+;가 그 가드에
+   *      걸려 `handleShortcut`에 영영 닿지 않습니다.
+   *   3. 그 뒤의 Ctrl/Meta 가드 — 나머지 조합키는 브라우저·OS 몫입니다.
+   *
+   * **열은 인자로 옵니다 — `resolvedActiveUnit`을 읽지 않습니다.** 열은 자기 자신을,
+   * 트리거는 `resolvedActiveUnit`을 넘깁니다. 계획서는 인자를 없애고 이 함수가
+   * `resolvedActiveUnit`을 직접 읽게 하라고 했지만, 그러면 **이벤트가 도착한 열과
+   * 활성 열이 갈리는 순간** 엉뚱한 열이 움직입니다. 실제로 갈립니다: 연도 네 자리를
+   * 채우면 `typeDigit`의 advance가 `activeUnit`을 월로 옮기는데, 그 뒤에도 키는 여전히
+   * 연도 열로 옵니다. `resolvedActiveUnit`으로 바꿔 370을 돌려 봤더니 tests의
+   * "연도 9999에서 ↓를 누르면 10000으로 새지 않고 값이 그대로다"가 연도 대신 월을
+   * 밀어 빨개졌습니다(`9999. 08. 12.` ≠ `9999. 07. 12.`). **그 테스트가 이 인자를
+   * 지키는 감시자입니다** — 인자를 지우려는 사람은 그 테스트부터 보세요.
+   */
+  function handleFieldKey(event: ReactKeyboardEvent, unit: DateWheelUnit) {
+    // 비활성 트리거는 포커스를 받을 수 없어 실제 브라우저에서는 키가 오지 않지만,
+    // 테스트처럼 이벤트를 직접 디스패치하면 그 관문을 건너뜁니다.
+    if (disabled) return;
     if (handleShortcut(event)) return;
     // Ctrl·Meta가 눌린 키는 건드리지 않습니다 — 브라우저·OS 단축키입니다.
     if (event.ctrlKey || event.metaKey) return;
     const key = event.key;
+
+    // 닫혀 있으면 여는 키만 봅니다 — 아래의 나머지 전부는 팝오버가 열려 있을 때의
+    // 계약입니다. 이 갈림은 합치기 전 `handleTriggerKeyDown`의 `if (open) return`을
+    // 그대로 옮긴 것입니다. 설계 스펙 §3의 키 계약표는 숫자·`Backspace`·`←`·`→`를
+    // "닫힘·열림" 양쪽으로 적고 있으므로 그것들은 결국 이 갈림 **위로** 올라와야
+    // 합니다 — 상태로 갈리는 키는 `↑`/`↓`와 `Enter`/`Space`뿐입니다. 아직 안 올린
+    // 이유는 그것이 동작 변경이고 이 합치기는 순수 리팩터이기 때문입니다.
+    if (!open) {
+      if (key !== "ArrowDown" && key !== "ArrowUp" && key !== "Enter" && key !== " ") return;
+      // <button>은 Enter를 keydown에서, Space를 keyup에서 click으로 바꿉니다. 막지 않으면
+      // 그 click이 트리거의 onClick과 겹쳐 연 직후 곧바로 다시 닫습니다.
+      event.preventDefault();
+      setActiveUnit(fields[0] ?? "year");
+      setOpen(true);
+      return;
+    }
 
     if (key >= "0" && key <= "9" && key.length === 1) {
       event.preventDefault();
@@ -671,27 +712,6 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     // flushTyping의 주석 참고.
     const flushed = flushTyping(unit);
     commitShift(flushed ?? baseValue, unit, key === "ArrowDown" ? 1 : -1);
-  }
-
-  /** 닫혀 있을 때 트리거에서 받는 키. 여는 것 하나만 담당합니다. */
-  function handleTriggerKeyDown(event: ReactKeyboardEvent) {
-    // 비활성 트리거는 포커스를 받을 수 없어 실제 브라우저에서는 키가 오지 않지만,
-    // 테스트처럼 이벤트를 직접 디스패치하면 그 관문을 건너뜁니다.
-    if (disabled) return;
-    // disabled 검사가 handleShortcut보다 앞에 옵니다 — 비활성 필드는 어떤 키에도
-    // 반응하지 않는다는 기존 불변식을 Delete/Ctrl+;도 지켜야 합니다.
-    if (handleShortcut(event)) return;
-    // handleShortcut이 이 가드보다 반드시 앞에 와야 합니다 — 뒤에 두면 Ctrl+;가
-    // 여기 걸려 handleShortcut에 영영 닿지 않습니다.
-    if (event.ctrlKey || event.metaKey) return;
-    if (open) return;
-    const key = event.key;
-    if (key !== "ArrowDown" && key !== "ArrowUp" && key !== "Enter" && key !== " ") return;
-    // <button>은 Enter를 keydown에서, Space를 keyup에서 click으로 바꿉니다. 막지 않으면
-    // 그 click이 트리거의 onClick과 겹쳐 연 직후 곧바로 다시 닫습니다.
-    event.preventDefault();
-    setActiveUnit(fields[0] ?? "year");
-    setOpen(true);
   }
 
   /* 스와이프는 30px 경계를 넘을 때마다 즉시 한 칸 커밋하고 나머지 거리는 손가락을
@@ -761,12 +781,12 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         버튼에 붙이면 버블이 문제가 되지 않습니다 — 버튼 자신이 포커스를 받고, 그 안의
         <span>·<i>는 포커스를 받을 수 없기 때문입니다. */}
     <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onClick={() => {
-      // 마우스로 열 때도 키보드 경로(handleTriggerKeyDown)와 같은 열로 시드합니다 —
+      // 마우스로 열 때도 키보드 경로(handleFieldKey의 `!open` 분기)와 같은 열로 시드합니다 —
       // Select.tsx:449의 마우스-키보드 일치 시딩과 같은 이유입니다. 닫혀 있을 때만
       // (=지금 열려는 참일 때만) 시드해야 닫는 클릭에서 activeUnit을 건드리지 않습니다.
       if (!open) setActiveUnit(fields[0] ?? "year");
       setOpen((current) => !current);
-    }} onKeyDown={handleTriggerKeyDown}>{/* 이 <span> 하나가 §12의 확정 신호를 재생하는 자리입니다 — key={commitPulse}가 커밋마다
+    }} onKeyDown={(event) => handleFieldKey(event, resolvedActiveUnit)}>{/* 이 <span> 하나가 §12의 확정 신호를 재생하는 자리입니다 — key={commitPulse}가 커밋마다
         이 노드를 리마운트시켜 .dropdown-value-commit 애니메이션을 다시 틉니다.
         **key를 세그먼트로 내리지 마세요** — 확정은 날짜 하나에 대한 사건이지 세그먼트에 대한
         사건이 아닙니다. (정확히 말하면 조각이 따로 반짝이게 만드는 것은 key가 아니라 **클래스가
@@ -805,7 +825,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
             걸면 그 focus 이벤트가 activeUnit 원본 상태까지 곧바로 따라잡습니다. 그래도
             원칙상 렌더가 fields 밖을 가리키는 상태를 그대로 믿으면 안 되므로 남겨
             둡니다 — 증명은 포커스 이펙트 쪽 테스트가 합니다. */}
-        {fields.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${motion.sequence ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${dateWheelLabel(baseValue, unit, labels.weekdays)}`} role="group" tabIndex={0} ref={(node) => { if (node) columnRefs.current.set(unit, node); else columnRefs.current.delete(unit); }} onFocus={() => setActiveUnit(unit)} onKeyDown={(event) => handleColumnKey(event, unit)} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); event.currentTarget.focus({ preventScroll: true }); suppressColumnClickRef.current = false; swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue }; if (typeof event.currentTarget.setPointerCapture === "function") event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {fields.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${motion.sequence ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${dateWheelLabel(baseValue, unit, labels.weekdays)}`} role="group" tabIndex={0} ref={(node) => { if (node) columnRefs.current.set(unit, node); else columnRefs.current.delete(unit); }} onFocus={() => setActiveUnit(unit)} onKeyDown={(event) => handleFieldKey(event, unit)} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); event.currentTarget.focus({ preventScroll: true }); suppressColumnClickRef.current = false; swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue }; if (typeof event.currentTarget.setPointerCapture === "function") event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
