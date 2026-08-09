@@ -380,11 +380,21 @@ describe("DateWheelPicker 스와이프", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  // 시작하지 않은 스와이프 — `swipeRef`가 비어 있는데 도착한 move. 위 테스트와 다른 가드다
-  // (`buttons`는 1이므로 첫 가드는 통과한다).
-  it("누르지 않고 지나가는 포인터는 값을 바꾸지 않는다", () => {
+  // 멀티터치 — 한 손가락이 스와이프 중일 때 **다른 손가락**의 move가 도착한다. 그것이 진행
+  // 중인 스와이프를 몰면 두 번째 손가락을 얹는 것만으로 값이 튄다. `moveSwipe`의
+  // `start.pointerId !== pointerId` 절이 그것을 막는다 — 위 두 테스트와 다른 가드다
+  // (`buttons`는 1이고 스와이프도 시작돼 있으므로 앞 두 가드는 통과한다).
+  //
+  // ⚠️ 같은 `if`의 **`!start` 절**(누르지 않았는데 도착한 move)은 여기서 고정하지 않는다.
+  // 그 절을 지우면 `start.y` 읽기가 TypeError를 내는데, **React DEV가 그 예외를 삼켜
+  // stderr로만 흘려보내고 테스트는 초록으로 남는다**(직접 확인했다 — 뮤테이션을 돌리면
+  // `TypeError: Cannot read properties of null (reading 'y')`가 stderr에 찍히는데
+  // 144개가 전부 통과한다). 그 절은 관찰 가능한 감시자를 못 만든다.
+  it("스와이프 중에 다른 손가락(pointerId)의 move가 와도 값이 안 바뀐다", () => {
     const { onChange, year } = openWheel();
-    pointer("pointerMove", year, { pointerId: 7, clientY: 60, buttons: 1 });
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    onChange.mockClear();
+    pointer("pointerMove", year, { pointerId: 9, clientY: 60, buttons: 1 });
     expect(onChange).not.toHaveBeenCalled();
   });
 
