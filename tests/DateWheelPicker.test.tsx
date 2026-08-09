@@ -1885,14 +1885,26 @@ describe("DateWheelPicker 지연 반영 부모 — 닫힘 스탬프는 확정한
 // 여전히 안 읽힌다 — §8의 `aria-activedescendant` 조항은 그대로 살아 있는 구멍이다.
 // 이 블록이 그것을 메웠다고 읽지 말 것.
 describe("DateWheelPicker 트리거 접근성 이름", () => {
+  /**
+   * ⚠️ **이 블록은 트리거를 이름으로 찾지 않는다.** 이름이 검사 대상인데 이름으로 찾으면
+   * 순환이고, 더 나쁜 것은 **이름이 깨졌을 때 단언이 아니라 쿼리가 던진다**는 것이다 —
+   * 실패 메시지가 "무엇이 틀렸는가"가 아니라 "찾을 수 없다"가 되고, 같은 뮤테이션이 이름과
+   * 무관한 테스트 수십 개까지 같이 죽여 매핑이 읽히지 않게 된다(실제로 그랬다: 이름에서
+   * 레이블 접두사를 떼는 뮤테이션에 142개가 빨개졌다).
+   *
+   * 닫힌 픽커에는 버튼이 트리거 하나뿐이라 역할만으로 찾을 수 있다. 팝오버를 여는 테스트는
+   * **열기 전에** 이 노드를 잡아 둔다.
+   */
+  function triggerNode() { return screen.getByRole("button"); }
+
   it("이름이 레이블 뒤에 값을 싣는다", () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
-    expect(fieldOf("거래 날짜").getAttribute("aria-label")).toBe("거래 날짜, 2026. 07. 12.");
+    expect(triggerNode().getAttribute("aria-label")).toBe("거래 날짜, 2026. 07. 12.");
   });
 
   it("값이 바뀌면 이름도 따라 바뀐다", () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
-    const field = fieldOf("거래 날짜");
+    const field = triggerNode();
     field.focus();
     fireEvent.keyDown(field, { key: "ArrowDown" });   // 연다
     fireEvent.keyDown(field, { key: "ArrowDown" });   // 활성은 연도 — 2027로
@@ -1904,7 +1916,7 @@ describe("DateWheelPicker 트리거 접근성 이름", () => {
   // 그 경우 "거래 날짜"만 남고, 여기서는 무엇이 비었는지가 읽힌다.
   it("값이 비면 placeholder를 싣는다", () => {
     render(<ControlledDateWheel initialValue="" />);
-    expect(fieldOf("거래 날짜").getAttribute("aria-label")).toBe("거래 날짜, 날짜 선택");
+    expect(triggerNode().getAttribute("aria-label")).toBe("거래 날짜, 날짜 선택");
   });
 
   // **화면과 이름이 갈라질 수 없다는 것**이 조각을 그대로 잇는 방식을 고른 이유다. 버퍼를
@@ -1912,7 +1924,7 @@ describe("DateWheelPicker 트리거 접근성 이름", () => {
   // 갈린다), 여기서 고정한다. 위 세 테스트는 버퍼가 없어 이 결함을 지나가지 못한다.
   it("치는 동안에도 이름이 화면에 보이는 그대로를 싣는다", async () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
-    const field = fieldOf("거래 날짜");
+    const field = triggerNode();   // 열기 전에 잡는다 — 열면 팝오버 버튼이 여럿 생긴다
     field.focus();
     fireEvent.keyDown(field, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
@@ -1926,7 +1938,7 @@ describe("DateWheelPicker 트리거 접근성 이름", () => {
   // 그대로다. 없애는 것이 아니라 뒤에 값을 잇는 것이다.
   it("소비자가 준 ariaLabel이 그대로 앞에 남는다", () => {
     render(<DateWheelPicker ariaLabel="종료일" value="2026-07-12" onChange={() => undefined} />);
-    expect(fieldOf("종료일").getAttribute("aria-label")).toBe("종료일, 2026. 07. 12.");
+    expect(triggerNode().getAttribute("aria-label")).toBe("종료일, 2026. 07. 12.");
   });
 });
 
