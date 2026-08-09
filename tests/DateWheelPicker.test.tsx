@@ -1577,15 +1577,17 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     // 자식 결합자 `>`가 없어지면 세그먼트마다 따로 말줄임이 걸려, 좁은 화면에서 날짜가
     // 통째로 잘리는 대신 조각조각 잘린다. 규칙이 컨테이너 하나에만 걸리는지 본다.
     it("말줄임은 세그먼트가 아니라 컨테이너 하나에 걸린다", () => {
+      // 규칙이 없을 때 `null`을 그대로 넘기면 실패 메시지가 "toMatch가 문자열을 기대했는데
+      // object를 받았다"가 되어 무엇이 깨졌는지 안 보인다. 문장으로 바꿔 넘긴다.
       const rule = datePickerCssSource.match(/\.date-wheel-trigger\s*>\s*span\s*\{[^}]*\}/);
-      expect(rule && rule[0]).toMatch(/overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap/);
+      expect(rule?.[0] ?? "(자식 결합자 `>`가 붙은 규칙이 없다)").toMatch(/overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap/);
     });
 
     // 자리 지킴(`20__`)과 tabular-nums는 짝이다 — 폭이 흔들리지 않는 것이 `_`로 채우는
     // 유일한 이유이므로, 한쪽만 남으면 그 이유가 무너진다.
     it("세그먼트에 tabular-nums가 걸린다 — 자리 지킴 표시의 이유다", () => {
       const rule = datePickerCssSource.match(/\.date-wheel-segment\s*\{[^}]*\}/);
-      expect(rule && rule[0]).toMatch(/font-variant-numeric:\s*tabular-nums/);
+      expect(rule?.[0] ?? "(.date-wheel-segment 규칙이 없다)").toMatch(/font-variant-numeric:\s*tabular-nums/);
     });
 
     // 포커스 없는 필드에 활성 표시가 남으면 그 필드가 입력을 받는 중으로 읽힌다(§4.5).
