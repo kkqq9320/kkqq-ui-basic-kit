@@ -4,7 +4,7 @@
 // 접근성 이름이 원본과 100% 같으므로, 이 테스트가 통과하면 추출 과정에서
 // 동작이 바뀌지 않았다는 증거가 됩니다. 아래쪽에 props 파라미터화 테스트를 더했습니다.
 
-import { cleanup, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useEffect, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -981,6 +981,217 @@ describe("DateWheelPicker 닫힌 채로 조작한다", () => {
     fireEvent.keyDown(field, { key: "Enter" });   // 완료
 
     expect(field.querySelector("span")).not.toBe(before);
+  });
+});
+
+// 설계 스펙 §4.2 — **버퍼의 수명.** 이 블록이 고정하는 것은 술어 하나다:
+//
+//   **떠나는 모든 경로는 버퍼 *자신의* unit으로 확정한다 — 활성 세그먼트가 아니라.**
+//
+// `commitAndClose`가 전부터 그렇게 했고(인자를 안 받고 `typing.unit`을 상태에서 읽음)
+// 나머지 확정 경로는 `resolvedActiveUnit`을 넘기고 있었다. 둘이 갈라지는 문이 둘 있었다 —
+// **트리거 세그먼트 클릭**과 **소비자의 런타임 `fields` 축소.**
+//
+// 리뷰가 실측한 시퀀스: 연도에 `3` → 일 세그먼트 클릭 → `↓` `←` `↓` `Enter` →
+// **`2003-08-13`으로 확정된다.** 치다 만 `3`이 사라지는 것이 아니라 **살아남아 세션 끝에
+// 연도를 2003년으로 만든다.** 같은 상태에서 `Tab`은 §3 계약과 반대로 버리고, `Backspace`는
+// no-op이 되고, `←`/`→`는 확정도 폐기도 안 한다 — **증상이 넷이고 원인이 하나다.**
+describe("DateWheelPicker 버퍼의 수명 — 확정은 버퍼 자신의 unit으로", () => {
+  function ControlledWithSpy({ initialValue, onChange }: { initialValue: string; onChange: (value: string) => void }) {
+    const [value, setValue] = useState(initialValue);
+    return <DateWheelPicker ariaLabel="거래 날짜" value={value} onChange={(next) => { onChange(next); setValue(next); }} />;
+  }
+
+  function closedField(initialValue = "2026-07-12") {
+    render(<ControlledDateWheel initialValue={initialValue} />);
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    return field;
+  }
+
+  function segmentOf(unit: string) {
+    return document.querySelector<HTMLElement>(`.date-wheel-segment[data-unit="${unit}"]`)!;
+  }
+
+  // ── §4.2: **자리를 옮기는 조작은 확정한다** — `→` `←` `Tab`, 그리고 **트리거의 세그먼트를
+  //    직접 누르는 것.** 사용자가 "여기로 가겠다"고 했지 "이 값이다"라고 하지 않았으므로,
+  //    치던 것은 원래 있던 자리에 남아야 한다.
+  //
+  // ⚠️ **단언은 클릭 *직후*의 트리거여야 한다.** 시퀀스 끝의 값을 보면 안 된다 —
+  // `flushBuffer(year, "3")`은 어느 쪽이든 2003이라, 끝까지 가서 보면 고치기 전에도
+  // 통과한다(vacuous). 갈리는 것은 **언제 확정되는가**다: 고치기 전에는 클릭 뒤에도
+  // `3‒‒‒`가 남아 있었고(실측), 고친 뒤에는 그 자리에서 `2003`이 된다.
+  //
+  // **이 테스트가 위 술어의 유일한 도달 가능한 파수꾼이다.** 클릭 시점에는 `activeUnit`이
+  // 아직 버퍼의 unit(연도)이므로 `flushTyping(resolvedActiveUnit)`으로 되돌려도 여기서는
+  // 옳게 굴지만(= 등가 뮤턴트), `flushTyping(clickedUnit)`(= 누른 세그먼트로 확정)은 unit이
+  // 갈려 아무것도 확정하지 않아 빨개진다. 뮤테이션 표에 둘 다 적었다.
+  it("닫힌 채 버퍼를 들고 세그먼트를 클릭하면 그 자리에서 확정된다", () => {
+    const field = closedField();
+    fireEvent.keyDown(field, { key: "3" });
+    fireEvent.click(segmentOf("day"));
+    expect(field.textContent).toBe("2003. 07. 12.");
+  });
+
+  // §4.2가 **"열림·닫힘에서 같게 동작해야 합니다"**를 명시한다. 고치기 전에는 갈렸다 —
+  // 열림에서는 클릭이 토글로 닫으며 "닫히면 버퍼를 버린다" 레이아웃 이펙트가 버렸고,
+  // 닫힘에서는 살아남았다. **그 비대칭은 설계가 아니라 우연이었다.**
+  it("열린 채 버퍼를 들고 세그먼트를 클릭해도 같게 확정된다", async () => {
+    const field = closedField();
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(field, { key: "3" });
+    fireEvent.click(segmentOf("day"));
+    expect(field.textContent).toBe("2003. 07. 12.");
+  });
+
+  // §4.2: **여는 조작은 아무것도 안 한다 — 버퍼를 들고 간다.** 구두점·아이콘·여백에는
+  // `data-unit`이 없어 "자리를 옮기는 조작"이 아니고, 그 클릭이 하는 일은 여는 것뿐이다.
+  // 확정 경로를 트리거 클릭 **전체**로 넓히는 과잉 수정을 이 테스트가 막는다.
+  it("구두점을 클릭하면 버퍼를 확정하지 않고 그대로 들고 연다", () => {
+    const field = closedField();
+    fireEvent.keyDown(field, { key: "3" });
+    fireEvent.click(document.querySelector<HTMLElement>(".date-wheel-punctuation")!);
+    expect(field.textContent).toBe(`3${FILL}${FILL}${FILL}. 07. 12.`);
+  });
+
+  // ── 두 번째 문: 소비자가 런타임에 `fields`를 줄이면 버퍼가 **사라진 열에 남는다.**
+  //    `activeUnit`에는 `resolvedActiveUnit` 클램프가 있는데 `typing.unit`에는 없었다.
+  function ShrinkableInDialog({ onClose, initialValue }: { onClose: () => void; initialValue: string }) {
+    const [value, setValue] = useState(initialValue);
+    const [fields, setFields] = useState<DateWheelUnit[]>(["year", "month", "day"]);
+    return <Dialog open onClose={onClose} ariaLabel="거래 수정" closeOnBack={false}>
+      <button type="button" onClick={() => setFields(["year", "month"])}>일 열 제거</button>
+      <DateWheelPicker ariaLabel="거래 날짜" value={value} onChange={setValue} fields={fields} />
+    </Dialog>;
+  }
+
+  /** 일 세그먼트에 버퍼를 만든 뒤 그 열을 통째로 없앤다 — 버퍼가 화면에서 사라진다. */
+  function hideBufferByShrinking() {
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "1" });
+    fireEvent.click(screen.getByRole("button", { name: "일 열 제거" }));
+    field.focus();
+    return field;
+  }
+
+  // ⚠️ **Task 5 브리프가 "빠뜨리면 안 된다"고 못박은 실패 모드가 다른 문으로 들어온 것이다.**
+  // 가드가 `if (!typing)`이라 **상태**를 물었고, 물어야 할 것은 **"사용자가 취소할 것이
+  // 화면에 있는가"**였다. 실측: `Escape` 한 번으로 안 닫히고 두 번째에 닫힌다.
+  //
+  // 기존 `Escape` 테스트 둘(`버퍼가 있으면…` / `없으면…`)은 버퍼가 **보이는** 경우만
+  // 고정하므로 이 칸을 잡지 못한다.
+  it("사라진 열에 남은 보이지 않는 버퍼는 Escape를 삼키지 않는다", () => {
+    const onClose = vi.fn();
+    render(<ShrinkableInDialog onClose={onClose} initialValue="2026-07-12" />);
+    const field = hideBufferByShrinking();
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  // 같은 원인의 두 번째 증상 — `triggerParts`가 `hasDateValue || typing`으로 켜지므로,
+  // **보이지 않는 버퍼 하나 때문에 값이 없는 필드가 오늘 날짜를 가진 것처럼 그려졌다**
+  // (실측: `"2026. 08."`). 접근성 이름도 그대로 그것을 읽었다.
+  it("값이 비었는데 보이지 않는 버퍼만 남으면 placeholder가 그대로다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-09T03:00:00Z"));
+    render(<ShrinkableInDialog onClose={() => undefined} initialValue="" />);
+    const field = hideBufferByShrinking();
+    expect(field.textContent).toBe("날짜 선택");
+  });
+
+  // ── §4.2: **포커스를 잃을 때도 확정합니다.** 닫힌 채 버퍼가 살 수 있게 되면서 `Tab`이
+  //    아니라 **다른 곳을 클릭해서** 떠나는 경로가 생겼고, 조용히 버리면 친 숫자가 이유
+  //    없이 사라진다.
+  //
+  // ⚠️ **팝오버 안 클릭은 `blur`를 만들지 않는다**(Task 4의 `mousedown` 차단) — 그게 이
+  // 규칙이 성립하는 이유다. 다만 **jsdom에서는 그 사실을 테스트로 고정할 수 없다**:
+  // jsdom은 `mousedown`·`click`의 포커스 부작용을 아예 구현하지 않아, 차단이 있든 없든
+  // 팝오버 클릭은 `blur`를 안 만든다. 이 파일의 "포커스 불변식" 블록 상단에 같은 한계가
+  // 이미 적혀 있다.
+  //
+  // ⚠️ **`.focus()`를 `act()`로 감싸야 한다 — 측정해서 알아낸 것이다.** 프로브로 확인한
+  // 사실: 바깥 요소에 `.focus()`를 부르면 트리거에서 네이티브 `blur`·`focusout`이 실제로
+  // 나고(리스너로 둘 다 관측) React 핸들러도 돈다. **그런데 그 핸들러가 일으킨 리렌더가
+  // 동기적으로 flush되지 않아** `textContent`는 여전히 `31‒‒. 07. 12.`로 읽힌다. 이 파일의
+  // 다른 `.focus()` 테스트들이 그냥 통과하는 이유는 그쪽이 **ref 변경**(세션 기준값)만 보기
+  // 때문이다 — 렌더가 필요 없다. `fireEvent`는 스스로 act로 감싸므로 이 문제가 없다.
+  //
+  // `fireEvent.focusOut(field)`로 우회하지 않는다 — 그건 포커스를 실제로 옮기지 않고
+  // 이벤트만 쏘는 것이라, "다른 곳을 클릭해서 떠난다"는 이 규칙의 전제를 건너뛴다.
+  it("다른 곳으로 포커스를 옮기면 치던 숫자가 확정된다", () => {
+    render(<><ControlledDateWheel initialValue="2026-07-12" /><button type="button">바깥</button></>);
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "3" });
+    fireEvent.keyDown(field, { key: "1" });
+
+    act(() => { screen.getByRole("button", { name: "바깥" }).focus(); });
+
+    expect(field.textContent).toBe("2031. 07. 12.");
+  });
+
+  // ── §4.2: **버퍼를 든 채 언마운트되면 버립니다.** 언마운트는 소비자가 필드를 화면에서
+  //    치우는 것이고, 그 순간의 `onChange`는 이미 사라진 필드에 대한 값이 된다.
+  //    **코드가 아니라 부재로 지켜지는 규칙이라, 테스트가 없으면 다음 사람이 "누수"로 보고
+  //    넣는다** — §4.2가 명시적으로 테스트를 요구한 자리다.
+  //
+  // ⚠️ **호출 횟수가 0인지를 보면 안 된다** — 앞의 타이핑이 이미 불렀다(연도 네 자리에서
+  // 한 번). **언마운트 전후로 변하지 않았는지**를 본다.
+  //
+  // 측정해 둔 전제: **React는 언마운트에서 `onBlur`를 부르지 않는다**(프로브로 확인 —
+  // 포커스된 버튼을 언마운트하면 `focus`만 기록되고 `blur`는 없다, `activeElement`는 body로
+  // 간다). 그래서 위 `blur` 확정 규칙과 이 폐기 규칙이 충돌하지 않는다. 어느 React 버전이
+  // 언마운트에서 `blur`를 부르기 시작하면 **이 테스트가 그것을 잡는다.**
+  it("버퍼를 든 채 언마운트되면 확정하지 않고 버린다", () => {
+    const onChange = vi.fn();
+    const { unmount } = render(<ControlledWithSpy initialValue="2026-07-12" onChange={onChange} />);
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(field, { key: digit });   // 확정 1회 — 활성이 월로
+    fireEvent.keyDown(field, { key: "1" });   // 월 버퍼 "1" — 10·11·12가 남아 대기, onChange 없음
+    const before = onChange.mock.calls.length;
+
+    unmount();
+
+    expect(onChange.mock.calls.length).toBe(before);
+  });
+});
+
+// 설계 스펙 §3 — "숫자·`Backspace`·방향키도 같이 막습니다(페이지 스크롤과 브라우저 단축키
+// 방지)." 열림 쪽은 전부터 감시자가 있었고, **닫힘 쪽 세 칸은 뮤테이션으로 파수꾼이 없다는
+// 것이 확인됐다**(리뷰 X2·X3·X7 → 각각 0 red). jsdom은 이 계약의 *증상*을 만들지 못하므로
+// `defaultPrevented`를 직접 고정한다.
+describe("DateWheelPicker 닫힌 상태의 preventDefault", () => {
+  function closedField() {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    return field;
+  }
+
+  it("닫힌 상태의 숫자는 preventDefault를 부른다", () => {
+    const field = closedField();
+    const event = createEvent.keyDown(field, { key: "3" });
+    fireEvent(field, event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("닫힌 상태의 →는 preventDefault를 부른다", () => {
+    const field = closedField();
+    const event = createEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent(field, event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("닫힌 상태의 ↓는 preventDefault를 부른다", () => {
+    const field = closedField();
+    const event = createEvent.keyDown(field, { key: "ArrowDown" });
+    fireEvent(field, event);
+    expect(event.defaultPrevented).toBe(true);
   });
 });
 
@@ -2178,10 +2389,19 @@ describe("DateWheelPicker 트리거 접근성 이름", () => {
     expect(triggerNode().getAttribute("aria-label")).toBe("거래 날짜, 날짜 선택");
   });
 
-  // **화면과 이름이 갈라질 수 없다는 것**이 조각을 그대로 잇는 방식을 고른 이유다. 버퍼를
-  // 치는 동안이 그 둘이 갈라지기 가장 쉬운 순간이라(이름만 `value`를 읽게 만들면 곧바로
-  // 갈린다), 여기서 고정한다. 위 세 테스트는 버퍼가 없어 이 결함을 지나가지 못한다.
-  it("치는 동안에도 이름이 화면에 보이는 그대로를 싣는다", async () => {
+  // **화면과 이름이 같은 출처에서 나온다는 것**이 조각을 그대로 잇는 방식을 고른 이유다.
+  // 버퍼를 치는 동안이 그 둘이 갈라지기 가장 쉬운 순간이라(이름만 `value`를 읽게 만들면
+  // 곧바로 갈린다), 여기서 고정한다. 위 세 테스트는 버퍼가 없어 이 결함을 지나가지 못한다.
+  //
+  // ⚠️ **채움 문자(U+2012)만은 이름에서 뺀다 — 설계 스펙 §8이 그렇게 정했다**(`9014bf5`).
+  // 그 문자를 고른 이유는 §4.5에 적혀 있고 **오직 어드밴스 폭 하나**다. 눈으로 보라고 넣은
+  // 자리 표시가 귀로도 읽혀야 할 이유가 없고, 빈 자리마다 반복되므로 네 자리 연도를 치는
+  // 동안 이름이 정보 없이 길어졌다 짧아진다. **"화면과 갈라질 수 없다"는 원칙은 그대로다** —
+  // 같은 출처에서 만들고 **할 말이 없는 문자 하나만** 빼는 것이지 다른 것을 말하는 게 아니다.
+  //
+  // 그래서 이 단언의 기대값이 `20‒‒`에서 `20`으로 바뀌었다. 실제로 스크린리더가 U+2012를
+  // 어떻게 발음하는지(무시/`dash`/`figure dash`)는 실기기 항목이고, **그 답과 무관하게** 뺀다.
+  it("치는 동안에도 이름이 화면과 같은 출처를 싣는다 — 채움 문자만 빼고", async () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
     const field = triggerNode();   // 열기 전에 잡는다 — 열면 팝오버 버튼이 여럿 생긴다
     field.focus();
@@ -2190,7 +2410,22 @@ describe("DateWheelPicker 트리거 접근성 이름", () => {
     fireEvent.keyDown(field, { key: "2" });
     fireEvent.keyDown(field, { key: "0" });
 
-    expect(field.getAttribute("aria-label")).toBe(`거래 날짜, 20${FILL}${FILL}. 07. 12.`);
+    expect(field.getAttribute("aria-label")).toBe("거래 날짜, 20. 07. 12.");
+  });
+
+  // 위 테스트의 짝 — **화면 쪽은 그대로 채움 문자를 그려야 한다.** 이름에서 빼는 고침이
+  // `dateTriggerParts`나 렌더까지 건드리면 §4.5의 폭 보장이 통째로 죽는데, 위 단언만으로는
+  // 그것이 안 잡힌다(둘 다 `20. 07. 12.`가 되어 통과한다).
+  it("이름에서 뺐어도 화면은 채움 문자를 그대로 그린다", async () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const field = triggerNode();
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(field, { key: "2" });
+    fireEvent.keyDown(field, { key: "0" });
+
+    expect(field.textContent).toBe(`20${FILL}${FILL}. 07. 12.`);
   });
 
   // 소비자가 준 `ariaLabel`이 접두사로 남는다 — PRINCIPLES §11의 "ariaLabel은 필수"는

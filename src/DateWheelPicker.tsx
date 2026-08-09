@@ -199,8 +199,9 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   const [open, setOpen] = useState(false);
   // 겹쳐 있으면 가장 안쪽만 닫힙니다 — 다이얼로그 안에서 열렸을 때 다이얼로그까지 닫으면 안 됩니다.
   // Escape는 이 파일 전체에서 "값을 바꾸지 않고 닫기"를 뜻합니다 — flushTyping을
-  // 부르지 않고 버퍼만 버립니다. 다른 모든 떠나는 경로(Tab·화살표·Enter)와의
-  // 유일한 예외입니다.
+  // 부르지 않고 버퍼만 버립니다. 다른 모든 떠나는 경로(Tab·화살표·**열림 상태의**
+  // Enter·Space·완료·세그먼트 클릭·blur)와의 유일한 예외입니다. (닫힘 상태의 Enter는
+  // 떠나는 경로가 아니라 **여는 키**입니다 — 버퍼를 들고 엽니다. 스펙 §3·§4.2.)
   useEscapeToClose(open, () => { setTyping(null); setOpen(false); });
   const [position, setPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const [columnMotion, setColumnMotion] = useState<Record<DateWheelUnit, DateWheelMotion>>({
@@ -215,15 +216,41 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 일어나지 않고, 트리거와 팝오버 어느 쪽에도 활성 표시가 남지 않습니다.
   const resolvedActiveUnit = fields.includes(activeUnit) ? activeUnit : (fields[0] ?? "year");
   // 지금 치고 있는 열과 그 자릿수. 자릿수가 차면 typeDigit이 곧바로 확정하고 비웁니다.
-  // 덜 찬 채로 열을 떠날 때는 경로에 따라 갈립니다:
-  //   · 확정(flushTyping/commitAndClose가 해석해 값에 반영하고 비웁니다):
-  //     Tab·Shift+Tab·←·→·↑·↓·Enter·Space·완료 버튼.
-  //   · 폐기(해석하지 않고 그냥 비웁니다): Escape·휠·포인터(스와이프·행 클릭·컬럼
-  //     클릭)·바깥 클릭·뒤로가기 등 그 외의 이유로 팝오버가 닫힐 때.
-  // ("팝오버 닫힘은 flushTyping이 처리한다"는 예전 버전의 이 주석은 틀렸었습니다 —
-  // 완료 버튼을 뺀 나머지 닫힘 경로(바깥 클릭·뒤로가기)는 커밋하지 않고 그냥
-  // 버립니다. 그 안전망은 아래 "닫히면 버퍼를 버린다" 이펙트입니다.)
+  //
+  // **덜 찬 채로 버퍼가 어떻게 되는지는 "무엇을 가리킨 조작인가"로 갈립니다**(설계 스펙
+  // §4.2). 이 자리에 한동안 "포인터면 버린다"로 적혀 있었는데, **스펙이 그 범주를 명시적으로
+  // 기각했습니다** — 드는 예가 전부 팝오버 안 항목이라 트리거 쪽 포인터 경로를 아예 상정하지
+  // 않았기 때문입니다. 가르는 것은 입력 장치가 아닙니다:
+  //   · **자리를 옮기는 조작 → 확정**: `←`·`→`·`Tab`·`Shift+Tab`, **열림 상태의**
+  //     `Enter`·`Space`, `완료` 버튼, **트리거의 세그먼트 클릭**, 그리고 **트리거의 blur**.
+  //   · **값을 직접 가리키는 조작 → 폐기**: 휠·스와이프·팝오버의 행 클릭·`오늘`·`비우기`.
+  //   · **여는 조작 → 아무것도 안 함(버퍼를 들고 갑니다)**: **닫힘 상태의**
+  //     `↓`·`↑`·`Enter`·`Space`, 그리고 세그먼트가 아닌 곳을 눌러 여는 트리거 클릭.
+  //   · `Escape`(폐기)와 `Delete`(폐기 + 값 비우기)는 각자 자기 자리에 적혀 있습니다.
+  // 그 밖의 이유로 팝오버가 닫히면(바깥 클릭·뒤로가기) 아래 "닫히면 버퍼를 버린다"
+  // 이펙트가 안전망으로 비웁니다. **언마운트에서는 flush하지 않습니다** — 사라진 필드에
+  // 대한 onChange가 되기 때문이고(§4.2), 코드가 아니라 **부재로** 지켜집니다.
   const [typing, setTyping] = useState<{ unit: DateWheelUnit; digits: string } | null>(null);
+  /**
+   * **지금 화면에 실제로 보이는 버퍼.** `resolvedActiveUnit`과 정확히 같은 이유의 클램프이고,
+   * 없어서 결함이 났습니다: `activeUnit`에는 클램프가 있었는데 `typing.unit`에는 없었습니다.
+   *
+   * 소비자가 런타임에 `fields`를 줄이면(예: 일간/월간 토글) 버퍼가 **사라진 열에 남습니다.**
+   * 어느 세그먼트에도 안 그려지는데 상태로는 살아 있어서, 리뷰가 잰 두 가지가 났습니다:
+   *   · 닫힘 `Escape`의 `if (!typing)` 가드가 그 **보이지 않는** 버퍼 때문에 전파를 막아,
+   *     `Dialog` 안에서 **첫 Escape가 안 먹고 두 번째에 닫혔습니다.** 가드가 물어야 할 것은
+   *     "상태가 있는가"가 아니라 **"사용자가 취소할 것이 화면에 있는가"**입니다.
+   *   · 값이 비어 있으면 placeholder 대신 `baseValue` 세그먼트가 그려져(`2026. 08.`),
+   *     **값 없는 필드가 값을 가진 것처럼** 보이고 접근성 이름도 그렇게 읽혔습니다.
+   *
+   * **버퍼를 *읽는* 자리는 전부 이것을 씁니다.** 쓰는 자리(`setTyping`)와 `flushTyping`의
+   * 청소는 원본 `typing`을 봅니다 — 보이지 않는 버퍼도 떠나는 경로에서 치워져야 하니까요.
+   *
+   * `fields`를 의존성으로 하는 이펙트로 지우지 **않습니다.** `fields`는 배열 prop이라
+   * 소비자가 인라인 리터럴로 주면 매 렌더 새 신원이 되고, 그러면 그 이펙트가 매 렌더 돌아
+   * **버퍼가 한 글자도 살아남지 못합니다.** 파생값이 이 컴포넌트가 이미 쓰는 패턴입니다.
+   */
+  const resolvedTyping = typing && fields.includes(typing.unit) ? typing : null;
   // 완료 피드백(css/surfaces.css .dropdown-value-commit) 커밋 카운터 — commitAndClose에서만,
   // 그것도 확정된 값이 **이 세션이 시작될 때의 값**(sessionStartValueRef, 아래)과 실제로
   // 다를 때만 올립니다. 0에서 시작해 첫 마운트는 애니메이션이 돌지 않고, 화살표·휠·
@@ -360,7 +387,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 값이 유효하지 않은데(빈 값·깨진 값) 버퍼도 없으면 예전 formatDateTrigger와 똑같이
   // placeholder입니다 — 판정도 그때와 같은 validDateValue입니다.
   const hasDateValue = validDateValue(value);
-  const triggerParts = hasDateValue || typing ? dateTriggerParts(hasDateValue ? value : baseValue, fields, typing) : null;
+  const triggerParts = hasDateValue || resolvedTyping ? dateTriggerParts(hasDateValue ? value : baseValue, fields, resolvedTyping) : null;
 
   /**
    * 트리거의 접근성 이름 — **레이블 뒤에 지금 화면에 보이는 값을 잇습니다**
@@ -378,11 +405,25 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 치고 있는지는 여전히 안 읽힙니다 — §8의 `aria-activedescendant` 조항은 그대로 살아 있는
    * 구멍입니다. 이걸로 그 구멍이 메워졌다고 적지 마세요.
    *
-   * 조각을 그대로 이으므로 **이름의 값 부분은 트리거의 `textContent`와 글자까지 같습니다.**
-   * 화면과 이름이 갈라질 수 없다는 뜻이고, 그것이 이 방식을 고른 이유입니다(버퍼를 치는
-   * 동안에도 화면에 보이는 그대로가 이름에 실립니다).
+   * 이름은 화면과 **같은 조각(`triggerParts`)에서** 만듭니다. 그래서 둘이 갈라질 수 없고,
+   * 그것이 이 방식을 고른 이유입니다 — 이름만 `value`를 읽게 만들면 버퍼를 치는 동안 곧바로
+   * 갈립니다.
+   *
+   * ⚠️ **채움 문자(`DATE_WHEEL_FILL`, U+2012)만은 이름에서 뺍니다 — 설계 스펙 §8.**
+   * 그 문자를 고른 이유는 위 상수 주석에 있고 **오직 어드밴스 폭 하나**입니다. 눈으로
+   * 보라고 넣은 자리 표시가 귀로도 읽혀야 할 이유가 없고, **빈 자리마다 반복되므로** 네
+   * 자리 연도를 치는 동안 이름이 정보 없이 길어졌다 짧아집니다(`2‒‒‒` → `20‒‒` → `203‒`).
+   * 빼면 `"거래 날짜, 20. 07. 12."`입니다.
+   *
+   * **"화면과 갈라질 수 없다"는 원칙은 그대로입니다** — 같은 출처에서 만들고 **할 말이 없는
+   * 문자 하나만** 빼는 것이지 다른 것을 말하는 게 아닙니다. 실제로 스크린리더가 U+2012를
+   * 어떻게 발음하는지(무시/`dash`/`figure dash` — 구두점 읽기 수준 설정에 따라 갈립니다)는
+   * 실기기 항목이고, **그 답과 무관하게 뺍니다.**
+   *
+   * `split`/`join`을 씁니다 — `replaceAll`은 `lib`가 ES2021 이상이어야 하고, 이 한 줄 때문에
+   * 타입 타깃을 올릴 이유가 없습니다.
    */
-  const triggerValueText = triggerParts ? triggerParts.map((part) => part.text).join("") : labels.placeholder;
+  const triggerValueText = triggerParts ? triggerParts.map((part) => part.text).join("").split(DATE_WHEEL_FILL).join("") : labels.placeholder;
   const triggerName = `${ariaLabel}, ${triggerValueText}`;
 
   useEffect(() => {
@@ -495,6 +536,23 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   /**
    * 열을 떠날 때 버퍼를 해석해 확정합니다. 확정할 수 없으면 조용히 버립니다.
    *
+   * ⚠️ **unit을 인자로 받지 않습니다. 버퍼가 자기 unit을 들고 있으므로 그것으로 확정합니다**
+   * (설계 스펙 §4.2). 예전에는 `flushTyping(unit)`이었고 호출부 셋이 전부
+   * `resolvedActiveUnit`을 넘겼는데, **그 둘은 갈라질 수 있습니다** — 트리거 세그먼트 클릭,
+   * 그리고 소비자의 런타임 `fields` 축소. 갈라지면 인자가 `typing.unit`과 안 맞아 이 함수가
+   * **아무것도 안 하고 빠져나가면서 버퍼도 안 비웠고**, 그 하나에서 증상이 넷 났습니다
+   * (리뷰 실측): 다음 숫자가 조용히 덮어씀 · `Backspace` no-op · `←`/`→`가 확정도 폐기도
+   * 안 함 · `Tab`이 계약과 반대로 버림. 그리고 살아남은 버퍼가 세션 끝의 `완료`에서
+   * **`2003-08-13`처럼 엉뚱한 연도로 확정**됐습니다 — 사라지는 것보다 나쁩니다.
+   *
+   * `commitAndClose`는 **혼자만 처음부터 옳았습니다**(인자 없이 상태에서 읽음). 인자를
+   * 없앤 것이 고침의 전부입니다 — **틀리게 넘길 인자가 없으면 갈라질 수도 없습니다.**
+   *
+   * **버퍼가 있으면 무조건 비웁니다**(해석 가능 여부와 무관). 그래야 `fields` 축소로 생긴
+   * **보이지 않는** 버퍼도 떠나는 경로에서 청소됩니다 — 안 그러면 `fields`가 다시 늘 때
+   * 묵은 숫자가 되살아납니다. 확정은 `resolvedTyping`(보이는 것)에 대해서만 합니다:
+   * 화면에 없는 숫자를 값에 얹으면 그게 바로 위의 `2003` 사고입니다.
+   *
    * 반환값(방금 확정한 새 값)을 호출부가 받아 써야 하는 경우가 있습니다 —
    * ArrowUp/ArrowDown처럼 확정 뒤 그 값에서 한 칸 더 움직이는 경로가 그렇습니다.
    * `commitTyped`의 `onChange`는 `baseValue`(이 렌더에서 고정된 값 prop)로 계산한
@@ -505,12 +563,14 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * `commitAndClose`(Enter·완료 버튼이 공유)도 같은 함정을 피하려고 `value` prop
    * 대신 이 반환값을 씁니다.
    */
-  function flushTyping(unit: DateWheelUnit) {
-    if (typing?.unit !== unit || !typing.digits) return null;
-    const amount = flushBuffer(unit, typing.digits);
+  function flushTyping() {
+    if (!typing) return null;
     setTyping(null);
+    const buffer = resolvedTyping;
+    if (!buffer?.digits) return null;
+    const amount = flushBuffer(buffer.unit, buffer.digits);
     if (amount === null) return null;
-    return commitTyped(unit, amount);
+    return commitTyped(buffer.unit, amount);
   }
 
   /**
@@ -532,7 +592,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * ArrowUp/ArrowDown에서 flushTyping이 이미 겪은 것과 같은 결함입니다.
    */
   function commitAndClose() {
-    const flushed = typing ? flushTyping(typing.unit) : null;
+    const flushed = flushTyping();
     // 이 함수가 최종적으로 확정하는 값. 아래에서 실제로 바뀐 값이 있으면만 갱신합니다 —
     // 아무것도 안 바뀌면(예: 이미 오늘인 값 그대로 완료) committed는 value와 같은
     // 채로 남아 커밋 신호가 켜지지 않습니다.
@@ -670,7 +730,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     // 없애는 것입니다**(스펙 §2·§3): 네이티브 날짜 필드는 달력을 열지 않고 고칩니다.
     if (key >= "0" && key <= "9" && key.length === 1) {
       event.preventDefault();
-      const buffer = typing?.unit === unit ? typing.digits : "";
+      const buffer = resolvedTyping?.unit === unit ? resolvedTyping.digits : "";
       const step = typeDigit(unit, buffer, key);
       if (step.commit !== null) {
         setTyping(null);
@@ -684,12 +744,12 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
 
     if (key === "Backspace") {
       event.preventDefault();
-      if (typing?.unit === unit && typing.digits) {
+      if (resolvedTyping?.digits) {
         // 버퍼가 없다는 상태는 항상 null 하나로만 표현합니다 — 빈 문자열 버퍼를
         // 살려두면 읽는 쪽마다 ""를 "없음"으로 따로 알아야 하고, 그 결과가 바로
         // 아래 렌더의 `??`가 빈 문자열을 걸러내지 못해 행이 통째로 비어 버리는 결함입니다.
-        const digits = typing.digits.slice(0, -1);
-        setTyping(digits ? { unit, digits } : null);
+        const digits = resolvedTyping.digits.slice(0, -1);
+        setTyping(digits ? { unit: resolvedTyping.unit, digits } : null);
       }
       return;
     }
@@ -705,7 +765,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       // **닫힌 채로 버퍼가 생길 방법이 없었기 때문**이다. SEG Task 5가 숫자 키를 닫힘으로
       // 올리는 순간 그 전제가 사라져, 치다 만 숫자를 들고 Tab으로 떠나면 그 숫자가 이유
       // 없이 사라지는 결함이 된다. `setOpen(false)`는 닫힌 상태에서 no-op이다.
-      flushTyping(unit);
+      flushTyping();
       setOpen(false);
       return;
     }
@@ -713,7 +773,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     // 방향키는 안에서만 움직인다 — 끝에서는 제자리이고 팝오버를 닫지 않는다.
     if (key === "ArrowRight" || key === "ArrowLeft") {
       event.preventDefault();
-      flushTyping(unit);
+      flushTyping();
       moveColumn(unit, key === "ArrowRight" ? 1 : -1);
       return;
     }
@@ -727,12 +787,17 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       // Escape로 닫아도 다이얼로그가 살아 있는 것이 그 훅 덕이다. 여기서 가로채면
       // (특히 아래 stopPropagation이 걸리면) 그 리스너에 영영 안 닿아 **팝오버가
       // Escape로 안 닫힌다.** tests의 "Escape를 누르면 팝오버가 닫힌다"가 버퍼를 채운
-      // 채로 그것을 지킨다 — 이 `if`와 아래 `if`의 순서를 바꾸면 빨개진다.
+      // 채로 그것을 지킨다 — **이 줄을 지우면** 빨개진다.
+      //
+      // ⚠️ 여기 한동안 "이 `if`와 아래 `if`의 **순서를 바꾸면** 빨개진다"고 적혀 있었는데
+      // **틀렸다 — 스왑은 0 red다**(리뷰가 측정). 두 가드 사이에 부수효과가 없어 **등가
+      // 뮤테이션**이기 때문이고, 등가 뮤테이션의 0 red는 "감시자가 없다"가 아니라
+      // "뮤테이션이 아무것도 안 바꿨다"는 뜻이다. 실제로 빨개지는 것은 **삭제**다.
       if (open) return;
       // **버퍼가 없으면 아무것도 하지 않고 그대로 흘려보낸다**(§3). 이쪽을 빠뜨리면
       // 날짜 필드에 포커스가 있는 동안 **다이얼로그가 Escape로 안 닫힌다** — 스펙이
       // 두 경우를 각각 테스트로 고정하라고 적어 둔 이유다.
-      if (!typing) return;
+      if (!resolvedTyping) return;
       // 버퍼가 있으면 버리고 전파를 멈춘다. 치던 숫자를 취소하려고 누른 Escape가 폼을
       // 통째로 닫으면 안 된다. React 루트는 document보다 **먼저** 실행되므로 여기서
       // 멈추면 useEscapeToClose의 document 리스너(다이얼로그 것 포함)에 닿지 않는다.
@@ -775,7 +840,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     // baseValue(이 렌더에서 고정된 옛 값)를 읽으므로 여기서 그대로 쓰면 방금
     // commitTyped가 넘긴 값을 뒤이은 onChange가 덮어써 버퍼 확정이 무효가 된다 —
     // flushTyping의 주석 참고.
-    const flushed = flushTyping(unit);
+    const flushed = flushTyping();
     commitShift(flushed ?? baseValue, unit, key === "ArrowDown" ? 1 : -1);
   }
 
@@ -850,8 +915,21 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         "지금 깨진다"가 아니라 **예방적** 근거입니다 — 팝오버 안 어떤 것도 포커스를 받지
         않게 막아 두었지만(§6.3), 그 차단이 한 겹 뚫리는 날 이 핸들러가 div에 있으면 그때
         조용히 깨집니다. 버튼에 붙이면 버블이 문제가 되지 않습니다 — 버튼 자신이 포커스를
-        받고, 그 안의 <span>·<i>는 포커스를 받을 수 없기 때문입니다. */}
-    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onClick={(event) => {
+        받고, 그 안의 <span>·<i>는 포커스를 받을 수 없기 때문입니다.
+
+        **onBlur는 버퍼를 확정합니다(설계 스펙 §4.2).** 닫힌 채로 버퍼가 살 수 있게 되면서
+        `Tab`이 아니라 **다른 곳을 클릭해서** 떠나는 경로가 생겼고, 조용히 버리면 친 숫자가
+        이유 없이 사라집니다. 팝오버 안 클릭은 여기 안 걸립니다 — `mousedown` 기본 동작을
+        막아 두어(§6.3) 포커스가 트리거를 떠나지 않기 때문이고, **그게 이 규칙이 성립하는
+        이유입니다.**
+
+        ⚠️ **언마운트에서는 확정하지 않습니다** — 사라진 필드에 대한 onChange가 되기
+        때문입니다(§4.2). 그 규칙은 코드가 아니라 **부재**로 지켜집니다: cleanup에서 flush를
+        부르지 않고, **React는 언마운트에서 onBlur를 부르지 않습니다**(프로브로 측정 —
+        포커스된 버튼을 언마운트하면 focus만 기록되고 blur는 없으며 activeElement는 body로
+        갑니다). 그래서 이 핸들러와 그 규칙이 충돌하지 않습니다. tests의 "버퍼를 든 채
+        언마운트되면 확정하지 않고 버린다"가 그 전제까지 함께 지킵니다. */}
+    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onBlur={flushTyping} onClick={(event) => {
       // **세그먼트를 직접 누르면 그 세그먼트가 활성이 됩니다**(설계 스펙 §6.4(3)) —
       // 네이티브 날짜 필드가 그렇게 합니다. 세그먼트는 <span>이라 클릭이 여기로 그대로
       // 올라오고, 그 전에 `event.target`의 `data-unit`을 읽습니다. 구두점·아이콘·여백에는
@@ -866,22 +944,26 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       // `fields`로 한 번 거르는 것은 캐스팅을 피하려는 것이기도 하지만, 소비자가 런타임에
       // fields를 줄인 직후의 낡은 DOM을 클릭해도 사라진 열을 가리키지 않게 합니다.
       //
-      // ⚠️ **여기서 버퍼(`typing`)를 일부러 건드리지 않습니다 — 그리고 그게 지금 결함입니다.
-      // 버퍼의 수명은 Task 6이 정할 자리라 여기서 고치지 않습니다.** 재현했습니다(SEG Task 5
-      // 보고서 §6): 닫힌 채 연도에 `3`을 치고 **일** 세그먼트를 클릭하면 활성만 일로 가고
-      // 버퍼는 `{unit:"year", digits:"3"}`인 채 살아남습니다 — 트리거는 `3‒‒‒. 07. 12.`를
-      // 계속 그리는데 다음 숫자는 일로 갑니다. 이어서 `5`를 치면 `2026. 07. 05.`가 되어
-      // **친 `3`이 확정되지도 않고 조용히 사라집니다.**
+      // **세그먼트 클릭은 버퍼를 확정합니다 — `←`/`→`와 같은 "자리를 옮기는 조작"이기
+      // 때문입니다**(설계 스펙 §4.2). 사용자가 "여기로 가겠다"고 했지 "이 값이다"라고 하지
+      // 않았으므로, 치던 것은 원래 있던 자리에 남아야 합니다. **열림·닫힘에서 같게
+      // 동작해야 합니다** — 고치기 전에는 열림에서만 (토글로 닫히며) 버려졌고 닫힘에서는
+      // 살아남았습니다. 그 비대칭은 설계가 아니라 우연이었습니다.
       //
-      // 열림에서는 같은 클릭이 토글로 닫으므로 "닫히면 버퍼를 버린다" 레이아웃 이펙트가 돌아
-      // 버퍼가 사라집니다(측정: `2026. 07. 12.`) — **같은 제스처가 `open`에 따라 다르게 굴고,
-      // 그 비대칭은 설계가 아니라 우연입니다.** 설계 스펙 §4.2의 포인터 폐기 규칙이 드는 예
-      // (휠·스와이프·행 클릭·`오늘`)는 전부 팝오버 안 항목이라, 트리거 쪽 포인터 경로가
-      // 생기기 전에 쓰였습니다. 열의 `onPointerDown`이 `setTyping(null)`을 들고 있는 이유가
-      // 정확히 그 규칙이고, 이 컨트롤에서 그것이 없는 포인터 입력은 지금 여기 하나뿐입니다.
+      // ⚠️ **`flushTyping()`이 활성 세그먼트가 아니라 버퍼 자신의 unit으로 확정한다는 것이
+      // 바로 여기서 값을 냅니다.** 이 시점의 `activeUnit`은 아직 버퍼의 열입니다(아래
+      // `setActiveUnit`은 다음 렌더에 반영됩니다). 그래서 "누른 세그먼트로 확정"을 넣으면
+      // unit이 갈려 **아무것도 확정되지 않고 버퍼가 그대로 살아남습니다** — 그게 리뷰가
+      // `2003-08-13`으로 잰 결함이었습니다. `flushTyping`에서 인자를 없앤 이유입니다.
+      //
+      // **구두점·아이콘·여백은 확정하지 않습니다.** `data-unit`이 없으면 자리를 옮기는
+      // 조작이 아니라 그냥 **여는 조작**이고, 여는 조작은 버퍼를 들고 갑니다(§4.2).
       const clicked = event.target instanceof Element ? event.target.getAttribute("data-unit") : null;
       const clickedUnit = fields.find((field) => field === clicked);
-      if (clickedUnit) setActiveUnit(clickedUnit);
+      if (clickedUnit) {
+        flushTyping();
+        setActiveUnit(clickedUnit);
+      }
       setOpen((current) => !current);
     }} onKeyDown={handleFieldKey}>{/* 이 <span> 하나가 §12의 확정 신호를 재생하는 자리입니다 — key={commitPulse}가 커밋마다
         이 노드를 리마운트시켜 .dropdown-value-commit 애니메이션을 다시 틉니다.
@@ -944,7 +1026,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
               컨테이너의 key가 바뀌어 행이 통째로 리마운트되므로 포커스를 둘 수도 없습니다. */}
-          <div className="date-wheel-viewport"><div className="date-wheel-values" key={`${unit}-${motion.sequence}`}>{DATE_WHEEL_OFFSETS.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === 3; const buffered = offset === 0 && typing?.unit === unit ? typing.digits : null; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={() => rowValue && applyShift(unit, offset)} key={offset}>{buffered ?? (rowValue ? dateWheelLabel(rowValue, unit, labels.weekdays) : "—")}</button>; })}</div></div>
+          <div className="date-wheel-viewport"><div className="date-wheel-values" key={`${unit}-${motion.sequence}`}>{DATE_WHEEL_OFFSETS.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === 3; const buffered = offset === 0 && resolvedTyping?.unit === unit ? resolvedTyping.digits : null; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={() => rowValue && applyShift(unit, offset)} key={offset}>{buffered ?? (rowValue ? dateWheelLabel(rowValue, unit, labels.weekdays) : "—")}</button>; })}</div></div>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.next}`} disabled={!shifted(unit, 1)} onClick={() => applyShift(unit, 1)}><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></button>
         </section>; })}
       </div>
