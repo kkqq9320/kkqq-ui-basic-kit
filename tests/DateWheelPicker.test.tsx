@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DateWheelPicker, type DateWheelUnit } from "../src/DateWheelPicker";
+import { Dialog } from "../src/Dialog";
 import datePickerCssSource from "../css/date-picker.css?raw";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -678,13 +679,19 @@ describe("DateWheelPicker 세그먼트 이동", () => {
   });
 });
 
-describe("DateWheelPicker 리뷰 Finding 1 — activeUnit 시드와 클램프", () => {
-  // 트리거의 onClick은 activeUnit을 건드리지 않고 setOpen만 토글했다. 키보드 진입
-  // (handleFieldKey의 `!open` 분기)은 열 때마다 activeUnit을 fields[0]으로 되돌리는데,
-  // 마우스 진입은 그러지 않아 두 경로가 갈렸다 — Select.tsx가 마우스·키보드를 같은
-  // 값으로 시딩하는 것과 같은 이유다. 월 열에 가 있던 채로 닫았다가 마우스로 다시
-  // 열면, 시드가 없으면 포커스가 여전히 월로 간다.
-  it("마우스로 다시 열면 키보드로 연 것과 같은 첫 세그먼트가 활성이다", async () => {
+describe("DateWheelPicker 리뷰 Finding 1 — activeUnit의 수명과 클램프", () => {
+  // ⚠️ **이 테스트의 계약이 SEG Task 5에서 뒤집혔다.** 예전 이름은 "마우스로 다시 열면
+  // 키보드로 연 것과 같은 첫 세그먼트가 활성이다"였고, 트리거 onClick과 키보드 진입
+  // 양쪽에 `setActiveUnit(fields[0] ?? "year")` 시드가 있어 여는 순간 활성이 첫 세그먼트로
+  // 되돌아갔다. 닫힌 채로 `←`/`→`가 활성을 옮길 수 있게 되면서(스펙 §3) 그 시드는
+  // **옮겨 둔 활성을 여는 순간 조용히 되돌리는 결함**이 됐다 — §6.4(3)이 "두 곳을
+  // 제거해야 한다"고 명시한다. 그래서 기대값이 `year`에서 `month`로 뒤집혔다.
+  //
+  // 이것이 **트리거 onClick 쪽 시드**의 파수꾼이다. 키보드 쪽 시드는 아래 "닫힌 채로
+  // 조작한다" 블록의 `→` 뒤 `↓` 테스트가 지킨다 — 하나만 지우면 반쪽이므로 파수꾼도
+  // 둘이어야 한다. 여기서 `fireEvent.click(field)`가 겨냥하는 것은 트리거 <button>
+  // 자신이라 `data-unit`이 없고, 그래서 새로 생긴 세그먼트 클릭 경로는 no-op이다.
+  it("마우스로 다시 열면 옮겨 둔 활성 세그먼트를 유지한 채 열린다", async () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
     const field = fieldOf("거래 날짜");
     field.focus();
@@ -697,7 +704,7 @@ describe("DateWheelPicker 리뷰 Finding 1 — activeUnit 시드와 클램프", 
 
     fireEvent.click(field);   // 마우스로 다시 연다 — activeUnit 상태는 여전히 "month"다
 
-    expect(activeSegment()).toBe("year");
+    expect(activeSegment()).toBe("month");
   });
 
   // fields가 열려 있는 동안 줄어들어 activeUnit이 가리키던 열이 통째로 사라지는 경로.
@@ -722,6 +729,258 @@ describe("DateWheelPicker 리뷰 Finding 1 — activeUnit 시드와 클램프", 
     fireEvent.click(screen.getByRole("button", { name: "일 열 제거" }));
 
     expect(screen.getByRole("group", { name: "연도 2026" }).classList.contains("active")).toBe(true);
+  });
+});
+
+// 설계 스펙 §2·§3 — **(가)안이 처음으로 눈에 보이는 자리다.** 네이티브 `<input type="date">`는
+// 달력을 열지 않고 값을 고친다. 이 블록은 그 계약 전체를 닫힌 상태에서 고정한다.
+//
+// 여기까지 참이던 전제 하나가 사라진다: **"닫힌 채로 버퍼가 생길 방법이 없다."** 그
+// 전제 위에 불활성으로 남아 있던 구멍이 둘 있었고(닫힘 `Escape` 미구현, 닫힘 `Tab`이
+// 버퍼를 확정하지 않음), 숫자 키가 닫힘으로 올라오는 순간 둘 다 활성화된다.
+describe("DateWheelPicker 닫힌 채로 조작한다", () => {
+  /** 닫힌 채 키를 받는 출발 상태 — 실사용과 같게 트리거에 포커스를 둔다. */
+  function closedField(initialValue = "2026-07-12") {
+    render(<ControlledDateWheel initialValue={initialValue} />);
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    return field;
+  }
+
+  // 아래 두 개는 원래 하나로 쓸 뻔한 것이다. "값이 확정된다"와 "팝오버가 안 열린다"는
+  // 서로 다른 결함이고, expect()는 첫 실패에서 던지므로 함께 두면 뒤쪽의 킬력을 증명할
+  // 수 없다 — 특히 숫자 분기를 통째로 지우는 뮤테이션은 값 단언에서 먼저 죽는다.
+  it("닫힌 채 숫자 넷을 치면 연도가 확정된다", () => {
+    const field = closedField();
+    for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(field, { key: digit });
+    expect(field.textContent).toBe("2031. 07. 12.");
+  });
+
+  it("닫힌 채 숫자를 쳐도 팝오버는 열리지 않는다", () => {
+    const field = closedField();
+    for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(field, { key: digit });
+    expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull();
+  });
+
+  // 버퍼는 닫힌 채로도 트리거가 자리를 지켜 그린다(스펙 §4.5) — 그래서 닫힌 상태에서도
+  // "확정 전"과 "확정 후"를 화면으로 구분할 수 있다. 채움 문자는 U+2012(파일 상단 FILL).
+  it("닫힌 채 두 자리만 치면 트리거가 자리를 지켜 그린다", () => {
+    const field = closedField();
+    fireEvent.keyDown(field, { key: "2" });
+    fireEvent.keyDown(field, { key: "0" });
+    expect(field.textContent).toBe(`20${FILL}${FILL}. 07. 12.`);
+  });
+
+  it("닫힌 채 Backspace가 버퍼에서 한 자리만 지운다", () => {
+    const field = closedField();
+    fireEvent.keyDown(field, { key: "2" });
+    fireEvent.keyDown(field, { key: "0" });
+    fireEvent.keyDown(field, { key: "Backspace" });
+    expect(field.textContent).toBe(`2${FILL}${FILL}${FILL}. 07. 12.`);
+  });
+
+  it("닫힌 채 →가 다음 세그먼트로 옮긴다", () => {
+    const field = closedField();
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    expect(activeSegment()).toBe("month");
+  });
+
+  it("닫힌 채 ←가 이전 세그먼트로 되돌린다", () => {
+    const field = closedField();
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "ArrowLeft" });
+    expect(activeSegment()).toBe("month");
+  });
+
+  // 방향키는 안에서만 움직인다(스펙 §2·§3) — 마지막 세그먼트에서 →를 눌러도 컨트롤을
+  // 떠나지 않는다. 닫힌 상태에서 이것이 깨지면 증상이 조용하다: 활성 표시가 사라진다.
+  it("닫힌 채 마지막 세그먼트에서 →는 제자리다", () => {
+    const field = closedField();
+    for (let i = 0; i < 3; i++) fireEvent.keyDown(field, { key: "ArrowRight" });
+    expect(activeSegment()).toBe("day");
+  });
+
+  // 스펙 §3의 **의도된 네이티브 이탈** — 네이티브는 닫힘 ↓가 값 ±1이지만, 이 킷의 모든
+  // 팝오버 컨트롤에서 ↓는 여는 키다. 아래 둘은 서로 다른 결함이라 나눈다("연다"를 지우는
+  // 뮤테이션과 "값을 안 바꾼다"를 깨뜨리는 뮤테이션이 다르다).
+  it("닫힌 채 ↓는 팝오버를 연다", async () => {
+    const field = closedField();
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    expect(await screen.findByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();
+  });
+
+  it("닫힌 채 ↓는 값을 바꾸지 않는다", () => {
+    const field = closedField();
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    expect(field.textContent).toBe("2026. 07. 12.");
+  });
+
+  // 스펙 §4.2 — "치다가 팝오버를 여는 것은 '떠나는' 조작이 아니다." 버퍼를 확정하면
+  // 여기서 값이 2003으로 튄다.
+  it("닫힌 채 버퍼를 들고 ↓로 열면 버퍼가 살아 있다", () => {
+    const field = closedField();
+    fireEvent.keyDown(field, { key: "3" });
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    expect(field.textContent).toBe(`3${FILL}${FILL}${FILL}. 07. 12.`);
+  });
+
+  // ⚠️ **스펙 §3은 닫힘의 `↓ ↑ Enter Space`를 한 행에 묶고 동작을 "연다" 하나로 적는다.**
+  // §4.2의 "떠나는 키" 목록에는 `Enter`·`Space`가 있지만, 그 목록은 그 둘이 실제로 떠나는
+  // 상태(열림 = `완료`)를 두고 쓴 것이고 §4.2의 예외 조항 자신이 `↓`/`↑`를 **"= 여는 키"**
+  // 라는 범주로 부른다. 두 문장이 함께 참이 되는 읽기는 하나뿐이다 — 닫힘의 여는 키는
+  // 넷 다 버퍼를 그대로 들고 연다. 이 테스트가 그 읽기를 고정한다.
+  it("닫힌 채 버퍼를 들고 Enter로 열어도 버퍼가 살아 있다", () => {
+    const field = closedField();
+    fireEvent.keyDown(field, { key: "3" });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(field.textContent).toBe(`3${FILL}${FILL}${FILL}. 07. 12.`);
+  });
+
+  // **키보드 쪽 activeUnit 시드의 파수꾼**(스펙 §6.4(3)). 시드가 살아 있으면 여는 순간
+  // 활성이 연도로 되돌아간다. 트리거 onClick 쪽 시드는 위 "리뷰 Finding 1" 블록이 지킨다 —
+  // 두 곳이므로 파수꾼도 둘이다.
+  //
+  // 스펙 §11의 함정: 활성 세그먼트의 초기값이 첫 세그먼트와 같으므로 `→`로 갈라 놓고
+  // **신원**으로 본다.
+  it("닫힌 채 →로 옮겨 둔 활성 세그먼트는 ↓로 열어도 유지된다", async () => {
+    const field = closedField();
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    expect(activeSegment()).toBe("day");
+  });
+
+  // 스펙 §3 — 닫힘 `Tab`도 "버퍼를 확정하고 떠난다"다. **Task 4 리뷰가 찾은 주인 없는
+  // 구멍 둘 중 하나**이고, 어느 인계 목록에도 없었다. 여기까지는 닫힌 채 버퍼가 생길 수
+  // 없어서 불활성이었다.
+  it("닫힌 채 Tab을 누르면 치던 숫자가 확정된다", () => {
+    const field = closedField();
+    fireEvent.keyDown(field, { key: "3" });
+    fireEvent.keyDown(field, { key: "1" });
+    fireEvent.keyDown(field, { key: "Tab" });
+    expect(field.textContent).toBe("2031. 07. 12.");
+  });
+
+  // 스펙 §3 — "`Enter`와 `Space`는 **두 상태 모두에서 항상** preventDefault한다." 열림
+  // 쪽은 "버퍼 확정과 폐기" 블록이 이미 고정하고 있고, 닫힘 쪽은 지금까지 없었다.
+  // jsdom은 <button>의 합성 click을 만들지 않으므로(직접 쟀다 — 그 블록의 주석 참고)
+  // 증상으로는 영영 안 잡힌다. `defaultPrevented`를 직접 고정한다.
+  it("닫힌 상태의 Enter도 preventDefault를 부른다", () => {
+    const field = closedField();
+    const event = createEvent.keyDown(field, { key: "Enter" });
+    fireEvent(field, event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("닫힌 상태의 Space도 preventDefault를 부른다", () => {
+    const field = closedField();
+    const event = createEvent.keyDown(field, { key: " " });
+    fireEvent(field, event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  // 스펙 §6.4(3) — 네이티브 날짜 필드가 그렇게 한다. 세그먼트는 <span>이라 클릭이 트리거의
+  // onClick으로 그대로 올라가고, 그 전에 `event.target`의 `data-unit`을 읽는다.
+  //
+  // 아래 둘은 **같은 클릭이 한 커밋에서 함께 일으키는 두 가지**라 서로를 가린다. 한 it에
+  // 두면 앞 단언이 터질 때 뒤 단언은 실행조차 되지 않는다.
+  function daySegment() {
+    return document.querySelector<HTMLElement>('.date-wheel-segment[data-unit="day"]')!;
+  }
+
+  it("세그먼트를 클릭하면 그 세그먼트가 활성이 된다", () => {
+    closedField();
+    fireEvent.click(daySegment());
+    expect(activeSegment()).toBe("day");
+  });
+
+  it("세그먼트를 클릭해도 열기 토글은 그대로 일어난다", async () => {
+    closedField();
+    fireEvent.click(daySegment());
+    expect(await screen.findByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();
+  });
+
+  // 구두점·아이콘·여백에는 `data-unit`이 없다 — 그때는 **활성을 안 바꾼다**(스펙 §6.4(3):
+  // 클릭에는 "어느 세그먼트"라는 정보가 없으므로 키보드로 옮겨 둔 활성을 조용히 되돌리지
+  // 않는다). `→`로 활성을 첫 세그먼트에서 갈라 놓고 본다.
+  it("구두점을 클릭하면 활성 세그먼트가 바뀌지 않는다", () => {
+    const field = closedField();
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.click(document.querySelector<HTMLElement>(".date-wheel-punctuation")!);
+    expect(activeSegment()).toBe("month");
+  });
+
+  // ── 닫힘 `Escape` — Task 4 리뷰가 찾은 두 번째 구멍이고, **아예 구현돼 있지 않았다.**
+  //    ⚠️ 소스 주석의 "남은 일(SEG Task 5)" 열거가 이것을 빠뜨리고 있었다(§3 표에는 있다).
+  //
+  //    두 경우를 각각 다른 `it`으로, `Dialog` 안에서 고정한다 — 전파를 정하는 것이 이
+  //    조항의 전부라, 위를 받아 줄 것이 없으면 아무것도 관찰되지 않는다.
+  //
+  //    `closeOnBack={false}`인 이유: `useBackToClose`는 언마운트 정리에서 `setTimeout(0)`으로
+  //    `history.back()`을 예약한다. 이 파일은 그 타이머를 흘려보내지 않으므로 켜 두면
+  //    다음 테스트로 새어 나간다. Escape 계약에는 필요 없는 기능이다.
+  function DateWheelInDialog({ onClose }: { onClose: () => void }) {
+    const [value, setValue] = useState("2026-07-12");
+    return <Dialog open onClose={onClose} ariaLabel="거래 수정" closeOnBack={false}>
+      <DateWheelPicker ariaLabel="거래 날짜" value={value} onChange={setValue} />
+    </Dialog>;
+  }
+
+  it("닫힌 채 버퍼가 있으면 Escape가 다이얼로그를 닫지 않는다", () => {
+    const onClose = vi.fn();
+    render(<DateWheelInDialog onClose={onClose} />);
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "3" });
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  // ⚠️ **이쪽을 빠뜨리면 날짜 필드에 포커스가 있는 동안 다이얼로그가 Escape로 안 닫힌다.**
+  // 스펙 §3이 두 경우를 각각 고정하라고 적어 둔 이유가 이것이다.
+  it("닫힌 채 버퍼가 없으면 Escape가 그대로 전파돼 다이얼로그가 닫힌다", () => {
+    const onClose = vi.fn();
+    render(<DateWheelInDialog onClose={onClose} />);
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  // 위 둘은 `stopPropagation()`과 `if (!typing) return`을 각각 죽인다. **`setTyping(null)`은
+  // 어느 쪽으로도 안 죽는다** — 지워도 둘 다 초록이다. 그 줄의 파수꾼이 이것이고, 단언
+  // 하나로 "버퍼가 사라졌다"와 "값은 그대로다"(스펙 §4.2: Escape는 버퍼를 버리고 값을
+  // 그대로 둔다)를 함께 본다.
+  it("닫힌 채 Escape는 치던 숫자를 버리고 값을 그대로 둔다", () => {
+    const field = closedField();
+    fireEvent.keyDown(field, { key: "2" });
+    fireEvent.keyDown(field, { key: "0" });
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(field.textContent).toBe("2026. 07. 12.");
+  });
+
+  // ── 스펙 §6.4(1)의 시나리오. **이 Task가 처음으로 증명 가능하게 만든다** — 닫힌 채
+  //    타이핑이 되기 전에는 이 순서를 밟을 수 없었다.
+  //
+  //    키보드만 쓰는 사용자가(= (가)안이 겨냥한 바로 그 사용자가) 자기가 친 날짜에 대해
+  //    확정 신호를 보는가. Task 1이 세션 기준값의 수명을 고치지 않았다면 — 즉 여는 순간
+  //    `sessionStartValueRef`를 찍는다면 — 첫 `Enter`가 기준값을 방금 친 2031로 덮어써
+  //    두 번째 `Enter`가 "안 바뀌었다"고 읽고 신호가 영영 안 뜬다.
+  //
+  //    **신호는 노드 신원으로 본다.** `classList`로 보면 이전 확정의 클래스가 남아 거짓
+  //    통과한다(08-06에 한 번 밟은 함정). `key={commitPulse}`가 바뀌어 트리거 안 span이
+  //    리마운트됐는지를 본다 — 타이핑 자체는 commitPulse를 안 올리므로 `before`는 안전하다.
+  it("닫힌 채 타이핑한 값을 Enter로 열어 Enter로 완료하면 확정 신호가 뜬다", () => {
+    const field = closedField();
+    for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(field, { key: digit });
+    const before = field.querySelector("span");
+
+    fireEvent.keyDown(field, { key: "Enter" });   // 연다 — 여기서 기준값을 찍으면 안 된다
+    fireEvent.keyDown(field, { key: "Enter" });   // 완료
+
+    expect(field.querySelector("span")).not.toBe(before);
   });
 });
 

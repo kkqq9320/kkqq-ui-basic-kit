@@ -621,19 +621,19 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 하나입니다. 열이 자기 자신을 넘기던 `unit` 인자가 여기 있었는데, 그 인자는 열도 키를
    * 받던 시절에만 뜻이 있었습니다.
    *
-   * 순서에 계약이 **넷** 박혀 있습니다. 바꾸지 마세요 — 넷 다 뮤테이션으로 빨개지는
+   * 순서에 계약이 **셋** 박혀 있습니다. 바꾸지 마세요 — 셋 다 뮤테이션으로 빨개지는
    * 것을 확인했습니다(괄호 안이 그때 빨개진 개수):
    *   1. `disabled`가 맨 앞 — 비활성 필드는 **어떤 키에도** 반응하지 않습니다.
    *      Delete·Ctrl+;도 예외가 아니라서 `handleShortcut`보다 앞입니다. (1↔2 스왑: 1 red)
    *   2. `handleShortcut`이 Ctrl/Meta 가드보다 **앞** — 뒤에 두면 Ctrl+;가 그 가드에
    *      걸려 `handleShortcut`에 영영 닿지 않습니다. (2↔3 스왑: 4 red)
    *   3. 그 뒤의 Ctrl/Meta 가드 — 나머지 조합키는 브라우저·OS 몫입니다.
-   *   4. `handleShortcut`이 아래 `if (!open)` 갈림보다 **앞**. 이 넷째는 **합치기가
-   *      만들어 낸 것**입니다 — 합치기 전 `handleColumnKey`에는 `open` 갈림이 아예
-   *      없었고, `handleTriggerKeyDown`의 `if (open) return`은 아무 일도 안 하고
-   *      빠지는 분기였습니다. 지금은 `!open` 분기가 **`return`으로 끝나므로**, 그 위로
-   *      올리면 닫힌 상태의 Delete·Ctrl+;가 영영 안 닿습니다. (`!open` 블록을
-   *      `handleShortcut` 위로 올림: 6 red)
+   *
+   * 여기 한동안 넷째가 있었습니다 — "`handleShortcut`이 아래 `if (!open)` 갈림보다 앞".
+   * **SEG Task 5가 그 갈림을 없앴으므로 그 조항도 없어집니다.** 닫힌 상태에서 조기
+   * `return`하는 자리가 더 이상 없어서(§3의 "닫힘·열림" 키들이 전부 이 함수 위쪽에
+   * 있습니다) 그 순서로 깨질 것이 남아 있지 않습니다. 성립할 수 없는 계약을 남겨 두면
+   * 다음 사람이 반증하고 나머지 셋까지 못 믿게 되므로 지웁니다.
    *
    * **`typeDigit`의 자동 이동이 활성 세그먼트를 옮기면 그 다음 키는 옮겨간 세그먼트에
    * 갑니다.** 연도 네 자리를 다 치면 활성이 월로 가고, 그 뒤의 `↓`는 월을 움직입니다 —
@@ -660,24 +660,14 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     if (event.ctrlKey || event.metaKey) return;
     const key = event.key;
 
-    // 닫혀 있으면 여는 키만 봅니다.
+    // 여기부터 아래 "상태로 갈리는 세 무리"까지는 **닫힘·열림에서 똑같이** 동작합니다
+    // (설계 스펙 §3의 "닫힘·열림" 행 전부). `Delete`·`Ctrl+;`는 이미 위 `handleShortcut`이
+    // 처리했습니다.
     //
-    // 설계 스펙 §3은 `0`~`9`·`Backspace`·`←`·`→`·`Tab`/`Shift+Tab`·`Delete`·`Ctrl+;`를
-    // **"닫힘·열림" 양쪽**으로 적습니다. `Delete`·`Ctrl+;`는 이미 위 `handleShortcut`으로
-    // 이 갈림 **위에** 있고, 나머지는 아직 아래에 있어 닫힌 상태에서 안 먹습니다 —
-    // 그것들을 위로 올리는 것이 남은 일입니다(SEG Task 5). 상태로 진짜 갈리는 것은 세
-    // 무리뿐입니다(`Enter`·`Space` / `↑`·`↓` / `Escape`) — 셋 다 "팝오버가 없으면 할 수
-    // 없는 일"이라 갈립니다.
-    if (!open) {
-      if (key !== "ArrowDown" && key !== "ArrowUp" && key !== "Enter" && key !== " ") return;
-      // <button>은 Enter를 keydown에서, Space를 keyup에서 click으로 바꿉니다. 막지 않으면
-      // 그 click이 트리거의 onClick과 겹쳐 연 직후 곧바로 다시 닫습니다.
-      event.preventDefault();
-      setActiveUnit(fields[0] ?? "year");
-      setOpen(true);
-      return;
-    }
-
+    // 예전에는 이 자리에 `if (!open) { 여는 키만 보고 나머지는 return }`이 있었습니다 —
+    // `handleTriggerKeyDown`이 트리거에 걸려 있던 시절의 것이고, 그래서 닫힌 채로는
+    // 숫자도 방향키도 `Tab`도 아무것도 안 먹었습니다. **(가)안의 요점이 바로 그것을
+    // 없애는 것입니다**(스펙 §2·§3): 네이티브 날짜 필드는 달력을 열지 않고 고칩니다.
     if (key >= "0" && key <= "9" && key.length === 1) {
       event.preventDefault();
       const buffer = typing?.unit === unit ? typing.digits : "";
@@ -704,25 +694,17 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       return;
     }
 
-    if (key === "Enter" || key === " ") {
-      // 완료 버튼과 같은 동작 — commitAndClose가 치던 숫자를 먼저 확정한 뒤 닫는다.
-      //
-      // **preventDefault를 빼지 마라(설계 스펙 §3).** 트리거는 <button>이고, <button>은
-      // Enter를 keydown에서, Space를 keyup에서 click으로 바꾼다. 그 click은 트리거의
-      // onClick(열기/닫기 토글)을 불러, 우리가 확정하며 닫은 팝오버를 곧바로 **다시
-      // 연다.** ⚠️ 이 결함은 **jsdom에서 재현되지 않는다** — jsdom 26.1.0은 그 click을
-      // 합성하지 않는다(직접 쟀다: Enter keydown·Space keyup 모두 click 0회). 그래서
-      // tests는 증상이 아니라 `defaultPrevented`를 직접 고정한다.
-      event.preventDefault();
-      commitAndClose();
-      return;
-    }
-
     if (key === "Tab") {
       // 떠나는 키다 — 세그먼트를 옮기지 않는다(설계 스펙 §3·§5: 이 컨트롤의 tab 정거장은
       // 트리거 하나다). **preventDefault를 부르지 않는다.** 기본 동작이 다음/이전 요소로
       // 보내고, 포커스는 이미 트리거에 있으므로 브라우저가 트리거 기준으로 다음 tabbable을
       // 계산한다. keydown은 기본 Tab 동작보다 먼저 실행되므로 확정·닫기가 먼저 끝난다.
+      //
+      // **닫힌 상태에서도 확정한다**(§3은 이 행을 "닫힘·열림"으로 적는다). 예전에는 이
+      // 분기가 `!open` 갈림 아래에 있어 닫힌 채로는 아예 닿지 않았고, 그래도 무해했다 —
+      // **닫힌 채로 버퍼가 생길 방법이 없었기 때문**이다. SEG Task 5가 숫자 키를 닫힘으로
+      // 올리는 순간 그 전제가 사라져, 치다 만 숫자를 들고 Tab으로 떠나면 그 숫자가 이유
+      // 없이 사라지는 결함이 된다. `setOpen(false)`는 닫힌 상태에서 no-op이다.
       flushTyping(unit);
       setOpen(false);
       return;
@@ -736,8 +718,58 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       return;
     }
 
-    if (key !== "ArrowUp" && key !== "ArrowDown") return;
+    // ── 여기서부터가 **상태로 갈리는 세 무리**다(설계 스펙 §3). 셋 다 "팝오버가 없으면
+    //    할 수 없는 일"이라는 한 가지 이유로 갈린다.
+
+    if (key === "Escape") {
+      // **열림은 여기서 처리하지 않는다.** `useEscapeToClose`(hooks.ts)가 document
+      // 리스너로 받아 겹친 것 중 가장 깊은 하나만 닫는다 — 다이얼로그 안의 픽커를
+      // Escape로 닫아도 다이얼로그가 살아 있는 것이 그 훅 덕이다. 여기서 가로채면
+      // (특히 아래 stopPropagation이 걸리면) 그 리스너에 영영 안 닿아 **팝오버가
+      // Escape로 안 닫힌다.** tests의 "Escape를 누르면 팝오버가 닫힌다"가 버퍼를 채운
+      // 채로 그것을 지킨다 — 이 `if`와 아래 `if`의 순서를 바꾸면 빨개진다.
+      if (open) return;
+      // **버퍼가 없으면 아무것도 하지 않고 그대로 흘려보낸다**(§3). 이쪽을 빠뜨리면
+      // 날짜 필드에 포커스가 있는 동안 **다이얼로그가 Escape로 안 닫힌다** — 스펙이
+      // 두 경우를 각각 테스트로 고정하라고 적어 둔 이유다.
+      if (!typing) return;
+      // 버퍼가 있으면 버리고 전파를 멈춘다. 치던 숫자를 취소하려고 누른 Escape가 폼을
+      // 통째로 닫으면 안 된다. React 루트는 document보다 **먼저** 실행되므로 여기서
+      // 멈추면 useEscapeToClose의 document 리스너(다이얼로그 것 포함)에 닿지 않는다.
+      //
+      // preventDefault는 부르지 않는다 — §3이 정한 것은 전파 차단 하나뿐이고,
+      // Escape에는 이 컨트롤이 되돌려야 할 기본 동작이 없다.
+      event.stopPropagation();
+      setTyping(null);
+      return;
+    }
+
+    if (key !== "Enter" && key !== " " && key !== "ArrowUp" && key !== "ArrowDown") return;
+    // Enter·Space: <button>은 Enter를 keydown에서, Space를 keyup에서 click으로 바꾸고,
+    // 그 click은 트리거의 onClick(열기/닫기 토글)을 부른다 — 막지 않으면 닫힘에서는 연
+    // 직후 다시 닫고, 열림에서는 확정하며 닫은 것을 **다시 연다.** 그래서 §3의 계약은
+    // "두 상태 모두에서 항상 preventDefault"다. ⚠️ 열림 쪽 결함은 **jsdom에서 재현되지
+    // 않는다** — jsdom 26.1.0은 그 click을 합성하지 않는다(직접 쟀다: Enter keydown·
+    // Space keyup 모두 click 0회). 그래서 tests는 증상이 아니라 `defaultPrevented`를
+    // 직접 고정한다. ↑·↓도 같이 막는다(페이지 스크롤 방지).
     event.preventDefault();
+    // **닫힘 — 넷이 한 행이다**(§3: `닫힘 | ↓ ↑ Enter Space | 연다. 활성 세그먼트는
+    // 그대로 둠`). 활성 세그먼트도, 치던 버퍼도 건드리지 않는다: §4.2가 "치다가 팝오버를
+    // 여는 것은 '떠나는' 조작이 아니다"라고 적어 둔 그대로다. 그 조항은 `↓`/`↑`를
+    // **"= 여는 키"**로 부르며 예로 들었고, 닫힌 상태의 Enter·Space도 정확히 여는 키다.
+    // (§4.2 첫 문단의 "떠나는 키" 목록에 Enter·Space가 있지만, 그 목록은 그 둘이 실제로
+    // 떠나는 상태 — 열림, 즉 `완료` — 을 두고 쓴 것이다. 두 문장은 이렇게 읽어야 둘 다
+    // 참이 된다.)
+    //
+    // ⚠️ **여기에 `setActiveUnit(fields[0] ?? "year")`를 되살리지 마세요.** 그 시드가
+    // 있으면 `→`·`→`로 일에 가 있다가 `↓`로 열 때 활성이 연도로 되돌아간다(스펙 §6.4(3)).
+    // 트리거 onClick에도 같은 시드가 있었고, 둘 다 지웠다 — 하나만 지우면 반쪽이다.
+    if (!open) { setOpen(true); return; }
+    if (key === "Enter" || key === " ") {
+      // 완료 버튼과 같은 동작 — commitAndClose가 치던 숫자를 먼저 확정한 뒤 닫는다.
+      commitAndClose();
+      return;
+    }
     setActiveUnit(unit);
     // 버퍼가 있으면 먼저 확정하고, 그 값에서 이어서 한 칸 움직인다. applyShift는
     // baseValue(이 렌더에서 고정된 옛 값)를 읽으므로 여기서 그대로 쓰면 방금
@@ -819,12 +851,23 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         않게 막아 두었지만(§6.3), 그 차단이 한 겹 뚫리는 날 이 핸들러가 div에 있으면 그때
         조용히 깨집니다. 버튼에 붙이면 버블이 문제가 되지 않습니다 — 버튼 자신이 포커스를
         받고, 그 안의 <span>·<i>는 포커스를 받을 수 없기 때문입니다. */}
-    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onClick={() => {
-      // 마우스로 열 때도 키보드 경로(handleFieldKey의 `!open` 분기)와 같은 열로 시드합니다 —
-      // Select.tsx의 onClick이 `initialActiveValue`로 하는 마우스-키보드 일치 시딩과 같은
-      // 이유입니다(줄 번호로 적어 두었던 참조는 이미 틀려 있었습니다). 닫혀 있을 때만
-      // (=지금 열려는 참일 때만) 시드해야 닫는 클릭에서 activeUnit을 건드리지 않습니다.
-      if (!open) setActiveUnit(fields[0] ?? "year");
+    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onClick={(event) => {
+      // **세그먼트를 직접 누르면 그 세그먼트가 활성이 됩니다**(설계 스펙 §6.4(3)) —
+      // 네이티브 날짜 필드가 그렇게 합니다. 세그먼트는 <span>이라 클릭이 여기로 그대로
+      // 올라오고, 그 전에 `event.target`의 `data-unit`을 읽습니다. 구두점·아이콘·여백에는
+      // 그 속성이 없으므로 **활성을 안 바꿉니다** — 클릭에는 "어느 세그먼트"라는 정보가
+      // 없고, 그때는 키보드로 옮겨 둔 활성을 조용히 되돌리지 않는 쪽이 계약입니다(§6.4).
+      //
+      // ⚠️ 여기 `if (!open) setActiveUnit(fields[0] ?? "year")`가 있었습니다(마우스 진입을
+      // 키보드 진입과 같은 열로 시딩). **SEG Task 5가 지웠습니다** — 키보드 쪽 시드와
+      // 짝이었고, 닫힌 채로 `←`/`→`가 활성을 옮길 수 있게 된 지금은 둘 다 "옮겨 둔 활성을
+      // 여는 순간 되돌리는" 결함입니다. 되살리지 마세요.
+      //
+      // `fields`로 한 번 거르는 것은 캐스팅을 피하려는 것이기도 하지만, 소비자가 런타임에
+      // fields를 줄인 직후의 낡은 DOM을 클릭해도 사라진 열을 가리키지 않게 합니다.
+      const clicked = event.target instanceof Element ? event.target.getAttribute("data-unit") : null;
+      const clickedUnit = fields.find((field) => field === clicked);
+      if (clickedUnit) setActiveUnit(clickedUnit);
       setOpen((current) => !current);
     }} onKeyDown={handleFieldKey}>{/* 이 <span> 하나가 §12의 확정 신호를 재생하는 자리입니다 — key={commitPulse}가 커밋마다
         이 노드를 리마운트시켜 .dropdown-value-commit 애니메이션을 다시 틉니다.
