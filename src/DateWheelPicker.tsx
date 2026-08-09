@@ -865,6 +865,20 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       //
       // `fields`로 한 번 거르는 것은 캐스팅을 피하려는 것이기도 하지만, 소비자가 런타임에
       // fields를 줄인 직후의 낡은 DOM을 클릭해도 사라진 열을 가리키지 않게 합니다.
+      //
+      // ⚠️ **여기서 버퍼(`typing`)를 일부러 건드리지 않습니다 — 그리고 그게 지금 결함입니다.
+      // 버퍼의 수명은 Task 6이 정할 자리라 여기서 고치지 않습니다.** 재현했습니다(SEG Task 5
+      // 보고서 §6): 닫힌 채 연도에 `3`을 치고 **일** 세그먼트를 클릭하면 활성만 일로 가고
+      // 버퍼는 `{unit:"year", digits:"3"}`인 채 살아남습니다 — 트리거는 `3‒‒‒. 07. 12.`를
+      // 계속 그리는데 다음 숫자는 일로 갑니다. 이어서 `5`를 치면 `2026. 07. 05.`가 되어
+      // **친 `3`이 확정되지도 않고 조용히 사라집니다.**
+      //
+      // 열림에서는 같은 클릭이 토글로 닫으므로 "닫히면 버퍼를 버린다" 레이아웃 이펙트가 돌아
+      // 버퍼가 사라집니다(측정: `2026. 07. 12.`) — **같은 제스처가 `open`에 따라 다르게 굴고,
+      // 그 비대칭은 설계가 아니라 우연입니다.** 설계 스펙 §4.2의 포인터 폐기 규칙이 드는 예
+      // (휠·스와이프·행 클릭·`오늘`)는 전부 팝오버 안 항목이라, 트리거 쪽 포인터 경로가
+      // 생기기 전에 쓰였습니다. 열의 `onPointerDown`이 `setTyping(null)`을 들고 있는 이유가
+      // 정확히 그 규칙이고, 이 컨트롤에서 그것이 없는 포인터 입력은 지금 여기 하나뿐입니다.
       const clicked = event.target instanceof Element ? event.target.getAttribute("data-unit") : null;
       const clickedUnit = fields.find((field) => field === clicked);
       if (clickedUnit) setActiveUnit(clickedUnit);
