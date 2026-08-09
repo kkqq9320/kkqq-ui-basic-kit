@@ -13,6 +13,19 @@ import datePickerCssSource from "../css/date-picker.css?raw";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
+/**
+ * 트리거가 빈 자리를 채우는 문자 — **U+2012 FIGURE DASH**. 밑줄이 아니다(설계 스펙 §4.5).
+ *
+ * 코드포인트로 적는다. `‒`(U+2012)는 `-`(U+002D)·`–`(U+2013)와 화면에서 구별되지 않으므로,
+ * 글리프를 그대로 쓰면 **틀린 문자가 눈에 안 띈 채 통과**할 수 있다. 순전히 폭 때문에 고른
+ * 문자다 — 이 폰트에서 U+2012는 `wght` 축 전 구간에서 tabular 숫자와 어드밴스가 정확히
+ * 같고(1132·1258·1341·1404), 밑줄은 16~20% 좁다.
+ *
+ * 소스의 `DATE_WHEEL_FILL`을 import하지 않고 **따로** 선언한다 — 같은 상수를 공유하면
+ * 소스가 밑줄로 되돌아갈 때 테스트가 같이 따라가 아무것도 못 잡는다.
+ */
+const FILL = "\u2012";
+
 /** 이 컨트롤의 유일한 포커스 자리(Task 4 이후). 키는 전부 여기로 보낸다.
  *  지금은 아직 열이 포커스를 받으므로 키를 보내는 자리가 두 곳이지만, Task 4가
  *  `getByRole("group", …)`에 키를 보내는 56곳을 이것으로 기계적으로 치환한다. */
@@ -639,9 +652,10 @@ describe("DateWheelPicker 타이핑", () => {
     // **이 단언의 기대값이 SEG Task 2에서 바뀌었습니다**(설계 스펙 §4.5). 예전에는 트리거가
     // `value` prop만 읽어 확정 전까지 "2026. 07. 12."가 남아 있었는데, 이제 트리거가
     // 세그먼트로 쪼개져 **치던 버퍼를 자리를 지켜** 그립니다. 계약이 약해진 것이 아니라
-    // 강해졌습니다 — `231_`은 "버퍼가 정확히 231이다"와 "아직 확정되지 않았다"를 동시에
+    // 강해졌습니다 — `231‒`은 "버퍼가 정확히 231이다"와 "아직 확정되지 않았다"를 동시에
     // 보여줍니다(확정됐다면 버퍼가 비고 세그먼트가 확정된 네 자리를 그렸을 것입니다).
-    expect(screen.getByRole("button", { name: "거래 날짜" }).textContent).toBe("231_. 07. 12.");
+    // 채움 문자는 U+2012 FIGURE DASH입니다 — 파일 상단 FILL 상수 주석 참고.
+    expect(screen.getByRole("button", { name: "거래 날짜" }).textContent).toBe(`231${FILL}. 07. 12.`);
     fireEvent.keyDown(year, { key: "9" });   // "2319" 네 자리
     await waitFor(() => expect(screen.getByRole("button", { name: "거래 날짜" }).textContent).toBe("2319. 07. 12."));
   });
@@ -1439,9 +1453,13 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
   //
   // **지금 이 순간 스크린리더가 이 점들을 읽고 있는 것은 아니다.** 트리거가 aria-label을
   // 달고 있어 접근성 이름이 내용을 통째로 덮으므로, aria-hidden이 있든 없든 버튼은
-  // "거래 날짜"로만 읽힌다. 그래도 붙이고 고정하는 이유는 둘이다: 스펙 §4.5가 명시했고,
-  // **트리거가 aria-label을 놓는 날 내용이 곧바로 이름이 되기 때문**이다(스펙 §8이
-  // role="combobox" 이관을 구멍으로 열어 뒀다). 지금 없는 효과를 있다고 적지 않는다.
+  // "거래 날짜"로만 읽힌다. 붙이고 고정하는 이유는 **스펙 §4.5가 명시했기 때문**이다.
+  //
+  // ⚠️ 여기 "트리거가 aria-label을 놓는 날 내용이 곧바로 이름이 되니까"라고 적었었는데,
+  // 그건 **미검증이고 방향이 반대일 수 있다** — 그 날이 오면 aria-hidden이 구분자를
+  // 이름에서 빼므로 name-from-contents가 "2026" "07" "12"를 어떻게 잇느냐에 따라 지금보다
+  // **덜** 읽히는 이름이 될 수도 있다(요소 경계의 공백 처리는 accname 구현마다 다르다).
+  // 재 보기 전에는 미래 근거로 쓰지 않는다. 지금 근거는 스펙 하나로 충분하다.
   //
   // 텍스트와 aria-hidden을 한 문자열로 묶어 단언 하나로 본다(단락 없이 둘 다 본다).
   it("세그먼트 사이 구두점은 aria-hidden 장식이다", () => {
@@ -1451,17 +1469,21 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
   });
 
   // 스펙 §4.5의 (나)안 — 자리를 지킨다. 기각된 (가)안이면 "20"이 나온다.
-  // **길이가 아니라 문자열 전체를 신원으로 비교한다.**
-  it("연도 버퍼가 두 자리면 남은 자리를 _로 지킨다", async () => {
+  //
+  // **길이가 아니라 문자열 전체를 신원으로 비교한다.** 그래서 이 단언은 "몇 칸을
+  // 채웠는가"와 "**어떤 문자로** 채웠는가"를 함께 고정한다 — 채움 문자를 밑줄로 되돌리는
+  // 결함도 여기서 죽는다. 폭이 흔들리지 않는 것이 이 표시 방식의 유일한 이유인데, 밑줄은
+  // tabular 치환을 받지 못해 그 이유를 절반만 달성한다(FILL 상수 주석의 실측표).
+  it("연도 버퍼가 두 자리면 남은 자리를 FIGURE DASH로 지킨다", async () => {
     const trigger = await openAndBuffer("2026-07-12", ["2", "0"]);
-    expect(segmentText(trigger, "year")).toBe("20__");
+    expect(segmentText(trigger, "year")).toBe(`20${FILL}${FILL}`);
   });
 
   // 세 자리 — 기각된 (가)안이면 "203"이다. 두 자리 케이스만 있으면 한 칸만 붙이는
-  // 구현(digits + "_")이 살아남는다. 그건 "20"에서 "20_"이 되어 위 테스트만 죽인다.
+  // 구현(digits + FILL)이 살아남는다. 그건 "20"에서 `20‒`가 되어 위 테스트만 죽인다.
   it("연도 버퍼가 세 자리면 한 칸만 남는다", async () => {
     const trigger = await openAndBuffer("2026-07-12", ["2", "0", "3"]);
-    expect(segmentText(trigger, "year")).toBe("203_");
+    expect(segmentText(trigger, "year")).toBe(`203${FILL}`);
   });
 
   it("연도를 치는 동안 월·일 세그먼트는 그대로다", async () => {
@@ -1469,7 +1491,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     expect([segmentText(trigger, "month"), segmentText(trigger, "day")]).toEqual(["07", "12"]);
   });
 
-  // 월은 두 칸이다. 연도의 네 칸을 그대로 쓰면 "1___"이 된다.
+  // 월은 두 칸이다. 연도의 네 칸을 그대로 쓰면 `1‒‒‒`가 된다.
   it("월 버퍼는 두 칸만 지킨다 — 연도의 네 칸을 쓰지 않는다", async () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
     const trigger = fieldOf("거래 날짜");
@@ -1479,7 +1501,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
     const month = await screen.findByRole("group", { name: "월 07" });
     fireEvent.keyDown(month, { key: "1" });
-    expect(segmentText(trigger, "month")).toBe("1_");
+    expect(segmentText(trigger, "month")).toBe(`1${FILL}`);
   });
 
   it("값도 버퍼도 없으면 placeholder 문구가 나온다", () => {
@@ -1532,7 +1554,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     const year = screen.getByRole("group", { name: /^연도/ });
     fireEvent.keyDown(year, { key: "2" });
     fireEvent.keyDown(year, { key: "0" });
-    expect(trigger.textContent).toBe("20__. 07. 12.");
+    expect(trigger.textContent).toBe(`20${FILL}${FILL}. 07. 12.`);
   });
 
   it("fields가 연도뿐이면 세그먼트도 연도 하나다", () => {
@@ -1592,43 +1614,105 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
 
   // jsdom은 캐스케이드를 계산하지 않으므로 소스 텍스트로 고정한다 — 이 파일 위쪽
   // "CSS 계약" 블록과 같은 idiom이다.
+  //
+  // **이 블록의 네 단언은 전부 소진형(`toEqual`)이다. 존재형·필터형으로 쓰지 마라.**
+  // 리뷰가 실측한 구멍이 그 형태였다: "좋은 규칙이 있다"만 보면 규칙을 *지우는* 결함은
+  // 잡히지만 규칙을 *덧붙이는* 결함은 통째로 새어 나간다. 실제로 세 단언이 그랬고,
+  // 셋 다 브리프·주석이 이름 대고 금지한 해악을 초록으로 통과시켰다:
+  //
+  //   · `>` 규칙을 그대로 둔 채 `.date-wheel-trigger span { …ellipsis… }`를 **추가**
+  //   · 게이트를 통과한 `.active` 규칙에 `font-variant-numeric: normal`을 **추가**
+  //   · 선택자 목록이 **두 줄인** `color` 규칙을 **추가**(정규식이 줄바꿈을 못 넘어 0회
+  //     매칭 → `filter(...)` → `[]` → **공허 통과**)
+  //
+  // 그래서 규칙을 파싱해 **선택자 목록 전체**를 신원으로 비교한다. 0회 매칭은 빈 배열이
+  // 기대 배열과 달라 시끄럽게 터진다 — `.not.toMatch(...)`처럼 빈 입력에 무조건 통과하는
+  // 형태를 이 블록에 들이지 마라.
   describe("CSS 계약", () => {
-    // 자식 결합자 `>`가 없어지면 세그먼트마다 따로 말줄임이 걸려, 좁은 화면에서 날짜가
-    // 통째로 잘리는 대신 조각조각 잘린다. 규칙이 컨테이너 하나에만 걸리는지 본다.
-    it("말줄임은 세그먼트가 아니라 컨테이너 하나에 걸린다", () => {
-      // 규칙이 없을 때 `null`을 그대로 넘기면 실패 메시지가 "toMatch가 문자열을 기대했는데
-      // object를 받았다"가 되어 무엇이 깨졌는지 안 보인다. 문장으로 바꿔 넘긴다.
-      const rule = datePickerCssSource.match(/\.date-wheel-trigger\s*>\s*span\s*\{[^}]*\}/);
-      expect(rule?.[0] ?? "(자식 결합자 `>`가 붙은 규칙이 없다)").toMatch(/overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap/);
+    /**
+     * `date-picker.css`를 규칙 단위로 쪼갠다.
+     *
+     * **주석을 먼저 걷어낸다.** 이 킷의 주석은 선택자와 선언을 그대로 인용하는 관습이라
+     * (바로 이 파일이 그렇다), 안 걷어내면 파서가 주석을 규칙으로 읽어 거짓 통과가 난다.
+     *
+     * **선택자는 여러 줄일 수 있다.** 줄바꿈을 못 넘는 정규식이 위 구멍의 직접 원인이라
+     * 여기서는 `[^{}]`로 넘긴다. 잡은 뒤 공백과 결합자를 정규화해, 줄바꿈이나 `>` 주변
+     * 공백 같은 서식 차이로는 안 갈리고 **선택자의 뜻이 달라질 때만** 갈리게 한다.
+     *
+     * `@media`·`@keyframes`의 prelude는 `[^{}]+\{` 가 중첩 `{`를 못 넘어 매칭에 실패하고
+     * 건너뛰어진다. 안쪽 규칙들은 정상적으로 잡힌다.
+     */
+    function cssRules(source: string) {
+      return [...source.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((match) => ({
+        selector: match[1]
+          .replace(/\s+/g, " ")
+          .replace(/\s*([>+~])\s*/g, " $1 ")
+          .replace(/\s*,\s*/g, ", ")
+          .replace(/\s+/g, " ")
+          .trim(),
+        body: match[2].replace(/\s+/g, " ").trim(),
+      }));
+    }
+    /** `color:` 선언이 있는가. `background: color-mix(…)`·`border-color:`는 아니다 —
+     *  앞에 `-`가 오거나 뒤에 `-`가 오는 경우를 둘 다 걸러낸다. */
+    function declaresColor(body: string) {
+      return /(^|[\s;])color\s*:/.test(body);
+    }
+
+    // 말줄임을 선언하는 규칙이 **정확히 하나**이고 그것이 자식 결합자 형태인지 본다.
+    // 자손 선택자 규칙을 하나 더 얹으면 목록이 둘이 되어 곧바로 터진다 — 지우는 결함만
+    // 잡던 예전 형태가 놓치던 자리다.
+    it("말줄임을 선언하는 규칙은 컨테이너를 겨냥한 자식 결합자 하나뿐이다", () => {
+      const ellipsis = cssRules(datePickerCssSource).filter((rule) => /text-overflow/.test(rule.body));
+      expect(ellipsis.map((rule) => rule.selector)).toEqual([".date-wheel-trigger > span"]);
     });
 
-    // 자리 지킴(`20__`)과 tabular-nums는 짝이다 — 폭이 흔들리지 않는 것이 `_`로 채우는
-    // 유일한 이유이므로, 한쪽만 남으면 그 이유가 무너진다.
-    it("세그먼트에 tabular-nums가 걸린다 — 자리 지킴 표시의 이유다", () => {
-      const rule = datePickerCssSource.match(/\.date-wheel-segment\s*\{[^}]*\}/);
-      expect(rule?.[0] ?? "(.date-wheel-segment 규칙이 없다)").toMatch(/font-variant-numeric:\s*tabular-nums/);
+    // 위 단언은 "말줄임을 거는 규칙이 하나"만 본다. 그 하나가 실제로 세 선언을 다 갖는지는
+    // 따로 봐야 한다 — `overflow: hidden`이 빠지면 `text-overflow`는 아무 일도 안 한다.
+    it("그 규칙이 말줄임에 필요한 세 선언을 다 갖는다", () => {
+      const rule = cssRules(datePickerCssSource).find((candidate) => candidate.selector === ".date-wheel-trigger > span");
+      expect(rule?.body ?? "(자식 결합자 규칙이 없다)").toMatch(/overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap/);
+    });
+
+    // `tabular-nums`는 **숫자끼리** 폭을 맞춘다(빈 자리는 DATE_WHEEL_FILL이 맡는다 — 아래
+    // 버퍼 테스트들이 그쪽을 고정한다). 선언을 지우는 결함뿐 아니라 **더 특이한 규칙에서
+    // `normal`로 되돌리는 결함**까지 잡아야 한다: 활성 세그먼트 규칙이 (0,4,0)이라
+    // (0,1,0)인 기본 규칙을 이기므로, 거기에 한 줄만 얹으면 **치는 중인 세그먼트만**
+    // tabular를 잃는다. 그래서 이 선언을 하는 규칙 전부를 값까지 함께 신원으로 본다.
+    it("font-variant-numeric을 선언하는 규칙은 세그먼트 기본 규칙 하나뿐이고 값이 tabular-nums다", () => {
+      const declared = cssRules(datePickerCssSource)
+        .filter((rule) => /font-variant-numeric/.test(rule.body))
+        .map((rule) => [rule.selector, /font-variant-numeric:\s*([^;]+)/.exec(rule.body)?.[1].trim()]);
+      expect(declared).toEqual([[".date-wheel-segment", "tabular-nums"]]);
     });
 
     // 포커스 없는 필드에 활성 표시가 남으면 그 필드가 입력을 받는 중으로 읽힌다(§4.5).
-    // `.active`를 그리는 규칙이 **정확히 하나**이고 그것이 포커스로 게이트돼 있는지를 단언
-    // 하나로 본다. 선택자 줄만 잡도록 `\n`을 제외한다 — 안 그러면 바로 위 주석에 적힌
-    // `:focus-within`이라는 글자가 정규식을 거짓 통과시킨다.
-    it("활성 세그먼트 표시는 트리거가 포커스를 가진 동안에만 그려진다", () => {
-      const selectors = datePickerCssSource.match(/[^{}\n]*\.date-wheel-segment\.active[^{}\n]*\{/g) ?? [];
-      expect(selectors.map((selector) => /:focus(-within|-visible)?[\s.:]/.test(selector))).toEqual([true]);
+    // 선택자를 **통째로** 신원 비교한다 — 스펙 §4.5가 이름 대고 금지한
+    // `.date-wheel-picker.open …` 보정이 별도 규칙으로 오든 같은 규칙의 선택자 목록에
+    // 끼어 오든 둘 다 터진다. (예전 형태는 뒤엣것을 놓쳤다: 죽은 선택자를 첫 줄에 두면
+    // 그 줄에 `{`가 없어 매칭 자체가 안 됐다.)
+    it("활성 세그먼트를 그리는 규칙은 포커스로 게이트된 하나뿐이다", () => {
+      const active = cssRules(datePickerCssSource).filter((rule) => /\.date-wheel-segment\.active/.test(rule.selector));
+      expect(active.map((rule) => rule.selector)).toEqual([".date-wheel-trigger:focus-within .date-wheel-segment.active"]);
     });
 
     // 확정 피드백(css/surfaces.css의 `dropdown-commit` 키프레임)은 **컨테이너의 `color`를**
-    // 애니메이션하고, 세그먼트는 그것을 **상속**받아 함께 반짝인다. 세그먼트를 겨냥한 규칙이
-    // 자기 `color`를 선언하는 순간 그 상속이 끊겨 그 세그먼트만 신호에서 빠진다.
+    // 애니메이션하고, 세그먼트는 그것을 **상속**받아 함께 반짝인다. 세그먼트에 매칭되는
+    // 규칙이 자기 `color`를 선언하는 순간 그 상속이 끊겨 그 세그먼트만 신호에서 빠진다.
     //
     // **jsdom은 애니메이션을 돌리지 않으므로 이 결함은 DOM 테스트로 절대 안 잡힌다.**
-    // 활성 표시를 글자색이 아니라 배경으로 그린 이유가 이것이고, 이유가 규칙보다 오래
-    // 살아남도록 여기서 고정한다. (`background: color-mix(...)`의 `color-mix`는 `color:`
-    // 선언이 아니므로 걸리지 않는다 — 뒤에 `-`가 오지 `:`가 오지 않는다.)
-    it("세그먼트를 겨냥한 규칙은 color를 선언하지 않는다 — 확정 신호가 상속으로 닿는다", () => {
-      const rules = datePickerCssSource.match(/[^{}\n]*\.date-wheel-segment[^{}\n]*\{[^}]*\}/g) ?? [];
-      expect(rules.filter((rule) => /[^-]color:/.test(rule))).toEqual([]);
+    // 활성 표시를 글자색이 아니라 배경으로 그린 이유가 이것이라, 이유가 규칙보다 오래
+    // 살아남도록 여기서 고정한다.
+    //
+    // 세그먼트·구두점을 겨냥한 규칙 **전부**를 선택자와 `color` 선언 여부까지 묶어
+    // 신원으로 본다. 규칙을 하나 덧붙이면 목록 길이가 달라져 터지고, 규칙이 통째로
+    // 사라져도 빈 배열이 기대와 달라 터진다 — 어느 쪽도 조용히 지나가지 않는다.
+    it("세그먼트에 닿는 규칙이 정확히 둘이고 어느 쪽도 color를 선언하지 않는다", () => {
+      const targeted = cssRules(datePickerCssSource).filter((rule) => /\.date-wheel-(segment|punctuation)/.test(rule.selector));
+      expect(targeted.map((rule) => [rule.selector, declaresColor(rule.body)])).toEqual([
+        [".date-wheel-segment", false],
+        [".date-wheel-trigger:focus-within .date-wheel-segment.active", false],
+      ]);
     });
   });
 });

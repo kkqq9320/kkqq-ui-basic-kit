@@ -108,8 +108,35 @@ function dateWheelLabel(value: string, unit: DateWheelUnit, weekdays: string[]) 
   return `${String(date.getUTCDate()).padStart(2, "0")} ${weekdays[date.getUTCDay()]}`;
 }
 
-/** 세그먼트가 지키는 자릿수. 버퍼가 덜 찼을 때 이 길이까지 `_`로 채웁니다. */
+/** 세그먼트가 지키는 자릿수. 버퍼가 덜 찼을 때 이 길이까지 아래 문자로 채웁니다. */
 const DATE_WHEEL_SEGMENT_WIDTH: Record<DateWheelUnit, number> = { year: 4, month: 2, day: 2 };
+
+/**
+ * 빈 자리를 채우는 문자 — **U+2012 FIGURE DASH**. 밑줄(`_`)이 아닙니다(설계 스펙 §4.5).
+ *
+ * **폭이 흔들리지 않는 것이 "자리를 지키는" 표시를 고른 유일한 이유**인데, 밑줄로는 그것이
+ * 달성되지 않습니다. `font-variant-numeric: tabular-nums`는 OpenType `tnum`으로 매핑되고
+ * `tnum`은 **숫자 글리프에만** 균일 어드밴스를 줍니다 — `_`는 숫자가 아니라 그 치환을 아예
+ * 받지 못합니다. 킷이 직접 싣는 `fonts/PretendardVariable.woff2`를 열어 `wght` 축을
+ * 인스턴스화해 잰 값입니다(단위: 폰트 units, unitsPerEm 2048):
+ *
+ *   wght  45 : tabular 숫자 1132 · U+2012 1132 (±0) · `_` 804 (−16.02% em)
+ *   wght 400 : tabular 숫자 1258 · U+2012 1258 (±0) · `_` 870 (−18.95% em)
+ *   wght 700 : tabular 숫자 1341 · U+2012 1341 (±0) · `_` 933 (−19.92% em)
+ *   wght 930 : tabular 숫자 1404 · U+2012 1404 (±0) · `_` 982 (−20.61% em)
+ *
+ * 15px 기준 빈 자리 하나당 약 2.8px이라, 밑줄이면 연도를 치는 동안 뒤 세그먼트가 5.7px
+ * 밀렸다가 돌아옵니다. U+2012는 **축 전 구간에서 tabular 숫자와 정확히 같고**, 이 폰트의
+ * cmap에 실제로 들어 있습니다(글리프 `figuredash`) — 없으면 폴백 폰트로 새서 보장이
+ * 깨지므로 폰트를 교체하는 소비자는 이 둘을 다시 재야 합니다(`css/fonts.css`).
+ *
+ * **그래서 `display: inline-block`도 `ch` 고정폭도 필요 없고, 써서도 안 됩니다** — 둘 다
+ * 인라인 박스를 원자 박스로 바꿔 바깥 컨테이너의 말줄임 동작까지 건드립니다(스펙 §4.5).
+ *
+ * 글리프를 그대로 쓰지 않고 코드포인트 이스케이프로 적습니다 — `‒`(U+2012)는 `-`(U+002D)·
+ * `–`(U+2013)와 화면에서 구별되지 않아, 눈으로는 못 잡는 조용한 폭 회귀가 됩니다.
+ */
+const DATE_WHEEL_FILL = "\u2012";
 
 /** 트리거를 이루는 조각. `unit: null`이 구두점(`. `)이고, 렌더에서 aria-hidden으로 나갑니다. */
 type DateTriggerPart = { unit: DateWheelUnit | null; text: string };
@@ -122,16 +149,21 @@ type DateTriggerPart = { unit: DateWheelUnit | null; text: string };
  * 않은 채로 계속 참이어야 이 변경이 "표시 구조만 바꿨다"는 뜻이 됩니다. 구두점을 세그먼트에
  * 붙여 넣거나(`"2026. "`) 사이 공백을 CSS 여백으로 옮기면 그 등가성이 조용히 깨집니다.
  *
- * **버퍼는 자리를 지켜 그립니다** — "20" → `20__`, "203" → `203_`, 월 "1" → `1_`.
- * 친 만큼만 그리는 안(`203. 07. 12.`)은 기각됐습니다: 자릿수가 늘었다 줄었다 하며 필드 폭이
- * 요동치고, 세 자리 `203`이 순간적으로 유효한 연도처럼 읽힙니다. **폭이 흔들리지 않는 것이
- * 이 표시 방식의 유일한 이유**이므로 `css/date-picker.css`의 `.date-wheel-segment`가
- * `tabular-nums`를 겁니다 — 둘 중 하나만 있으면 아무 뜻이 없습니다.
+ * **버퍼는 자리를 지켜 그립니다** — "20" → `20‒‒`, "203" → `203‒`, 월 "1" → `1‒`
+ * (채움 문자는 `DATE_WHEEL_FILL`, U+2012). 친 만큼만 그리는 안(`203. 07. 12.`)은
+ * 기각됐습니다: 자릿수가 늘었다 줄었다 하며 필드 폭이 요동치고, 세 자리 `203`이 순간적으로
+ * 유효한 연도처럼 읽힙니다.
+ *
+ * **폭을 지키는 장치가 둘이고 역할이 다릅니다.** `css/date-picker.css`의
+ * `.date-wheel-segment`가 거는 `tabular-nums`는 **숫자끼리** 폭을 맞추고(이 폰트에서
+ * 비례폭 `1`은 898, `4`는 1278로 크게 다릅니다), `DATE_WHEEL_FILL`은 **빈 자리를 숫자
+ * 폭에** 맞춥니다. `tabular-nums`는 숫자 글리프에만 적용되므로 채움 문자를 덮지
+ * **않습니다** — 그래서 둘 다 필요하고, 하나만으로는 폭이 흔들립니다.
  */
 function dateTriggerParts(source: string, fields: DateWheelUnit[], typing: { unit: DateWheelUnit; digits: string } | null): DateTriggerPart[] {
   const [year, month, day] = source.split("-");
   function segment(unit: DateWheelUnit, text: string): DateTriggerPart {
-    return { unit, text: typing?.unit === unit && typing.digits ? typing.digits.padEnd(DATE_WHEEL_SEGMENT_WIDTH[unit], "_") : text };
+    return { unit, text: typing?.unit === unit && typing.digits ? typing.digits.padEnd(DATE_WHEEL_SEGMENT_WIDTH[unit], DATE_WHEEL_FILL) : text };
   }
   const parts: DateTriggerPart[] = [segment("year", year)];
   if (!fields.includes("month")) return [...parts, { unit: null, text: "." }];
@@ -735,13 +767,24 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       if (!open) setActiveUnit(fields[0] ?? "year");
       setOpen((current) => !current);
     }} onKeyDown={handleTriggerKeyDown}>{/* 이 <span> 하나가 §12의 확정 신호를 재생하는 자리입니다 — key={commitPulse}가 커밋마다
-        이 노드를 리마운트시켜 .dropdown-value-commit 애니메이션을 다시 틀고, css/date-picker.css:20의
-        `.date-wheel-trigger > span`이 여기에만 말줄임을 겁니다(자식 결합자 `>` 덕에 세그먼트에는
-        안 걸립니다). **key를 세그먼트로 내리지 마세요** — 확정은 날짜 하나에 대한 사건이지
-        세그먼트에 대한 사건이 아니라, 세그먼트마다 리마운트되면 조각들이 따로 반짝입니다.
-        아래 세그먼트의 key는 위치가 고정된 이름표일 뿐이고 commitPulse와 아무 관계가 없습니다.
-        `.placeholder`(:21의 흐린 색)는 **값도 버퍼도 없을 때만** 붙습니다 — 버퍼가 있으면
-        placeholder를 버리고 baseValue 세그먼트를 그리기 때문입니다(§4.5). */}
+        이 노드를 리마운트시켜 .dropdown-value-commit 애니메이션을 다시 틉니다.
+        **key를 세그먼트로 내리지 마세요** — 확정은 날짜 하나에 대한 사건이지 세그먼트에 대한
+        사건이 아닙니다. (정확히 말하면 조각이 따로 반짝이게 만드는 것은 key가 아니라 **클래스가
+        어디 붙느냐**입니다 — 컨테이너가 리마운트되면 자식은 어차피 전부 새로 만들어집니다.
+        아래 세그먼트의 key는 위치가 고정된 이름표일 뿐이고 commitPulse와 아무 관계가 없습니다.)
+
+        말줄임은 css/date-picker.css의 `.date-wheel-trigger > span`이 이 컨테이너에 겁니다.
+        **지금 DOM에서는 `>`를 지워도 그림이 바뀌지 않습니다** — 세그먼트는 display를 선언하지
+        않은 인라인 박스이고, `overflow`·`text-overflow`·`min-width`는 non-replaced 인라인
+        박스에 **적용되지 않습니다**(`white-space: nowrap`은 상속이라 `>`와 무관하게 이미
+        걸립니다). 그래도 `>`를 남기는 이유는 누군가 세그먼트를 `inline-block`으로 만드는 날
+        — 폭을 고정하려 들면 그렇게 됩니다 — 그때부터 세그먼트마다 말줄임이 걸려 날짜가
+        "20…. 0…. 1…."처럼 조각조각 잘리기 때문입니다. 그 날은 오면 안 되지만(§4.5가 금지),
+        규칙이 싸므로 남깁니다.
+
+        `.placeholder`(css/date-picker.css의 `.date-wheel-trigger .placeholder`, 흐린 색)는
+        **날짜도 버퍼도 없을 때만** 붙습니다 — 버퍼가 있으면 placeholder를 버리고 baseValue
+        세그먼트를 그리기 때문입니다(§4.5). 판정은 문구와 같은 validDateValue입니다. */}
       <span className={[triggerParts ? "" : "placeholder", commitPulse ? "dropdown-value-commit" : ""].filter(Boolean).join(" ")} key={commitPulse}>{triggerParts
         ? triggerParts.map((part, index) => part.unit === null
           ? <span className="date-wheel-punctuation" aria-hidden="true" key={`gap${index}`}>{part.text}</span>

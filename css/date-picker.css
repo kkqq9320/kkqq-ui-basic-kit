@@ -17,18 +17,40 @@
  * flex + space-between으로 두면 아이콘이 버튼 padding 안쪽에 서서 드롭다운
  * 셰브런보다 왼쪽으로 밀립니다. */
 .date-wheel-trigger { min-width: 0; height: 39px; display: grid; grid-template-columns: minmax(0, 1fr) var(--dropdown-icon-box); align-items: center; gap: 8px; padding: 0 var(--dropdown-inline-padding); border: 0; border-radius: 7px; color: var(--text); background: transparent; font-size: var(--font-size-control); text-align: left; }
-/* 말줄임은 **세그먼트를 감싸는 컨테이너 하나**에만 걸립니다. 자식 결합자 `>`를 지우지
- * 마세요 — 지우면 세그먼트마다 따로 말줄임이 걸려, 좁은 화면에서 날짜가 통째로 잘리는
- * 대신 "20…. 0…. 1…."처럼 조각조각 잘립니다. */
+/* 말줄임은 **세그먼트를 감싸는 컨테이너 하나**에 겁니다.
+ *
+ * **지금 DOM에서는 `>`를 지워도 그림이 안 바뀝니다** — 세그먼트는 display를 선언하지 않은
+ * 인라인 박스이고, `overflow`·`text-overflow`는 블록 컨테이너에만, `min-width`는
+ * non-replaced 인라인 요소에 **적용되지 않습니다**(`white-space: nowrap`은 상속 속성이라
+ * `>`가 있든 없든 세그먼트에 이미 걸립니다). 예전 주석은 이 자리에서 "지우면 조각조각
+ * 잘린다"고 단언했는데 **거짓이었습니다.**
+ *
+ * 그래도 `>`를 남깁니다. 누군가 세그먼트에 `display: inline-block`을 주는 날 — 폭을
+ * 고정하려 들면 그 처방이 제일 먼저 나옵니다 — `overflow`가 적용되기 시작해 세그먼트마다
+ * 말줄임이 걸리고, 날짜가 통째로 잘리는 대신 "20…. 0…. 1…."처럼 조각조각 잘립니다.
+ * 그 날은 오면 안 됩니다(스펙 §4.5가 `inline-block`을 금지합니다) — 폭은 아래 두 장치로
+ * 이미 지켜지고, 규칙은 싸므로 방어로 남깁니다. */
 .date-wheel-trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .date-wheel-trigger .placeholder { color: var(--muted); }
 /* 트리거 문구를 연·월·일로 쪼갠 조각(설계 스펙 §4.5). 사이의 구두점은
- * `.date-wheel-punctuation`이고 장식이라 aria-hidden입니다.
+ * `.date-wheel-punctuation`인데 **규칙이 아니라 이름만 있는 클래스입니다** — 스타일은
+ * 하나도 없고, 스펙 §4.5의 구조를 DOM에 새겨 테스트가 잡을 수 있게 하는 용도입니다.
+ * 여기서 그 클래스의 규칙을 찾지 마세요. 없습니다.
  *
- * **tabular-nums가 이 표시 방식의 이유입니다.** 덜 찬 버퍼를 `_`로 채워 자리를 지키는
- * 까닭이 필드 폭이 흔들리지 않게 하려는 것인데, 숫자마다 폭이 다르면 `20__` → `203_` →
- * `2031`로 가는 동안 필드가 계속 들썩여 그 이유가 통째로 무너집니다. 채움과 이 한 줄은
- * 짝이라 하나만 남기면 아무 뜻이 없습니다. */
+ * **폭을 지키는 장치가 둘이고 역할이 다릅니다. 하나만으로는 안 됩니다.**
+ *
+ *   · 이 줄(`tabular-nums`)은 **숫자끼리** 폭을 맞춥니다. 이 폰트의 비례폭은 `1`이 898,
+ *     `4`가 1278로 크게 다르므로, 없으면 `2026` → `2031`만으로도 필드가 들썩입니다.
+ *   · **빈 자리**는 `src/DateWheelPicker.tsx`의 `DATE_WHEEL_FILL`(U+2012 FIGURE DASH)이
+ *     맡습니다. `tabular-nums`는 OpenType `tnum`으로 매핑되고 `tnum`은 **숫자 글리프에만**
+ *     적용되므로, 채움 문자는 이 줄의 혜택을 **못 받습니다.**
+ *
+ * 예전 주석은 둘이 "짝이라 하나만 남기면 아무 뜻이 없다"고 적었습니다. 결론은 맞지만
+ * **인과가 거짓이었습니다** — 채움 문자가 밑줄이던 시절, 이 줄은 그 밑줄을 덮은 적이 한
+ * 번도 없습니다(`_`는 숫자보다 16~20% 좁습니다. 실측표는 `DATE_WHEEL_FILL` 주석에).
+ *
+ * `.date-wheel-punctuation`에 이 선언을 안 건 것은 무해합니다 — 구두점은 언제나 같은
+ * 문자(`.`와 공백)라 `tnum` 여부와 무관하게 폭이 고정입니다. */
 .date-wheel-segment { font-variant-numeric: tabular-nums; }
 /* 활성 세그먼트는 **트리거가 포커스를 가진 동안에만** 보입니다 — 포커스 없는 필드에 활성
  * 표시가 남아 있으면 그 필드가 입력을 받는 중으로 읽힙니다(§4.5). `.active` 클래스 자체는
@@ -37,16 +59,25 @@
  * `:focus-within`은 여기서 "트리거가 포커스를 가졌는가"와 정확히 같습니다.
  *
  * 특이도는 손으로 셉니다: `.date-wheel-trigger`(0,1,0) + `:focus-within`(0,1,0) +
- * `.date-wheel-segment`(0,1,0) + `.active`(0,1,0) = **(0,4,0)**. 이 파일에서
- * `.date-wheel-segment`를 건드리는 다른 규칙은 바로 위 (0,1,0) 하나뿐이라 경쟁이 없습니다.
- * (미디어 쿼리는 특이도를 더하지 않으므로 :54·:88 블록도 이 계산을 바꾸지 않습니다.)
+ * `.date-wheel-segment`(0,1,0) + `.active`(0,1,0) = **(0,4,0)**. 미디어 쿼리는 특이도를
+ * 더하지 않으므로 이 파일의 `@media` 블록들도 이 계산을 바꾸지 않습니다.
+ *
+ * 물어야 할 것은 "선택자에 `.date-wheel-segment`가 들어간 규칙"이 아니라 **"세그먼트
+ * 요소에 매칭되는 규칙"** 전부입니다. 이 파일에서 그건 바로 위 `.date-wheel-segment`
+ * (0,1,0)와 이 규칙 둘뿐입니다 — `.date-wheel-trigger > span`은 자식 결합자라 손자인
+ * 세그먼트에 안 닿고, `.date-wheel-trigger .placeholder`는 세그먼트에 그 클래스가 붙는
+ * 경우가 없어(placeholder일 때는 세그먼트가 0개입니다) 안 닿습니다. `css/*.css` 전체에서
+ * 트리거 안 `<span>`에 닿는 선택자는 이 파일 밖에 없습니다.
  *
  * **`color`를 주면 안 됩니다.** 확정 피드백(surfaces.css의 `dropdown-commit`)이 컨테이너의
- * `color`를 애니메이션하고 세그먼트는 그것을 **상속**받아 함께 반짝입니다. 세그먼트에 자기
- * `color`를 선언하면 그 상속이 끊겨 활성 세그먼트만 확정 신호에서 빠집니다.
- * **`padding`·`box-shadow`도 쓰지 않습니다** — 컨테이너가 `overflow: hidden`(위 :20)이라
- * 글자 상자 밖으로 나간 잉크는 첫 세그먼트에서 잘리고, 가로 폭이 바뀌면 tabular-nums로
- * 지키려던 것이 무너집니다. 배경은 인라인 글자 상자 안에만 칠해지므로 둘 다 피합니다. */
+ * `color`를 애니메이션하고, 애니메이션 출처는 저자 normal 선언보다 위라 그 계산값이 자식에
+ * **상속**되어 세그먼트가 함께 반짝입니다. 세그먼트가 자기 `color`를 선언하는 순간 그
+ * 상속이 끊겨 그 세그먼트만 확정 신호에서 빠집니다(`prefers-reduced-motion`의
+ * `dropdown-commit-reduced`도 `color`를 남기므로 그쪽 경로에서도 같습니다).
+ * **`padding`·`box-shadow`도 쓰지 않습니다** — 위 `.date-wheel-trigger > span`이
+ * `overflow: hidden`이라 글자 상자 밖으로 나간 잉크는 첫 세그먼트에서 잘리고, 가로 폭이
+ * 바뀌면 폭을 지키려던 두 장치가 무너집니다. 배경은 인라인 글자 상자 안에만 칠해지므로
+ * 둘 다 피합니다. */
 .date-wheel-trigger:focus-within .date-wheel-segment.active { border-radius: 4px; background: color-mix(in srgb, var(--accent) 20%, transparent); }
 /* 비활성 날짜 필드 — select.css의 비활성 트리거와 같은 값, 같은 이유.
  * 테두리·배경은 shell이 그리므로 shell째 흐리게 한다(:18이 이미 쓰는 :has() idiom).
