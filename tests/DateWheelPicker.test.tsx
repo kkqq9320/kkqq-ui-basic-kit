@@ -1653,8 +1653,16 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
         body: match[2].replace(/\s+/g, " ").trim(),
       }));
     }
-    /** `color:` 선언이 있는가. `background: color-mix(…)`·`border-color:`는 아니다 —
-     *  앞에 `-`가 오거나 뒤에 `-`가 오는 경우를 둘 다 걸러낸다. */
+    /**
+     * `color:` **속성** 선언이 있는가. `background: color-mix(…)`·`border-color:`는 아니다 —
+     * 앞에 `-`가 오거나 뒤에 `-`가 오는 경우를 둘 다 걸러낸다.
+     *
+     * **"이 규칙에 색이 하나도 없다"가 아니라 "상속되는 `color` 속성을 덮지 않는다"를
+     * 묻는 것이다.** 지키려는 계약이 그것이기 때문이다 — `dropdown-commit`이 애니메이션하는
+     * 것은 `color`뿐이고, 상속이 끊기는 것도 그 속성을 자식이 선언할 때뿐이다.
+     * `background`·`border-color` 같은 다른 색 선언은 상속 경로에 아무 영향이 없으므로
+     * 일부러 통과시킨다(활성 표시가 바로 그 `background`다).
+     */
     function declaresColor(body: string) {
       return /(^|[\s;])color\s*:/.test(body);
     }
