@@ -753,7 +753,11 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       // 경우뿐이고, 그때 "활성은 연도"는 거짓이 아니라 진실입니다.
       //
       // 아래 `moveColumn`(자동 이동)이 뒤에 오므로, 자릿수가 차서 다음 세그먼트로 넘어가는
-      // 경우에는 그쪽이 마지막에 이깁니다 — 순서를 바꾸지 마세요.
+      // 경우에는 그쪽이 마지막에 이깁니다 — **순서를 바꾸지 마세요. 재고 적습니다:** 이 줄을
+      // `moveColumn` **뒤로** 옮기면 3 red입니다(`연도 네 자리를 치면 월 세그먼트로 넘어간다`,
+      // `월에서 5를 치면 일 세그먼트로 넘어간다`, `연도 네 자리를 친 뒤 ↓는 월을 움직인다`).
+      // 이 파일에서 **근거 없이 적은 순서 계약이 두 번 거짓으로 밝혀졌으므로**(Task 5의
+      // `Escape` 스왑, 위 `[fields]` 이펙트 근거) 이번에는 뮤테이션을 먼저 돌렸습니다.
       setActiveUnit(unit);
       const buffer = resolvedTyping?.unit === unit ? resolvedTyping.digits : "";
       const step = typeDigit(unit, buffer, key);
