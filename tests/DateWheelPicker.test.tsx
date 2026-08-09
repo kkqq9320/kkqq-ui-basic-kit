@@ -40,6 +40,30 @@ function activeSegment(): string | null {
   return document.querySelector(".date-wheel-segment.active")?.getAttribute("data-unit") ?? null;
 }
 
+/**
+ * 포인터 이벤트를 **속성이 실제로 실린 채** 도착하게 보낸다.
+ *
+ * ⚠️ **이 jsdom에는 `PointerEvent` 생성자가 없다.** 직접 쟀다 —
+ * `typeof PointerEvent === "undefined"`이고 `MouseEvent`는 `function`이다. 그래서
+ * `fireEvent.pointerDown(el, { pointerId, clientY, buttons })`는 RTL이 `Event`로 폴백해
+ * **넘긴 속성을 전부 조용히 버린다**(핸들러에서 읽으면 셋 다 `undefined`다).
+ *
+ * 그 결과가 이 파일에서 무엇이었는지가 중요하다: `moveSwipe`의 첫 줄이
+ * `if (buttons !== 1) return;`이라 **스와이프 본문이 그렇게 보낸 이벤트로는 단 한 번도
+ * 실행되지 않았다.** 그래서 스와이프 감시자가 오랫동안 0개였다 — `moveSwipe` 본문과
+ * `finishSwipe`의 커밋을 통째로 지워도 스위트가 전부 초록이었다(SEG Task 4 리뷰가 계측).
+ *
+ * **스와이프 동작을 건드리는 테스트는 반드시 이것을 쓸 것.** `fireEvent.pointerMove(el,
+ * { clientY: 60 })`은 좌표가 전달된다고 믿게 만들지만 실제로는 아무 일도 일으키지 않는다.
+ * (열 `onPointerDown`의 `setActiveUnit`·`setTyping(null)`은 이벤트 속성을 안 읽으므로
+ * 평범한 `fireEvent.pointerDown`으로도 동작한다 — 그쪽 테스트는 그대로 둔다.)
+ */
+function pointer(type: "pointerDown" | "pointerMove" | "pointerUp", element: Element, props: Record<string, unknown>) {
+  const event = createEvent[type](element);
+  for (const [key, value] of Object.entries(props)) Object.defineProperty(event, key, { value, configurable: true });
+  fireEvent(element, event);
+}
+
 function ControlledDateWheel({ initialValue, allowClear }: { initialValue: string; allowClear?: boolean }) {
   const [value, setValue] = useState(initialValue);
   return <DateWheelPicker ariaLabel="거래 날짜" value={value} onChange={setValue} allowClear={allowClear} />;
@@ -95,16 +119,16 @@ describe("DateWheelPicker", () => {
     expect(onChange).toHaveBeenLastCalledWith("2026-07-13");
   });
 
-  it("does not change on hover-only pointer movement and activates the pressed column", () => {
-    const onChange = vi.fn();
-    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={onChange} />);
+  // 초판은 이름이 둘("hover만으로는 안 바뀐다" + "누른 열이 활성이 된다")이었고, **앞의 것이
+  // 공허 통과였다** — `fireEvent.pointerMove`가 `buttons`를 못 싣는 탓에 가드가 막아서가
+  // 아니라 애초에 아무 일도 안 일어나서 초록이었다(`pointer` 헬퍼 주석 참고). 그 계약은
+  // 아래 "스와이프" 블록이 진짜로 지키고, 여기서는 킬이 확인된 쪽만 남긴다.
+  it("activates the pressed column", () => {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} />);
     fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
 
     const year = screen.getByRole("group", { name: "연도 2026" });
     const month = screen.getByRole("group", { name: "월 07" });
-    fireEvent.pointerMove(year, { pointerId: 10, clientY: 80, buttons: 0 });
-    expect(onChange).not.toHaveBeenCalled();
-
     fireEvent.pointerDown(month, { pointerId: 11, clientY: 80, buttons: 1 });
     expect(month.classList.contains("active")).toBe(true);
     expect(year.classList.contains("active")).toBe(false);
@@ -317,6 +341,64 @@ describe("DateWheelPicker year-month mode (fields)", () => {
   });
 });
 
+// ⚠️ **이 블록이 생기기 전까지 스와이프는 감시자가 0개였습니다.** `moveSwipe`의 본문과
+// `finishSwipe`의 커밋을 통째로 지워도 스위트 390개가 전부 초록이었습니다. 원인은 테스트가
+// 아니라 환경입니다 — 이 jsdom에 `PointerEvent` 생성자가 없어 `fireEvent.pointerDown`이
+// `clientY`·`pointerId`·`buttons`를 조용히 버리고, `moveSwipe`가 첫 줄에서 언제나 반환했기
+// 때문입니다(파일 상단 `pointer` 헬퍼 주석에 계측값이 있습니다).
+//
+// **SEG Task 4가 만든 구멍이 아닙니다** — `abb991c`에도 글자까지 같은 상태였습니다. 다만
+// 스와이프는 이 컨트롤의 모바일 주 조작이라(스펙과 PRINCIPLES가 "휠·스와이프·방향키"를
+// 나란히 둡니다) 무방비로 둘 수 없어 여기서 메웁니다.
+//
+// 아래 넷은 `moveSwipe`·`finishSwipe`의 **서로 다른 가드**를 하나씩 겨냥합니다.
+describe("DateWheelPicker 스와이프", () => {
+  function openWheel() {
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    return { onChange, year: screen.getByRole("group", { name: "연도 2026" }) };
+  }
+
+  // 30px 경계를 넘을 때마다 **즉시** 한 칸 커밋한다 — 손을 뗄 때 한꺼번에 여러 칸이 튀는
+  // 것을 막는 설계다. 위로 끌면(clientY 감소) 다음 값이다.
+  it("30px 넘게 위로 끌면 한 칸 다음으로 커밋한다", () => {
+    const { onChange, year } = openWheel();
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", year, { pointerId: 7, clientY: 60, buttons: 1 });
+    expect(onChange).toHaveBeenCalledWith("2027-07-12");
+  });
+
+  // 실제로 일어나는 시퀀스다: 누른 채 시작했다가 컨트롤 밖에서 버튼을 떼면 `pointerup`이
+  // 안 오고 `buttons: 0`인 `pointermove`만 계속 온다. 그때도 값이 따라 움직이면 "누르지도
+  // 않았는데 휠이 돈다"가 된다. 이것이 초판 `:97`이 지킨다고 믿어졌던 계약이다.
+  it("버튼을 뗀 채(buttons:0) 같은 거리를 움직이면 값이 안 바뀐다", () => {
+    const { onChange, year } = openWheel();
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    onChange.mockClear();
+    pointer("pointerMove", year, { pointerId: 7, clientY: 60, buttons: 0 });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // 시작하지 않은 스와이프 — `swipeRef`가 비어 있는데 도착한 move. 위 테스트와 다른 가드다
+  // (`buttons`는 1이므로 첫 가드는 통과한다).
+  it("누르지 않고 지나가는 포인터는 값을 바꾸지 않는다", () => {
+    const { onChange, year } = openWheel();
+    pointer("pointerMove", year, { pointerId: 7, clientY: 60, buttons: 1 });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // 손을 뗄 때 30px 경계에 못 미치고 남은 거리가 18px 이상이면 그 방향으로 한 칸 더 간다.
+  // 여기서는 100 → 80이므로 커밋 경계(30)는 못 넘고 놓기 경계(18)는 넘는다.
+  it("손을 뗄 때 18px 이상 남아 있으면 그 방향으로 한 칸 더 커밋한다", () => {
+    const { onChange, year } = openWheel();
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    onChange.mockClear();
+    pointer("pointerUp", year, { pointerId: 7, clientY: 80 });
+    expect(onChange).toHaveBeenCalledWith("2027-07-12");
+  });
+});
+
 describe("DateWheelPicker 키보드 진입", () => {
   it("↓로 열린다", async () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
@@ -328,13 +410,17 @@ describe("DateWheelPicker 키보드 진입", () => {
     expect(await screen.findByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();
   });
 
+  // 루프 안에서 곧바로 단언하면 실패 메시지가 **어느 키인지 안 알려준다**("expected null to
+  // be truthy"). 연 키를 모아 신원으로 비교해, 빠진 키가 실패 메시지에 그대로 찍히게 한다.
   it("↑ Enter Space로도 열린다", () => {
+    const opened: string[] = [];
     for (const key of ["ArrowUp", "Enter", " "]) {
       render(<ControlledDateWheel initialValue="2026-07-12" />);
       fireEvent.keyDown(fieldOf("거래 날짜"), { key });
-      expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();
+      if (screen.queryByRole("dialog", { name: "거래 날짜 선택" })) opened.push(key);
       cleanup();
     }
+    expect(opened).toEqual(["ArrowUp", "Enter", " "]);
   });
 
   it("비활성이면 어느 키로도 열리지 않는다", () => {
@@ -501,6 +587,12 @@ describe("DateWheelPicker 세그먼트 이동", () => {
   // 팝오버가 닫혔다는 것. 초판은 `preventDefault()`가 **불리는** 쪽을 고정하고 있었으므로
   // (`moveColumn`이 성공하면 막았다) 이 단언은 **값이 뒤집힌 것**이지 새로 생긴 것이 아니다.
   // 둘은 서로 다른 결함이라 나눠 둔다.
+  //
+  // ⚠️ **아래 `defaultPrevented === false` 쌍은 "덧붙임 전용" 감시자다.** 지킬 코드가
+  // **없는 것**(`preventDefault()` 호출이 안 일어나는 것)이므로 **삭제 뮤테이션으로는 영영
+  // 안 빨개진다** — 지울 줄이 없기 때문이다. `Tab` 분기에 `event.preventDefault()`를
+  // **덧붙이는** 뮤테이션에서 2 red가 된다(직접 유도했다). 삭제 뮤테이션만 돌려 보고
+  // "감시자가 없다"고 결론내지 말 것.
   it("마지막 세그먼트에서 Tab은 팝오버를 닫는다", async () => {
     const field = await openPickerAtLastSegment();
     fireEvent.keyDown(field, { key: "Tab" });
@@ -638,6 +730,22 @@ describe("DateWheelPicker tab 순서", () => {
   it("트리거는 tab 정거장으로 남는다", async () => {
     await openPicker();
     expect(fieldOf("거래 날짜").getAttribute("tabindex")).toBeNull();
+  });
+
+  // 팝오버가 tab 순서에서도 빠지고 포커스도 영영 안 들어가게 되면서, 보조기술이 "무엇이
+  // 확장됐는가"에 답할 경로가 `aria-controls` 하나만 남았다. 팝오버는 body 끝 포털이라
+  // 포함 관계로도 못 찾는다. Select.tsx가 같은 이유로 같은 연결을 갖고 있다.
+  //
+  // 신원으로 본다 — `aria-controls`가 **그 다이얼로그를** 가리키는지까지 봐야 한다.
+  // 존재만 보면 엉뚱한 id를 가리켜도 통과한다.
+  it("열려 있으면 트리거의 aria-controls가 그 팝오버를 가리킨다", async () => {
+    const dialog = await openPicker();
+    expect(fieldOf("거래 날짜").getAttribute("aria-controls")).toBe(dialog.id);
+  });
+
+  it("닫혀 있으면 aria-controls가 없다 — 가리킬 것이 없다", () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    expect(fieldOf("거래 날짜").hasAttribute("aria-controls")).toBe(false);
   });
 
   // 아래 세 개는 원래 "tabindex·title·aria-hidden 확인" 한 개였다. expect()는 첫
@@ -1026,11 +1134,12 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
     expect(reopenedYear.querySelector(".date-wheel-values .selected")?.textContent).toBe("2031");
   });
 
-  // 완료 버튼이 이제 flushTyping을 거치므로, 완료 테스트만으로는 포커스 이펙트의
-  // `!open` 분기(:282)가 버퍼를 비우는지 더 이상 증명하지 못한다 — 완료 경로는
-  // commitAndClose 자신이 이미 버퍼를 비운다. 바깥 클릭·뒤로가기는 flushTyping을
-  // 전혀 거치지 않는 유일한 닫힘 경로라 :282의 안전망이 실제로 켜지는지는 이걸로만
-  // 확인할 수 있다.
+  // 완료 버튼이 flushTyping을 거치므로, 완료 테스트만으로는 **"닫히면 버퍼를 버린다" 이펙트**가
+  // 버퍼를 비우는지 증명하지 못한다 — 완료 경로는 commitAndClose 자신이 이미 비운다.
+  // 바깥 클릭·뒤로가기는 flushTyping을 전혀 거치지 않는 유일한 닫힘 경로라, 그 안전망이
+  // 실제로 켜지는지는 이걸로만 확인할 수 있다.
+  // (그 이펙트는 예전에 포커스 이펙트의 `!open` 분기 안에 얹혀 있었다. SEG Task 4가 포커스
+  //  이펙트를 지우면서 이 부분만 자기 이펙트로 떼어 살렸다.)
   it("바깥을 클릭해 닫으면 남아 있던 버퍼가 사라진다", async () => {
     const { trigger } = await openAndType("2026-07-12", ["3", "1"]);
     fireEvent.pointerDown(document.body);   // 팝오버 밖에서 시작한 포인터 — closeOutside가 닫는다
@@ -1451,14 +1560,9 @@ describe("DateWheelPicker 세션 수명", () => {
   //
   // ⚠️ **초판 주석은 이 줄이 "focusout 리셋 금지"(스펙 §6.4)의 파수꾼이라고 적고 있었다.**
   // 근거는 "팝오버를 여는 것 자체가 포커스를 열로 가져가 트리거에서 focusout이 난다"였는데,
-  // **SEG Task 4가 그 메커니즘을 없앴다** — 포커스가 트리거를 떠나지 않으므로 이 시퀀스에서
-  // focusout이 아예 나지 않는다. 트리거에 focusout 리셋을 심는 뮤테이션을 돌려 확인했다:
-  // **RED 0.** 그 조항은 지금 이 파일의 어떤 테스트도 지키지 않는다.
-  //
-  // 다만 **위험 자체가 줄었다.** focusout이 이제 진짜로 "컨트롤을 떠났다"만 뜻하고, 떠날 때
-  // 찍는 것은 돌아올 때 찍는 것과 같은 값이 된다. 그래서 리셋을 심어도 관찰 가능한 차이를
-  // 만드는 시퀀스를 못 찾았다 — **"없다"고 증명한 것은 아니다.** 자세한 것은 SEG Task 4
-  // 보고서 §7.
+  // **SEG Task 4가 그 메커니즘을 없앴다** — 이 시퀀스에서는 이제 focusout이 아예 안 난다.
+  // 그러므로 이 테스트는 그 조항의 파수꾼이 **아니다.** 파수꾼은 이 블록 끝의 두 테스트
+  // ("팝오버가 열린 채 포커스를 잃어도 …")다.
   it("닫힌 채 Delete로 지운 값을 완료가 되살리지 않는다", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-09T03:00:00Z"));   // 서울 기준 오늘 = 2026-08-09
@@ -1607,6 +1711,49 @@ describe("DateWheelPicker 세션 수명", () => {
     fireEvent.click(screen.getByRole("button", { name: "완료" }));   // 아무것도 안 건드리고 완료
 
     expect(trigger.querySelector("span")).toBe(afterFirst);
+  });
+
+  // ⚠️ **스펙 §6.4의 "focusout에는 아무것도 하지 않는다"를 지키는 두 파수꾼이다.**
+  //
+  // Task 4 전에는 이 조항을 위쪽 "닫힌 채 Delete" 테스트가 지켰다. 근거가 "팝오버를 여는
+  // 것 자체가 포커스를 열로 옮겨 트리거에서 focusout이 난다"였는데 그 메커니즘이 사라져
+  // 조항이 무방비가 됐다(금지된 리셋을 심어도 0 red였다).
+  //
+  // **다시 지킬 수 있는 창이 있다: 팝오버가 열린 채 포커스만 떠나는 상태.** 실제로 도달
+  // 가능하다 — `closeOutside`는 `pointerdown`만 보므로 포커스 이동으로는 팝오버가 닫히지
+  // 않고, 완료 클릭은 팝오버 `onMouseDown`의 `preventDefault`(§6.3) 때문에 포커스를 트리거로
+  // 되돌리지 않는다. 즉 **`focusin`이 한 번도 다시 나지 않는 창**이다(토스트, 자동 포커스
+  // 모달, 소비자의 프로그램적 포커스 이동). focusout에 리셋을 심으면 정확히 여기서 관찰된다.
+  //
+  // 둘은 같은 창의 **서로 다른 상태**를 본다 — 하나는 `clearedRef`, 하나는
+  // `sessionStartValueRef`. 한 it에 넣으면 앞이 터질 때 뒤가 실행되지 않는다.
+  it("팝오버가 열린 채 포커스를 잃어도 '지웠다' 기억은 남는다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-09T03:00:00Z"));
+    render(<ControlledDateWheelValue initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "Delete" });      // 닫힌 채 지운다 — clearedRef = true
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });   // 연다 (포커스는 여전히 트리거)
+    screen.getByRole("button", { name: "바깥" }).focus();   // focusout — 팝오버는 열린 채다
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+
+    expect(screen.getByTestId("value").textContent).toBe("(빈값)");
+  });
+
+  it("팝오버가 열린 채 포커스를 잃어도 세션 기준값은 갱신되지 않는다", () => {
+    render(<ControlledDateWheelValue initialValue="2026-07-12" />);
+    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+
+    trigger.focus();                                       // 기준값 = 2026-07-12
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });      // 연다
+    const before = trigger.querySelector("span");
+    fireEvent.keyDown(trigger, { key: "ArrowUp" });        // 2025로 — value가 곧바로 바뀐다
+    screen.getByRole("button", { name: "바깥" }).focus();   // focusout — 여기서 찍으면 안 된다
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+
+    expect(trigger.querySelector("span")).not.toBe(before);
   });
 });
 

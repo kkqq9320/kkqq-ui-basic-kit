@@ -10,7 +10,7 @@
  *     절대 다른 컬럼으로 자리올림하지 않습니다
  *   · 데스크톱 휠·화살표는 커서가 있는 컬럼만, 모바일 스와이프·키보드는 활성 컬럼만
  */
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type WheelEvent as ReactWheelEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type WheelEvent as ReactWheelEvent } from "react";
 import { createPortal } from "react-dom";
 
 import { flushBuffer, lastDayOf, typeDigit, withUnitValue } from "./dateWheelTyping";
@@ -265,8 +265,23 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 부모" 블록이 그 시퀀스를 재현합니다.
   //
   // 확정하지 않는 닫힘 경로(바깥 클릭·뒤로가기·Escape)는 이것을 채우지 않으므로 그대로
-  // `value`로 찍힙니다 — 그 경로들은 값을 바꾸지 않았으니 그게 맞습니다.
+  // `value`로 찍힙니다.
+  //
+  // ⚠️ **그 경로들이 "값을 안 바꿨으니 안전하다"는 뜻이 아닙니다** — 확정(commit)을 안 했을
+  // 뿐 값은 얼마든지 바뀝니다. `↑`/`↓`·휠·스와이프·± 버튼·`오늘`·`비우기`가 전부
+  // `commitAndClose` **밖에서** `onChange`를 부릅니다. 그러므로 지연 반영 부모에서
+  // "`↓`로 값 변경 → 바깥 클릭으로 닫기"를 하면 저 경로에서도 기준값이 변경 **전** 값으로
+  // 찍힐 수 있습니다. **이것은 기존 결함이고 Task 4의 회귀가 아닙니다** — 그 경로에는
+  // 예전에도 rAF 안전망이 없었습니다. 여기서 고치지 않는 이유는 `commitAndClose`처럼
+  // "이번 닫힘이 확정한 값"이라고 부를 것이 그 경로에는 없기 때문입니다. 고치려면 기준값을
+  // 언제 찍을지를 다시 정해야 하므로 별건입니다.
   const committedOnCloseRef = useRef<string | null>(null);
+  // 트리거의 aria-controls가 가리킬 팝오버 id — Select.tsx의 menuId와 같은 이유이고, 이
+  // 컨트롤에서는 더 중요합니다. 팝오버는 body 끝 포털이라 트리거와의 포함 관계가 없고,
+  // **설계 스펙 §6.2 이후로는 포커스가 그 안에 들어가는 일도 영영 없습니다.** 포커스가
+  // 따라 들어가 주던 시절에는 보조기술이 그 경로로 팝오버를 찾을 수 있었지만 이제 그
+  // 채널이 없으므로, 이 id가 "무엇이 확장됐는가"에 답하는 **유일한** 연결입니다.
+  const popoverId = `${useId()}-popover`;
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -770,12 +785,18 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
 
         **반드시 트리거 <button> 자신에 붙습니다. 바깥 rootRef div로 올리면 안 됩니다.**
         focusin은 버블하고, 팝오버는 포털이지만 React 트리에서는 그 div의 자식이라 합성
-        이벤트가 그리로 올라갑니다 — div에 붙이면 팝오버를 여는 순간 포커스 이펙트가 열에
-        준 focus가 곧바로 이 핸들러를 불러 "여는 순간에는 찍지 않는다"가 조용히 깨집니다
-        (뮤테이션으로 실증: 핸들러를 div로 옮기면 "닫힌 채 Delete" 테스트가 빨개집니다).
-        버튼에 붙이면 버블이 문제가 되지 않습니다 — 버튼 자신이 포커스를 받고, 그 안의
-        <span>·<i>는 포커스를 받을 수 없기 때문입니다. */}
-    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onClick={() => {
+        이벤트가 그리로 올라갑니다. div에 붙이면 이 핸들러가 "트리거가 포커스를 얻었다"가
+        아니라 "이 컨트롤 어딘가가 포커스를 얻었다"를 뜻하게 되고, 그것은 세션 도중에
+        기준값을 덮어쓰는 사건입니다(§6.4가 focusout에 아무것도 하지 않는 이유와 같습니다).
+
+        ⚠️ **이 자리에 예전에는 "팝오버를 여는 순간 포커스 이펙트가 열에 준 focus가 곧바로
+        이 핸들러를 부른다(뮤테이션으로 실증)"고 적혀 있었습니다. SEG Task 4가 그 포커스
+        이펙트를 지웠으므로 그 근거도, 그 측정도 더 이상 재현되지 않습니다.** 지금 이것은
+        "지금 깨진다"가 아니라 **예방적** 근거입니다 — 팝오버 안 어떤 것도 포커스를 받지
+        않게 막아 두었지만(§6.3), 그 차단이 한 겹 뚫리는 날 이 핸들러가 div에 있으면 그때
+        조용히 깨집니다. 버튼에 붙이면 버블이 문제가 되지 않습니다 — 버튼 자신이 포커스를
+        받고, 그 안의 <span>·<i>는 포커스를 받을 수 없기 때문입니다. */}
+    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onClick={() => {
       // 마우스로 열 때도 키보드 경로(handleFieldKey의 `!open` 분기)와 같은 열로 시드합니다 —
       // Select.tsx의 onClick이 `initialActiveValue`로 하는 마우스-키보드 일치 시딩과 같은
       // 이유입니다(줄 번호로 적어 두었던 참조는 이미 틀려 있었습니다). 닫혀 있을 때만
@@ -827,7 +848,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         ⚠️ PRINCIPLES §5의 passive 함정과는 **다른 자리**입니다 — 그 조항은
         `wheel`·`touchstart`·`touchmove`에 대한 것이고 `mousedown`은 passive로 등록되지
         않으므로 여기서 preventDefault가 실제로 먹습니다. */}
-    {open && position && createPortal(<div ref={popoverRef} className="date-wheel-popover dropdown-menu-surface" role="dialog" aria-modal="false" aria-label={`${ariaLabel} ${labels.select}`} onMouseDown={(event) => event.preventDefault()} style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
+    {open && position && createPortal(<div ref={popoverRef} id={popoverId} className="date-wheel-popover dropdown-menu-surface" role="dialog" aria-modal="false" aria-label={`${ariaLabel} ${labels.select}`} onMouseDown={(event) => event.preventDefault()} style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
       <div className="date-wheel-heading"><strong>{ariaLabel}</strong><span>{labels.hint}</span></div>
       <div className="date-wheel-columns" data-fields={fields.length}>
         {/* 열은 **포커스를 받지 않고 키도 받지 않습니다**(설계 스펙 §5·§6.2) — `tabIndex`가
