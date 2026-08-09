@@ -362,6 +362,29 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   const hasDateValue = validDateValue(value);
   const triggerParts = hasDateValue || typing ? dateTriggerParts(hasDateValue ? value : baseValue, fields, typing) : null;
 
+  /**
+   * 트리거의 접근성 이름 — **레이블 뒤에 지금 화면에 보이는 값을 잇습니다**
+   * (설계 스펙 §8): `"거래 날짜, 2026. 07. 12."`, 값이 없으면 `"거래 날짜, 날짜 선택"`.
+   *
+   * **왜 필요한가:** 포커스가 트리거에 머무르게 되면서(§6.2) 값을 읽히게 할 자리가 여기밖에
+   * 남지 않았습니다. 초판 모델에서는 포커스가 옮겨간 열이 `aria-label="연도 2026"`으로 값을
+   * 실어 날랐는데, 그 열에 이제 포커스가 가지 않습니다. `ariaLabel`만 이름으로 쓰면 값이
+   * 바뀌어도 **읽히는 것이 하나도 없습니다.**
+   *
+   * PRINCIPLES §11의 "`ariaLabel`은 필수"와 충돌하지 않습니다 — 없애는 것이 아니라 뒤에
+   * 값을 잇는 것입니다.
+   *
+   * ⚠️ **이것이 읽히게 하는 것은 "값"이지 "활성 세그먼트"가 아닙니다.** 지금 어느 세그먼트를
+   * 치고 있는지는 여전히 안 읽힙니다 — §8의 `aria-activedescendant` 조항은 그대로 살아 있는
+   * 구멍입니다. 이걸로 그 구멍이 메워졌다고 적지 마세요.
+   *
+   * 조각을 그대로 이으므로 **이름의 값 부분은 트리거의 `textContent`와 글자까지 같습니다.**
+   * 화면과 이름이 갈라질 수 없다는 뜻이고, 그것이 이 방식을 고른 이유입니다(버퍼를 치는
+   * 동안에도 화면에 보이는 그대로가 이름에 실립니다).
+   */
+  const triggerValueText = triggerParts ? triggerParts.map((part) => part.text).join("") : labels.placeholder;
+  const triggerName = `${ariaLabel}, ${triggerValueText}`;
+
   useEffect(() => {
     if (!open) return;
     function closeOutside(event: PointerEvent) {
@@ -796,7 +819,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         않게 막아 두었지만(§6.3), 그 차단이 한 겹 뚫리는 날 이 핸들러가 div에 있으면 그때
         조용히 깨집니다. 버튼에 붙이면 버블이 문제가 되지 않습니다 — 버튼 자신이 포커스를
         받고, 그 안의 <span>·<i>는 포커스를 받을 수 없기 때문입니다. */}
-    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onClick={() => {
+    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onClick={() => {
       // 마우스로 열 때도 키보드 경로(handleFieldKey의 `!open` 분기)와 같은 열로 시드합니다 —
       // Select.tsx의 onClick이 `initialActiveValue`로 하는 마우스-키보드 일치 시딩과 같은
       // 이유입니다(줄 번호로 적어 두었던 참조는 이미 틀려 있었습니다). 닫혀 있을 때만

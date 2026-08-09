@@ -26,11 +26,25 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
  */
 const FILL = "\u2012";
 
-/** 이 컨트롤의 **유일한** 포커스 자리이자 키가 도착하는 유일한 자리다(설계 스펙 §6.2).
- *  열은 더 이상 `tabIndex`도 `onKeyDown`도 갖지 않으므로, 열에 보낸 키는 아무 핸들러에도
- *  닿지 않고 **조용히 사라진다** — 열을 겨냥한 `fireEvent.keyDown`이 남아 있으면 그 테스트는
- *  "동작이 옳아서"가 아니라 "아무 일도 안 일어나서" 초록이 된다. 키는 전부 여기로 보낸다. */
-function fieldOf(name: string) { return screen.getByRole("button", { name }); }
+/**
+ * 이 컨트롤의 **유일한** 포커스 자리이자 키가 도착하는 유일한 자리다(설계 스펙 §6.2).
+ * 열은 더 이상 `tabIndex`도 `onKeyDown`도 갖지 않으므로, 열에 보낸 키는 아무 핸들러에도
+ * 닿지 않고 **조용히 사라진다** — 열을 겨냥한 `fireEvent.keyDown`이 남아 있으면 그 테스트는
+ * "동작이 옳아서"가 아니라 "아무 일도 안 일어나서" 초록이 된다. 키는 전부 여기로 보낸다.
+ *
+ * **`ariaLabel`로 찾되 이름 전체와 맞추지 않는다.** 트리거의 접근성 이름이 이제
+ * `"거래 날짜, 2026. 07. 12."`처럼 **값을 함께 싣기** 때문이다(설계 스펙 §8) — 완전 일치로
+ * 찾으면 값이 바뀔 때마다 쿼리가 깨진다. 이 파일의 트리거 조회는 **전부 이 헬퍼를 지나간다**
+ * (49곳을 기계로 옮겼다). 그래서 계약이 또 바뀌어도 고칠 자리가 여기 하나다.
+ *
+ * ⚠️ **이 헬퍼로는 "이름이 값을 싣는다"가 증명되지 않는다.** 접두사만 보므로 뒤에 무엇이
+ * 붙든 — 아무것도 안 붙어도 — 똑같이 찾아낸다. 그 계약은 "트리거 접근성 이름" 블록이 따로
+ * 고정한다. 이름을 여기서 완전 일치로 검사하면 안 되는 이유도 같다: 이름이 안 맞아 쿼리가
+ * 던지는 것은 **단언 실패가 아니라 쿼리 실패**라, 엉뚱한 테스트가 엉뚱한 줄에서 죽는다.
+ */
+function fieldOf(name: string) {
+  return screen.getByRole("button", { name: (accessibleName: string) => accessibleName === name || accessibleName.startsWith(`${name}, `) });
+}
 
 /** 지금 활성인 세그먼트의 unit. 없으면 null.
  *  `.active` 클래스는 포커스와 무관하게 붙는다 — 포커스에 따라 감추는 일은 CSS가 한다
@@ -86,7 +100,7 @@ describe("DateWheelPicker", () => {
     const onChange = vi.fn();
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-06-01" onChange={onChange} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    fireEvent.click(fieldOf("거래 날짜"));
     fireEvent.click(screen.getByRole("button", { name: "오늘" }));
     expect(onChange).toHaveBeenCalledWith("2026-07-12");
   });
@@ -95,7 +109,7 @@ describe("DateWheelPicker", () => {
     const onChange = vi.fn();
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={onChange} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    fireEvent.click(fieldOf("거래 날짜"));
     expect(screen.getByRole("group", { name: "연도 2026" }).querySelectorAll(".date-wheel-values button")).toHaveLength(7);
 
     const yearPrevious = screen.getByRole("button", { name: "연도 이전" });
@@ -125,7 +139,7 @@ describe("DateWheelPicker", () => {
   // 아래 "스와이프" 블록이 진짜로 지키고, 여기서는 킬이 확인된 쪽만 남긴다.
   it("activates the pressed column", () => {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} />);
-    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    fireEvent.click(fieldOf("거래 날짜"));
 
     const year = screen.getByRole("group", { name: "연도 2026" });
     const month = screen.getByRole("group", { name: "월 07" });
@@ -137,7 +151,7 @@ describe("DateWheelPicker", () => {
 
   it("cycles month and day inside the selected year and month", () => {
     render(<ControlledDateWheel initialValue="2026-12-31" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
     fireEvent.click(trigger);
 
     fireEvent.click(screen.getByRole("button", { name: "월 다음" }));
@@ -151,7 +165,7 @@ describe("DateWheelPicker", () => {
 
   it("clamps the day to the destination month's last day", () => {
     render(<ControlledDateWheel initialValue="2025-01-31" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
     fireEvent.click(trigger);
     fireEvent.click(screen.getByRole("button", { name: "월 다음" }));
     expect(trigger.textContent).toContain("2025. 02. 28.");
@@ -174,7 +188,7 @@ describe("DateWheelPicker", () => {
     };
     render(<DateWheelPicker ariaLabel="Date" value="" onChange={() => undefined} labels={english} allowClear />);
 
-    const trigger = screen.getByRole("button", { name: "Date" });
+    const trigger = fieldOf("Date");
     expect(trigger.textContent).toBe("Pick a date");
 
     fireEvent.click(trigger);
@@ -188,7 +202,7 @@ describe("DateWheelPicker", () => {
 
   it("accepts a partial label override and keeps Korean defaults for the rest", () => {
     render(<DateWheelPicker ariaLabel="날짜" value="" onChange={() => undefined} labels={{ placeholder: "미정" }} />);
-    const trigger = screen.getByRole("button", { name: "날짜" });
+    const trigger = fieldOf("날짜");
     expect(trigger.textContent).toBe("미정");
     // 트리거 안의 달력 아이콘은 장식이다 — 누를 수 있는 요소가 아니고 이름도 없다.
     expect(screen.queryByRole("button", { name: /오늘로 설정/ })).toBeNull();
@@ -213,7 +227,7 @@ describe("DateWheelPicker", () => {
   // 그대로 고정한다. 이 자리에 blur()나 다른 포커스 이동이 새로 들어오면 여기서 터진다.
   it("완료 버튼으로 닫아도 포커스는 트리거에 그대로 있다", () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     expect(screen.getByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();
@@ -229,14 +243,14 @@ describe("DateWheelPicker", () => {
     vi.setSystemTime(new Date("2026-07-12T20:00:00Z"));
     const seoul = vi.fn();
     render(<DateWheelPicker ariaLabel="서울" value="2026-01-01" onChange={seoul} />);
-    fireEvent.click(screen.getByRole("button", { name: "서울" }));
+    fireEvent.click(fieldOf("서울"));
     fireEvent.click(screen.getByRole("button", { name: "오늘" }));
     expect(seoul).toHaveBeenCalledWith("2026-07-13");
     cleanup();
 
     const utc = vi.fn();
     render(<DateWheelPicker ariaLabel="UTC" value="2026-01-01" onChange={utc} timeZone="UTC" />);
-    fireEvent.click(screen.getByRole("button", { name: "UTC" }));
+    fireEvent.click(fieldOf("UTC"));
     fireEvent.click(screen.getByRole("button", { name: "오늘" }));
     expect(utc).toHaveBeenCalledWith("2026-07-12");
   });
@@ -246,7 +260,7 @@ describe("DateWheelPicker", () => {
 describe("DateWheelPicker year-month mode (fields)", () => {
   it("renders only year and month columns and drops the day from the trigger", () => {
     render(<DateWheelPicker ariaLabel="예산 월" value="2026-07-12" fields={["year", "month"]} onChange={() => undefined} />);
-    const trigger = screen.getByRole("button", { name: "예산 월" });
+    const trigger = fieldOf("예산 월");
     expect(trigger.textContent).toBe("2026. 07.");            // 일 없음
 
     fireEvent.click(trigger);
@@ -260,7 +274,7 @@ describe("DateWheelPicker year-month mode (fields)", () => {
   it("emits a day-01 value when the month changes", () => {
     const onChange = vi.fn();
     render(<DateWheelPicker ariaLabel="예산 월" value="2026-07-12" fields={["year", "month"]} onChange={onChange} />);
-    fireEvent.click(screen.getByRole("button", { name: "예산 월" }));
+    fireEvent.click(fieldOf("예산 월"));
     fireEvent.click(screen.getByRole("button", { name: "월 다음" }));
     expect(onChange).toHaveBeenLastCalledWith("2026-08-01");   // 12일이 아니라 01일
   });
@@ -269,7 +283,7 @@ describe("DateWheelPicker year-month mode (fields)", () => {
     // 예산이 7월 15일부터 시작해도 '7월'은 통째로 선택 가능해야 합니다.
     const onChange = vi.fn();
     render(<DateWheelPicker ariaLabel="예산 월" value="2026-08-01" min="2026-07-15" fields={["year", "month"]} onChange={onChange} />);
-    fireEvent.click(screen.getByRole("button", { name: "예산 월" }));
+    fireEvent.click(fieldOf("예산 월"));
     const monthPrevious = screen.getByRole("button", { name: "월 이전" });
     expect(monthPrevious.hasAttribute("disabled")).toBe(false);   // 7월 허용
     fireEvent.click(monthPrevious);
@@ -279,7 +293,7 @@ describe("DateWheelPicker year-month mode (fields)", () => {
   it("disables the month before a month-granular min and keeps the min month in range", () => {
     // min이 8월 5일이면: 7월은 막히고, 8월 1일은 min보다 이른 날짜지만 '8월'이라 클램프되지 않습니다.
     render(<DateWheelPicker ariaLabel="예산 월" value="2026-08-01" min="2026-08-05" fields={["year", "month"]} onChange={() => undefined} />);
-    fireEvent.click(screen.getByRole("button", { name: "예산 월" }));
+    fireEvent.click(fieldOf("예산 월"));
     expect(screen.getByRole("group", { name: "월 08" })).toBeTruthy();                        // 8월 그대로
     expect(screen.getByRole("button", { name: "월 이전" }).hasAttribute("disabled")).toBe(true);   // 7월 막힘
   });
@@ -289,14 +303,14 @@ describe("DateWheelPicker year-month mode (fields)", () => {
     vi.setSystemTime(new Date("2026-07-12T03:00:00Z"));   // 서울 2026-07-12 정오
     const onChange = vi.fn();
     render(<DateWheelPicker ariaLabel="예산 월" value="2026-05-01" fields={["year", "month"]} onChange={onChange} />);
-    fireEvent.click(screen.getByRole("button", { name: "예산 월" }));
+    fireEvent.click(fieldOf("예산 월"));
     fireEvent.click(screen.getByRole("button", { name: "오늘" }));
     expect(onChange).toHaveBeenCalledWith("2026-07-01");
   });
 
   it("renders a year-only picker and formats the trigger as the bare year", () => {
     render(<DateWheelPicker ariaLabel="회계 연도" value="2026-07-12" fields={["year"]} onChange={() => undefined} />);
-    const trigger = screen.getByRole("button", { name: "회계 연도" });
+    const trigger = fieldOf("회계 연도");
     expect(trigger.textContent).toBe("2026.");            // 월·일 없음
 
     fireEvent.click(trigger);
@@ -310,7 +324,7 @@ describe("DateWheelPicker year-month mode (fields)", () => {
   it("emits a January-01 value when the year changes in year-only mode", () => {
     const onChange = vi.fn();
     render(<DateWheelPicker ariaLabel="회계 연도" value="2026-07-12" fields={["year"]} onChange={onChange} />);
-    fireEvent.click(screen.getByRole("button", { name: "회계 연도" }));
+    fireEvent.click(fieldOf("회계 연도"));
     fireEvent.click(screen.getByRole("button", { name: "연도 다음" }));
     expect(onChange).toHaveBeenLastCalledWith("2027-01-01");   // 월·일 모두 01로 정규화
   });
@@ -356,7 +370,7 @@ describe("DateWheelPicker 스와이프", () => {
   function openWheel() {
     const onChange = vi.fn();
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={onChange} />);
-    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    fireEvent.click(fieldOf("거래 날짜"));
     return { onChange, year: screen.getByRole("group", { name: "연도 2026" }) };
   }
 
@@ -920,7 +934,7 @@ describe("DateWheelPicker 리뷰 Finding 3 — shiftDateValue의 말일 계산�
   // 번이 필요하던 이 값에 몇 키만으로 닿는다.
   it("연도 0000에서 월을 다음으로 옮기면 윤년 2/29를 안다", () => {
     render(<ControlledDateWheel initialValue="0000-01-29" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
     fireEvent.click(trigger);
     fireEvent.click(screen.getByRole("button", { name: "월 다음" }));
     expect(trigger.textContent).toBe("0000. 02. 29.");
@@ -973,7 +987,7 @@ describe("DateWheelPicker 리뷰 Finding 3 — shiftDateValue의 말일 계산�
 describe("DateWheelPicker 버퍼 확정과 폐기", () => {
   async function openAndType(initialValue: string, keys: string[]) {
     render(<ControlledDateWheel initialValue={initialValue} />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
@@ -1061,7 +1075,7 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 6, 12, 12));   // 서울 기준 2026-07-12 정오 — baseValue의 월·일 출처
     render(<ControlledDateWheel initialValue="" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
     fireEvent.click(trigger);
     fireEvent.keyDown(trigger, { key: "3" });
     fireEvent.keyDown(trigger, { key: "1" });
@@ -1095,7 +1109,7 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
 
   it("월의 0 단독은 확정할 수 없으므로 버린다", async () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
@@ -1203,7 +1217,7 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
   // 사라졌다. Shift+Tab은 이제 어느 세그먼트에서든 닫는다.)
   it("Shift+Tab이 치던 숫자를 확정한다", async () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
@@ -1222,7 +1236,7 @@ describe("DateWheelPicker 단축키", () => {
   it("Delete가 allowClear일 때 값을 비운다", () => {
     const onChange = vi.fn();
     render(<DateWheelPicker ariaLabel="종료일" value="2026-07-12" onChange={onChange} allowClear />);
-    const trigger = screen.getByRole("button", { name: "종료일" });
+    const trigger = fieldOf("종료일");
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "Delete" });
     expect(onChange).toHaveBeenCalledWith("");
@@ -1235,7 +1249,7 @@ describe("DateWheelPicker 단축키", () => {
   it("Delete는 allowClear가 아니면 무시된다", () => {
     const blocked = vi.fn();
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={blocked} />);
-    fireEvent.keyDown(screen.getByRole("button", { name: "거래 날짜" }), { key: "Delete" });
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "Delete" });
     expect(blocked).not.toHaveBeenCalled();
   });
 
@@ -1246,7 +1260,7 @@ describe("DateWheelPicker 단축키", () => {
     // disabled 검사를 그대로 맨 앞에 두고 handleShortcut을 그다음에 부른다.
     const onChange = vi.fn();
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={onChange} allowClear disabled />);
-    fireEvent.keyDown(screen.getByRole("button", { name: "거래 날짜" }), { key: "Delete" });
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "Delete" });
     expect(onChange).not.toHaveBeenCalled();
   });
 
@@ -1255,7 +1269,7 @@ describe("DateWheelPicker 단축키", () => {
     vi.setSystemTime(new Date("2026-07-12T03:00:00Z"));
     const onChange = vi.fn();
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-01-01" onChange={onChange} />);
-    fireEvent.keyDown(screen.getByRole("button", { name: "거래 날짜" }), { key: ";", code: "Semicolon", ctrlKey: true });
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: ";", code: "Semicolon", ctrlKey: true });
     expect(onChange).toHaveBeenCalledWith("2026-07-12");
   });
 
@@ -1265,7 +1279,7 @@ describe("DateWheelPicker 단축키", () => {
     vi.setSystemTime(new Date("2026-07-12T03:00:00Z"));
     const onChange = vi.fn();
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-01-01" onChange={onChange} />);
-    fireEvent.keyDown(screen.getByRole("button", { name: "거래 날짜" }), { key: "Unidentified", code: "Semicolon", ctrlKey: true });
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "Unidentified", code: "Semicolon", ctrlKey: true });
     expect(onChange).toHaveBeenCalledWith("2026-07-12");
   });
 
@@ -1327,7 +1341,7 @@ describe("DateWheelPicker 단축키", () => {
   // 소스만 바꾸고 테스트가 없으면 다음 사람이 조용히 되돌려도 아무도 모른다.
   it("팝오버 안내 문구 기본값이 타이핑까지 안내한다", () => {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} />);
-    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    fireEvent.click(fieldOf("거래 날짜"));
     const heading = screen.getByRole("dialog", { name: "거래 날짜 선택" }).querySelector(".date-wheel-heading span");
     expect(heading?.textContent).toBe("휠·스와이프·방향키·숫자 입력 · Ctrl+; 오늘");
   });
@@ -1339,19 +1353,19 @@ describe("DateWheelPicker 단축키", () => {
   // 표면이므로(하나가 죽어도 나머지의 킬력을 증명할 수 있어야 한다) 나눈다.
   it("오늘 버튼의 aria-keyshortcuts가 고정돼 있다", () => {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} />);
-    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    fireEvent.click(fieldOf("거래 날짜"));
     expect(screen.getByRole("button", { name: "오늘" }).getAttribute("aria-keyshortcuts")).toBe("Control+; Meta+;");
   });
 
   it("비우기 버튼의 aria-keyshortcuts가 고정돼 있다", () => {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} allowClear />);
-    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    fireEvent.click(fieldOf("거래 날짜"));
     expect(screen.getByRole("button", { name: "비우기" }).getAttribute("aria-keyshortcuts")).toBe("Delete");
   });
 
   it("완료 버튼의 aria-keyshortcuts가 고정돼 있다", () => {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} />);
-    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    fireEvent.click(fieldOf("거래 날짜"));
     expect(screen.getByRole("button", { name: "완료" }).getAttribute("aria-keyshortcuts")).toBe("Enter");
   });
 });
@@ -1406,7 +1420,7 @@ describe("DateWheelPicker 완료 피드백(커밋 애니메이션)", () => {
 
   it("타이핑한 값이 Enter로 확정되면(값이 바뀌면) 커밋 클래스가 붙는다", async () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
@@ -1425,7 +1439,7 @@ describe("DateWheelPicker 완료 피드백(커밋 애니메이션)", () => {
   // 못한다(둘 다 "2026-07-12"이므로) — 그 증명은 뮤테이션 표의 별도 뮤테이션이 한다.
   it("아무것도 바꾸지 않고 완료하면(값이 그대로면) 커밋 클래스가 붙지 않는다", () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
     fireEvent.click(trigger);
     fireEvent.click(screen.getByRole("button", { name: "완료" }));
 
@@ -1436,7 +1450,7 @@ describe("DateWheelPicker 완료 피드백(커밋 애니메이션)", () => {
   // (commitShift, commitAndClose가 아니다), 매번 반짝이면 신호가 아니라 소음이 된다(§12).
   it("화살표로 값을 옮기면(완료를 누르지 않으면) 커밋 클래스가 붙지 않는다", async () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
@@ -1452,7 +1466,7 @@ describe("DateWheelPicker 완료 피드백(커밋 애니메이션)", () => {
   // 찍은 값)과 비교해야 잡힌다.
   it("화살표로 값을 옮긴 뒤 완료하면(세션 시작 값과 달라지면) 커밋 클래스가 붙는다", async () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
@@ -1464,7 +1478,7 @@ describe("DateWheelPicker 완료 피드백(커밋 애니메이션)", () => {
 
   it("휠을 굴리면 커밋 클래스가 붙지 않는다", async () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     const year = await screen.findByRole("group", { name: /^연도/ });
@@ -1490,7 +1504,7 @@ describe("DateWheelPicker 비우기 뒤 완료가 지운 값을 되살리지 않
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-06T03:00:00Z"));   // 서울 기준 오늘 = 2026-08-06
     render(<ControlledDateWheel initialValue="" allowClear />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
 
     fireEvent.click(trigger);
     fireEvent.click(screen.getByRole("button", { name: "오늘" }));
@@ -1506,7 +1520,7 @@ describe("DateWheelPicker 비우기 뒤 완료가 지운 값을 되살리지 않
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-06T03:00:00Z"));
     render(<ControlledDateWheel initialValue="" allowClear />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
 
     fireEvent.click(trigger);
     fireEvent.click(screen.getByRole("button", { name: "오늘" }));
@@ -1526,7 +1540,7 @@ describe("DateWheelPicker 비우기 뒤 완료가 지운 값을 되살리지 않
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-06T03:00:00Z"));
     render(<ControlledDateWheel initialValue="" allowClear />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
 
     fireEvent.click(trigger);
     fireEvent.click(screen.getByRole("button", { name: "비우기" }));
@@ -1577,7 +1591,7 @@ describe("DateWheelPicker 세션 수명", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-09T03:00:00Z"));   // 서울 기준 오늘 = 2026-08-09
     render(<ControlledDateWheelValue initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
 
     trigger.focus();                                   // 키보드 사용자의 실제 출발 상태
     fireEvent.keyDown(trigger, { key: "Delete" });      // 닫힌 채 지운다 — clearedRef = true
@@ -1594,7 +1608,7 @@ describe("DateWheelPicker 세션 수명", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-09T03:00:00Z"));
     render(<ControlledDateWheelValue initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
 
     fireEvent.keyDown(trigger, { key: "ArrowDown" });   // 먼저 연다
     fireEvent.click(screen.getByRole("button", { name: "비우기" }));
@@ -1610,7 +1624,7 @@ describe("DateWheelPicker 세션 수명", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-09T03:00:00Z"));
     render(<ControlledDateWheelValue initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
 
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "Delete" });                   // 닫힌 채 지운다
@@ -1634,7 +1648,7 @@ describe("DateWheelPicker 세션 수명", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-09T03:00:00Z"));
     render(<ControlledDateWheelValue initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
 
     trigger.focus();
     fireEvent.keyDown(trigger, { key: ";", code: "Semicolon", ctrlKey: true });   // 닫힌 채 오늘로
@@ -1661,7 +1675,7 @@ describe("DateWheelPicker 세션 수명", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-09T03:00:00Z"));
     render(<ControlledDateWheelValue initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
 
     trigger.focus();                                                             // 기준값 = 2026-07-12
     fireEvent.keyDown(trigger, { key: ";", code: "Semicolon", ctrlKey: true });   // 닫힌 채 오늘로
@@ -1686,7 +1700,7 @@ describe("DateWheelPicker 세션 수명", () => {
   // 오롯이 닫힘 스탬프에만 걸려 있다.
   it("한 번 포커스한 동안 첫 완료에는 확정 신호가 뜬다", () => {
     render(<ControlledDateWheelValue initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
 
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
@@ -1699,7 +1713,7 @@ describe("DateWheelPicker 세션 수명", () => {
 
   it("한 번 포커스한 동안 두 번째 완료에는 확정 신호가 뜨지 않는다", () => {
     render(<ControlledDateWheelValue initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
 
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
@@ -1741,7 +1755,7 @@ describe("DateWheelPicker 세션 수명", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-09T03:00:00Z"));
     render(<ControlledDateWheelValue initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
 
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "Delete" });      // 닫힌 채 지운다 — clearedRef = true
@@ -1754,7 +1768,7 @@ describe("DateWheelPicker 세션 수명", () => {
 
   it("팝오버가 열린 채 포커스를 잃어도 세션 기준값은 갱신되지 않는다", () => {
     render(<ControlledDateWheelValue initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
+    const trigger = fieldOf("거래 날짜");
 
     trigger.focus();                                       // 기준값 = 2026-07-12
     fireEvent.keyDown(trigger, { key: "ArrowDown" });      // 연다
@@ -1859,6 +1873,63 @@ describe("DateWheelPicker 지연 반영 부모 — 닫힘 스탬프는 확정한
 // 조각 텍스트를 이으면 예전 formatDateTrigger가 만들던 문자열과 글자 하나까지 같다 —
 // 트리거를 textContent 하나로 보는 기존 단언 스무 곳이 그 등가성의 파수꾼이라 여기서
 // 다시 세지 않는다. 여기서 새로 고정하는 것은 **구조**(어떤 요소가 어떤 자리를 그리는가)다.
+// 설계 스펙 §8 — **트리거의 접근성 이름이 값을 함께 싣는다**: `"거래 날짜, 2026. 07. 12."`.
+// 포커스가 트리거를 떠나지 않게 되면서(§6.2) 값을 읽히게 할 자리가 여기밖에 남지 않았다.
+// 초판 모델에서는 포커스가 옮겨간 열의 `aria-label="연도 2026"`이 값을 실어 날랐다.
+//
+// ⚠️ **이 블록이 없으면 이름 계약을 지키는 것이 하나도 없다.** 이 파일의 트리거 조회는 전부
+// `fieldOf`를 지나가는데 그것은 **접두사만** 본다 — 값이 통째로 빠져도 49곳이 전부 그대로
+// 초록이다. 쿼리가 초록의 이유가 되는 통로이고, 이 라운드에서 이미 두 번 만난 모양이다.
+//
+// ⚠️ **읽히는 것은 "값"이지 "활성 세그먼트"가 아니다.** 지금 어느 세그먼트를 치고 있는지는
+// 여전히 안 읽힌다 — §8의 `aria-activedescendant` 조항은 그대로 살아 있는 구멍이다.
+// 이 블록이 그것을 메웠다고 읽지 말 것.
+describe("DateWheelPicker 트리거 접근성 이름", () => {
+  it("이름이 레이블 뒤에 값을 싣는다", () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    expect(fieldOf("거래 날짜").getAttribute("aria-label")).toBe("거래 날짜, 2026. 07. 12.");
+  });
+
+  it("값이 바뀌면 이름도 따라 바뀐다", () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowDown" });   // 연다
+    fireEvent.keyDown(field, { key: "ArrowDown" });   // 활성은 연도 — 2027로
+
+    expect(field.getAttribute("aria-label")).toBe("거래 날짜, 2027. 07. 12.");
+  });
+
+  // 값이 없으면 placeholder를 잇는다(§8). 이름을 레이블 하나로 되돌리는 것과 다르다 —
+  // 그 경우 "거래 날짜"만 남고, 여기서는 무엇이 비었는지가 읽힌다.
+  it("값이 비면 placeholder를 싣는다", () => {
+    render(<ControlledDateWheel initialValue="" />);
+    expect(fieldOf("거래 날짜").getAttribute("aria-label")).toBe("거래 날짜, 날짜 선택");
+  });
+
+  // **화면과 이름이 갈라질 수 없다는 것**이 조각을 그대로 잇는 방식을 고른 이유다. 버퍼를
+  // 치는 동안이 그 둘이 갈라지기 가장 쉬운 순간이라(이름만 `value`를 읽게 만들면 곧바로
+  // 갈린다), 여기서 고정한다. 위 세 테스트는 버퍼가 없어 이 결함을 지나가지 못한다.
+  it("치는 동안에도 이름이 화면에 보이는 그대로를 싣는다", async () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(field, { key: "2" });
+    fireEvent.keyDown(field, { key: "0" });
+
+    expect(field.getAttribute("aria-label")).toBe(`거래 날짜, 20${FILL}${FILL}. 07. 12.`);
+  });
+
+  // 소비자가 준 `ariaLabel`이 접두사로 남는다 — PRINCIPLES §11의 "ariaLabel은 필수"는
+  // 그대로다. 없애는 것이 아니라 뒤에 값을 잇는 것이다.
+  it("소비자가 준 ariaLabel이 그대로 앞에 남는다", () => {
+    render(<DateWheelPicker ariaLabel="종료일" value="2026-07-12" onChange={() => undefined} />);
+    expect(fieldOf("종료일").getAttribute("aria-label")).toBe("종료일, 2026. 07. 12.");
+  });
+});
+
 describe("DateWheelPicker 트리거 세그먼트", () => {
   function segmentUnits(trigger: HTMLElement) {
     return [...trigger.querySelectorAll(".date-wheel-segment")].map((element) => element.getAttribute("data-unit"));
