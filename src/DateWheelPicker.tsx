@@ -108,12 +108,36 @@ function dateWheelLabel(value: string, unit: DateWheelUnit, weekdays: string[]) 
   return `${String(date.getUTCDate()).padStart(2, "0")} ${weekdays[date.getUTCDay()]}`;
 }
 
-function formatDateTrigger(value: string, placeholder: string, fields: DateWheelUnit[]) {
-  if (!validDateValue(value)) return placeholder;
-  const [year, month, day] = value.split("-");
-  if (!fields.includes("month")) return `${year}.`;
-  if (!fields.includes("day")) return `${year}. ${month}.`;
-  return `${year}. ${month}. ${day}.`;
+/** 세그먼트가 지키는 자릿수. 버퍼가 덜 찼을 때 이 길이까지 `_`로 채웁니다. */
+const DATE_WHEEL_SEGMENT_WIDTH: Record<DateWheelUnit, number> = { year: 4, month: 2, day: 2 };
+
+/** 트리거를 이루는 조각. `unit: null`이 구두점(`. `)이고, 렌더에서 aria-hidden으로 나갑니다. */
+type DateTriggerPart = { unit: DateWheelUnit | null; text: string };
+
+/**
+ * 트리거 문구를 **세그먼트와 구두점으로 쪼갭니다**(설계 스펙 §4.5).
+ *
+ * **조각 텍스트를 순서대로 이으면 예전 `formatDateTrigger`가 만들던 문자열과 글자 하나까지
+ * 같습니다.** 트리거를 `textContent` 하나로 보는 테스트가 스무 곳 넘게 있고, 그것들이 손대지
+ * 않은 채로 계속 참이어야 이 변경이 "표시 구조만 바꿨다"는 뜻이 됩니다. 구두점을 세그먼트에
+ * 붙여 넣거나(`"2026. "`) 사이 공백을 CSS 여백으로 옮기면 그 등가성이 조용히 깨집니다.
+ *
+ * **버퍼는 자리를 지켜 그립니다** — "20" → `20__`, "203" → `203_`, 월 "1" → `1_`.
+ * 친 만큼만 그리는 안(`203. 07. 12.`)은 기각됐습니다: 자릿수가 늘었다 줄었다 하며 필드 폭이
+ * 요동치고, 세 자리 `203`이 순간적으로 유효한 연도처럼 읽힙니다. **폭이 흔들리지 않는 것이
+ * 이 표시 방식의 유일한 이유**이므로 `css/date-picker.css`의 `.date-wheel-segment`가
+ * `tabular-nums`를 겁니다 — 둘 중 하나만 있으면 아무 뜻이 없습니다.
+ */
+function dateTriggerParts(source: string, fields: DateWheelUnit[], typing: { unit: DateWheelUnit; digits: string } | null): DateTriggerPart[] {
+  const [year, month, day] = source.split("-");
+  function segment(unit: DateWheelUnit, text: string): DateTriggerPart {
+    return { unit, text: typing?.unit === unit && typing.digits ? typing.digits.padEnd(DATE_WHEEL_SEGMENT_WIDTH[unit], "_") : text };
+  }
+  const parts: DateTriggerPart[] = [segment("year", year)];
+  if (!fields.includes("month")) return [...parts, { unit: null, text: "." }];
+  parts.push({ unit: null, text: ". " }, segment("month", month));
+  if (!fields.includes("day")) return [...parts, { unit: null, text: "." }];
+  return [...parts, { unit: null, text: ". " }, segment("day", day), { unit: null, text: "." }];
 }
 
 export type DateWheelPickerProps = {
@@ -279,6 +303,17 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     return normalized;
   }
   const baseValue = clampToRange(validDateValue(value) ? value : todayIn(timeZone));
+
+  // 트리거가 그릴 조각들. null이면 placeholder를 그린다는 뜻입니다.
+  //
+  // **값이 비어 있어도 버퍼가 있으면 placeholder를 버리고 baseValue 세그먼트를 그립니다**
+  // (설계 스펙 §4.5). 팝오버의 휠은 빈 값일 때 이미 baseValue를 그리고 있으므로, 화면 두
+  // 곳이 같은 순간에 서로 다른 것을 말하지 않게 하는 것입니다.
+  //
+  // 값이 유효하지 않은데(빈 값·깨진 값) 버퍼도 없으면 예전 formatDateTrigger와 똑같이
+  // placeholder입니다 — 판정도 그때와 같은 validDateValue입니다.
+  const hasDateValue = validDateValue(value);
+  const triggerParts = hasDateValue || typing ? dateTriggerParts(hasDateValue ? value : baseValue, fields, typing) : null;
 
   useEffect(() => {
     if (!open) return;
@@ -699,7 +734,25 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       // (=지금 열려는 참일 때만) 시드해야 닫는 클릭에서 activeUnit을 건드리지 않습니다.
       if (!open) setActiveUnit(fields[0] ?? "year");
       setOpen((current) => !current);
-    }} onKeyDown={handleTriggerKeyDown}><span className={`${value ? "" : "placeholder"}${commitPulse ? " dropdown-value-commit" : ""}`} key={commitPulse}>{formatDateTrigger(value, labels.placeholder, fields)}</span><i className="date-wheel-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm2-2v4m10-4v4M3 9h18" /></svg></i></button></div>
+    }} onKeyDown={handleTriggerKeyDown}>{/* 이 <span> 하나가 §12의 확정 신호를 재생하는 자리입니다 — key={commitPulse}가 커밋마다
+        이 노드를 리마운트시켜 .dropdown-value-commit 애니메이션을 다시 틀고, css/date-picker.css:20의
+        `.date-wheel-trigger > span`이 여기에만 말줄임을 겁니다(자식 결합자 `>` 덕에 세그먼트에는
+        안 걸립니다). **key를 세그먼트로 내리지 마세요** — 확정은 날짜 하나에 대한 사건이지
+        세그먼트에 대한 사건이 아니라, 세그먼트마다 리마운트되면 조각들이 따로 반짝입니다.
+        아래 세그먼트의 key는 위치가 고정된 이름표일 뿐이고 commitPulse와 아무 관계가 없습니다.
+        `.placeholder`(:21의 흐린 색)는 **값도 버퍼도 없을 때만** 붙습니다 — 버퍼가 있으면
+        placeholder를 버리고 baseValue 세그먼트를 그리기 때문입니다(§4.5). */}
+      <span className={[triggerParts ? "" : "placeholder", commitPulse ? "dropdown-value-commit" : ""].filter(Boolean).join(" ")} key={commitPulse}>{triggerParts
+        ? triggerParts.map((part, index) => part.unit === null
+          ? <span className="date-wheel-punctuation" aria-hidden="true" key={`gap${index}`}>{part.text}</span>
+          /* 활성 표시는 resolvedActiveUnit으로 판정합니다(원본 activeUnit이 아니라) — 소비자가
+             런타임에 fields를 줄이면 activeUnit이 사라진 열을 계속 가리키고, 그러면 어느
+             세그먼트도 활성이 아니게 되어 닫힌 채로 트리거에 활성 표시가 통째로 사라집니다.
+             `.active` 클래스 자체는 포커스와 무관하게 붙고, **감추는 일은 CSS가 합니다**
+             (`.date-wheel-trigger:focus-within` — §4.5: 포커스 없는 필드에 활성 표시가 남으면
+             그 필드가 입력을 받는 중으로 읽힙니다). */
+          : <span className={`date-wheel-segment${resolvedActiveUnit === part.unit ? " active" : ""}`} data-unit={part.unit} key={part.unit}>{part.text}</span>)
+        : labels.placeholder}</span><i className="date-wheel-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm2-2v4m10-4v4M3 9h18" /></svg></i></button></div>
     {open && position && createPortal(<div ref={popoverRef} className="date-wheel-popover dropdown-menu-surface" role="dialog" aria-modal="false" aria-label={`${ariaLabel} ${labels.select}`} style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
       <div className="date-wheel-heading"><strong>{ariaLabel}</strong><span>{labels.hint}</span></div>
       <div className="date-wheel-columns" data-fields={fields.length}>

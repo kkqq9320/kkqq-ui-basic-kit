@@ -13,6 +13,19 @@ import datePickerCssSource from "../css/date-picker.css?raw";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
+/** 이 컨트롤의 유일한 포커스 자리(Task 4 이후). 키는 전부 여기로 보낸다.
+ *  지금은 아직 열이 포커스를 받으므로 키를 보내는 자리가 두 곳이지만, Task 4가
+ *  `getByRole("group", …)`에 키를 보내는 56곳을 이것으로 기계적으로 치환한다. */
+function fieldOf(name: string) { return screen.getByRole("button", { name }); }
+
+/** 지금 활성인 세그먼트의 unit. 없으면 null.
+ *  `.active` 클래스는 포커스와 무관하게 붙는다 — 포커스에 따라 감추는 일은 CSS가 한다
+ *  (css/date-picker.css의 `.date-wheel-trigger:focus-within …`). 그래서 이 헬퍼는
+ *  "화면에 보이는가"가 아니라 "컴포넌트가 어느 세그먼트를 활성으로 보고 있는가"를 읽는다. */
+function activeSegment(): string | null {
+  return document.querySelector(".date-wheel-segment.active")?.getAttribute("data-unit") ?? null;
+}
+
 function ControlledDateWheel({ initialValue, allowClear }: { initialValue: string; allowClear?: boolean }) {
   const [value, setValue] = useState(initialValue);
   return <DateWheelPicker ariaLabel="거래 날짜" value={value} onChange={setValue} allowClear={allowClear} />;
@@ -621,8 +634,14 @@ describe("DateWheelPicker 타이핑", () => {
     fireEvent.keyDown(year, { key: "Backspace" });
     fireEvent.keyDown(year, { key: "3" });
     fireEvent.keyDown(year, { key: "1" });
-    // "20" -> Backspace -> "2" -> "231"... 네 자리가 아직 아니므로 확정되지 않았다
-    expect(screen.getByRole("button", { name: "거래 날짜" }).textContent).toBe("2026. 07. 12.");
+    // "20" -> Backspace -> "2" -> "231". 네 자리가 아직 아니므로 확정되지 않았다.
+    //
+    // **이 단언의 기대값이 SEG Task 2에서 바뀌었습니다**(설계 스펙 §4.5). 예전에는 트리거가
+    // `value` prop만 읽어 확정 전까지 "2026. 07. 12."가 남아 있었는데, 이제 트리거가
+    // 세그먼트로 쪼개져 **치던 버퍼를 자리를 지켜** 그립니다. 계약이 약해진 것이 아니라
+    // 강해졌습니다 — `231_`은 "버퍼가 정확히 231이다"와 "아직 확정되지 않았다"를 동시에
+    // 보여줍니다(확정됐다면 버퍼가 비고 세그먼트가 확정된 네 자리를 그렸을 것입니다).
+    expect(screen.getByRole("button", { name: "거래 날짜" }).textContent).toBe("231_. 07. 12.");
     fireEvent.keyDown(year, { key: "9" });   // "2319" 네 자리
     await waitFor(() => expect(screen.getByRole("button", { name: "거래 날짜" }).textContent).toBe("2319. 07. 12."));
   });
@@ -1370,5 +1389,212 @@ describe("DateWheelPicker 세션 수명", () => {
     fireEvent.click(screen.getByRole("button", { name: "완료" }));   // 아무것도 안 건드리고 완료
 
     expect(trigger.querySelector("span")).toBe(afterFirst);
+  });
+});
+
+// 설계 스펙 §4.5 — 트리거 문구가 **세그먼트로 쪼개진다.** 표시만 바뀌는 Task라 키 계약도
+// 포커스도 그대로다: 버퍼를 만들려면 아직 팝오버를 열어 열에 쳐야 한다(Task 4가 옮긴다).
+//
+// 조각 텍스트를 이으면 예전 formatDateTrigger가 만들던 문자열과 글자 하나까지 같다 —
+// 트리거를 textContent 하나로 보는 기존 단언 스무 곳이 그 등가성의 파수꾼이라 여기서
+// 다시 세지 않는다. 여기서 새로 고정하는 것은 **구조**(어떤 요소가 어떤 자리를 그리는가)다.
+describe("DateWheelPicker 트리거 세그먼트", () => {
+  function segmentUnits(trigger: HTMLElement) {
+    return [...trigger.querySelectorAll(".date-wheel-segment")].map((element) => element.getAttribute("data-unit"));
+  }
+  function segmentTexts(trigger: HTMLElement) {
+    return [...trigger.querySelectorAll(".date-wheel-segment")].map((element) => element.textContent);
+  }
+  /** 개수가 아니라 **신원**으로 읽는다 — 어느 자리를 그리는가가 계약이다. */
+  function segmentText(trigger: HTMLElement, unit: string) {
+    return trigger.querySelector(`.date-wheel-segment[data-unit="${unit}"]`)?.textContent ?? null;
+  }
+  function container(trigger: HTMLElement) {
+    return trigger.querySelector("span")!;
+  }
+
+  /** 버퍼를 들고 있는 상태를 만든다. 지금은 열에 쳐야 버퍼가 생긴다(키 계약은 Task 4 몫). */
+  async function openAndBuffer(initialValue: string, keys: string[]) {
+    render(<ControlledDateWheel initialValue={initialValue} />);
+    const trigger = fieldOf("거래 날짜");
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    const year = screen.getByRole("group", { name: /^연도/ });
+    for (const key of keys) fireEvent.keyDown(year, { key });
+    return trigger;
+  }
+
+  it("값이 있으면 세그먼트가 연·월·일 셋으로 그려진다", () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    expect(segmentUnits(fieldOf("거래 날짜"))).toEqual(["year", "month", "day"]);
+  });
+
+  it("각 세그먼트가 값에서 자기 자리만 그린다", () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    expect(segmentTexts(fieldOf("거래 날짜"))).toEqual(["2026", "07", "12"]);
+  });
+
+  // 구두점은 장식이다 — 세그먼트로 쪼갠 뒤에도 스크린리더가 점을 하나하나 읽으면 안 된다.
+  // 텍스트와 aria-hidden을 한 문자열로 묶어 단언 하나로 본다(단락 없이 둘 다 본다).
+  it("세그먼트 사이 구두점은 aria-hidden 장식이다", () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const punctuation = [...fieldOf("거래 날짜").querySelectorAll(".date-wheel-punctuation")];
+    expect(punctuation.map((element) => `${element.textContent}|${element.getAttribute("aria-hidden")}`)).toEqual([". |true", ". |true", ".|true"]);
+  });
+
+  // 스펙 §4.5의 (나)안 — 자리를 지킨다. 기각된 (가)안이면 "20"이 나온다.
+  // **길이가 아니라 문자열 전체를 신원으로 비교한다.**
+  it("연도 버퍼가 두 자리면 남은 자리를 _로 지킨다", async () => {
+    const trigger = await openAndBuffer("2026-07-12", ["2", "0"]);
+    expect(segmentText(trigger, "year")).toBe("20__");
+  });
+
+  // 세 자리 — 기각된 (가)안이면 "203"이다. 두 자리 케이스만 있으면 한 칸만 붙이는
+  // 구현(digits + "_")이 살아남는다. 그건 "20"에서 "20_"이 되어 위 테스트만 죽인다.
+  it("연도 버퍼가 세 자리면 한 칸만 남는다", async () => {
+    const trigger = await openAndBuffer("2026-07-12", ["2", "0", "3"]);
+    expect(segmentText(trigger, "year")).toBe("203_");
+  });
+
+  it("연도를 치는 동안 월·일 세그먼트는 그대로다", async () => {
+    const trigger = await openAndBuffer("2026-07-12", ["2", "0"]);
+    expect([segmentText(trigger, "month"), segmentText(trigger, "day")]).toEqual(["07", "12"]);
+  });
+
+  // 월은 두 칸이다. 연도의 네 칸을 그대로 쓰면 "1___"이 된다.
+  it("월 버퍼는 두 칸만 지킨다 — 연도의 네 칸을 쓰지 않는다", async () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = fieldOf("거래 날짜");
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
+    const month = await screen.findByRole("group", { name: "월 07" });
+    fireEvent.keyDown(month, { key: "1" });
+    expect(segmentText(trigger, "month")).toBe("1_");
+  });
+
+  it("값도 버퍼도 없으면 placeholder 문구가 나온다", () => {
+    render(<ControlledDateWheel initialValue="" />);
+    expect(fieldOf("거래 날짜").textContent).toBe("날짜 선택");
+  });
+
+  it("값도 버퍼도 없으면 세그먼트가 하나도 없다", () => {
+    render(<ControlledDateWheel initialValue="" />);
+    expect(segmentUnits(fieldOf("거래 날짜"))).toEqual([]);
+  });
+
+  it("값도 버퍼도 없으면 컨테이너에 placeholder 클래스가 붙는다", () => {
+    render(<ControlledDateWheel initialValue="" />);
+    expect(container(fieldOf("거래 날짜")).classList.contains("placeholder")).toBe(true);
+  });
+
+  // 값이 비어 있어도 버퍼가 있으면 placeholder를 버린다 — 그 자리는 이제 숫자가 차지한다.
+  it("값이 비어도 버퍼가 있으면 placeholder 클래스가 빠진다", async () => {
+    const trigger = await openAndBuffer("", ["2", "0"]);
+    expect(container(trigger).classList.contains("placeholder")).toBe(false);
+  });
+
+  // 아직 치지 않은 세그먼트는 baseValue(=오늘, min/max로 자름)를 보여준다 — 팝오버의 휠이
+  // 빈 값일 때 이미 baseValue를 그리고 있으므로, 화면 두 곳이 같은 것을 말하게 하는 것이다.
+  // 문자열 전체를 신원으로 본다: placeholder가 사라진 것, 버퍼가 자리를 지킨 것, 안 친
+  // 자리가 baseValue인 것이 한 줄에 다 들어 있다.
+  //
+  // openAndBuffer를 쓰지 않고 동기로 푼다 — findByRole은 가짜 타이머 아래서 폴링이 돌지
+  // 않아 그대로 멈춘다(실측: 5초 타임아웃). 이 파일의 다른 가짜 타이머 테스트들도 같은
+  // 이유로 click + 동기 getByRole을 쓴다.
+  it("값이 비었는데 숫자를 치면 baseValue 세그먼트가 나온다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-12T03:00:00Z"));   // 서울 기준 오늘 = 2026-07-12
+    render(<ControlledDateWheel initialValue="" />);
+    const trigger = fieldOf("거래 날짜");
+    fireEvent.click(trigger);
+    const year = screen.getByRole("group", { name: /^연도/ });
+    fireEvent.keyDown(year, { key: "2" });
+    fireEvent.keyDown(year, { key: "0" });
+    expect(trigger.textContent).toBe("20__. 07. 12.");
+  });
+
+  it("fields가 연도뿐이면 세그먼트도 연도 하나다", () => {
+    render(<DateWheelPicker ariaLabel="회계 연도" value="2026-07-12" fields={["year"]} onChange={() => undefined} />);
+    expect(segmentUnits(fieldOf("회계 연도"))).toEqual(["year"]);
+  });
+
+  // 스펙 §11 — **활성 세그먼트의 초기값이 첫 세그먼트와 같다.** 기본 상태로 검사하면 "활성
+  // 세그먼트를 그린다"와 "첫 세그먼트를 그린다"가 구분되지 않으므로, →를 한 번 눌러 둘을
+  // 갈라놓고 개수가 아니라 **신원**으로 확인한다.
+  it("→로 활성 열을 옮기면 활성 세그먼트도 월로 따라간다", async () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = fieldOf("거래 날짜");
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
+    expect(activeSegment()).toBe("month");
+  });
+
+  // 소비자가 런타임에 fields를 줄이면(일간/월간 토글) activeUnit이 사라진 열을 계속 가리킨다.
+  // 트리거는 resolvedActiveUnit(클램프한 값)으로 그려야 하고, 원본 activeUnit으로 그리면
+  // 어느 세그먼트도 활성이 아니게 된다.
+  //
+  // **반드시 팝오버를 닫은 뒤에 fields를 줄여야 한다.** 열려 있으면 포커스 이펙트가 클램프된
+  // 열에 진짜 focus를 걸고, 그 열의 onFocus가 activeUnit 원본까지 곧바로 따라잡아 두 세계가
+  // 겹친다(소스 :706-711이 열 렌더에 대해 적어 둔 바로 그 함정이다 — 닫아 두면 그 되먹임이
+  // 없어 트리거 쪽에서는 증명된다). 그래서 닫힘을 waitFor로 못박는다 — 이건 독립된 계약이
+  // 아니라 아래 단언의 **전제**이고, 이게 성립하지 않으면 아래 단언은 아무것도 증명하지 못한다.
+  it("fields가 줄어 활성 열이 사라지면 트리거는 클램프된 첫 세그먼트를 활성으로 그린다", async () => {
+    render(<DateWheelFieldsShrink />);
+    const trigger = fieldOf("거래 날짜");
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
+    fireEvent.keyDown(await screen.findByRole("group", { name: "월 07" }), { key: "ArrowRight" });
+    fireEvent.keyDown(await screen.findByRole("group", { name: /^일/ }), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
+
+    fireEvent.click(screen.getByRole("button", { name: "일 열 제거" }));
+    expect(activeSegment()).toBe("year");
+  });
+
+  // §12의 확정 신호는 **날짜 하나에 대한 사건**이지 세그먼트에 대한 사건이 아니다. 신호를
+  // 재생하는 요소가 정확히 하나이고, 그것이 세그먼트가 아니라 세그먼트 셋을 감싸는
+  // 컨테이너라는 것을 단언 하나로 본다 — className에 "date-wheel-segment"가 섞이면 조각이
+  // 따로 반짝인다는 뜻이고, 안에 세 세그먼트가 다 들어 있어야 "값 전체"다.
+  it("확정 신호는 세그먼트가 아니라 값 전체를 감싸는 컨테이너 하나에 붙는다", async () => {
+    const trigger = await openAndBuffer("2026-07-12", ["3", "1"]);
+    fireEvent.keyDown(screen.getByRole("group", { name: /^연도/ }), { key: "Enter" });
+
+    const pulsing = [...trigger.querySelectorAll(".dropdown-value-commit")];
+    expect(pulsing.map((element) => [element.className, [...element.querySelectorAll(".date-wheel-segment")].map((segment) => segment.getAttribute("data-unit"))]))
+      .toEqual([["dropdown-value-commit", ["year", "month", "day"]]]);
+  });
+
+  // jsdom은 캐스케이드를 계산하지 않으므로 소스 텍스트로 고정한다 — 이 파일 위쪽
+  // "CSS 계약" 블록과 같은 idiom이다.
+  describe("CSS 계약", () => {
+    // 자식 결합자 `>`가 없어지면 세그먼트마다 따로 말줄임이 걸려, 좁은 화면에서 날짜가
+    // 통째로 잘리는 대신 조각조각 잘린다. 규칙이 컨테이너 하나에만 걸리는지 본다.
+    it("말줄임은 세그먼트가 아니라 컨테이너 하나에 걸린다", () => {
+      const rule = datePickerCssSource.match(/\.date-wheel-trigger\s*>\s*span\s*\{[^}]*\}/);
+      expect(rule && rule[0]).toMatch(/overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap/);
+    });
+
+    // 자리 지킴(`20__`)과 tabular-nums는 짝이다 — 폭이 흔들리지 않는 것이 `_`로 채우는
+    // 유일한 이유이므로, 한쪽만 남으면 그 이유가 무너진다.
+    it("세그먼트에 tabular-nums가 걸린다 — 자리 지킴 표시의 이유다", () => {
+      const rule = datePickerCssSource.match(/\.date-wheel-segment\s*\{[^}]*\}/);
+      expect(rule && rule[0]).toMatch(/font-variant-numeric:\s*tabular-nums/);
+    });
+
+    // 포커스 없는 필드에 활성 표시가 남으면 그 필드가 입력을 받는 중으로 읽힌다(§4.5).
+    // `.active`를 그리는 규칙이 **정확히 하나**이고 그것이 포커스로 게이트돼 있는지를 단언
+    // 하나로 본다. 선택자 줄만 잡도록 `\n`을 제외한다 — 안 그러면 바로 위 주석에 적힌
+    // `:focus-within`이라는 글자가 정규식을 거짓 통과시킨다.
+    it("활성 세그먼트 표시는 트리거가 포커스를 가진 동안에만 그려진다", () => {
+      const selectors = datePickerCssSource.match(/[^{}\n]*\.date-wheel-segment\.active[^{}\n]*\{/g) ?? [];
+      expect(selectors.map((selector) => /:focus(-within|-visible)?[\s.:]/.test(selector))).toEqual([true]);
+    });
   });
 });
