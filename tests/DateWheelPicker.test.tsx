@@ -1598,5 +1598,18 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
       const selectors = datePickerCssSource.match(/[^{}\n]*\.date-wheel-segment\.active[^{}\n]*\{/g) ?? [];
       expect(selectors.map((selector) => /:focus(-within|-visible)?[\s.:]/.test(selector))).toEqual([true]);
     });
+
+    // 확정 피드백(css/surfaces.css의 `dropdown-commit` 키프레임)은 **컨테이너의 `color`를**
+    // 애니메이션하고, 세그먼트는 그것을 **상속**받아 함께 반짝인다. 세그먼트를 겨냥한 규칙이
+    // 자기 `color`를 선언하는 순간 그 상속이 끊겨 그 세그먼트만 신호에서 빠진다.
+    //
+    // **jsdom은 애니메이션을 돌리지 않으므로 이 결함은 DOM 테스트로 절대 안 잡힌다.**
+    // 활성 표시를 글자색이 아니라 배경으로 그린 이유가 이것이고, 이유가 규칙보다 오래
+    // 살아남도록 여기서 고정한다. (`background: color-mix(...)`의 `color-mix`는 `color:`
+    // 선언이 아니므로 걸리지 않는다 — 뒤에 `-`가 오지 `:`가 오지 않는다.)
+    it("세그먼트를 겨냥한 규칙은 color를 선언하지 않는다 — 확정 신호가 상속으로 닿는다", () => {
+      const rules = datePickerCssSource.match(/[^{}\n]*\.date-wheel-segment[^{}\n]*\{[^}]*\}/g) ?? [];
+      expect(rules.filter((rule) => /[^-]color:/.test(rule))).toEqual([]);
+    });
   });
 });
