@@ -170,7 +170,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 버립니다. 그 안전망은 아래 포커스 이펙트의 `!open` 분기에 있습니다.)
   const [typing, setTyping] = useState<{ unit: DateWheelUnit; digits: string } | null>(null);
   // 완료 피드백(css/surfaces.css .dropdown-value-commit) 커밋 카운터 — commitAndClose에서만,
-  // 그것도 확정된 값이 **이 세션이 열렸을 때의 값**(sessionStartValueRef, 아래)과 실제로
+  // 그것도 확정된 값이 **이 세션이 시작될 때의 값**(sessionStartValueRef, 아래)과 실제로
   // 다를 때만 올립니다. 0에서 시작해 첫 마운트는 애니메이션이 돌지 않고, 화살표·휠·
   // 타이핑 자체(자릿수가 차서 즉시 확정되는 경우 포함)·오늘·비우기 같은 다른 값 변경
   // 경로는 건드리지 않습니다 — 그 경로들은 "완료"가 아니라 매 조작마다 반짝이면 신호가
