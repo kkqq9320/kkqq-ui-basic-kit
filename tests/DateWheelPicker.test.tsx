@@ -1103,6 +1103,100 @@ describe("DateWheelPicker 버퍼의 수명 — 확정은 버퍼 자신의 unit�
     expect(field.textContent).toBe("날짜 선택");
   });
 
+  // ── **세 번째 문** — `fields` 축소 **뒤 복원**. Task 6 리뷰가 측정해서 찾았고, 이 Task가
+  //    "갈라지는 문이 다 닫혔다"고 **잘못 선언했던** 자리다.
+  //
+  // 뿌리: `resolvedActiveUnit`이 폴백해도 **`activeUnit`이 동기화되지 않는다.** 숫자 분기는
+  // 버퍼를 `setTyping({ unit: resolvedActiveUnit, … })`로 **클램프값**에 매어 두면서
+  // `setActiveUnit`은 안 불렀다. 그래서 `fields`가 복원되면 `activeUnit`이 그림자에서 나오며
+  // 버퍼와 갈라진다 — 보이는 버퍼는 연도에 있는데 활성 표시는 일에 있는 상태다.
+  //
+  // **고친 이음매:** 숫자 분기가 열림 `↑`/`↓` 분기와 **같게** 클램프값을 `activeUnit`에
+  // 되쓴다. 그쪽은 전부터 `setActiveUnit(unit)`을 불렀다 — 숫자 분기만 빠져 있었으니 새
+  // 정책이 아니라 **형제 분기 사이의 불일치를 없앤 것**이다.
+  //
+  // ⚠️ **"`fields` 축소가 활성을 영구히 옮긴다"로 일반화하지 않았다.** 줄이기만 하고 아무것도
+  // 안 치면 활성은 그대로 돌아온다(`resolvedActiveUnit`을 파생값으로 둔 원래 판단, 스펙
+  // §6.4(3)). 옮기는 것은 **사용자가 그 세그먼트에 실제로 친 경우**뿐이고 그건 진실이다.
+  function ShrinkRestore({ initialValue }: { initialValue: string }) {
+    const [value, setValue] = useState(initialValue);
+    const [fields, setFields] = useState<DateWheelUnit[]>(["year", "month", "day"]);
+    return <>
+      <button type="button" onClick={() => setFields(["year", "month"])}>줄이기</button>
+      <button type="button" onClick={() => setFields(["year", "month", "day"])}>되돌리기</button>
+      <DateWheelPicker ariaLabel="거래 날짜" value={value} onChange={setValue} fields={fields} />
+    </>;
+  }
+
+  /** 활성을 일로 옮겨 둔 채 그 열을 없앤다 — 활성이 연도로 폴백한 상태를 만든다. */
+  function shrunkPastActive() {
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "ArrowRight" });                   // activeUnit = day
+    fireEvent.click(screen.getByRole("button", { name: "줄이기" }));    // resolvedActiveUnit -> year
+    return field;
+  }
+
+  it("사라진 열 대신 폴백 세그먼트에 숫자를 치면 활성 표시도 그 세그먼트로 간다", () => {
+    render(<ShrinkRestore initialValue="2026-07-12" />);
+    const field = shrunkPastActive();
+    fireEvent.keyDown(field, { key: "3" });                             // 연도에 친다
+    fireEvent.click(screen.getByRole("button", { name: "되돌리기" }));
+
+    expect(activeSegment()).toBe("year");
+  });
+
+  // 위 테스트의 증상 쪽 짝. 갈라진 상태에서는 다음 숫자가 **활성(일)** 로 가서 치던 `3`이
+  // 확정도 폐기도 없이 사라졌다(리뷰 측정: `2026. 07. 05.`). 여기서는 같은 버퍼에 이어져야
+  // 한다. 둘을 나눈 이유는 원인(활성 표시)과 증상(다음 숫자의 행선지)이 서로 다른 결함이라서다.
+  it("그 뒤 다음 숫자는 같은 버퍼에 이어진다 — 앞 숫자가 사라지지 않는다", () => {
+    render(<ShrinkRestore initialValue="2026-07-12" />);
+    const field = shrunkPastActive();
+    fireEvent.keyDown(field, { key: "3" });
+    fireEvent.click(screen.getByRole("button", { name: "되돌리기" }));
+
+    fireEvent.keyDown(field, { key: "1" });
+
+    expect(field.textContent).toBe(`31${FILL}${FILL}. 07. 12.`);
+  });
+
+  // ── `flushTyping`이 조기 `return`을 `setTyping(null)` **뒤로** 옮긴 것 — 이 Task가 새로
+  //    만든 계약인데 감시자가 없었다(리뷰 M1). 이 Task 보고서가 "안 그러면 `fields`가 다시
+  //    늘 때 묵은 숫자가 되살아납니다"라고 **그 실패를 정확히 서술해 놓고** 테스트를 안 붙였다.
+  it("사라진 열의 버퍼는 떠나는 경로에서 청소된다 — fields가 돌아와도 되살아나지 않는다", () => {
+    render(<ShrinkRestore initialValue="2026-07-12" />);
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "1" });                             // 일에 버퍼
+    fireEvent.click(screen.getByRole("button", { name: "줄이기" }));     // 안 보이게 됨
+
+    fireEvent.keyDown(field, { key: "Tab" });                           // 떠나는 경로 — 청소해야 한다
+    fireEvent.click(screen.getByRole("button", { name: "되돌리기" }));
+
+    expect(field.textContent).toBe("2026. 07. 12.");
+  });
+
+  // `Backspace`의 클램프도 감시자가 없었다(리뷰 M2). 계약: **화면에 없는 것은 지울 수 없다** —
+  // `Backspace`는 보이는 버퍼를 편집하는 키이지 청소하는 키가 아니다(청소는 위의 떠나는
+  // 경로가 한다). 클램프를 되돌리면 안 보이는 버퍼가 여기서 조용히 지워진다.
+  it("사라진 열의 버퍼는 Backspace로 지워지지 않는다 — 화면에 없는 것은 지울 수 없다", () => {
+    render(<ShrinkRestore initialValue="2026-07-12" />);
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "1" });
+    fireEvent.click(screen.getByRole("button", { name: "줄이기" }));
+
+    fireEvent.keyDown(field, { key: "Backspace" });
+    fireEvent.click(screen.getByRole("button", { name: "되돌리기" }));
+
+    expect(field.textContent).toBe(`2026. 07. 1${FILL}.`);
+  });
+
   // ── §4.2: **포커스를 잃을 때도 확정합니다.** 닫힌 채 버퍼가 살 수 있게 되면서 `Tab`이
   //    아니라 **다른 곳을 클릭해서** 떠나는 경로가 생겼고, 조용히 버리면 친 숫자가 이유
   //    없이 사라진다.

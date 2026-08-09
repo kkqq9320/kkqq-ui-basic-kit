@@ -730,6 +730,24 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     // 없애는 것입니다**(스펙 §2·§3): 네이티브 날짜 필드는 달력을 열지 않고 고칩니다.
     if (key >= "0" && key <= "9" && key.length === 1) {
       event.preventDefault();
+      // **클램프값을 activeUnit에 되씁니다.** 열림 `↑`/`↓` 분기가 전부터 하던 것과 같고,
+      // 숫자 분기만 빠져 있었습니다 — 그 불일치가 **세 번째 갈라짐의 문**이었습니다(Task 6
+      // 리뷰가 측정). 이 분기는 버퍼를 `{ unit, … }`, 즉 **클램프된** 활성 세그먼트에 매어
+      // 두는데 `activeUnit` 원본은 그대로 뒀습니다. 그래서:
+      //
+      //   활성=일 → 소비자가 fields에서 일을 뺌(폴백: 연도) → 연도에 "3"을 침
+      //   → 소비자가 fields를 되돌림 ⇒ activeUnit이 그림자에서 나와 다시 일
+      //   ⇒ **보이는 버퍼는 연도, 활성 표시는 일.** 다음 숫자가 일로 가서 친 "3"이
+      //     확정도 폐기도 없이 사라집니다.
+      //
+      // ⚠️ **"fields 축소가 활성을 영구히 옮긴다"로 일반화하지 마세요.** 줄이기만 하고 아무것도
+      // 안 치면 활성은 그대로 돌아옵니다 — `resolvedActiveUnit`을 파생값으로 둔 판단(스펙
+      // §6.4(3))은 그대로입니다. 여기서 옮기는 것은 **사용자가 그 세그먼트에 실제로 친**
+      // 경우뿐이고, 그때 "활성은 연도"는 거짓이 아니라 진실입니다.
+      //
+      // 아래 `moveColumn`(자동 이동)이 뒤에 오므로, 자릿수가 차서 다음 세그먼트로 넘어가는
+      // 경우에는 그쪽이 마지막에 이깁니다 — 순서를 바꾸지 마세요.
+      setActiveUnit(unit);
       const buffer = resolvedTyping?.unit === unit ? resolvedTyping.digits : "";
       const step = typeDigit(unit, buffer, key);
       if (step.commit !== null) {
@@ -917,6 +935,11 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         조용히 깨집니다. 버튼에 붙이면 버블이 문제가 되지 않습니다 — 버튼 자신이 포커스를
         받고, 그 안의 <span>·<i>는 포커스를 받을 수 없기 때문입니다.
 
+        **`onBlur={() => flushTyping()}`이지 `onBlur={flushTyping}`이 아닙니다.** 후자는
+        `FocusEvent`를 인자 0번에 흘려 넣습니다. `flushTyping()`이 인자를 안 받으므로 오늘은
+        무해하지만, **이 컴포넌트의 안전성 주장이 "틀리게 넘길 인자가 없다"**인데 그러면 여기
+        하나가 넘기고 있는 셈이라, 누군가 시그니처를 되살리는 날 이 자리만 조용히 통과합니다.
+
         **onBlur는 버퍼를 확정합니다(설계 스펙 §4.2).** 닫힌 채로 버퍼가 살 수 있게 되면서
         `Tab`이 아니라 **다른 곳을 클릭해서** 떠나는 경로가 생겼고, 조용히 버리면 친 숫자가
         이유 없이 사라집니다. 팝오버 안 클릭은 여기 안 걸립니다 — `mousedown` 기본 동작을
@@ -929,7 +952,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         포커스된 버튼을 언마운트하면 focus만 기록되고 blur는 없으며 activeElement는 body로
         갑니다). 그래서 이 핸들러와 그 규칙이 충돌하지 않습니다. tests의 "버퍼를 든 채
         언마운트되면 확정하지 않고 버린다"가 그 전제까지 함께 지킵니다. */}
-    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onBlur={flushTyping} onClick={(event) => {
+    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onBlur={() => flushTyping()} onClick={(event) => {
       // **세그먼트를 직접 누르면 그 세그먼트가 활성이 됩니다**(설계 스펙 §6.4(3)) —
       // 네이티브 날짜 필드가 그렇게 합니다. 세그먼트는 <span>이라 클릭이 여기로 그대로
       // 올라오고, 그 전에 `event.target`의 `data-unit`을 읽습니다. 구두점·아이콘·여백에는
