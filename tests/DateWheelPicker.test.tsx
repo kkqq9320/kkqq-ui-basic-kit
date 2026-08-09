@@ -4,8 +4,8 @@
 // 접근성 이름이 원본과 100% 같으므로, 이 테스트가 통과하면 추출 과정에서
 // 동작이 바뀌지 않았다는 증거가 됩니다. 아래쪽에 props 파라미터화 테스트를 더했습니다.
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { cleanup, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useEffect, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DateWheelPicker, type DateWheelUnit } from "../src/DateWheelPicker";
@@ -26,9 +26,10 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
  */
 const FILL = "\u2012";
 
-/** 이 컨트롤의 유일한 포커스 자리(Task 4 이후). 키는 전부 여기로 보낸다.
- *  지금은 아직 열이 포커스를 받으므로 키를 보내는 자리가 두 곳이지만, Task 4가
- *  `getByRole("group", …)`에 키를 보내는 56곳을 이것으로 기계적으로 치환한다. */
+/** 이 컨트롤의 **유일한** 포커스 자리이자 키가 도착하는 유일한 자리다(설계 스펙 §6.2).
+ *  열은 더 이상 `tabIndex`도 `onKeyDown`도 갖지 않으므로, 열에 보낸 키는 아무 핸들러에도
+ *  닿지 않고 **조용히 사라진다** — 열을 겨냥한 `fireEvent.keyDown`이 남아 있으면 그 테스트는
+ *  "동작이 옳아서"가 아니라 "아무 일도 안 일어나서" 초록이 된다. 키는 전부 여기로 보낸다. */
 function fieldOf(name: string) { return screen.getByRole("button", { name }); }
 
 /** 지금 활성인 세그먼트의 unit. 없으면 null.
@@ -174,20 +175,28 @@ describe("DateWheelPicker", () => {
     expect(icon?.getAttribute("aria-hidden")).toBe("true");
   });
 
-  it("완료 버튼으로 닫으면 트리거로 포커스를 되돌리되 스크롤 위치는 건드리지 않는다 (preventScroll)", async () => {
-    // 이 focus() 호출에 preventScroll이 빠지면, 데스크톱에서 완료를 눌렀을 때
-    // 브라우저가 트리거를 보이게 하려고 페이지를 스크롤해 버린다. positioning.ts:55와
-    // 같은 컬럼의 다른 모든 focus 복귀가 지키는 규칙이다.
+  // 초판은 "완료 버튼으로 닫으면 트리거로 포커스를 **되돌리되** 스크롤 위치는 건드리지
+  // 않는다(preventScroll)"였고, 그 대상은 `commitAndClose`의
+  // `requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }))`였다.
+  //
+  // **SEG Task 4에서 그 호출이 사라졌다** — 포커스가 팝오버 안에 간 적이 없으므로 되돌릴
+  // 것이 없다(설계 스펙 §6.2). 그리고 그 삭제로 `src/DateWheelPicker.tsx`에는
+  // `focus({ preventScroll: true })` 호출이 **하나도 남지 않았다**(직접 확인했다). 즉 이
+  // 자리의 preventScroll 계약은 지킬 대상이 없어졌다 — 규칙 자체는 이 킷의 다른 focus
+  // 복귀(positioning.ts, Select)에서 계속 지켜지고, 그쪽 테스트가 따로 있다.
+  //
+  // 대신 초판이 최종적으로 보장하려던 상태 — **완료 뒤 포커스는 트리거에 있다** — 를
+  // 그대로 고정한다. 이 자리에 blur()나 다른 포커스 이동이 새로 들어오면 여기서 터진다.
+  it("완료 버튼으로 닫아도 포커스는 트리거에 그대로 있다", () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
     const trigger = screen.getByRole("button", { name: "거래 날짜" });
-    fireEvent.click(trigger);
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
     expect(screen.getByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();
 
-    const focusSpy = vi.spyOn(trigger, "focus");
     fireEvent.click(screen.getByRole("button", { name: "완료" }));
 
-    await waitFor(() => expect(focusSpy).toHaveBeenCalled());   // requestAnimationFrame으로 미뤄진다
-    expect(focusSpy).toHaveBeenCalledWith({ preventScroll: true });
+    expect(document.activeElement).toBe(trigger);
   });
 
   it("resolves today in the supplied time zone", () => {
@@ -309,22 +318,20 @@ describe("DateWheelPicker year-month mode (fields)", () => {
 });
 
 describe("DateWheelPicker 키보드 진입", () => {
-  it("↓로 열고 포커스가 첫 열에 간다", async () => {
+  it("↓로 열린다", async () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
-    trigger.focus();
+    const field = fieldOf("거래 날짜");
+    field.focus();
 
-    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    fireEvent.keyDown(field, { key: "ArrowDown" });
 
-    // 개수가 아니라 신원으로 확인한다 — 어느 열인지가 계약이다.
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "연도 2026" })));
+    expect(await screen.findByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();
   });
 
   it("↑ Enter Space로도 열린다", () => {
     for (const key of ["ArrowUp", "Enter", " "]) {
       render(<ControlledDateWheel initialValue="2026-07-12" />);
-      const trigger = screen.getByRole("button", { name: "거래 날짜" });
-      fireEvent.keyDown(trigger, { key });
+      fireEvent.keyDown(fieldOf("거래 날짜"), { key });
       expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();
       cleanup();
     }
@@ -332,140 +339,226 @@ describe("DateWheelPicker 키보드 진입", () => {
 
   it("비활성이면 어느 키로도 열리지 않는다", () => {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} disabled />);
-    fireEvent.keyDown(screen.getByRole("button", { name: "거래 날짜" }), { key: "ArrowDown" });
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "ArrowDown" });
     expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull();
   });
 
-  it("뒤로가기로 닫으면 포커스가 트리거로 돌아온다", async () => {
-    // 포커스가 팝오버 안에 있는 채로 열이 언마운트되면 포커스가 body로 떨어지고
-    // 다음 Tab이 문서 처음부터 시작한다. Escape·완료는 이미 회수하고 있었다.
+  it("뒤로가기로 팝오버가 닫힌다", async () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
-    trigger.focus();
-    fireEvent.keyDown(trigger, { key: "ArrowDown" });
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "연도 2026" })));
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
 
     fireEvent.popState(window, { state: null });
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
-    expect(document.activeElement).toBe(trigger);
+  });
+
+  // 초판은 "뒤로가기로 닫으면 포커스가 **트리거로 돌아온다**"였다. 돌아올 것이 없어졌다 —
+  // 포커스는 애초에 떠난 적이 없다(설계 스펙 §6.2). 그래서 회수가 아니라 **머무름**을 고정한다.
+  //
+  // 위 테스트와 나눠 둔다. "팝오버가 닫혔다"와 "포커스가 트리거다"는 같은 커밋에서 함께
+  // 일어나 서로를 가린다 — 한 it에 두면 앞 단언이 터질 때 뒤 단언은 실행조차 되지 않는다.
+  it("뒤로가기로 닫아도 포커스는 트리거에 그대로 있다", async () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    fireEvent.popState(window, { state: null });
+
+    expect(document.activeElement).toBe(field);
   });
 });
 
-describe("DateWheelPicker 열 이동", () => {
+// 설계 스펙 §6.2의 핵심 불변식을 직접 고정하는 블록이다:
+// **이 컨트롤이 키보드를 받는 동안 `document.activeElement`는 언제나 트리거다.**
+//
+// ⚠️ **이 블록의 mousedown 테스트는 "실브라우저에서 포커스가 안 옮겨간다"를 증명하지
+// 못한다.** jsdom은 `mousedown`·`click`의 포커스 부작용을 구현하지 않으므로(직접 확인했다 —
+// `fireEvent.click(trigger)`가 포커스를 옮기지 않는 것에 이 파일의 여러 테스트가 이미
+// 의존한다), "포커스가 옮겨졌는가"를 물으면 차단이 있든 없든 똑같이 통과한다. 그래서
+// 대신 **`preventDefault()`가 불렸는가**를 고정한다 — 실브라우저에서 포커스 이동을 막는
+// 것이 정확히 그 기본 동작 취소이기 때문이다. 그 연결고리(취소 → 포커스 유지) 자체는
+// 여기서 증명되지 않으므로, 실기기 확인이 필요한 항목으로 스펙 §9에 남아 있다.
+// (tests/AppShell.test.tsx 상단의 clamp 주석과 같은 종류의 한계 표시다.)
+describe("DateWheelPicker 포커스 불변식 — 키보드를 받는 동안 activeElement는 트리거다", () => {
+  function openWithKeyboard() {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    return field;
+  }
+
+  it("↓로 열어도 포커스는 트리거에 그대로 있다", () => {
+    const field = openWithKeyboard();
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("세그먼트를 옮겨도 포커스는 트리거에 그대로 있다", () => {
+    const field = openWithKeyboard();
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(field);
+  });
+
+  // 클릭 대상은 **실제로 포커스를 받는 요소**여야 한다. 열 `<section>`은 `tabIndex`가
+  // 없어 원래 포커스를 안 받으므로, 그걸 고르면 차단을 지워도 아무것도 안 달라진다.
+  it("팝오버 행 버튼의 mousedown 기본 동작이 막힌다", () => {
+    openWithKeyboard();
+    const row = screen.getByRole("dialog", { name: "거래 날짜 선택" }).querySelector<HTMLElement>(".date-wheel-values button")!;
+    const event = createEvent.mouseDown(row);
+    fireEvent(row, event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  // 행 버튼과 다른 서브트리(.date-wheel-actions)를 하나 더 본다 — 차단을 팝오버 표면이
+  // 아니라 `.date-wheel-columns`에 다는 결함은 위 테스트만으로는 안 잡힌다.
+  it("완료 버튼의 mousedown 기본 동작도 막힌다", () => {
+    openWithKeyboard();
+    const done = screen.getByRole("button", { name: "완료" });
+    const event = createEvent.mouseDown(done);
+    fireEvent(done, event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  // 차단이 `click`까지 삼키면 팝오버 안의 모든 버튼이 죽는다 — mousedown의 기본 동작만
+  // 막고 click은 그대로 내보내는 것이 이 방법의 요점이다.
+  it("mousedown을 막아도 버튼의 click은 그대로 동작한다", () => {
+    const field = openWithKeyboard();
+    const previous = screen.getByRole("button", { name: "연도 이전" });
+    fireEvent.mouseDown(previous);
+    fireEvent.click(previous);
+    expect(field.textContent).toBe("2025. 07. 12.");
+  });
+});
+
+// 초판의 이 블록은 "어느 열이 포커스를 쥐고 있는가"로 세그먼트 이동을 읽었다. 열이
+// 포커스를 받지 않게 되면서(설계 스펙 §5·§6.2) 그 채널이 사라졌고, 이제 활성 세그먼트를
+// `activeSegment()`(트리거의 `.date-wheel-segment.active`)로 읽는다.
+describe("DateWheelPicker 세그먼트 이동", () => {
   async function openPicker() {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
-    trigger.focus();
-    fireEvent.keyDown(trigger, { key: "ArrowDown" });
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "연도 2026" })));
-    return trigger;
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    return field;
   }
 
-  /** 연도 열에서 →를 두 번 눌러 마지막 열(일)까지 옮겨 놓은 상태를 만든다. */
-  async function openPickerAtLastColumn() {
-    const trigger = await openPicker();
-    const year = screen.getByRole("group", { name: "연도 2026" });
-    fireEvent.keyDown(year, { key: "ArrowRight" });
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "월 07" })));
-    fireEvent.keyDown(screen.getByRole("group", { name: "월 07" }), { key: "ArrowRight" });
-    const day = await screen.findByRole("group", { name: /^일 12/ });
-    await waitFor(() => expect(document.activeElement).toBe(day));
-    return { trigger, day };
+  /** →를 두 번 눌러 마지막 세그먼트(일)를 활성으로 만든다. */
+  async function openPickerAtLastSegment() {
+    const field = await openPicker();
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    await waitFor(() => expect(activeSegment()).toBe("day"));
+    return field;
   }
 
-  /** 열이 하나뿐인 픽커를 열어 그 열(첫 열이자 마지막 열)에 포커스를 둔다. */
+  /** 세그먼트가 하나뿐인 픽커를 연다 — 그 하나가 첫 세그먼트이자 마지막 세그먼트다. */
   async function openSoloYearPicker() {
     render(<DateWheelPicker ariaLabel="회계 연도" value="2026-07-12" fields={["year"]} onChange={() => undefined} />);
-    const trigger = screen.getByRole("button", { name: "회계 연도" });
-    trigger.focus();
-    fireEvent.keyDown(trigger, { key: "ArrowDown" });
-    const year = await screen.findByRole("group", { name: "연도 2026" });
-    await waitFor(() => expect(document.activeElement).toBe(year));
-    return year;
+    const field = fieldOf("회계 연도");
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "회계 연도 선택" });
+    return field;
   }
 
-  it("→와 Tab이 다음 열로 옮긴다", async () => {
-    await openPicker();
-    const year = screen.getByRole("group", { name: "연도 2026" });
-
-    fireEvent.keyDown(year, { key: "ArrowRight" });
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "월 07" })));
-
-    fireEvent.keyDown(screen.getByRole("group", { name: "월 07" }), { key: "Tab" });
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: /^일 12/ })));
+  // 초판은 "→와 Tab이 다음 열로 옮긴다" 한 개였다. 스펙 §3에서 **둘의 뜻이 갈라졌다** —
+  // 세그먼트를 옮기는 일은 이제 `←`/`→`가 전담하고 `Tab`은 컨트롤을 떠난다.
+  it("→가 다음 세그먼트로 옮긴다", async () => {
+    const field = await openPicker();
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    expect(activeSegment()).toBe("month");
   });
 
-  // 아래 세 개는 원래 "마지막 열에서 →는 제자리, Tab은 닫고 나간다" 한 개였다. 팝오버를
-  // 경계에서 닫아버리는 뮤테이션은 포커스-정체성 검사와 다이얼로그-열림 검사를 항상
-  // 같이 죽인다 — 포커스가 있던 노드가 언마운트되며 activeElement가 같이 떨어지기
-  // 때문이다. 한 it 안에서 그 둘을 순서대로 두면 앞 것이 먼저 던져 뒤 것은 한 번도
-  // 실행되지 못한 채 "통과"만 한다. 각 assert를 별도 실행으로 쪼갠다.
-  it("마지막 열에서 →는 포커스를 그대로 둔다", async () => {
-    const { day } = await openPickerAtLastColumn();
-    fireEvent.keyDown(day, { key: "ArrowRight" });
-    expect(document.activeElement).toBe(day);
+  it("Tab은 세그먼트를 옮기지 않는다", async () => {
+    const field = await openPicker();
+    fireEvent.keyDown(field, { key: "Tab" });
+    expect(activeSegment()).toBe("year");
   });
 
-  it("마지막 열에서 →는 팝오버를 닫지 않는다", async () => {
-    const { day } = await openPickerAtLastColumn();
-    fireEvent.keyDown(day, { key: "ArrowRight" });
+  // 아래 두 개는 원래 "마지막 열에서 →는 제자리, Tab은 닫고 나간다" 한 개였다. 경계에서
+  // 팝오버를 닫아버리는 뮤테이션은 두 검사를 함께 죽이므로 한 it 안에 두면 앞 것이 먼저
+  // 던져 뒤 것이 실행조차 되지 않는다.
+  it("마지막 세그먼트에서 →는 제자리다", async () => {
+    const field = await openPickerAtLastSegment();
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    expect(activeSegment()).toBe("day");
+  });
+
+  it("마지막 세그먼트에서 →는 팝오버를 닫지 않는다", async () => {
+    const field = await openPickerAtLastSegment();
+    fireEvent.keyDown(field, { key: "ArrowRight" });
     expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();
   });
 
-  it("마지막 열에서 Tab은 닫고 트리거로 포커스를 넘긴다", async () => {
-    const { trigger, day } = await openPickerAtLastColumn();
-    // Tab은 떠나는 키 — 닫고 포커스를 트리거로 넘긴다(브라우저가 그 다음을 계산한다)
-    fireEvent.keyDown(day, { key: "Tab" });
+  // ⚠️ **jsdom은 `Tab` 이동을 구현하지 않는다.** "컨트롤을 떠난다"는 어느 쪽으로 짜든
+  // 통과하므로 고정할 수 있는 것은 둘뿐이다 — **`preventDefault()`가 불리지 않았다는 것**과
+  // 팝오버가 닫혔다는 것. 초판은 `preventDefault()`가 **불리는** 쪽을 고정하고 있었으므로
+  // (`moveColumn`이 성공하면 막았다) 이 단언은 **값이 뒤집힌 것**이지 새로 생긴 것이 아니다.
+  // 둘은 서로 다른 결함이라 나눠 둔다.
+  it("마지막 세그먼트에서 Tab은 팝오버를 닫는다", async () => {
+    const field = await openPickerAtLastSegment();
+    fireEvent.keyDown(field, { key: "Tab" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
-    expect(document.activeElement).toBe(trigger);
   });
 
-  // 아래 세 개는 원래 "첫 열에서 ←는 제자리, Shift+Tab은 닫고 트리거로" 한 개였다.
-  // 위와 같은 이유로 포커스-정체성 검사와 다이얼로그-열림 검사를 분리한다.
-  it("첫 열에서 ←는 포커스를 그대로 둔다", async () => {
-    await openPicker();
-    const year = screen.getByRole("group", { name: "연도 2026" });
-    fireEvent.keyDown(year, { key: "ArrowLeft" });
-    expect(document.activeElement).toBe(year);
+  it("Tab은 preventDefault를 부르지 않는다 — 기본 동작이 컨트롤을 떠나게 한다", async () => {
+    const field = await openPickerAtLastSegment();
+    const event = createEvent.keyDown(field, { key: "Tab" });
+    fireEvent(field, event);
+    expect(event.defaultPrevented).toBe(false);
   });
 
-  it("첫 열에서 ←는 팝오버를 닫지 않는다", async () => {
-    await openPicker();
-    const year = screen.getByRole("group", { name: "연도 2026" });
-    fireEvent.keyDown(year, { key: "ArrowLeft" });
+  it("첫 세그먼트에서 ←는 제자리다", async () => {
+    const field = await openPicker();
+    fireEvent.keyDown(field, { key: "ArrowLeft" });
+    expect(activeSegment()).toBe("year");
+  });
+
+  it("첫 세그먼트에서 ←는 팝오버를 닫지 않는다", async () => {
+    const field = await openPicker();
+    fireEvent.keyDown(field, { key: "ArrowLeft" });
     expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();
   });
 
-  it("첫 열에서 Shift+Tab은 닫고 트리거로 포커스를 넘긴다", async () => {
-    const trigger = await openPicker();
-    const year = screen.getByRole("group", { name: "연도 2026" });
-    fireEvent.keyDown(year, { key: "Tab", shiftKey: true });
+  // Shift+Tab도 대칭으로 떠난다(스펙 §3). 초판은 첫 열에서만 닫혔고 그 조건이 사라졌다.
+  it("첫 세그먼트에서 Shift+Tab은 팝오버를 닫는다", async () => {
+    const field = await openPicker();
+    fireEvent.keyDown(field, { key: "Tab", shiftKey: true });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
-    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("Shift+Tab도 preventDefault를 부르지 않는다", async () => {
+    const field = await openPicker();
+    const event = createEvent.keyDown(field, { key: "Tab", shiftKey: true });
+    fireEvent(field, event);
+    expect(event.defaultPrevented).toBe(false);
   });
 
   // 아래 두 개는 원래 "연도만 있는 픽커는 첫 열이 곧 마지막 열이다" 한 개였다. →와
-  // ←는 같은 분기(ArrowRight/ArrowLeft)를 타므로 경계-닫힘 뮤테이션은 둘 다 깨뜨리는데,
-  // 한 it 안에 순서대로 두면 → 쪽 assert가 먼저 던져 ← 쪽은 실행되지 못한 채 통과한다.
-  // 각자 새로 렌더링해서 분리한다.
-  it("연도만 있는 픽커에서 →는 제자리다", async () => {
-    const year = await openSoloYearPicker();
-    fireEvent.keyDown(year, { key: "ArrowRight" });
-    expect(document.activeElement).toBe(year);
+  // ←는 같은 분기를 타므로 경계-닫힘 뮤테이션은 둘 다 깨뜨리는데, 한 it 안에 순서대로
+  // 두면 → 쪽 assert가 먼저 던져 ← 쪽은 실행되지 못한 채 통과한다.
+  it("세그먼트가 하나뿐이면 →는 제자리다", async () => {
+    const field = await openSoloYearPicker();
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    expect(activeSegment()).toBe("year");
   });
 
-  it("연도만 있는 픽커에서 ←는 제자리다", async () => {
-    const year = await openSoloYearPicker();
-    fireEvent.keyDown(year, { key: "ArrowLeft" });
-    expect(document.activeElement).toBe(year);
+  it("세그먼트가 하나뿐이면 ←는 제자리다", async () => {
+    const field = await openSoloYearPicker();
+    fireEvent.keyDown(field, { key: "ArrowLeft" });
+    expect(activeSegment()).toBe("year");
   });
 
-  it("Ctrl이 눌린 방향키는 열을 옮기지 않는다", async () => {
-    await openPicker();
-    const year = screen.getByRole("group", { name: "연도 2026" });
-    fireEvent.keyDown(year, { key: "ArrowRight", ctrlKey: true });
-    expect(document.activeElement).toBe(year);
+  it("Ctrl이 눌린 방향키는 세그먼트를 옮기지 않는다", async () => {
+    const field = await openPicker();
+    fireEvent.keyDown(field, { key: "ArrowRight", ctrlKey: true });
+    expect(activeSegment()).toBe("year");
   });
 });
 
@@ -475,72 +568,76 @@ describe("DateWheelPicker 리뷰 Finding 1 — activeUnit 시드와 클램프", 
   // 마우스 진입은 그러지 않아 두 경로가 갈렸다 — Select.tsx가 마우스·키보드를 같은
   // 값으로 시딩하는 것과 같은 이유다. 월 열에 가 있던 채로 닫았다가 마우스로 다시
   // 열면, 시드가 없으면 포커스가 여전히 월로 간다.
-  it("마우스로 다시 열면 키보드로 연 것과 같은 첫 열에 포커스가 간다", async () => {
+  it("마우스로 다시 열면 키보드로 연 것과 같은 첫 세그먼트가 활성이다", async () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
-    trigger.focus();
-    fireEvent.keyDown(trigger, { key: "ArrowDown" });
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "연도 2026" })));
-    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "월 07" })));
-    fireEvent.keyDown(screen.getByRole("group", { name: "월 07" }), { key: "Escape" });
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    await waitFor(() => expect(activeSegment()).toBe("month"));
+    fireEvent.keyDown(field, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
 
-    fireEvent.click(trigger);   // 마우스로 다시 연다 — activeUnit 상태는 여전히 "month"다
+    fireEvent.click(field);   // 마우스로 다시 연다 — activeUnit 상태는 여전히 "month"다
 
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "연도 2026" })));
+    expect(activeSegment()).toBe("year");
   });
 
-  // columnRefs.current.get(activeUnit)이 undefined가 되는 경로 — fields가 열려 있는
-  // 동안 줄어들어 activeUnit이 가리키던 열이 통째로 사라진다. jsdom은 포커스된
-  // 노드가 DOM에서 제거되면 포커스를 body로 떨어뜨린다(직접 확인했다). 클램프가
-  // 포커스 이펙트의 의존성까지 갱신하지 않으면(즉 이펙트가 다시 안 돌면) 포커스는
-  // body에 머물고 방향키가 죽는다 — 리뷰가 지적한 "마우스 전용"이 이 상태다.
+  // fields가 열려 있는 동안 줄어들어 activeUnit이 가리키던 열이 통째로 사라지는 경로.
   //
-  // (렌더의 `resolvedActiveUnit === unit`(활성 클래스) 쪽도 처음엔 별도로 테스트를
-  // 뒀었다. 그런데 각 열의 `onFocus={() => setActiveUnit(unit)}`가 있어, 이 포커스
-  // 이펙트가 클램프된 열에 진짜 focus()를 걸면 그 focus 이벤트가 즉시 activeUnit
-  // 원본 상태까지 클램프값으로 되먹임한다 — 그래서 렌더 줄만 되돌리는 뮤테이션은
-  // act()가 다 정리된 뒤에는 관찰되지 않는다(직접 뮤테이션해 확인했다). 렌더 줄은
-  // 방어적으로 남겨 두되(원칙상 렌더가 fields 밖 상태를 믿으면 안 된다), 독립적으로
-  // 증명 가능한 채널은 이 포커스 이펙트 쪽뿐이라 테스트도 여기 하나만 둔다.)
-  it("fields가 열린 채로 줄어 activeUnit이 사라진 열을 가리키면 포커스가 남은 첫 열로 돌아온다", async () => {
+  // **초판에서 이 테스트가 보던 채널(포커스 이펙트)이 없어졌다.** 대신 이제 클램프를
+  // **열의 `.active` 클래스**로 본다 — 초판에서는 각 열의 `onFocus`가 activeUnit 원본
+  // 상태까지 되먹임해 렌더 줄만 되돌리는 뮤테이션이 관찰되지 않았는데, 그 되먹임이
+  // 사라져 이제는 관찰된다.
+  //
+  // 아래 "트리거 세그먼트" 블록의 같은 취지 테스트와 **소스 줄이 다르다** — 그쪽은 팝오버를
+  // 닫고 트리거 세그먼트의 클램프를 보고, 이쪽은 팝오버가 열린 채 열 렌더의 클램프를 본다.
+  it("fields가 열린 채로 줄어 activeUnit이 사라진 열을 가리키면 남은 첫 열이 활성이 된다", async () => {
     render(<DateWheelFieldsShrink />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
-    trigger.focus();
-    fireEvent.keyDown(trigger, { key: "ArrowDown" });
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "연도 2026" })));
-    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
-    const month = await screen.findByRole("group", { name: "월 07" });
-    await waitFor(() => expect(document.activeElement).toBe(month));
-    fireEvent.keyDown(month, { key: "ArrowRight" });
-    const day = await screen.findByRole("group", { name: /^일 12/ });
-    await waitFor(() => expect(document.activeElement).toBe(day));
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    await waitFor(() => expect(activeSegment()).toBe("day"));
 
     fireEvent.click(screen.getByRole("button", { name: "일 열 제거" }));
 
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "연도 2026" })));
+    expect(screen.getByRole("group", { name: "연도 2026" }).classList.contains("active")).toBe(true);
   });
 });
 
 describe("DateWheelPicker tab 순서", () => {
   async function openPicker() {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
-    trigger.focus();
-    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowDown" });
     const dialog = await screen.findByRole("dialog", { name: "거래 날짜 선택" });
     return dialog;
   }
 
-  it("팝오버 안에서 tab 순서에 있는 것은 열뿐이다", async () => {
+  // 설계 스펙 §5 — **이 컨트롤의 tab 정거장은 트리거 하나이고 팝오버 안에는 0개다.**
+  // 초판은 열 셋이 정거장이었다(`Tab`이 열 사이를 걷는 설계였으므로). 그 전제가
+  // 사라졌으므로 이 단언은 **값이 뒤집힌 것**이다.
+  //
+  // 빈 배열을 신원으로 비교한다 — `toHaveLength(0)`이면 "무엇이 정거장인가"를 안 묻고,
+  // 실패해도 어느 요소가 새로 들어왔는지 실패 메시지에 안 찍힌다.
+  it("팝오버 안에는 tab 정거장이 하나도 없다", async () => {
     const dialog = await openPicker();
 
     const stops = [...dialog.querySelectorAll<HTMLElement>('[tabindex="0"], button:not([tabindex="-1"])')];
-    // 신원으로 고정한다 — 개수만 맞추면 엉뚱한 요소가 정거장이어도 통과한다.
-    expect(stops.map((node) => node.getAttribute("aria-label"))).toEqual([
-      "연도 2026", "월 07", "일 12 일",
-    ]);
+    expect(stops.map((node) => node.getAttribute("aria-label"))).toEqual([]);
+  });
+
+  // 위 테스트의 짝 — 정거장이 0개인 것이 "컨트롤이 tab 순서에서 통째로 빠졌다"가 아니라
+  // "정거장이 트리거 하나로 모였다"임을 고정한다. 트리거에서 tabIndex를 빼는 결함은
+  // 위 테스트로는 안 잡힌다(팝오버 밖이라 세지도 않는다).
+  it("트리거는 tab 정거장으로 남는다", async () => {
+    await openPicker();
+    expect(fieldOf("거래 날짜").getAttribute("tabindex")).toBeNull();
   });
 
   // 아래 세 개는 원래 "tabindex·title·aria-hidden 확인" 한 개였다. expect()는 첫
@@ -568,85 +665,76 @@ describe("DateWheelPicker tab 순서", () => {
 describe("DateWheelPicker 타이핑", () => {
   async function openAt(initialValue: string) {
     render(<ControlledDateWheel initialValue={initialValue} />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
-    trigger.focus();
-    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
-    return trigger;
+    return field;
   }
 
-  // 원래 한 테스트였다 — 트리거 문구(값 계산)와 포커스 이동(자동 전진)은 서로 다른
-  // 결함이다. expect()는 첫 실패에서 던지므로 함께 두면 뒤쪽 결함의 킬력을 증명할 수
-  // 없다. 각자 분리한다.
+  // 원래 한 테스트였다 — 트리거 문구(값 계산)와 자동 전진은 서로 다른 결함이다.
+  // expect()는 첫 실패에서 던지므로 함께 두면 뒤쪽 결함의 킬력을 증명할 수 없다.
   it("연도 네 자리를 치면 확정된다", async () => {
-    await openAt("2026-07-12");
-    const year = screen.getByRole("group", { name: "연도 2026" });
-    for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(year, { key: digit });
+    const field = await openAt("2026-07-12");
+    for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(field, { key: digit });
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "거래 날짜" }).textContent).toBe("2031. 07. 12."));
+    await waitFor(() => expect(field.textContent).toBe("2031. 07. 12."));
   });
 
-  it("연도 네 자리를 치면 월 열로 넘어간다", async () => {
-    await openAt("2026-07-12");
-    const year = screen.getByRole("group", { name: "연도 2026" });
-    for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(year, { key: digit });
+  it("연도 네 자리를 치면 월 세그먼트로 넘어간다", async () => {
+    const field = await openAt("2026-07-12");
+    for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(field, { key: digit });
 
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: "월 07" })));
+    await waitFor(() => expect(activeSegment()).toBe("month"));
   });
 
-  // soloFloor 즉시확정 경로(월 2~9, 일 4~9)도 값 확정과 열 전진이 서로 다른 결함이다 —
+  // soloFloor 즉시확정 경로(월 2~9, 일 4~9)도 값 확정과 전진이 서로 다른 결함이다 —
   // 위 연도 케이스와 같은 이유로 나눈다.
   it("월에서 5를 치면 곧바로 5월로 확정한다", async () => {
-    await openAt("2026-07-12");
-    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
-    const month = await screen.findByRole("group", { name: "월 07" });
-    fireEvent.keyDown(month, { key: "5" });
+    const field = await openAt("2026-07-12");
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "5" });
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "거래 날짜" }).textContent).toBe("2026. 05. 12."));
+    await waitFor(() => expect(field.textContent).toBe("2026. 05. 12."));
   });
 
-  it("월에서 5를 치면 일 열로 넘어간다", async () => {
-    await openAt("2026-07-12");
-    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
-    const month = await screen.findByRole("group", { name: "월 07" });
-    fireEvent.keyDown(month, { key: "5" });
+  it("월에서 5를 치면 일 세그먼트로 넘어간다", async () => {
+    const field = await openAt("2026-07-12");
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "5" });
 
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("group", { name: /^일 12/ })));
+    await waitFor(() => expect(activeSegment()).toBe("day"));
   });
 
   it("일에서 9를 치면 곧바로 9일로 확정한다", async () => {
-    await openAt("2026-07-12");
-    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
-    const month = await screen.findByRole("group", { name: "월 07" });
-    fireEvent.keyDown(month, { key: "ArrowRight" });
-    const day = await screen.findByRole("group", { name: /^일 12/ });
-    fireEvent.keyDown(day, { key: "9" });
+    const field = await openAt("2026-07-12");
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "9" });
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "거래 날짜" }).textContent).toBe("2026. 07. 09."));
+    await waitFor(() => expect(field.textContent).toBe("2026. 07. 09."));
   });
 
   it("타이핑은 휠 이동 애니메이션을 재생하지 않는다", async () => {
     // markColumnMotion을 타면 숫자 하나마다 행 7개가 리마운트되고 210ms 전환이
     // 재생된다. 값만 확인하면 이 결함을 못 잡으므로 경로 자체를 고정한다.
-    await openAt("2026-07-12");
-    const year = screen.getByRole("group", { name: "연도 2026" });
-    const rowsBefore = year.querySelector(".date-wheel-values");
-    for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(year, { key: digit });
+    const field = await openAt("2026-07-12");
+    const rowsBefore = screen.getByRole("group", { name: "연도 2026" }).querySelector(".date-wheel-values");
+    for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(field, { key: digit });
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "거래 날짜" }).textContent).toBe("2031. 07. 12."));
+    await waitFor(() => expect(field.textContent).toBe("2031. 07. 12."));
     const yearAfter = screen.getByRole("group", { name: "연도 2031" });
     expect(yearAfter.querySelector(".date-wheel-values")).toBe(rowsBefore);   // 리마운트되지 않았다
     expect(yearAfter.classList.contains("moving-next")).toBe(false);
   });
 
   it("Backspace가 버퍼에서 한 자리만 지운다", async () => {
-    await openAt("2026-07-12");
-    const year = screen.getByRole("group", { name: "연도 2026" });
-    fireEvent.keyDown(year, { key: "2" });
-    fireEvent.keyDown(year, { key: "0" });
-    fireEvent.keyDown(year, { key: "Backspace" });
-    fireEvent.keyDown(year, { key: "3" });
-    fireEvent.keyDown(year, { key: "1" });
+    const field = await openAt("2026-07-12");
+    fireEvent.keyDown(field, { key: "2" });
+    fireEvent.keyDown(field, { key: "0" });
+    fireEvent.keyDown(field, { key: "Backspace" });
+    fireEvent.keyDown(field, { key: "3" });
+    fireEvent.keyDown(field, { key: "1" });
     // "20" -> Backspace -> "2" -> "231". 네 자리가 아직 아니므로 확정되지 않았다.
     //
     // **이 단언의 기대값이 SEG Task 2에서 바뀌었습니다**(설계 스펙 §4.5). 예전에는 트리거가
@@ -655,27 +743,25 @@ describe("DateWheelPicker 타이핑", () => {
     // 강해졌습니다 — `231‒`은 "버퍼가 정확히 231이다"와 "아직 확정되지 않았다"를 동시에
     // 보여줍니다(확정됐다면 버퍼가 비고 세그먼트가 확정된 네 자리를 그렸을 것입니다).
     // 채움 문자는 U+2012 FIGURE DASH입니다 — 파일 상단 FILL 상수 주석 참고.
-    expect(screen.getByRole("button", { name: "거래 날짜" }).textContent).toBe(`231${FILL}. 07. 12.`);
-    fireEvent.keyDown(year, { key: "9" });   // "2319" 네 자리
-    await waitFor(() => expect(screen.getByRole("button", { name: "거래 날짜" }).textContent).toBe("2319. 07. 12."));
+    expect(field.textContent).toBe(`231${FILL}. 07. 12.`);
+    fireEvent.keyDown(field, { key: "9" });   // "2319" 네 자리
+    await waitFor(() => expect(field.textContent).toBe("2319. 07. 12."));
   });
 
   it("한 자리를 치고 Backspace를 누르면 선택 행이 실제 값으로 돌아간다", async () => {
     // 버퍼가 "2" -> Backspace로 ""가 되는 순간, "없음"을 빈 문자열이 아니라 null로
     // 표현해야 한다. 아니면 `buffered ?? (...)`가 빈 문자열을 걸러내지 못해 행이 빈다.
-    await openAt("2026-07-12");
-    const year = screen.getByRole("group", { name: "연도 2026" });
-    fireEvent.keyDown(year, { key: "2" });
-    fireEvent.keyDown(year, { key: "Backspace" });
-    expect(year.querySelector(".date-wheel-values .selected")?.textContent).toBe("2026");
+    const field = await openAt("2026-07-12");
+    fireEvent.keyDown(field, { key: "2" });
+    fireEvent.keyDown(field, { key: "Backspace" });
+    expect(screen.getByRole("group", { name: "연도 2026" }).querySelector(".date-wheel-values .selected")?.textContent).toBe("2026");
   });
 
   it("치는 동안 선택 행에 친 숫자가 그대로 보인다", async () => {
-    await openAt("2026-07-12");
-    const year = screen.getByRole("group", { name: "연도 2026" });
-    fireEvent.keyDown(year, { key: "2" });
-    fireEvent.keyDown(year, { key: "0" });
-    expect(year.querySelector(".date-wheel-values .selected")?.textContent).toBe("20");
+    const field = await openAt("2026-07-12");
+    fireEvent.keyDown(field, { key: "2" });
+    fireEvent.keyDown(field, { key: "0" });
+    expect(screen.getByRole("group", { name: "연도 2026" }).querySelector(".date-wheel-values .selected")?.textContent).toBe("20");
   });
 });
 
@@ -687,9 +773,9 @@ describe("DateWheelPicker 리뷰 Finding 2 — §4.3 확정할 때 값을 다루
   it("타이핑한 값이 min 밖이면 경계값으로 자른다", async () => {
     const onChange = vi.fn();
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" min="2026-01-01" onChange={onChange} />);
-    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
-    const year = screen.getByRole("group", { name: "연도 2026" });
-    for (const digit of ["1", "9", "8", "5"]) fireEvent.keyDown(year, { key: digit });
+    const field = fieldOf("거래 날짜");
+    fireEvent.click(field);
+    for (const digit of ["1", "9", "8", "5"]) fireEvent.keyDown(field, { key: digit });
     await waitFor(() => expect(onChange).toHaveBeenLastCalledWith("2026-01-01"));
   });
 
@@ -699,9 +785,9 @@ describe("DateWheelPicker 리뷰 Finding 2 — §4.3 확정할 때 값을 다루
   it("연도만 있는 픽커에서 연도를 타이핑하면 월·일이 01로 정규화된다", () => {
     const onChange = vi.fn();
     render(<DateWheelPicker ariaLabel="회계 연도" value="2026-07-12" fields={["year"]} onChange={onChange} />);
-    fireEvent.click(screen.getByRole("button", { name: "회계 연도" }));
-    const year = screen.getByRole("group", { name: "연도 2026" });
-    for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(year, { key: digit });
+    const field = fieldOf("회계 연도");
+    fireEvent.click(field);
+    for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(field, { key: digit });
     expect(onChange).toHaveBeenLastCalledWith("2031-01-01");
   });
 });
@@ -722,25 +808,47 @@ describe("DateWheelPicker 리뷰 Finding 3 — shiftDateValue의 말일 계산�
     expect(trigger.textContent).toBe("0000. 02. 29.");
   });
 
-  // 연도가 10000 이상이 되면 Date#toISOString()이 확장 ISO 표기
-  // (+010000-07-12)로 바뀐다. shiftDateValue의 .slice(0, 10)은 그 표기의 앞
-  // 10글자("+010000-07")만 자르고, normalizeToFields가 이걸 "-"로 쪼개면 세
-  // 번째 조각(일)이 undefined가 되어 "+010000-07-undefined"가 onChange로
-  // 나간다. shiftedFrom이 validDateValue로 이 결과를 걸러내지 않으면, 연도
-  // 9999에서 네 자리를 타이핑한 뒤 ↓ 한 번만으로 소비자에게 깨진 문자열이
-  // 전달된다. 고친 뒤에는 그 걸음이 그냥 막힌 걸음(no-op)이어야 한다 —
-  // §3.4.3처럼 "누를 수 없는 자리"를 만드는 대신, 이미 있는 "쓸 수 없는 값"
-  // 신호(shiftedFrom의 null)를 그대로 쓴다.
-  it("연도 9999에서 ↓를 누르면 10000으로 새지 않고 값이 그대로다", async () => {
+  // ⚠️ **아래 두 테스트는 원래 하나였고, 그 하나가 두 가지를 동시에 지키고 있었다.**
+  // SEG Task 4가 그 둘을 갈라놓았으므로 테스트도 갈라야 한다. 하나로 두고 기대값만
+  // 고치면 **연도 10000 오버플로 가드가 아무 소리 없이 사라진다.**
+  //
+  // 무엇이 갈라졌나: 초판은 키를 **연도 열 요소**로 보냈는데, 연도 네 자리를 다 치면
+  // `typeDigit`의 자동 이동이 활성을 **월로** 옮긴다. "키가 도착한 열"과 "활성 열"이
+  // 갈려 있어서 `↓`가 연도로 갔고, 그래서 한 테스트가 자동 이동과 오버플로 가드를
+  // 둘 다 건드렸다. 키가 트리거로만 오게 된 지금은 `↓`가 **월을 움직인다** — 그리고
+  // 그것이 설계 스펙 §4.1상 옳다.
+  async function typeYear9999() {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
-    const trigger = screen.getByRole("button", { name: "거래 날짜" });
-    fireEvent.click(trigger);
-    const year = screen.getByRole("group", { name: "연도 2026" });
-    for (const digit of ["9", "9", "9", "9"]) fireEvent.keyDown(year, { key: digit });
-    await waitFor(() => expect(trigger.textContent).toBe("9999. 07. 12."));
+    const field = fieldOf("거래 날짜");
+    fireEvent.click(field);
+    for (const digit of ["9", "9", "9", "9"]) fireEvent.keyDown(field, { key: digit });
+    await waitFor(() => expect(field.textContent).toBe("9999. 07. 12."));
+    return field;
+  }
 
-    fireEvent.keyDown(year, { key: "ArrowDown" });
-    expect(trigger.textContent).toBe("9999. 07. 12.");
+  // (1) 새 계약 — §4.1의 자동 이동을 고정한다. 네 자리를 다 치면 활성이 월로 갔으므로
+  // 그 뒤의 ↓는 월을 움직인다.
+  it("연도 네 자리를 친 뒤 ↓는 월을 움직인다", async () => {
+    const field = await typeYear9999();
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    expect(field.textContent).toBe("9999. 08. 12.");
+  });
+
+  // (2) **원래 가드.** 연도가 10000 이상이 되면 Date#toISOString()이 확장 ISO 표기
+  // (+010000-07-12)로 바뀐다. shiftDateValue의 .slice(0, 10)은 그 표기의 앞 10글자
+  // ("+010000-07")만 자르고, normalizeToFields가 이걸 "-"로 쪼개면 세 번째 조각(일)이
+  // undefined가 되어 **"+010000-07-undefined"가 그대로 onChange로 나간다.** shiftedFrom이
+  // validDateValue로 이 결과를 걸러내지 않으면 소비자에게 깨진 문자열이 전달된다.
+  // 고친 뒤에는 그 걸음이 그냥 막힌 걸음(no-op)이어야 한다 — "누를 수 없는 자리"를
+  // 새로 만드는 대신 이미 있는 "쓸 수 없는 값" 신호(shiftedFrom의 null)를 그대로 쓴다.
+  //
+  // **`←`로 연도를 다시 활성으로 되돌리는 줄이 이 테스트의 전부다.** 그게 없으면 ↓가
+  // 월을 움직여 위 (1)과 같은 것을 볼 뿐, 연도 경계에는 영영 닿지 않는다.
+  it("연도 9999를 다시 활성으로 되돌린 뒤 ↓를 누르면 10000으로 새지 않고 값이 그대로다", async () => {
+    const field = await typeYear9999();
+    fireEvent.keyDown(field, { key: "ArrowLeft" });   // 활성을 월 → 연도로 되돌린다
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    expect(field.textContent).toBe("9999. 07. 12.");
   });
 });
 
@@ -751,14 +859,15 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    // `year`는 **값 확인용**으로만 쓴다(선택 행의 텍스트). 키는 전부 트리거로 간다.
     const year = screen.getByRole("group", { name: /^연도/ });
-    for (const key of keys) fireEvent.keyDown(year, { key });
+    for (const key of keys) fireEvent.keyDown(trigger, { key });
     return { trigger, year };
   }
 
   it("연도 두 자리만 치고 →를 누르면 2000년대로 확정된다", async () => {
-    const { trigger, year } = await openAndType("2026-07-12", ["3", "1"]);
-    fireEvent.keyDown(year, { key: "ArrowRight" });
+    const { trigger } = await openAndType("2026-07-12", ["3", "1"]);
+    fireEvent.keyDown(trigger, { key: "ArrowRight" });
     await waitFor(() => expect(trigger.textContent).toBe("2031. 07. 12."));
   });
 
@@ -770,15 +879,58 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
   // 읽어 2026이 되는 것이 이 테스트의 요점이다. 초기값이 이미 2026이면 flushTyping
   // 호출을 통째로 지워도(버퍼를 무시해도) 우연히 같은 값이 나와 이 assert가 죽지 않는다.
   it("Enter로 완료하면 치던 숫자가 확정된다", async () => {
-    const { trigger, year } = await openAndType("2020-07-12", ["2", "6"]);
-    fireEvent.keyDown(year, { key: "Enter" });
+    const { trigger } = await openAndType("2020-07-12", ["2", "6"]);
+    fireEvent.keyDown(trigger, { key: "Enter" });
     await waitFor(() => expect(trigger.textContent).toBe("2026. 07. 12."));
   });
 
   it("Enter를 누르면 팝오버가 닫힌다", async () => {
-    const { year } = await openAndType("2020-07-12", ["2", "6"]);
-    fireEvent.keyDown(year, { key: "Enter" });
+    const { trigger } = await openAndType("2020-07-12", ["2", "6"]);
+    fireEvent.keyDown(trigger, { key: "Enter" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
+  });
+
+  // 설계 스펙 §3 — 열린 상태의 `Space`는 **확정**이다. 초판은 "Space는 여는 키"라는
+  // 이유로 열린 상태에서 아무것도 안 했는데, 그러면 포커스를 가진 요소가 Space를 안 먹어
+  // **페이지가 스크롤된다.** 드롭다운은 이미 열린 상태에서 Enter·Space가 둘 다 확정이다.
+  it("Space로도 완료하면 치던 숫자가 확정된다", async () => {
+    const { trigger } = await openAndType("2020-07-12", ["2", "6"]);
+    fireEvent.keyDown(trigger, { key: " " });
+    await waitFor(() => expect(trigger.textContent).toBe("2026. 07. 12."));
+  });
+
+  it("Space를 누르면 팝오버가 닫힌다", async () => {
+    const { trigger } = await openAndType("2020-07-12", ["2", "6"]);
+    fireEvent.keyDown(trigger, { key: " " });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
+  });
+
+  // ⚠️ 아래 두 단언은 **증상이 아니라 `preventDefault()` 자체**를 고정한다. 실브라우저의
+  // 결함은 이렇다: 트리거는 `<button>`이고 `<button>`은 Enter를 keydown에서, Space를
+  // keyup에서 click으로 바꾼다 — 막지 않으면 우리가 확정하며 닫은 뒤 그 합성 click이
+  // 트리거의 onClick(토글)을 불러 **다시 연다.**
+  //
+  // **그 증상은 jsdom에서 재현되지 않는다.** 설계 스펙 §11과 이 Task의 브리프는 둘 다
+  // "jsdom에서도 일어난다"고 적었지만 **틀렸다** — 직접 쟀다(jsdom 26.1.0, 이 저장소의
+  // vitest 환경): 포커스를 준 `<button>`에 Enter keydown, Space keydown+keyup을 보내도
+  // onClick 호출은 **0회**다. 그래서 "다시 열렸는가"를 보는 테스트는 preventDefault를
+  // 지워도 초록으로 남는다(그 뮤테이션을 실제로 돌려 확인했다: 0 red).
+  //
+  // 증상이 안 잡힌다고 해서 preventDefault가 필요 없다는 뜻은 아니다 — 실브라우저에서는
+  // 필요하다(HTML 표준의 `<button>` 활성화 동작). jsdom이 못 보는 것을 "없는 것"으로
+  // 옮겨 적지 않고, 대신 계약 자체를 직접 고정한다.
+  it("열린 상태의 Enter는 preventDefault를 부른다 — 합성 click이 다시 열지 못하게", async () => {
+    const { trigger } = await openAndType("2020-07-12", ["2", "6"]);
+    const event = createEvent.keyDown(trigger, { key: "Enter" });
+    fireEvent(trigger, event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("열린 상태의 Space도 preventDefault를 부른다", async () => {
+    const { trigger } = await openAndType("2020-07-12", ["2", "6"]);
+    const event = createEvent.keyDown(trigger, { key: " " });
+    fireEvent(trigger, event);
+    expect(event.defaultPrevented).toBe(true);
   });
 
   // 리뷰 Finding 3 — Enter 분기는 flushTyping으로 확정한 뒤 `if (!value) onChange(baseValue)`를
@@ -793,10 +945,9 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
     render(<ControlledDateWheel initialValue="" />);
     const trigger = screen.getByRole("button", { name: "거래 날짜" });
     fireEvent.click(trigger);
-    const year = screen.getByRole("group", { name: /^연도/ });
-    fireEvent.keyDown(year, { key: "3" });
-    fireEvent.keyDown(year, { key: "1" });
-    fireEvent.keyDown(year, { key: "Enter" });
+    fireEvent.keyDown(trigger, { key: "3" });
+    fireEvent.keyDown(trigger, { key: "1" });
+    fireEvent.keyDown(trigger, { key: "Enter" });
     expect(trigger.textContent).toBe("2031. 07. 12.");
   });
 
@@ -804,23 +955,23 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
   // 폐기 결함 표면)는 서로 다르다. Escape의 setOpen(false)는 Task 7 이전부터 있던
   // 동작이라 이 작업 범위의 뮤테이션으로는 앞쪽을 못 죽인다 — 그래도 나눠 둔다.
   it("Escape를 누르면 팝오버가 닫힌다", async () => {
-    const { year } = await openAndType("2026-07-12", ["3", "1"]);
-    fireEvent.keyDown(year, { key: "Escape" });
+    const { trigger } = await openAndType("2026-07-12", ["3", "1"]);
+    fireEvent.keyDown(trigger, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
   });
 
   it("Escape는 치던 숫자를 버리고 값을 그대로 둔다", async () => {
     // Escape의 뜻은 "값을 바꾸지 않고 닫기"다. 치다 만 숫자를 확정하면 그 뜻과 어긋난다.
-    const { trigger, year } = await openAndType("2026-07-12", ["3", "1"]);
-    fireEvent.keyDown(year, { key: "Escape" });
+    const { trigger } = await openAndType("2026-07-12", ["3", "1"]);
+    fireEvent.keyDown(trigger, { key: "Escape" });
     await waitFor(() => expect(trigger.textContent).toBe("2026. 07. 12."));
   });
 
   it("↑는 버퍼를 확정한 뒤 그 값에서 한 칸 움직인다", async () => {
     // 이 컴포넌트에서 ArrowUp은 -1이다(handleFieldKey의 ArrowUp/ArrowDown 분기).
     // 버퍼를 무시하고 옛 값에서 움직이면 2025가 되므로 둘이 확실히 갈린다.
-    const { trigger, year } = await openAndType("2026-07-12", ["3", "1"]);
-    fireEvent.keyDown(year, { key: "ArrowUp" });
+    const { trigger } = await openAndType("2026-07-12", ["3", "1"]);
+    fireEvent.keyDown(trigger, { key: "ArrowUp" });
     await waitFor(() => expect(trigger.textContent).toBe("2030. 07. 12."));   // 2031로 확정한 뒤 -1
   });
 
@@ -830,10 +981,9 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
-    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
-    const month = await screen.findByRole("group", { name: "월 07" });
-    fireEvent.keyDown(month, { key: "0" });
-    fireEvent.keyDown(month, { key: "ArrowRight" });
+    fireEvent.keyDown(trigger, { key: "ArrowRight" });
+    fireEvent.keyDown(trigger, { key: "0" });
+    fireEvent.keyDown(trigger, { key: "ArrowRight" });
     expect(trigger.textContent).toBe("2026. 07. 12.");
   });
 
@@ -842,9 +992,10 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
   // 휠을 굴려 값을 옮겨도(2026 -> 2027) 버퍼 "3"은 그대로 남고, Tab으로 떠날 때
   // flushTyping이 그 묵은 "3"을 2003으로 해석해 휠이 방금 맞춘 값을 조용히 덮어쓴다.
   it("휠을 굴리면 치던 숫자를 버린다", async () => {
+    // 휠은 열이 받는다(onWheel은 열에 남아 있다) — 키만 트리거로 옮겼다.
     const { trigger, year } = await openAndType("2026-07-12", ["3"]);
     fireEvent.wheel(year, { deltaY: 100 });
-    fireEvent.keyDown(year, { key: "Tab" });
+    fireEvent.keyDown(trigger, { key: "Tab" });
     await waitFor(() => expect(trigger.textContent).toBe("2027. 07. 12."));
   });
 
@@ -903,41 +1054,43 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
   // 비운 뒤라 그 호출이 no-op으로 지나간다. 여기서는 → 테스트와 같은 모양으로,
   // 버퍼를 채운 채로 곧장 Tab을 눌러 flushTyping이 실제로 해석·확정하는지 본다.
   it("Tab이 치던 숫자를 확정한다", async () => {
-    const { trigger, year } = await openAndType("2026-07-12", ["3", "1"]);
-    fireEvent.keyDown(year, { key: "Tab" });
+    const { trigger } = await openAndType("2026-07-12", ["3", "1"]);
+    fireEvent.keyDown(trigger, { key: "Tab" });
     await waitFor(() => expect(trigger.textContent).toBe("2031. 07. 12."));
   });
 
-  // 위 테스트에 얹는다 — Tab은 팝오버를 닫지 않고 다음 열로 초점만 옮기므로,
-  // 확정 직후에도 방금 떠난 연도 열이 여전히 화면에 남아 있다. flushTyping이
-  // setTyping(null)로 버퍼를 비우지 않으면, 행 렌더의
-  // `buffered = offset === 0 && typing?.unit === unit ? typing.digits : null`가
-  // unit이 여전히 "year"인 낡은 버퍼를 얹어, 확정된 "2031" 대신 치던 숫자
-  // "31"을 그대로 보여준다. trigger.textContent는 `value` prop만 읽으므로 이
-  // 결함을 못 잡는다 — 남겨진 열 자신의 선택 행을 봐야 한다. 트리거 문구(값
-  // 계산)와 남겨진 열의 렌더(버퍼 정리)는 서로 다른 결함이므로 나눈다. 뮤테이션
-  // 이후에도 실패가 이 assert 줄 자체에서 나도록, 새로 role 조회를 하지 않고
-  // openAndType이 이미 쥐고 있는 `year` 노드 참조를 그대로 쓴다.
-  it("Tab으로 떠난 뒤 남겨진 연도 열은 버퍼가 아니라 확정된 값을 보여준다", async () => {
-    const { year } = await openAndType("2026-07-12", ["3", "1"]);
-    fireEvent.keyDown(year, { key: "Tab" });
+  // 초판은 이 테스트를 **`Tab`으로** 짰다. `Tab`이 세그먼트를 옮기고 팝오버를 열어 두던
+  // 시절에는 "떠난 뒤에도 남아 있는 연도 열"이 있었기 때문이다. 이제 `Tab`은 팝오버를
+  // 닫으므로 그 열이 언마운트되어 이 단언이 볼 것이 없어진다 — 같은 결함을 계속 보려면
+  // **팝오버를 열어 둔 채 세그먼트를 떠나는 키**, 즉 `→`로 바꿔야 한다(둘 다
+  // `flushTyping`을 거치는 같은 경로다).
+  //
+  // 무엇을 지키나: flushTyping이 setTyping(null)로 버퍼를 비우지 않으면, 행 렌더의
+  // `buffered = offset === 0 && typing?.unit === unit ? typing.digits : null`가 unit이
+  // 여전히 "year"인 낡은 버퍼를 얹어 확정된 "2031" 대신 치던 숫자 "31"을 보여준다.
+  // trigger.textContent는 `value` prop만 읽으므로 이 결함을 못 잡는다 — 떠난 열 자신의
+  // 선택 행을 봐야 한다. 뮤테이션 이후에도 실패가 이 assert 줄에서 나도록 새로 role
+  // 조회를 하지 않고 openAndType이 쥐고 있는 `year` 노드를 그대로 쓴다.
+  it("→로 세그먼트를 떠난 뒤 연도 열은 버퍼가 아니라 확정된 값을 보여준다", async () => {
+    const { trigger, year } = await openAndType("2026-07-12", ["3", "1"]);
+    fireEvent.keyDown(trigger, { key: "ArrowRight" });
     expect(year.querySelector(".date-wheel-values .selected")?.textContent).toBe("2031");
   });
 
-  // Shift+Tab은 어떤 테스트에서도 눌린 적이 없었다. 첫 열에서는 이동이 실패해
-  // (moveColumn이 false를 돌려줘) 팝오버를 닫아 버리므로, 버퍼 확정만 따로 보려면
-  // 이동이 성공하는 둘째 열(월)에서 시작해야 한다. 월의 첫 자리 "1"은 soloFloor(2)
-  // 미만이라 곧장 확정되지 않고 버퍼로 남는다(dateWheelTyping.ts의 typeDigit 참고).
+  // Shift+Tab도 확정하고 떠난다(스펙 §3 — Tab과 완전히 대칭이다). 월에서 시작하는
+  // 이유는 월의 첫 자리 "1"이 soloFloor(2) 미만이라 곧장 확정되지 않고 버퍼로 남기
+  // 때문이다(dateWheelTyping.ts의 typeDigit 참고) — 연도와 다른 버퍼 모양을 한 번 더
+  // 지나간다. (초판이 월에서 시작한 이유였던 "첫 열에서는 이동이 실패해 닫힌다"는
+  // 사라졌다. Shift+Tab은 이제 어느 세그먼트에서든 닫는다.)
   it("Shift+Tab이 치던 숫자를 확정한다", async () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
     const trigger = screen.getByRole("button", { name: "거래 날짜" });
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
-    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
-    const month = await screen.findByRole("group", { name: "월 07" });
-    fireEvent.keyDown(month, { key: "1" });
-    fireEvent.keyDown(month, { key: "Tab", shiftKey: true });
+    fireEvent.keyDown(trigger, { key: "ArrowRight" });
+    fireEvent.keyDown(trigger, { key: "1" });
+    fireEvent.keyDown(trigger, { key: "Tab", shiftKey: true });
     await waitFor(() => expect(trigger.textContent).toBe("2026. 01. 12."));
   });
 });
@@ -997,12 +1150,10 @@ describe("DateWheelPicker 단축키", () => {
     expect(onChange).toHaveBeenCalledWith("2026-07-12");
   });
 
-  // 브리프의 두 테스트는 닫힌 트리거로만 Ctrl+;를 쏜다. 그런데 스펙 §3은 "닫힘·열림"
-  // 둘 다라고 명시하고, 그 순서 함정은 열 쪽 경로에도 똑같이 있다 — 열 쪽만 순서가
-  // 틀려도 트리거 테스트 두 개는 계속 통과한다. 열 쪽 경로를 직접 쏴서 그 결함도 잡는다.
-  // (핸들러가 `handleColumnKey`·`handleTriggerKeyDown` 둘이던 시절의 이야기다. 지금은
-  //  `handleFieldKey` 하나이고, 그 순서 계약은 그 함수 머리말이 넷으로 세고 있다.)
-  it("Ctrl+;는 팝오버가 열려 있을 때 열에서도 동작한다", () => {
+  // 위 두 테스트는 **닫힌** 트리거로만 Ctrl+;를 쏜다. 스펙 §3은 "닫힘·열림" 둘 다라고
+  // 명시하고, `handleShortcut`이 `if (!open)` 갈림보다 **앞**에 있어야 한다는 순서 계약이
+  // 열린 쪽에서만 드러난다 — 순서가 뒤집혀도 위 두 테스트는 계속 통과한다.
+  it("Ctrl+;는 팝오버가 열려 있을 때도 동작한다", () => {
     // 이 파일의 다른 가짜 타이머 테스트와 같은 동기 관용구를 쓴다(예: "팝오버의 오늘
     // 버튼이…") — fireEvent.click + 동기 쿼리. await waitFor/findByRole을 가짜
     // 타이머와 섞으면 RTL 버전에 따라 어긋날 수 있다.
@@ -1010,9 +1161,10 @@ describe("DateWheelPicker 단축키", () => {
     vi.setSystemTime(new Date("2026-07-12T03:00:00Z"));
     const onChange = vi.fn();
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-01-01" onChange={onChange} />);
-    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
-    const year = screen.getByRole("group", { name: "연도 2026" });
-    fireEvent.keyDown(year, { key: ";", code: "Semicolon", ctrlKey: true });
+    const field = fieldOf("거래 날짜");
+    fireEvent.click(field);
+    expect(screen.getByRole("dialog", { name: "거래 날짜 선택" })).toBeTruthy();   // 열린 상태라는 전제
+    fireEvent.keyDown(field, { key: ";", code: "Semicolon", ctrlKey: true });
     expect(onChange).toHaveBeenCalledWith("2026-07-12");
   });
 
@@ -1024,9 +1176,10 @@ describe("DateWheelPicker 단축키", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-12T03:00:00Z"));   // 서울 기준 오늘 = 2026-07-12
     render(<ControlledDateWheel initialValue="2020-01-01" />);
-    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    const field = fieldOf("거래 날짜");
+    fireEvent.click(field);
     const year = screen.getByRole("group", { name: "연도 2020" });
-    fireEvent.keyDown(year, { key: "3" });   // 버퍼 "3" — 연도는 네 자리라야 확정된다
+    fireEvent.keyDown(field, { key: "3" });   // 버퍼 "3" — 연도는 네 자리라야 확정된다
 
     fireEvent.click(screen.getByRole("button", { name: "오늘" }));
 
@@ -1039,9 +1192,10 @@ describe("DateWheelPicker 단축키", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-12T03:00:00Z"));   // 서울 기준 오늘 = 2026-07-12
     render(<ControlledDateWheel initialValue="2020-01-01" allowClear />);
-    fireEvent.click(screen.getByRole("button", { name: "거래 날짜" }));
+    const field = fieldOf("거래 날짜");
+    fireEvent.click(field);
     const year = screen.getByRole("group", { name: "연도 2020" });
-    fireEvent.keyDown(year, { key: "3" });
+    fireEvent.keyDown(field, { key: "3" });
 
     fireEvent.click(screen.getByRole("button", { name: "비우기" }));
 
@@ -1083,37 +1237,39 @@ describe("DateWheelPicker 단축키", () => {
   });
 });
 
-// "비활성 필드는 어떤 키에도 반응하지 않는다"는 이 저장소의 기존 불변식인데, 지금까지
-// 그것을 지키는 테스트는 전부 **닫힌** 트리거에만 키를 쐈다("비활성이면 어느 키로도
-// 열리지 않는다", "비활성이면 Delete도 무시한다"). 핸들러가 트리거 하나뿐이던 시절엔
-// 그걸로 충분했지만, 이제 열도 같은 핸들러를 쓰므로 **열려 있는 동안 disabled가 켜지는**
-// 경우가 그 불변식의 새 노출면이다.
+// "비활성 필드는 어떤 키에도 반응하지 않는다"는 이 저장소의 기존 불변식인데, 그것을
+// 지키던 테스트는 전부 **닫힌** 트리거에만 키를 쐈다("비활성이면 어느 키로도 열리지
+// 않는다", "비활성이면 Delete도 무시한다"). **열려 있는 동안 disabled가 켜지는** 경우가
+// 그 불변식의 나머지 노출면이고, 소비자가 폼을 제출하는 동안 필드를 잠그는 흔한 패턴에서
+// 실제로 만들어지는 상태다(팝오버 렌더 조건이 `open && position`뿐이라 아무도 안 닫는다).
 //
-// 소비자가 폼을 제출하는 동안 필드를 잠그는 흔한 패턴에서 실제로 만들어지는 상태다.
+// ⚠️ **SEG Task 4에서 이 블록의 키 대상이 바뀌었다.** 초판은 키를 **열**로 쐈는데, 열이
+// `onKeyDown`을 잃으면서 그 이벤트는 어떤 핸들러에도 닿지 않게 됐다 — 그대로 뒀다면 이
+// 테스트는 "`if (disabled) return;`이 막아서"가 아니라 **"아무 데도 안 배선돼서"** 초록이
+// 되어, 가드를 통째로 지워도 안 빨개진다(공허한 초록). 트리거로 쏴야 그 가드를 실제로
+// 지나간다.
 describe("DateWheelPicker 비활성 — 팝오버가 열려 있는 동안 켜지는 경우", () => {
-  /** 연 다음 disabled를 켠다. 열 노드는 **켜기 전에** 잡아 둔다 — 아래 두 테스트가
-   *  보는 것이 "그 열이 키를 무시하는가"이지 "열을 찾을 수 있는가"가 아니기 때문이다. */
+  /** 연 다음 disabled를 켠다. 트리거 노드는 rerender를 건너서도 같은 노드다. */
   function openThenDisable(onChange: () => void) {
     const view = render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={onChange} />);
-    fireEvent.keyDown(screen.getByRole("button", { name: "거래 날짜" }), { key: "ArrowDown" });
-    const year = screen.getByRole("group", { name: /^연도/ });
+    const field = fieldOf("거래 날짜");
+    fireEvent.keyDown(field, { key: "ArrowDown" });
     view.rerender(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={onChange} disabled />);
-    return year;
+    return field;
   }
 
   // 이 테스트가 아래 테스트의 **전제**다. disabled가 팝오버를 닫아 버리면 아래 테스트는
-  // "키가 막혔으니까"가 아니라 "열 노드가 떨어져 나가 이벤트가 React 트리에 안 닿아서"
-  // 초록이 된다 — 공허하게 통과한다. 그래서 상태가 실제로 만들어진다는 것을 따로 박는다.
+  // "키가 막혔으니까"가 아니라 "팝오버가 없어서 애초에 바뀔 것이 없어서" 초록이 된다.
   it("disabled를 켜도 팝오버를 닫는 코드는 없다 — 이 상태가 실제로 만들어진다", () => {
     openThenDisable(() => undefined);
     expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).not.toBeNull();
   });
 
-  it("그 상태에서 열이 받은 ↓도 값을 바꾸지 않는다", () => {
+  it("그 상태에서 트리거가 받은 ↓도 값을 바꾸지 않는다", () => {
     const onChange = vi.fn();
-    const year = openThenDisable(onChange);
+    const field = openThenDisable(onChange);
     onChange.mockClear();   // 여는 동안의 호출과 섞이지 않게
-    fireEvent.keyDown(year, { key: "ArrowDown" });
+    fireEvent.keyDown(field, { key: "ArrowDown" });
     expect(onChange).not.toHaveBeenCalled();
   });
 });
@@ -1134,10 +1290,10 @@ describe("DateWheelPicker 완료 피드백(커밋 애니메이션)", () => {
     const trigger = screen.getByRole("button", { name: "거래 날짜" });
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
-    const year = await screen.findByRole("group", { name: /^연도/ });
-    fireEvent.keyDown(year, { key: "3" });
-    fireEvent.keyDown(year, { key: "1" });
-    fireEvent.keyDown(year, { key: "Enter" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(trigger, { key: "3" });
+    fireEvent.keyDown(trigger, { key: "1" });
+    fireEvent.keyDown(trigger, { key: "Enter" });
 
     await waitFor(() => expect(trigger.textContent).toBe("2031. 07. 12."));
     expect(hasCommitClass(trigger)).toBe(true);
@@ -1164,8 +1320,8 @@ describe("DateWheelPicker 완료 피드백(커밋 애니메이션)", () => {
     const trigger = screen.getByRole("button", { name: "거래 날짜" });
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
-    const year = await screen.findByRole("group", { name: /^연도/ });
-    fireEvent.keyDown(year, { key: "ArrowUp" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(trigger, { key: "ArrowUp" });
 
     expect(hasCommitClass(trigger)).toBe(false);
   });
@@ -1180,8 +1336,8 @@ describe("DateWheelPicker 완료 피드백(커밋 애니메이션)", () => {
     const trigger = screen.getByRole("button", { name: "거래 날짜" });
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
-    const year = await screen.findByRole("group", { name: /^연도/ });
-    fireEvent.keyDown(year, { key: "ArrowUp" });   // commitShift — value가 곧바로 2025-07-12로 바뀐다
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(trigger, { key: "ArrowUp" });   // commitShift — value가 곧바로 2025-07-12로 바뀐다
     fireEvent.click(screen.getByRole("button", { name: "완료" }));
 
     expect(hasCommitClass(trigger)).toBe(true);
@@ -1235,7 +1391,7 @@ describe("DateWheelPicker 비우기 뒤 완료가 지운 값을 되살리지 않
 
     fireEvent.click(trigger);
     fireEvent.click(screen.getByRole("button", { name: "오늘" }));
-    fireEvent.keyDown(screen.getByRole("group", { name: /^연도/ }), { key: "Delete" });
+    fireEvent.keyDown(trigger, { key: "Delete" });
     fireEvent.click(screen.getByRole("button", { name: "완료" }));
 
     expect(trigger.textContent).toBe("날짜 선택");
@@ -1302,7 +1458,7 @@ describe("DateWheelPicker 세션 수명", () => {
     trigger.focus();                                   // 키보드 사용자의 실제 출발 상태
     fireEvent.keyDown(trigger, { key: "Delete" });      // 닫힌 채 지운다 — clearedRef = true
     fireEvent.keyDown(trigger, { key: "ArrowDown" });   // 연다 — 여기서 리셋되면 안 된다
-    fireEvent.keyDown(screen.getByRole("group", { name: /^연도/ }), { key: "Enter" });
+    fireEvent.keyDown(trigger, { key: "Enter" });
 
     expect(screen.getByTestId("value").textContent).toBe("(빈값)");
   });
@@ -1318,7 +1474,7 @@ describe("DateWheelPicker 세션 수명", () => {
 
     fireEvent.keyDown(trigger, { key: "ArrowDown" });   // 먼저 연다
     fireEvent.click(screen.getByRole("button", { name: "비우기" }));
-    fireEvent.keyDown(screen.getByRole("group", { name: /^연도/ }), { key: "Enter" });
+    fireEvent.keyDown(trigger, { key: "Enter" });
 
     expect(screen.getByTestId("value").textContent).toBe("(빈값)");
   });
@@ -1398,10 +1554,12 @@ describe("DateWheelPicker 세션 수명", () => {
   // 아래 두 테스트는 같은 시퀀스의 두 단계를 각각 본다. 한 블록에 넣으면 첫 단언이
   // 터질 때 두 번째가 실행조차 되지 않아, 정작 증명하려는 "두 번째 완료"를 못 본다.
   //
-  // **await·waitFor를 넣지 마라.** commitAndClose는 requestAnimationFrame으로 트리거에
-  // 포커스를 되돌리고, 그 focus가 onFocus를 불러 기준값을 다시 찍는다 — 두 완료 사이에
-  // rAF가 흐르면 닫힘 스탬프를 지운 뮤테이션이 그 rAF에 구조돼 초록으로 남는다.
-  // 동기 블록 안에서는 rAF가 돌지 않는다.
+  // **초판에는 여기 "await·waitFor를 넣지 마라"는 경고가 있었다.** 근거는 commitAndClose의
+  // `requestAnimationFrame` 리포커스가 두 완료 사이에 흐르면 그 focus가 onFocus를 불러
+  // 닫힘 스탬프를 지운 뮤테이션을 구조한다는 것이었다. **SEG Task 4에서 그 rAF가
+  // 사라졌으므로 그 경고도 사라진다** — 포커스는 이제 트리거를 떠난 적이 없어 되돌릴 것이
+  // 없고, 그래서 두 완료 사이에 focusin이 날 길 자체가 없다. 이 테스트의 킬력은 이제
+  // 오롯이 닫힘 스탬프에만 걸려 있다.
   it("한 번 포커스한 동안 첫 완료에는 확정 신호가 뜬다", () => {
     render(<ControlledDateWheelValue initialValue="2026-07-12" />);
     const trigger = screen.getByRole("button", { name: "거래 날짜" });
@@ -1409,7 +1567,7 @@ describe("DateWheelPicker 세션 수명", () => {
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     const before = trigger.querySelector("span");
-    fireEvent.keyDown(screen.getByRole("group", { name: /^연도/ }), { key: "ArrowUp" });   // 2025로
+    fireEvent.keyDown(trigger, { key: "ArrowUp" });   // 2025로
     fireEvent.click(screen.getByRole("button", { name: "완료" }));
 
     expect(trigger.querySelector("span")).not.toBe(before);
@@ -1421,24 +1579,110 @@ describe("DateWheelPicker 세션 수명", () => {
 
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
-    fireEvent.keyDown(screen.getByRole("group", { name: /^연도/ }), { key: "ArrowUp" });   // 2025로
+    fireEvent.keyDown(trigger, { key: "ArrowUp" });   // 2025로
     fireEvent.click(screen.getByRole("button", { name: "완료" }));   // 1회차 — 값이 바뀌었으므로 신호가 뜬다
     const afterFirst = trigger.querySelector("span");
 
-    // **전제 가드.** 이 테스트의 킬력은 "두 완료 사이에 rAF가 흐르지 않는다"에 통째로
-    // 걸려 있다(위 주석). 나중에 누가 await를 하나 끼우면 이 테스트는 조용히 초록으로
-    // 남으면서 아무것도 증명하지 않게 되므로, 그 전제가 깨지는 순간 시끄럽게 실패하도록
-    // 여기서 못박는다 — 완료 직후 rAF 전에는 포커스가 아직 트리거로 안 돌아와 있다.
+    // **전제 가드 — 값이 뒤집혔다.** 초판은 "완료 직후 rAF 전에는 포커스가 아직 트리거로
+    // 안 돌아와 있다"를 못박고 있었다. 이제 포커스는 **처음부터 끝까지 트리거에 있다**
+    // (설계 스펙 §6.2). 지키는 것은 그대로다: 이 테스트의 킬력은 "두 완료 사이에 기준값을
+    // 다시 찍는 focusin이 없다"에 걸려 있고, 포커스가 트리거를 떠났다 돌아오면 그 전제가
+    // 깨진다. 그때 조용히 초록으로 남지 않고 여기서 시끄럽게 터지게 한다.
     //
-    // 단언이 둘이지만 단락 문제가 아니다. 이건 독립된 계약이 아니라 **아래 단언의
-    // 전제**이고, 이게 터지면 아래 단언은 어차피 아무 뜻이 없다. 순서도 시퀀스 중간이라
-    // 아래 단언은 전제가 성립하는 모든 세계에서 그대로 실행된다.
-    expect(document.activeElement).not.toBe(trigger);
+    // 단언이 둘이지만 단락 문제가 아니다 — 독립된 계약이 아니라 **아래 단언의 전제**이고,
+    // 이게 터지면 아래 단언은 어차피 아무 뜻이 없다.
+    expect(document.activeElement).toBe(trigger);
 
     fireEvent.keyDown(trigger, { key: "ArrowDown" });                // 2회차 — 다시 연다
     fireEvent.click(screen.getByRole("button", { name: "완료" }));   // 아무것도 안 건드리고 완료
 
     expect(trigger.querySelector("span")).toBe(afterFirst);
+  });
+});
+
+// ⚠️ **SEG Task 4가 깨운 잠재 결함을 고정하는 블록이다.**
+//
+// `commitAndClose`의 `onChange`는 `setOpen(false)`와 같은 배치에 들어간다. 부모가 그 값을
+// **한 렌더 늦게** 반영하면, 닫힘 이펙트가 도는 렌더의 `value`는 아직 확정 **전** 값이라
+// 세션 기준값이 옛 값으로 찍힌다. 그러면 **다음 완료가 "아무것도 안 바꿨는데" 확정 신호를
+// 낸다** — 증상은 "한 번 반짝임" 하나다.
+//
+// **Task 4 전에는 도달할 수 없었다.** `commitAndClose`가 `requestAnimationFrame`으로
+// 트리거에 포커스를 되돌렸고, 포커스가 팝오버 안에 있다가 돌아오는 그 focus가 두 번째
+// focusin을 일으켜 **커밋된 값으로 기준값을 다시 찍었기** 때문이다. Task 1 리뷰어가 이걸
+// 회귀로 적었다가 도달성을 재고 철회했다. Task 4가 그 안전망을 없앤다 — 포커스가 트리거에
+// 머무르면 그 rAF `focus()`는 no-op이 되고 두 번째 focusin이 안 난다(그래서 rAF 자체를
+// 지웠다).
+//
+// **이 파일의 다른 픽스처는 전부 `useState`로 즉시 반영해서 이 경우를 지나가지 않는다.**
+// 그래서 지연 반영 부모를 따로 만든다.
+describe("DateWheelPicker 지연 반영 부모 — 닫힘 스탬프는 확정한 값으로 찍는다", () => {
+  /** onChange를 **한 렌더 늦게** 반영하는 부모. 리덕스·폼 라이브러리처럼 상태가 컴포넌트
+   *  바깥에 있어 dispatch가 곧바로 prop이 되지 않는 소비자를 흉내낸다. */
+  function DeferredDateWheel({ initialValue }: { initialValue: string }) {
+    const [value, setValue] = useState(initialValue);
+    const [pending, setPending] = useState<string | null>(null);
+    useEffect(() => {
+      if (pending === null) return;
+      setValue(pending);
+      setPending(null);
+    }, [pending]);
+    return <DateWheelPicker ariaLabel="거래 날짜" value={value} onChange={setPending} />;
+  }
+
+  // 전제 — 부모가 정말로 한 렌더 늦게 반영하는가. 이게 아니면 아래 테스트는 즉시 반영
+  // 픽스처와 다를 게 없어 아무것도 증명하지 못한다.
+  it("이 부모는 onChange를 한 렌더 늦게 반영한다", async () => {
+    render(<DeferredDateWheel initialValue="2026-07-12" />);
+    const trigger = fieldOf("거래 날짜");
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(trigger, { key: digit });
+    await waitFor(() => expect(trigger.textContent).toBe("2031. 07. 12."));
+  });
+
+  // 본 테스트. 타이핑을 **Enter가 확정**해야 한다 — 그래야 `commitAndClose`의 onChange와
+  // `setOpen(false)`가 같은 배치에 들어가 닫힘 스탬프가 확정 전 값을 보게 된다. 연도 두
+  // 자리("26")는 버퍼로 남았다가 Enter의 flushTyping에서 확정된다.
+  //
+  // 신호는 classList로 보지 않는다 — 이전 확정의 클래스가 남아 거짓 통과한다.
+  // key={commitPulse}가 바뀌면 span이 리마운트되므로 **노드 신원**으로 본다.
+  it("타이핑을 Enter로 확정해 닫은 뒤, 아무것도 안 바꾸고 다시 완료하면 신호가 뜨지 않는다", async () => {
+    render(<DeferredDateWheel initialValue="2020-07-12" />);
+    const trigger = fieldOf("거래 날짜");
+
+    trigger.focus();                                    // 기준값 = 2020-07-12
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(trigger, { key: "2" });
+    fireEvent.keyDown(trigger, { key: "6" });
+    fireEvent.keyDown(trigger, { key: "Enter" });       // 확정 — 여기서 닫힘 스탬프가 찍힌다
+    await waitFor(() => expect(trigger.textContent).toBe("2026. 07. 12."));
+    const afterFirst = trigger.querySelector("span");
+
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });   // 2회차 — 다시 연다
+    fireEvent.keyDown(trigger, { key: "Enter" });       // 아무것도 안 건드리고 완료
+
+    expect(trigger.querySelector("span")).toBe(afterFirst);
+  });
+
+  // 대조군 — 같은 부모에서 값을 **실제로** 바꾸면 신호는 그대로 떠야 한다. 이게 없으면
+  // "닫힘 스탬프를 확정 값으로 찍는다"와 "신호를 아예 죽였다"를 구분하지 못한다.
+  it("같은 부모에서 값을 실제로 바꾸고 완료하면 신호가 뜬다", async () => {
+    render(<DeferredDateWheel initialValue="2020-07-12" />);
+    const trigger = fieldOf("거래 날짜");
+
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    const before = trigger.querySelector("span");
+    fireEvent.keyDown(trigger, { key: "2" });
+    fireEvent.keyDown(trigger, { key: "6" });
+    fireEvent.keyDown(trigger, { key: "Enter" });
+
+    await waitFor(() => expect(trigger.textContent).toBe("2026. 07. 12."));
+    expect(trigger.querySelector("span")).not.toBe(before);
   });
 });
 
@@ -1463,15 +1707,16 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     return trigger.querySelector("span")!;
   }
 
-  /** 버퍼를 들고 있는 상태를 만든다. 지금은 열에 쳐야 버퍼가 생긴다(키 계약은 Task 4 몫). */
+  /** 버퍼를 들고 있는 상태를 만든다. 팝오버를 여는 이유는 버퍼 때문이 아니라 `↑`/`↓`가
+   *  상태로 갈리는 것과 무관하게 이 블록의 초판 시퀀스를 그대로 두기 위해서다 — 닫힌 채
+   *  타이핑하는 계약은 SEG Task 5가 연다. */
   async function openAndBuffer(initialValue: string, keys: string[]) {
     render(<ControlledDateWheel initialValue={initialValue} />);
     const trigger = fieldOf("거래 날짜");
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
-    const year = screen.getByRole("group", { name: /^연도/ });
-    for (const key of keys) fireEvent.keyDown(year, { key });
+    for (const key of keys) fireEvent.keyDown(trigger, { key });
     return trigger;
   }
 
@@ -1534,9 +1779,8 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
-    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
-    const month = await screen.findByRole("group", { name: "월 07" });
-    fireEvent.keyDown(month, { key: "1" });
+    fireEvent.keyDown(trigger, { key: "ArrowRight" });
+    fireEvent.keyDown(trigger, { key: "1" });
     expect(segmentText(trigger, "month")).toBe(`1${FILL}`);
   });
 
@@ -1587,9 +1831,8 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     render(<ControlledDateWheel initialValue="" />);
     const trigger = fieldOf("거래 날짜");
     fireEvent.click(trigger);
-    const year = screen.getByRole("group", { name: /^연도/ });
-    fireEvent.keyDown(year, { key: "2" });
-    fireEvent.keyDown(year, { key: "0" });
+    fireEvent.keyDown(trigger, { key: "2" });
+    fireEvent.keyDown(trigger, { key: "0" });
     expect(trigger.textContent).toBe(`20${FILL}${FILL}. 07. 12.`);
   });
 
@@ -1607,7 +1850,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
-    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
+    fireEvent.keyDown(trigger, { key: "ArrowRight" });
     expect(activeSegment()).toBe("month");
   });
 
@@ -1615,20 +1858,19 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
   // 트리거는 resolvedActiveUnit(클램프한 값)으로 그려야 하고, 원본 activeUnit으로 그리면
   // 어느 세그먼트도 활성이 아니게 된다.
   //
-  // **반드시 팝오버를 닫은 뒤에 fields를 줄여야 한다.** 열려 있으면 포커스 이펙트가 클램프된
-  // 열에 진짜 focus를 걸고, 그 열의 onFocus가 activeUnit 원본까지 곧바로 따라잡아 두 세계가
-  // 겹친다(소스 :706-711이 열 렌더에 대해 적어 둔 바로 그 함정이다 — 닫아 두면 그 되먹임이
-  // 없어 트리거 쪽에서는 증명된다). 그래서 닫힘을 waitFor로 못박는다 — 이건 독립된 계약이
-  // 아니라 아래 단언의 **전제**이고, 이게 성립하지 않으면 아래 단언은 아무것도 증명하지 못한다.
+  // **팝오버를 닫은 뒤에 fields를 줄인다.** 그래야 이 테스트가 보는 소스 줄이 트리거
+  // 세그먼트의 클램프 하나로 좁혀진다 — 열려 있으면 열 렌더의 클램프(위 "리뷰 Finding 1"
+  // 블록이 보는 줄)와 겹친다. 닫힘을 waitFor로 못박는 것은 독립된 계약이 아니라 아래
+  // 단언의 **전제**이고, 이게 성립하지 않으면 아래 단언은 아무것도 증명하지 못한다.
   it("fields가 줄어 활성 열이 사라지면 트리거는 클램프된 첫 세그먼트를 활성으로 그린다", async () => {
     render(<DateWheelFieldsShrink />);
     const trigger = fieldOf("거래 날짜");
     trigger.focus();
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
-    fireEvent.keyDown(screen.getByRole("group", { name: "연도 2026" }), { key: "ArrowRight" });
-    fireEvent.keyDown(await screen.findByRole("group", { name: "월 07" }), { key: "ArrowRight" });
-    fireEvent.keyDown(await screen.findByRole("group", { name: /^일/ }), { key: "Escape" });
+    fireEvent.keyDown(trigger, { key: "ArrowRight" });
+    fireEvent.keyDown(trigger, { key: "ArrowRight" });
+    fireEvent.keyDown(trigger, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
 
     fireEvent.click(screen.getByRole("button", { name: "일 열 제거" }));
@@ -1641,7 +1883,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
   // 따로 반짝인다는 뜻이고, 안에 세 세그먼트가 다 들어 있어야 "값 전체"다.
   it("확정 신호는 세그먼트가 아니라 값 전체를 감싸는 컨테이너 하나에 붙는다", async () => {
     const trigger = await openAndBuffer("2026-07-12", ["3", "1"]);
-    fireEvent.keyDown(screen.getByRole("group", { name: /^연도/ }), { key: "Enter" });
+    fireEvent.keyDown(trigger, { key: "Enter" });
 
     const pulsing = [...trigger.querySelectorAll(".dropdown-value-commit")];
     expect(pulsing.map((element) => [element.className, [...element.querySelectorAll(".date-wheel-segment")].map((segment) => segment.getAttribute("data-unit"))]))

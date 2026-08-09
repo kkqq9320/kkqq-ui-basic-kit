@@ -201,7 +201,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // Escape는 이 파일 전체에서 "값을 바꾸지 않고 닫기"를 뜻합니다 — flushTyping을
   // 부르지 않고 버퍼만 버립니다. 다른 모든 떠나는 경로(Tab·화살표·Enter)와의
   // 유일한 예외입니다.
-  useEscapeToClose(open, () => { setTyping(null); setOpen(false); triggerRef.current?.focus({ preventScroll: true }); });
+  useEscapeToClose(open, () => { setTyping(null); setOpen(false); });
   const [position, setPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const [columnMotion, setColumnMotion] = useState<Record<DateWheelUnit, DateWheelMotion>>({
     year: { sequence: 0, direction: "next" },
@@ -211,19 +211,18 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   const [activeUnit, setActiveUnit] = useState<DateWheelUnit>(fields[0] ?? "year");
   // activeUnit은 소비자가 런타임에 fields를 바꿀 수 있어(예: 일간/월간 토글) fields
   // 밖의 열을 계속 가리킬 수 있습니다. 그 원본 상태를 그대로 믿지 않고, 매 렌더
-  // fields 안으로 클램프한 값을 씁니다 — 그렇지 않으면 columnRefs.current.get(activeUnit)이
-  // undefined가 되어 아래 포커스 이펙트가 조용히 멈추고, 팝오버가 마우스로만 조작
-  // 가능해집니다(방향키가 죽습니다).
+  // fields 안으로 클램프한 값을 씁니다 — 그렇지 않으면 키가 사라진 열에 가서 아무 일도
+  // 일어나지 않고, 트리거와 팝오버 어느 쪽에도 활성 표시가 남지 않습니다.
   const resolvedActiveUnit = fields.includes(activeUnit) ? activeUnit : (fields[0] ?? "year");
   // 지금 치고 있는 열과 그 자릿수. 자릿수가 차면 typeDigit이 곧바로 확정하고 비웁니다.
   // 덜 찬 채로 열을 떠날 때는 경로에 따라 갈립니다:
   //   · 확정(flushTyping/commitAndClose가 해석해 값에 반영하고 비웁니다):
-  //     Tab·Shift+Tab·←·→·↑·↓·Enter·완료 버튼.
+  //     Tab·Shift+Tab·←·→·↑·↓·Enter·Space·완료 버튼.
   //   · 폐기(해석하지 않고 그냥 비웁니다): Escape·휠·포인터(스와이프·행 클릭·컬럼
   //     클릭)·바깥 클릭·뒤로가기 등 그 외의 이유로 팝오버가 닫힐 때.
   // ("팝오버 닫힘은 flushTyping이 처리한다"는 예전 버전의 이 주석은 틀렸었습니다 —
   // 완료 버튼을 뺀 나머지 닫힘 경로(바깥 클릭·뒤로가기)는 커밋하지 않고 그냥
-  // 버립니다. 그 안전망은 아래 포커스 이펙트의 `!open` 분기에 있습니다.)
+  // 버립니다. 그 안전망은 아래 "닫히면 버퍼를 버린다" 이펙트입니다.)
   const [typing, setTyping] = useState<{ unit: DateWheelUnit; digits: string } | null>(null);
   // 완료 피드백(css/surfaces.css .dropdown-value-commit) 커밋 카운터 — commitAndClose에서만,
   // 그것도 확정된 값이 **이 세션이 시작될 때의 값**(sessionStartValueRef, 아래)과 실제로
@@ -256,33 +255,25 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 열림이 사실상 같은 순간이라 "열린 순간"으로 둡니다 — 두 컨트롤이 여기서만 갈리는
   // 이유는 닫힌 채로도 값이 바뀔 수 있는 쪽이 날짜 피커뿐이기 때문입니다(§6.4).
   const sessionStartValueRef = useRef(value);
+  // 이 닫힘에서 commitAndClose가 **실제로 확정한** 값. 아래 닫힘 이펙트가 기준값을 찍을 때
+  // `value` prop보다 이것을 먼저 씁니다.
+  //
+  // 왜 필요한가: `commitAndClose`의 `onChange`는 `setOpen(false)`와 같은 배치에 들어갑니다.
+  // 부모가 그 값을 **한 렌더 늦게** 반영하면(리덕스·폼 라이브러리처럼 상태가 컴포넌트
+  // 바깥에 있는 소비자) 이펙트가 도는 렌더의 `value`는 아직 확정 **전** 값이라, 기준값이
+  // 옛 값으로 찍히고 다음 완료가 "안 바꿨는데" 확정 신호를 냅니다. tests의 "지연 반영
+  // 부모" 블록이 그 시퀀스를 재현합니다.
+  //
+  // 확정하지 않는 닫힘 경로(바깥 클릭·뒤로가기·Escape)는 이것을 채우지 않으므로 그대로
+  // `value`로 찍힙니다 — 그 경로들은 값을 바꾸지 않았으니 그게 맞습니다.
+  const committedOnCloseRef = useRef<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const swipeRef = useRef<{ unit: DateWheelUnit; y: number; pointerId: number; value: string } | null>(null);
   const suppressColumnClickRef = useRef(false);
-  const columnRefs = useRef(new Map<DateWheelUnit, HTMLElement>());
-  // 이미 이 열에 포커스를 적용했는가 — 아래 포커스 이펙트를 멱등하게 만든다.
-  const focusedColumnRef = useRef<DateWheelUnit | null>(null);
 
-  /**
-   * 포커스가 팝오버 안에 있을 때만 회수한 뒤 닫습니다. 포커스가 열 안에 있는 채로
-   * 팝오버가 언마운트되면 포커스가 body로 떨어지고 다음 Tab이 문서 처음부터
-   * 시작합니다(다이얼로그 안이라면 포커스 스코프 밖으로 나갑니다).
-   *
-   * "포커스가 실제로 안에 있을 때만"인 이유: 우리가 옮긴 포커스만 되돌리고,
-   * 사용자가 그 사이 다른 곳을 눌러 옮긴 포커스는 뺏지 않습니다.
-   */
-  function closeAndReclaimFocus() {
-    const popover = popoverRef.current;
-    if (popover && document.activeElement && popover.contains(document.activeElement)) {
-      triggerRef.current?.focus({ preventScroll: true });
-    }
-    setOpen(false);
-  }
-
-  // 뒤로가기로 닫습니다. 포커스를 팝오버 안으로 옮기므로 회수도 함께 합니다.
-  useBackToClose(open, closeAndReclaimFocus);
+  useBackToClose(open, () => setOpen(false));
 
   // 세션 기준값을 찍는 두 지점 중 하나 — **팝오버가 닫힐 때**입니다(다른 하나는
   // 트리거의 onFocus). 설계 스펙 §6.4의 계약: 기준값은 이 컨트롤이 마지막으로
@@ -299,11 +290,9 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 마운트에서도 한 번 돕니다(open이 false이므로). 그래도 되는 정도가 아니라 그게
   // 맞습니다 — 마운트 직후는 아직 아무 조작도 없었으므로 그 순간의 value가 곧 기준값입니다.
   //
-  // **focusout에는 아무것도 하지 않습니다.** 버리고 싶어지지만, 지금은 팝오버를 여는
-  // 것 자체가 포커스를 열로 옮기므로(아래 포커스 이펙트) 트리거에서 focusout이 납니다 —
-  // 세션 도중에 기준값이 사라집니다. 더 근본적으로 focusout은 "컨트롤을 떠났다"와
-  // "컨트롤 안에서 옮겼다"를 구분하지 못하는 이벤트입니다. 찍기만 하고 버리지 않으면
-  // 두 상태 모두에서 옳습니다(§6.4).
+  // **focusout에는 아무것도 하지 않습니다.** focusout은 "컨트롤을 떠났다"와 "컨트롤 안에서
+  // 옮겼다"를 구분하지 못하는 이벤트입니다. 찍기만 하고 버리지 않으면 두 상태 모두에서
+  // 옳습니다(§6.4).
   //
   // 의존성 배열에 value를 일부러 넣지 않습니다. 넣으면 **닫혀 있는 동안** value가 바뀔
   // 때마다 이 이펙트가 다시 돌고, Delete가 그 자리에서 clearedRef를 도로 false로 지워
@@ -320,8 +309,19 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   useEffect(() => {
     if (open) return;
     clearedRef.current = false;
-    sessionStartValueRef.current = value;
+    sessionStartValueRef.current = committedOnCloseRef.current ?? value;
+    committedOnCloseRef.current = null;
   }, [open]);
+
+  // 팝오버가 닫히면 버퍼를 버립니다. 닫힘은 "세그먼트를 떠난다"의 상위 집합이라, 확정하지
+  // 않는 닫힘 경로(바깥 클릭·뒤로가기)가 남긴 버퍼를 여기서 비웁니다 — 다음에 열었을 때
+  // 지난 버퍼가 되살아나지 않게. `typing`이 이미 null이면 React가 같은 값의 setState를
+  // 걸러내므로(bail-out) 무한 렌더로 이어지지 않습니다.
+  //
+  // **useLayoutEffect인 이유:** 트리거가 버퍼를 그립니다(§4.5 — 값이 비어도 버퍼가 있으면
+  // placeholder 대신 baseValue 세그먼트를 그립니다). 페인트 뒤에 비우면 닫힌 프레임에
+  // 지난 버퍼가 한 번 스쳐 보입니다.
+  useLayoutEffect(() => { if (!open) setTyping(null); }, [open]);
 
   // 남은 최소 단위로만 비교합니다(연·월 픽커면 "월" 단위). 함수 선언이라 baseValue보다
   // 아래에 있어도 호출 시점엔 keyLen이 이미 초기화돼 있습니다.
@@ -402,35 +402,6 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       window.visualViewport?.removeEventListener("resize", placePicker);
     };
   }, [open, mobileBottomInset]);
-
-  /**
-   * 팝오버가 열리면 활성 열에 진짜 포커스를 줍니다.
-   *
-   * **`position`이 의존성에 있어야 하는 이유:** 팝오버는 좌표가 정해진 뒤에야
-   * 마운트됩니다(`open && position &&`). `open`이 켜지는 커밋에는 팝오버가 DOM에
-   * 없으므로 그때만 시도하면 포커스가 영영 가지 않습니다.
-   *
-   * **그런데 `position`만 넣으면 안 됩니다.** 좌표는 스크롤·리사이즈마다 새 객체가
-   * 되고, 그때마다 다시 돌면 사용자가 옮겨 둔 포커스를 되끌어옵니다. 그래서 "이미
-   * 이 열에 적용했는가"를 ref로 들고 멱등하게 만듭니다.
-   *
-   * `preventScroll`을 쓰는 이유는 이 파일의 다른 focus 복귀와 같습니다 — 네이티브
-   * 포커스 스크롤은 조상 스크롤 컨테이너까지 움직입니다.
-   */
-  useLayoutEffect(() => {
-    // 완료 버튼·바깥 클릭처럼 열을 거치지 않고 팝오버 자체가 닫히는 경로도 있습니다.
-    // 닫힘은 "열을 떠난다"의 상위 집합이므로 여기서도 버퍼를 비워, 다음에 열었을 때
-    // 지난 버퍼가 남아 있지 않게 합니다. `typing`이 이미 null이면 React가 같은 값의
-    // setState를 걸러내 리렌더를 건너뛰므로(bail-out) 무한 렌더로 이어지지 않습니다 —
-    // 이 이펙트의 의존성 배열에도 `typing`은 들어 있지 않아, typing을 바꿔도 이
-    // 이펙트가 다시 실행되지는 않습니다.
-    if (!open) { focusedColumnRef.current = null; setTyping(null); return; }
-    if (focusedColumnRef.current === resolvedActiveUnit) return;
-    const column = columnRefs.current.get(resolvedActiveUnit);
-    if (!column) return;   // 좌표가 아직 없어 마운트 전 — 정해지면 다시 온다
-    focusedColumnRef.current = resolvedActiveUnit;
-    column.focus({ preventScroll: true });
-  }, [open, resolvedActiveUnit, position]);
 
   function shiftedFrom(sourceValue: string, unit: DateWheelUnit, amount: number) {
     const next = normalizeToFields(shiftDateValue(sourceValue, unit, amount), fields);
@@ -546,8 +517,9 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     // 눌러 이미 오늘인 값을 다시 완료, 또는 아무것도 안 건드리고 완료) 아무 신호도
     // 없는 게 의도입니다 — 오너에게 확인받은 동작이고, 보완하지 않습니다.
     if (committed !== sessionStartValueRef.current) setCommitPulse((n) => n + 1);
+    // 닫힘 이펙트가 기준값을 이 값으로 찍게 합니다 — 선언부에 이유가 있습니다.
+    committedOnCloseRef.current = committed;
     setOpen(false);
-    requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
   }
 
   /* 여기서 event.preventDefault()를 부르지 마세요.
@@ -567,7 +539,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     applyShift(unit, event.deltaY > 0 ? 1 : -1);
   }
 
-  /** step 방향의 열로 포커스를 옮깁니다. 끝이면 아무것도 하지 않고 false를 돌려줍니다. */
+  /** step 방향의 세그먼트를 활성으로 만듭니다. 끝이면 아무것도 하지 않고 false를 돌려줍니다. */
   function moveColumn(unit: DateWheelUnit, step: 1 | -1) {
     const index = fields.indexOf(unit);
     const nextIndex = index + step;
@@ -603,11 +575,13 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   }
 
   /**
-   * 이 컨트롤이 받는 **유일한** 키 핸들러입니다. 트리거에도 열에도 같은 함수를 겁니다.
+   * 이 컨트롤이 받는 **유일한** 키 핸들러이고, 그것을 거는 자리도 **트리거 하나**입니다
+   * (설계 스펙 §6.2의 불변식: 이 컨트롤이 키보드를 받는 동안 `document.activeElement`는
+   * 언제나 트리거입니다 — 팝오버가 열려 있어도 그렇습니다).
    *
-   * 둘이었던 시절(`handleTriggerKeyDown`은 여는 것만, `handleColumnKey`는 나머지 전부)에는
-   * **같은 계약을 두 곳이 각자 구현**하고 있었습니다. 이 킷에서 그렇게 복제된 규칙이
-   * 갈라지지 않은 적이 없어 하나로 합쳤습니다(설계 스펙 §6.2).
+   * 그래서 "키가 도착한 열"이라는 개념이 없고, 움직이는 것은 언제나 `resolvedActiveUnit`
+   * 하나입니다. 열이 자기 자신을 넘기던 `unit` 인자가 여기 있었는데, 그 인자는 열도 키를
+   * 받던 시절에만 뜻이 있었습니다.
    *
    * 순서에 계약이 **넷** 박혀 있습니다. 바꾸지 마세요 — 넷 다 뮤테이션으로 빨개지는
    * 것을 확인했습니다(괄호 안이 그때 빨개진 개수):
@@ -623,52 +597,39 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    *      올리면 닫힌 상태의 Delete·Ctrl+;가 영영 안 닿습니다. (`!open` 블록을
    *      `handleShortcut` 위로 올림: 6 red)
    *
-   * **열은 인자로 옵니다 — `resolvedActiveUnit`을 읽지 않습니다.** 열은 자기 자신을,
-   * 트리거는 `resolvedActiveUnit`을 넘깁니다. 계획서는 인자를 없애고 이 함수가
-   * `resolvedActiveUnit`을 직접 읽게 하라고 했지만, 그러면 **이벤트가 도착한 열과
-   * 활성 열이 갈리는 순간** 엉뚱한 열이 움직입니다. 실제로 갈립니다: 연도 네 자리를
-   * 채우면 `typeDigit`의 advance가 `activeUnit`을 월로 옮기는데, 그 뒤에도 키는 여전히
-   * 연도 열로 옵니다. `resolvedActiveUnit`으로 바꿔 370을 돌려 봤더니 tests의
-   * "연도 9999에서 ↓를 누르면 10000으로 새지 않고 값이 그대로다"가 연도 대신 월을
-   * 밀어 빨개졌습니다(`9999. 08. 12.` ≠ `9999. 07. 12.`). **그 테스트가 이 인자를
-   * 지키는 감시자입니다** — 인자를 지우려는 사람은 그 테스트부터 보세요.
+   * **`typeDigit`의 자동 이동이 활성 세그먼트를 옮기면 그 다음 키는 옮겨간 세그먼트에
+   * 갑니다.** 연도 네 자리를 다 치면 활성이 월로 가고, 그 뒤의 `↓`는 월을 움직입니다 —
+   * 설계 스펙 §4.1이 정한 계약입니다. 열도 키를 받던 시절에는 키가 여전히 연도 열로 와서
+   * 둘이 갈렸고, 그 부산물을 tests가 붙잡고 있었습니다. 지금은 tests의 "네 자리를 친 뒤
+   * ↓는 월을 움직인다"가 이 계약 쪽을 고정하고, 연도 10000 오버플로 가드는 `←`로 연도를
+   * 되돌린 뒤 누르는 별도 테스트가 지킵니다.
    */
-  function handleFieldKey(event: ReactKeyboardEvent, unit: DateWheelUnit) {
-    // 이 가드는 **실사용자 키를 막습니다** — 테스트 편의용이 아닙니다. 지우지 마세요.
+  function handleFieldKey(event: ReactKeyboardEvent) {
+    const unit = resolvedActiveUnit;
+    // 이 가드를 지우지 마세요. 팝오버는 `disabled`를 안 봅니다 — 렌더 조건이
+    // `open && position`뿐이라 열린 채 `disabled`가 켜져도 **아무도 안 닫습니다**.
+    // 소비자가 제출 중에 폼을 잠그는 흔한 패턴에서 곧바로 "비활성인데 팝오버가 떠 있는"
+    // 상태가 만들어지고, tests의 "비활성 — 팝오버가 열려 있는 동안 켜지는 경우" 블록이
+    // 그 상태를 고정합니다.
     //
-    // 트리거만 이 핸들러를 쓰던 시절에는 "비활성 <button>은 포커스를 못 받으니 실제로는
-    // 안 오고, 테스트가 이벤트를 직접 디스패치할 때만 온다"가 맞았습니다. 지금은 **열도
-    // 같은 핸들러를 씁니다.** 열은 `disabled` 속성이 없는 `<section tabIndex={0}>`이라
-    // 진짜로 포커스를 받고 진짜로 키를 받습니다. 그리고 팝오버는 `disabled`를 안 봅니다
-    // (렌더 조건이 `open && position`뿐이라 열린 채 `disabled`가 켜져도 **아무도 안
-    // 닫습니다**) — 소비자가 제출 중에 폼을 잠그면 곧바로 그 상태가 됩니다.
-    // 그 상태를 tests의 "비활성 — 팝오버가 열려 있는 동안 켜지는 경우" 블록이 고정합니다.
+    // **그 상태에서 실브라우저가 트리거에 키를 계속 배달하는지는 재지 않았습니다** —
+    // 포커스를 쥔 요소가 비활성이 될 때 브라우저가 blur하는지가 갈림길입니다. 재기 전에는
+    // "도달 불가"라고 적지 않습니다. 이 저장소에서 "히트 0"을 "도달 불가"로 옮겨 적었다가
+    // 두 번 틀렸습니다(SEG Task 3 보고서 §3).
     if (disabled) return;
     if (handleShortcut(event)) return;
     // Ctrl·Meta가 눌린 키는 건드리지 않습니다 — 브라우저·OS 단축키입니다.
     if (event.ctrlKey || event.metaKey) return;
     const key = event.key;
 
-    // 닫혀 있으면 여는 키만 봅니다. 이 갈림은 합치기 전 `handleTriggerKeyDown`의
-    // `if (open) return`을 그대로 옮긴 것입니다.
-    //
-    // **여기 오는 것은 트리거뿐입니다.** 열은 `open && position`일 때만 렌더되므로
-    // `open === false`인 동안 존재하지 않습니다. 합치기 전 `handleColumnKey`는 `open`에
-    // 아무 의존이 없었으니, 이 의존은 **합치기가 새로 만든 것**이고 그 정확성은 저 렌더
-    // 조건 하나에 걸려 있습니다. ⚠️ **팝오버에 퇴장 애니메이션(닫은 뒤 언마운트 지연)을
-    // 넣으면 그 순간 깨집니다** — 닫히는 중인 열에 도착한 `↓`가 이 여는 분기를 타서
-    // 팝오버를 도로 열고 활성 열을 첫 열로 리셋합니다. 그 불변식은 tests가 이미 아홉 곳에서
-    // 지키고 있습니다(닫힘 뒤 `queryByRole("dialog")`가 null이라는 단언들 — 언마운트를
-    // 늦추는 뮤테이션에 9 red).
+    // 닫혀 있으면 여는 키만 봅니다.
     //
     // 설계 스펙 §3은 `0`~`9`·`Backspace`·`←`·`→`·`Tab`/`Shift+Tab`·`Delete`·`Ctrl+;`를
     // **"닫힘·열림" 양쪽**으로 적습니다. `Delete`·`Ctrl+;`는 이미 위 `handleShortcut`으로
     // 이 갈림 **위에** 있고, 나머지는 아직 아래에 있어 닫힌 상태에서 안 먹습니다 —
-    // 그것들을 위로 올리는 것이 남은 일입니다. **`Tab`이 특히 빠지기 쉽습니다**: 스펙은
-    // 닫힘에서도 "버퍼를 확정하고 컨트롤을 떠남"이라고 적는데 지금은 아무 일도 안 합니다.
-    // 상태로 진짜 갈리는 것은 세 무리뿐입니다(`Enter`·`Space` / `↑`·`↓` / `Escape`) —
-    // 셋 다 "팝오버가 없으면 할 수 없는 일"이라 갈립니다. 아직 안 올린 이유는 그것이
-    // 동작 변경이고 이 합치기는 순수 리팩터이기 때문입니다.
+    // 그것들을 위로 올리는 것이 남은 일입니다(SEG Task 5). 상태로 진짜 갈리는 것은 세
+    // 무리뿐입니다(`Enter`·`Space` / `↑`·`↓` / `Escape`) — 셋 다 "팝오버가 없으면 할 수
+    // 없는 일"이라 갈립니다.
     if (!open) {
       if (key !== "ArrowDown" && key !== "ArrowUp" && key !== "Enter" && key !== " ") return;
       // <button>은 Enter를 keydown에서, Space를 keyup에서 click으로 바꿉니다. 막지 않으면
@@ -705,20 +666,26 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       return;
     }
 
-    if (key === "Enter") {
+    if (key === "Enter" || key === " ") {
       // 완료 버튼과 같은 동작 — commitAndClose가 치던 숫자를 먼저 확정한 뒤 닫는다.
+      //
+      // **preventDefault를 빼지 마라(설계 스펙 §3).** 트리거는 <button>이고, <button>은
+      // Enter를 keydown에서, Space를 keyup에서 click으로 바꾼다. 그 click은 트리거의
+      // onClick(열기/닫기 토글)을 불러, 우리가 확정하며 닫은 팝오버를 곧바로 **다시
+      // 연다.** ⚠️ 이 결함은 **jsdom에서 재현되지 않는다** — jsdom 26.1.0은 그 click을
+      // 합성하지 않는다(직접 쟀다: Enter keydown·Space keyup 모두 click 0회). 그래서
+      // tests는 증상이 아니라 `defaultPrevented`를 직접 고정한다.
       event.preventDefault();
       commitAndClose();
       return;
     }
 
     if (key === "Tab") {
-      // 떠나는 키. 기본 동작(다음 요소로)은 막지 않는다 — 포커스를 트리거로 옮겨
-      // 두면 브라우저가 트리거 기준으로 다음 tabbable을 계산한다. keydown은 기본
-      // Tab 동작보다 먼저 실행되므로 순서가 보장된다.
+      // 떠나는 키다 — 세그먼트를 옮기지 않는다(설계 스펙 §3·§5: 이 컨트롤의 tab 정거장은
+      // 트리거 하나다). **preventDefault를 부르지 않는다.** 기본 동작이 다음/이전 요소로
+      // 보내고, 포커스는 이미 트리거에 있으므로 브라우저가 트리거 기준으로 다음 tabbable을
+      // 계산한다. keydown은 기본 Tab 동작보다 먼저 실행되므로 확정·닫기가 먼저 끝난다.
       flushTyping(unit);
-      if (moveColumn(unit, event.shiftKey ? -1 : 1)) { event.preventDefault(); return; }
-      triggerRef.current?.focus({ preventScroll: true });
       setOpen(false);
       return;
     }
@@ -815,7 +782,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       // (=지금 열려는 참일 때만) 시드해야 닫는 클릭에서 activeUnit을 건드리지 않습니다.
       if (!open) setActiveUnit(fields[0] ?? "year");
       setOpen((current) => !current);
-    }} onKeyDown={(event) => handleFieldKey(event, resolvedActiveUnit)}>{/* 이 <span> 하나가 §12의 확정 신호를 재생하는 자리입니다 — key={commitPulse}가 커밋마다
+    }} onKeyDown={handleFieldKey}>{/* 이 <span> 하나가 §12의 확정 신호를 재생하는 자리입니다 — key={commitPulse}가 커밋마다
         이 노드를 리마운트시켜 .dropdown-value-commit 애니메이션을 다시 틉니다.
         **key를 세그먼트로 내리지 마세요** — 확정은 날짜 하나에 대한 사건이지 세그먼트에 대한
         사건이 아닙니다. (정확히 말하면 조각이 따로 반짝이게 만드는 것은 key가 아니라 **클래스가
@@ -845,16 +812,33 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
              그 필드가 입력을 받는 중으로 읽힙니다). */
           : <span className={`date-wheel-segment${resolvedActiveUnit === part.unit ? " active" : ""}`} data-unit={part.unit} key={part.unit}>{part.text}</span>)
         : labels.placeholder}</span><i className="date-wheel-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm2-2v4m10-4v4M3 9h18" /></svg></i></button></div>
-    {open && position && createPortal(<div ref={popoverRef} className="date-wheel-popover dropdown-menu-surface" role="dialog" aria-modal="false" aria-label={`${ariaLabel} ${labels.select}`} style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
+    {/* onMouseDown의 기본 동작을 막는 것이 §6.2의 불변식("키보드를 받는 동안
+        activeElement는 언제나 트리거")을 실제로 지키는 장치입니다 — 설계 스펙 §6.3.
+        포커스 이동과 텍스트 선택이 mousedown의 기본 동작이고, `tabIndex={-1}`인 버튼도
+        **클릭하면 포커스를 받습니다.** `click`은 그대로 발생하므로 안의 모든 버튼(±·행·
+        오늘·비우기·완료)이 계속 동작합니다. 표준 콤보박스 구현이 쓰는 방법입니다.
+
+        ⚠️ **`pointerdown`이 아니라 `mousedown`이어야 합니다.** 스와이프가
+        `pointerdown` → `setPointerCapture` → `pointermove` 사슬이고 열은
+        `touch-action: none`입니다(css/date-picker.css). `pointerdown`을 막으면 그 사슬을
+        건드립니다. `mousedown`은 포인터 이벤트보다 **뒤**에 오고(터치에서는 `touchend`
+        뒤의 호환 이벤트) 포인터 캡처는 이미 걸린 뒤입니다.
+
+        ⚠️ PRINCIPLES §5의 passive 함정과는 **다른 자리**입니다 — 그 조항은
+        `wheel`·`touchstart`·`touchmove`에 대한 것이고 `mousedown`은 passive로 등록되지
+        않으므로 여기서 preventDefault가 실제로 먹습니다. */}
+    {open && position && createPortal(<div ref={popoverRef} className="date-wheel-popover dropdown-menu-surface" role="dialog" aria-modal="false" aria-label={`${ariaLabel} ${labels.select}`} onMouseDown={(event) => event.preventDefault()} style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
       <div className="date-wheel-heading"><strong>{ariaLabel}</strong><span>{labels.hint}</span></div>
       <div className="date-wheel-columns" data-fields={fields.length}>
-        {/* 이 자리의 클램프(resolvedActiveUnit)는 아래 포커스 이펙트의 focus() →
-            각 열의 onFocus → setActiveUnit 되먹임에 가려, 이 줄만 되돌리는 뮤테이션으로는
-            증명되지 않습니다(직접 확인했습니다) — 이펙트가 클램프된 열에 진짜 focus를
-            걸면 그 focus 이벤트가 activeUnit 원본 상태까지 곧바로 따라잡습니다. 그래도
-            원칙상 렌더가 fields 밖을 가리키는 상태를 그대로 믿으면 안 되므로 남겨
-            둡니다 — 증명은 포커스 이펙트 쪽 테스트가 합니다. */}
-        {fields.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${motion.sequence ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${dateWheelLabel(baseValue, unit, labels.weekdays)}`} role="group" tabIndex={0} ref={(node) => { if (node) columnRefs.current.set(unit, node); else columnRefs.current.delete(unit); }} onFocus={() => setActiveUnit(unit)} onKeyDown={(event) => handleFieldKey(event, unit)} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); event.currentTarget.focus({ preventScroll: true }); suppressColumnClickRef.current = false; swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue }; if (typeof event.currentTarget.setPointerCapture === "function") event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {/* 열은 **포커스를 받지 않고 키도 받지 않습니다**(설계 스펙 §5·§6.2) — `tabIndex`가
+            없고 `onKeyDown`도 없습니다. 활성 표시는 `resolvedActiveUnit`이 붙이는 `.active`
+            클래스 하나로만 그려집니다. css/date-picker.css의 `.date-wheel-column:focus-visible`
+            선택자는 **남겨 둡니다** — 지우면 다음에 열을 포커스 가능하게 되돌릴 때 표시가
+            조용히 사라집니다(스펙 §5).
+
+            `onPointerDown`의 `setActiveUnit(unit)`이 **포인터 경로가 활성 세그먼트를 따라가는
+            유일한 길**입니다(열의 `onFocus`가 하던 일). 지우지 마세요. */}
+        {fields.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${motion.sequence ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${dateWheelLabel(baseValue, unit, labels.weekdays)}`} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue }; if (typeof event.currentTarget.setPointerCapture === "function") event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
