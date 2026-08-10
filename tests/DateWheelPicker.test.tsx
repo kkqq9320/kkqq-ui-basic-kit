@@ -1613,6 +1613,123 @@ describe("DateWheelPicker 모바일에서는 아래로 열고 자리를 만든�
   });
 });
 
+// 오너: **"esc로 피커를 닫으면 현재 고르고 있던 상태로 저장돼. esc는 기존값으로 닫고,
+// 적용하는 건 space bar랑 enter가 해야 해."**
+//
+// 스펙의 "`Escape`는 값을 바꾸지 않고 닫는다"는 **오랫동안 거짓이었습니다.** 이 컨트롤은
+// 화살표 한 번·휠 한 칸·행 클릭 하나마다 **곧바로 `onChange`를 부르므로**, `Escape`를 누르는
+// 시점엔 값이 이미 여러 번 바뀐 뒤입니다. `Escape`가 버리던 것은 **타이핑 버퍼뿐**이었습니다.
+//
+// 새 계약(스펙 §3): **`Escape`는 팝오버가 열린 순간의 값으로 되돌리고 닫습니다.**
+// `Enter`·`Space`·`완료`는 적용하고 닫습니다(그대로).
+describe("DateWheelPicker Escape는 열기 직전 값으로 되돌린다", () => {
+  function openWith(initialValue = "2026-07-12") {
+    const onChange = vi.fn();
+    function Controlled() {
+      const [value, setValue] = useState(initialValue);
+      return <DateWheelPicker ariaLabel="거래 날짜" value={value} onChange={(next) => { onChange(next); setValue(next); }} />;
+    }
+    render(<Controlled />);
+    const trigger = fieldOf("거래 날짜");
+    trigger.focus();
+    return { onChange, trigger };
+  }
+
+  it("열고 화살표로 옮긴 뒤 Escape면 열기 직전 값으로 돌아온다", async () => {
+    const { trigger } = openWith();
+    fireEvent.click(trigger);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await waitFor(() => expect(trigger.textContent).toBe("2027. 07. 12."));
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() => expect(trigger.textContent).toBe("2026. 07. 12."));
+  });
+
+  // 되돌림도 `onChange` 한 번입니다 — 소비자는 중간값들을 이미 받았고, 되돌림은 그
+  // 마지막을 정정하는 호출입니다.
+  it("되돌림은 onChange 한 번으로 알린다", async () => {
+    const { onChange, trigger } = openWith();
+    fireEvent.click(trigger);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await waitFor(() => expect(trigger.textContent).toBe("2027. 07. 12."));
+    onChange.mockClear();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() => expect(onChange.mock.calls.flat()).toEqual(["2026-07-12"]));
+  });
+
+  // ⚠️ **안 바뀌었으면 부르지 않습니다.** 안 바뀐 값을 다시 보내면 소비자의 dirty 판정이
+  // 더러워집니다. 이것이 없으면 "무조건 onChange(열기 직전 값)"으로 고쳐도 위가 통과합니다.
+  it("아무것도 안 바꿨으면 Escape는 onChange를 부르지 않는다", async () => {
+    const { onChange, trigger } = openWith();
+    fireEvent.click(trigger);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    onChange.mockClear();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // ⚠️⚠️ **되돌아가는 곳은 "열기 직전"이지 "포커스를 얻었을 때"가 아닙니다.**
+  // §12의 확정 신호가 쓰는 `sessionStartValueRef`는 **포커스**에서 찍히므로 수명이 다릅니다
+  // (스펙 §3이 "합치려 들지 말라"고 못 박은 자리입니다). 닫힌 채로 2031을 친 뒤 열어서
+  // `Escape`를 누르면 2031로 돌아와야 합니다 — 2026이 아니라. **둘을 한 ref로 합치면
+  // 여기가 2026을 내놓습니다.**
+  it("닫힌 채 타이핑한 뒤 열어서 Escape면, 포커스 시점이 아니라 열기 직전으로 돌아온다", async () => {
+    const { trigger } = openWith();
+    for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(trigger, { key: digit });
+    await waitFor(() => expect(trigger.textContent).toBe("2031. 07. 12."));
+
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });   // 닫힌 채로 열린다(§3) — 아직 값은 그대로
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    // 네 자리를 다 치면 활성이 월로 넘어가므로(§4.4 advance) 이 ↓는 **월**을 움직인다.
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await waitFor(() => expect(trigger.textContent).toBe("2031. 08. 12."));
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    // 열기 직전은 2031-07-12다. 포커스 시점이었다면 2026-07-12이 나온다.
+    await waitFor(() => expect(trigger.textContent).toBe("2031. 07. 12."));
+  });
+
+  // **대조군 — 적용하는 쪽은 그대로입니다.**
+  it("Enter는 고른 값을 적용하고 닫는다", async () => {
+    const { trigger } = openWith();
+    fireEvent.click(trigger);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await waitFor(() => expect(trigger.textContent).toBe("2027. 07. 12."));
+
+    fireEvent.keyDown(trigger, { key: "Enter" });
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
+    expect(trigger.textContent).toBe("2027. 07. 12.");
+  });
+
+  // **대조군 — 뒤로가기는 이 조항이 정하지 않습니다.** 스펙 §3이 "오너에게 묻기 전까지
+  // 지금 동작(마지막 값 유지)을 바꾸지 말라"고 명시했습니다. `Escape`는 "취소"라는 뜻이
+  // 분명하지만 뒤로가기·바깥 클릭은 "그만 본다"에 가깝고, 묶는 것은 별개 판단입니다.
+  // 되돌림을 "닫힘 전체"로 넓히는 고침이 있으면 이것이 빨개집니다.
+  it("뒤로가기는 되돌리지 않는다 — 마지막 값을 유지한다", async () => {
+    const { trigger } = openWith();
+    fireEvent.click(trigger);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await waitFor(() => expect(trigger.textContent).toBe("2027. 07. 12."));
+
+    fireEvent.popState(window, { state: null });
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
+    expect(trigger.textContent).toBe("2027. 07. 12.");
+  });
+});
+
 describe("DateWheelPicker 활성 표시는 편집 중에만", () => {
   function open() {
     render(<ControlledDateWheel initialValue="2026-07-12" />);

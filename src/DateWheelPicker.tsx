@@ -256,7 +256,25 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 부르지 않고 버퍼만 버립니다. 다른 모든 떠나는 경로(Tab·화살표·**열림 상태의**
   // Enter·Space·완료·세그먼트 클릭·blur)와의 유일한 예외입니다. (닫힘 상태의 Enter는
   // 떠나는 경로가 아니라 **여는 키**입니다 — 버퍼를 들고 엽니다. 스펙 §3·§4.2.)
-  useEscapeToClose(open, () => { setTyping(null); setOpen(false); });
+  /**
+   * `Escape`는 **되돌리고** 닫습니다(스펙 §3, 오너 실기기 지시).
+   *
+   * "값을 바꾸지 않고 닫는다"는 오랫동안 거짓이었습니다 — 화살표 한 번, 휠 한 칸, 행 클릭
+   * 하나마다 곧바로 `onChange`를 부르므로 `Escape` 시점엔 값이 이미 여러 번 바뀐 뒤이고,
+   * 여기서 버리던 것은 **타이핑 버퍼뿐**이었습니다.
+   *
+   * ⚠️ **값이 그대로면 부르지 않습니다.** 안 바뀐 값을 다시 보내면 소비자의 dirty 판정이
+   * 더러워집니다. 되돌림은 소비자가 이미 받은 중간값들의 **마지막을 정정하는** 한 번입니다.
+   *
+   * ⚠️ **뒤로가기·바깥 클릭은 여기 안 들어옵니다.** `Escape`는 "취소"가 분명하지만 그 둘은
+   * "그만 본다"에 가깝고, 묶는 것은 별개 판단이라 스펙이 지금 동작(마지막 값 유지)을
+   * 그대로 두라고 명시했습니다.
+   */
+  useEscapeToClose(open, () => {
+    setTyping(null);
+    if (openStartValueRef.current !== value) onChange(openStartValueRef.current);
+    setOpen(false);
+  });
   const [position, setPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const [columnMotion, setColumnMotion] = useState<Record<DateWheelUnit, DateWheelMotion>>({
     year: { sequence: 0, direction: "next", playing: false },
@@ -274,6 +292,9 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   const [entering, setEntering] = useState(false);
   useLayoutEffect(() => {
     if (!open) { setEntering(false); return; }
+    // 열리는 바로 이 전이에서 `Escape`가 되돌아갈 값을 찍습니다. deps가 `[open]`이므로
+    // 여기서 읽는 `value`는 **열린 순간의 값**이고, 그것이 정확히 필요한 것입니다.
+    openStartValueRef.current = value;
     setEntering(true);
     const timer = window.setTimeout(() => setEntering(false), DATE_WHEEL_ENTER_TOTAL_MS);
     return () => window.clearTimeout(timer);
@@ -353,6 +374,18 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 도는데, 요청은 **열림당 한 번**이어야 합니다 — 매 프레임 다시 밀면 스크롤이 제 꼬리를
    * 물고, 사용자가 그 사이 스크롤을 되돌려도 컨트롤이 다시 뺏습니다.
    */
+  /**
+   * **팝오버가 열린 순간의 값.** `Escape`가 되돌아갈 곳입니다(스펙 §3).
+   *
+   * ⚠️ **`sessionStartValueRef`와 다른 것이고, 합치면 안 됩니다.** 그쪽은 **포커스**를
+   * 얻은 순간과 닫히는 순간에 찍혀 §12의 확정 신호("이번 세션에 값이 실제로 바뀌었는가")를
+   * 판정합니다. 이쪽은 **열린 순간**에만 찍힙니다.
+   *
+   * 둘이 갈리는 경로가 실제로 있습니다: 닫힌 채로 숫자를 쳐서 값을 바꾼 뒤(§3) 팝오버를
+   * 열고 `Escape`를 누르면, 되돌아갈 곳은 **열기 직전**(친 값)이지 포커스를 얻었을 때가
+   * 아닙니다. 하나로 합치는 순간 §12의 신호나 `Escape`의 되돌림 중 하나가 조용히 틀어집니다.
+   */
+  const openStartValueRef = useRef(value);
   const roomRequestedRef = useRef(false);
   const [editing, setEditing] = useState(false);
   const [commitPulse, setCommitPulse] = useState(0);
