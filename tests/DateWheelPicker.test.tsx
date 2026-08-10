@@ -1777,11 +1777,11 @@ describe("DateWheelPicker Escape는 열기 직전 값으로 되돌린다", () =>
     expect(trigger.textContent).toBe("2027. 07. 12.");
   });
 
-  // **대조군 — 뒤로가기는 이 조항이 정하지 않습니다.** 스펙 §3이 "오너에게 묻기 전까지
-  // 지금 동작(마지막 값 유지)을 바꾸지 말라"고 명시했습니다. `Escape`는 "취소"라는 뜻이
-  // 분명하지만 뒤로가기·바깥 클릭은 "그만 본다"에 가깝고, 묶는 것은 별개 판단입니다.
-  // 되돌림을 "닫힘 전체"로 넓히는 고침이 있으면 이것이 빨개집니다.
-  it("뒤로가기는 되돌리지 않는다 — 마지막 값을 유지한다", async () => {
+  // **뒤로가기도 되돌립니다**(오너 답, 스펙 §3의 표). 폰에는 `Escape`가 없고 이 킷은 이미
+  // 뒤로가기를 "가장 안쪽 오버레이를 닫는 키"로 씁니다(`useBackToClose`) — 취소하려는 사람이
+  // 폰에서 누를 수 있는 것이 그것뿐이라 **뒤로가기가 모바일의 `Escape`**입니다. 다르게 두면
+  // 같은 의도가 기기에 따라 다른 결과를 냅니다.
+  it("뒤로가기도 열기 직전 값으로 되돌린다", async () => {
     const { trigger } = openWith();
     fireEvent.click(trigger);
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
@@ -1789,6 +1789,24 @@ describe("DateWheelPicker Escape는 열기 직전 값으로 되돌린다", () =>
     await waitFor(() => expect(trigger.textContent).toBe("2027. 07. 12."));
 
     fireEvent.popState(window, { state: null });
+
+    await waitFor(() => expect(trigger.textContent).toBe("2026. 07. 12."));
+  });
+
+  // ⚠️⚠️ **이 표에서 제일 중요한 대조군.** 바깥 클릭은 **적용**합니다 — "취소"가 아니라
+  // **"그만 본다"**입니다. 다른 걸 누르러 간 사람에게서 방금 고른 값을 뺏으면, 되돌리기가
+  // 없는 이 컨트롤에서는 복구할 방법이 없습니다.
+  //
+  // **지금 그런 것은 우연이고, 그래서 고정합니다** — 되돌림을 "닫힘 전체"로 넓히는 고침에
+  // 바깥 클릭이 딸려 들어가면 이것 말고는 잡을 것이 없습니다.
+  it("바깥 클릭은 되돌리지 않는다 — 마지막 값을 적용한다", async () => {
+    const { trigger } = openWith();
+    fireEvent.click(trigger);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    await waitFor(() => expect(trigger.textContent).toBe("2027. 07. 12."));
+
+    fireEvent.pointerDown(document.body, { button: 0 });
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
     expect(trigger.textContent).toBe("2027. 07. 12.");

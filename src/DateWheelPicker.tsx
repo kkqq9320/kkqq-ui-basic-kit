@@ -270,11 +270,12 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * "그만 본다"에 가깝고, 묶는 것은 별개 판단이라 스펙이 지금 동작(마지막 값 유지)을
    * 그대로 두라고 명시했습니다.
    */
-  useEscapeToClose(open, () => {
+  function cancelAndClose() {
     setTyping(null);
     if (openStartValueRef.current !== value) onChange(openStartValueRef.current);
     setOpen(false);
-  });
+  }
+  useEscapeToClose(open, cancelAndClose);
   const [position, setPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const [columnMotion, setColumnMotion] = useState<Record<DateWheelUnit, DateWheelMotion>>({
     year: { sequence: 0, direction: "next", playing: false },
@@ -452,7 +453,14 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   const swipeRef = useRef<{ unit: DateWheelUnit; y: number; pointerId: number; value: string; captured: boolean } | null>(null);
   const suppressColumnClickRef = useRef(false);
 
-  useBackToClose(open, () => setOpen(false));
+  // **뒤로가기도 취소입니다**(스펙 §3의 표, 오너 답). 폰에는 `Escape`가 없고 이 킷은 이미
+  // 뒤로가기를 "가장 안쪽 오버레이를 닫는 키"로 씁니다 — 취소하려는 사람이 폰에서 누를 수
+  // 있는 것이 그것뿐이라 **뒤로가기가 모바일의 `Escape`**입니다. 다르게 두면 같은 의도가
+  // 기기에 따라 다른 결과를 냅니다.
+  //
+  // ⚠️ **바깥 클릭은 여기 안 들어옵니다** — "취소"가 아니라 "그만 본다"이고, 다른 걸 누르러
+  // 간 사람에게서 방금 고른 값을 뺏으면 되돌리기가 없는 이 컨트롤에서 복구할 방법이 없습니다.
+  useBackToClose(open, cancelAndClose);
 
   // 세션 기준값을 찍는 두 지점 중 하나 — **팝오버가 닫힐 때**입니다(다른 하나는
   // 트리거의 onFocus). 설계 스펙 §6.4의 계약: 기준값은 이 컨트롤이 마지막으로
