@@ -134,7 +134,7 @@ const SWIPE_SLOP = 18;
  * `date-wheel-selected-pop`에서도 버블해 올라오고, `prefers-reduced-motion`에서는
  * 애니메이션이 아예 안 돌아 **영영 안 옵니다.** 시간으로 걷으면 두 경우 다 성립합니다.
  */
-const DATE_WHEEL_ENTER_TOTAL_MS = 900;
+const DATE_WHEEL_ENTER_TOTAL_MS = 360;
 
 type DateWheelMotion = { sequence: number; direction: "next" | "previous"; playing: boolean };
 
