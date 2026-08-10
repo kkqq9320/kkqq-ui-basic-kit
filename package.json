@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "React + 순수 CSS 디자인 시스템. 드롭다운·날짜 피커·다이얼로그·사이드바·토큰·폰트.",
   "type": "module",
-  "license": "MIT",
+  "license": "MIT AND OFL-1.1",
   "private": true,
   "author": "KKQQ",
   "repository": { "type": "git", "url": "git+https://github.com/kkqq9320/kkqq-ui-basic-kit.git" },
