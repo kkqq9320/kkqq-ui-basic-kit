@@ -588,6 +588,94 @@ describe("DateWheelPicker 스와이프", () => {
     pointer("pointerMove", year, { pointerId: 7, clientY: 0, buttons: 1 });
     expect(year.style.getPropertyValue("--date-wheel-drag-offset")).toBe("-15px");
   });
+  // ── 포인터 캡처는 드래그를 위한 장치다. 누름은 아직 드래그가 아니다 ──────────
+  //
+  // 오너 실기기 TRACE(한 캡처)가 확정한 것:
+  //
+  //     +0ms   pointerdown target=button                    <- 행 버튼
+  //     +4ms   mousedown   target=button                    <- 행 버튼
+  //     +352ms pointerup   target=section.date-wheel-column <- 열로 리타겟
+  //     +356ms mouseup     target=section.date-wheel-column
+  //     +357ms click       target=section.date-wheel-column <- 클릭이 열에 발생
+  //
+  // `onPointerDown`이 누르자마자 `setPointerCapture`를 걸었고, 캡처가 걸리면 이후 포인터
+  // 이벤트가 **열로 리타겟**됩니다. `mousedown`(행)과 `mouseup`(열)의 타깃이 달라지므로
+  // 브라우저는 `click`을 **공통 조상인 열**에 발생시키고, **행의 `onClick`은 호출될 수가
+  // 없습니다.** 같은 캡처에서 `off=0px`이 59프레임 내내이고 커밋도 0이었으므로 — 오너는
+  // 손을 전혀 안 움직였습니다 — **클릭 억제 플래그는 이 결함과 무관합니다.**
+  //
+  // 고침은 캡처를 **늦게** 거는 것입니다. 캡처는 드래그를 위한 장치인데 누름은 아직
+  // 드래그가 아닙니다. 슬롭을 넘긴 첫 `pointermove`에서 걸면 탭에는 캡처가 없어
+  // `pointerup`·`click`이 행에 그대로 가고, 드래그에는 그대로 걸려 행이 리마운트돼도 추적이
+  // 안 끊기고 포인터가 픽커 밖으로 나가도 계속 따라옵니다.
+  //
+  // ⚠️ **행을 캡처 대상에서 빼는 방식은 안 됩니다** — 휠 표면 150px이 통째로 행 버튼이라
+  // 모든 스와이프가 캡처를 잃습니다. `moveSwipe`의 주석이 "target이 아니라 currentTarget(열)에
+  // 건다"고 적어 둔 이유가 그것입니다. 바꾸는 것은 **대상이 아니라 시점**입니다.
+  //
+  // ⚠️⚠️ **이 테스트들이 증명하는 것과 못 하는 것.**
+  // **증명합니다:** 우리가 캡처를 **언제 부르는가**(누를 때가 아니라 슬롭을 넘긴 첫 move에서).
+  // **증명하지 못합니다:** 실브라우저에서 클릭이 행에 도달한다는 것. **jsdom에는
+  // `setPointerCapture`가 아예 없고**(직접 쟀습니다 — `Element.prototype`에 셋 다 없습니다),
+  // 따라서 캡처로 인한 **리타겟이 재현되지 않습니다.** "행 클릭이 값을 바꾼다"류의 테스트는
+  // 캡처가 걸려 있든 아니든 jsdom에서 똑같이 통과합니다 — **그래서 이 결함이 지금까지**
+  // **한 번도 안 걸렸습니다.** 실기기 확인 항목으로 남습니다.
+  // (이 파일 위쪽 `pointer` 헬퍼 주석, `tests/AppShell.test.tsx` 상단 clamp 주석과 같은 종류의
+  // 한계입니다.)
+  //
+  // jsdom에 `setPointerCapture`가 없으므로 열 요소에 직접 심어 호출을 셉니다. 소스가
+  // `typeof … === "function"`으로 가드하고 있어, 심지 않으면 아무 일도 안 일어납니다.
+  function countCaptures(column: Element) {
+    const calls: number[] = [];
+    Object.defineProperty(column, "setPointerCapture", { value: (pointerId: number) => calls.push(pointerId), configurable: true });
+    return calls;
+  }
+
+  it("움직임 없는 탭은 포인터 캡처를 걸지 않는다", () => {
+    const { year } = openWheel();
+    const calls = countCaptures(year);
+    const row = [...year.querySelectorAll(".date-wheel-values button")][4];
+    pointer("pointerDown", row, { pointerId: 2, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerUp", row, { pointerId: 2, clientY: 100 });
+    expect(calls).toEqual([]);
+  });
+
+  // **시점**을 본다. 누를 때 0, 슬롭을 넘긴 move 뒤 1 — 한 단언으로 둘을 함께 보므로
+  // 실패 메시지가 "언제 걸렸는지"를 그대로 보여준다(고치기 전에는 [1, 1]이다).
+  it("캡처는 누를 때가 아니라 슬롭을 넘긴 첫 move에서 걸린다", () => {
+    const { year } = openWheel();
+    const calls = countCaptures(year);
+    const row = [...year.querySelectorAll(".date-wheel-values button")][4];
+    pointer("pointerDown", row, { pointerId: 2, clientY: 100, buttons: 1, button: 0 });
+    const afterDown = calls.length;
+    pointer("pointerMove", row, { pointerId: 2, clientY: 120, buttons: 1 });
+    expect([afterDown, calls.length]).toEqual([0, 1]);
+  });
+
+  // 슬롭 아래의 흔들림은 여전히 탭이므로 캡처도 없어야 한다 — 캡처를 "첫 move"에 거는
+  // (슬롭을 안 보는) 고침이 위 둘을 통과하는 것을 막는다.
+  it("슬롭 아래로 흔들린 move는 캡처를 걸지 않는다", () => {
+    const { year } = openWheel();
+    const calls = countCaptures(year);
+    const row = [...year.querySelectorAll(".date-wheel-values button")][4];
+    pointer("pointerDown", row, { pointerId: 2, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", row, { pointerId: 2, clientY: 105, buttons: 1 });
+    pointer("pointerMove", row, { pointerId: 2, clientY: 108, buttons: 1 });
+    expect(calls).toEqual([]);
+  });
+
+  // 프레임마다 다시 걸면 안 된다. 브라우저에서 재캡처는 무해하지만 "한 제스처에 한 번"이
+  // 이 장치의 뜻이고, 매 프레임 호출은 그 뜻이 흐려졌다는 신호다.
+  it("한 제스처에서 캡처는 한 번만 건다", () => {
+    const { year } = openWheel();
+    const calls = countCaptures(year);
+    const row = [...year.querySelectorAll(".date-wheel-values button")][4];
+    pointer("pointerDown", row, { pointerId: 2, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", row, { pointerId: 2, clientY: 120, buttons: 1 });
+    pointer("pointerMove", row, { pointerId: 2, clientY: 140, buttons: 1 });
+    pointer("pointerMove", row, { pointerId: 2, clientY: 160, buttons: 1 });
+    expect(calls).toEqual([2]);
+  });
   // ── 탭인가 스와이프인가는 숫자 하나가 정한다 ─────────────────────────────────
   //
   // 오너: "마우스 클릭이나 터치로 클릭해도 선택 안 되고 그냥 열만 활성화된다."

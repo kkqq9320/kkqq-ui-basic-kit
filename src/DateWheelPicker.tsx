@@ -356,7 +356,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
-  const swipeRef = useRef<{ unit: DateWheelUnit; y: number; pointerId: number; value: string } | null>(null);
+  const swipeRef = useRef<{ unit: DateWheelUnit; y: number; pointerId: number; value: string; captured: boolean } | null>(null);
   const suppressColumnClickRef = useRef(false);
 
   useBackToClose(open, () => setOpen(false));
@@ -1049,12 +1049,41 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 포인터 캡처는 target이 아니라 currentTarget(컬럼)에 겁니다. 한 칸 커밋될 때마다
    * 값 버튼들이 key 변경으로 다시 마운트되는데, 캡처를 그 버튼(target)에 걸었으면
    * 언마운트되며 캡처가 풀려, 포인터가 picker 밖으로 나가는 순간 move가 끊깁니다.
-   * 컬럼은 슬라이드 내내 그대로라 캡처가 유지되고 밖에서도 계속 따라옵니다. */
+   * 컬럼은 슬라이드 내내 그대로라 캡처가 유지되고 밖에서도 계속 따라옵니다.
+   *
+   * **그리고 누를 때가 아니라 슬롭을 넘긴 첫 move에서 겁니다** — 이유는 아래 본문의
+   * 해당 자리에 있습니다. 명시적으로 푸는 자리는 없습니다: 캡처는 `pointerup`·
+   * `pointercancel`에서 브라우저가 암묵적으로 해제하고, 우리가 안 건 제스처에서
+   * 해제를 부를 일도 없어야 하므로 `releasePointerCapture` 호출을 두지 않습니다. */
   function moveSwipe(unit: DateWheelUnit, clientY: number, pointerId: number, buttons: number, column: HTMLElement) {
     if (buttons !== 1) return;
     const start = swipeRef.current;
     if (!start || start.unit !== unit || start.pointerId !== pointerId || !Number.isFinite(start.y) || !Number.isFinite(clientY)) return;
     let delta = clientY - start.y;
+    // **여기가 "이 제스처는 탭이 아니라 드래그다"라고 정하는 한 자리입니다.** 클릭 억제와
+    // 포인터 캡처가 **같은 판정**을 씁니다.
+    //
+    // ⚠️ **캡처를 `pointerdown`에서 걸면 안 됩니다.** 캡처는 드래그를 위한 장치인데 누름은
+    // 아직 드래그가 아닙니다. 걸어 두면 이후 포인터 이벤트가 **열로 리타겟**되어,
+    // `mousedown`은 행에 `mouseup`은 열에 도착하고 브라우저가 `click`을 **공통 조상인 열**에
+    // 발생시킵니다 — **행의 `onClick`이 호출될 수가 없습니다.** 오너 실기기 TRACE가 그것을
+    // 잡았습니다(pointerdown/mousedown target=button, pointerup/mouseup/click
+    // target=section.date-wheel-column, 그 사이 offset은 59프레임 내내 0px).
+    //
+    // ⚠️ **대상은 그대로 열(`currentTarget`)입니다. 바꾼 것은 시점뿐입니다.** 행(`target`)에
+    // 걸면 한 칸 커밋마다 행이 리마운트되면서 캡처가 풀려, 포인터가 픽커 밖으로 나가는 순간
+    // move가 끊깁니다. 휠 표면 150px이 통째로 행 버튼이라 "행은 캡처하지 않는다"는 방식도
+    // 같은 이유로 안 됩니다 — 모든 스와이프가 캡처를 잃습니다.
+    //
+    // 커밋 분기보다 **앞**에 둡니다. 한 프레임에 30px 넘게 뛰면 아래에서 delta가 잔여로
+    // 줄어드는데, 판정은 **손가락이 실제로 간 거리**로 해야 합니다.
+    if (Math.abs(delta) >= SWIPE_SLOP) {
+      suppressColumnClickRef.current = true;
+      if (!start.captured && typeof column.setPointerCapture === "function") {
+        column.setPointerCapture(pointerId);
+        start.captured = true;
+      }
+    }
     if (Math.abs(delta) >= 30) {
       const direction = delta < 0 ? 1 : -1;
       // **드래그 중 커밋은 휠 이동 애니메이션을 재생하지 않습니다.** 손가락이 이미
@@ -1087,7 +1116,6 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         delta = 0;
       }
     }
-    if (Math.abs(delta) >= SWIPE_SLOP) suppressColumnClickRef.current = true;
     // **화면은 손가락의 절반만 움직입니다**(오너 실기기 판정: "움직이는 px을 반으로").
     // 클램프만 낮추지 않고 감쇠로 하는 이유: 클램프는 그 위 구간을 **정지**시키므로
     // 실기기에서 잰 데드존(최대 102ms)이 오히려 커집니다. 감쇠는 손가락 전 구간을 화면에
@@ -1284,7 +1312,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
 
             `onPointerDown`의 `setActiveUnit(unit)`이 **포인터 경로가 활성 세그먼트를 따라가는
             유일한 길**입니다(열의 `onFocus`가 하던 일). 지우지 마세요. */}
-        {fields.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${dateWheelLabel(baseValue, unit, labels.weekdays)}`} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue }; if (typeof event.currentTarget.setPointerCapture === "function") event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {fields.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${dateWheelLabel(baseValue, unit, labels.weekdays)}`} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
