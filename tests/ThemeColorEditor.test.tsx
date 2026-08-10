@@ -353,3 +353,69 @@ describe("groups 확장 (키트 수정 없이 새 색 추가)", () => {
     expect(root.style.getPropertyValue("--brand-2")).toBe("#123456");
   });
 });
+
+// 오너 리포트: "RGB Picker로 설정하는 건 되는데 헥스코드 지우고 쓰는 건 안 된다."
+//
+// 원인은 추측이 아니라 소스에 있습니다. 텍스트 칸이 **완전 통제(controlled)**인데
+// `value`가 커밋된 색에서만 오고, `setToken`이 파싱 실패에 early return 합니다.
+// 그래서 지우거나 반쯤 친 순간 상태가 안 바뀌고 **React가 옛 값으로 되돌려 그립니다.**
+// 견본(`type="color"`)이 멀쩡한 이유도 같습니다 — 그건 언제나 유효한 `#rrggbb`를 뱉습니다.
+//
+// ⚠️ 소스 주석은 그 early return을 "입력 중인 값은 무시하고 **타이핑을 막지 않습니다**"
+// 라고 적어 뒀는데, 통제 입력에서는 그게 정확히 타이핑을 막는 동작입니다.
+describe("헥스 칸은 지우고 다시 칠 수 있다", () => {
+  it("칸을 비울 수 있다", () => {
+    renderEditor("dark");
+
+    expect(card("강조색").type("").text().value).toBe("");
+  });
+
+  // **`it`을 나눕니다** — 빈 문자열과 반쯤 친 값은 같은 early return이 만드는 서로 다른
+  // 증상이라, 한 블록에 두면 앞엣것이 터질 때 뒤엣것이 실행조차 안 됩니다.
+  it("반쯤 친 값이 지워지지 않는다", () => {
+    renderEditor("dark");
+
+    expect(card("강조색").type("#12").text().value).toBe("#12");
+  });
+
+  it("지웠다가 새로 치면 그 값이 적용된다", () => {
+    renderEditor("dark");
+    card("강조색").type("").type("#112233");
+
+    expect(root.style.getPropertyValue("--accent")).toBe("#112233");
+  });
+
+  // 반쯤 친 채로 떠나면 칸이 마지막으로 **커밋된** 값으로 정리돼야 합니다 —
+  // 안 그러면 화면의 글자와 실제 적용된 색이 갈라진 채로 남습니다.
+  it("포커스가 떠나면 커밋된 값으로 정리된다", () => {
+    renderEditor("dark");
+    const teal = card("강조색").type("#112233").type("#12");
+
+    fireEvent.blur(teal.text());
+
+    expect(teal.text().value).toBe("#112233");
+  });
+
+  // 초안이 남은 채로 버튼을 눌러도 칸이 따라와야 합니다. 초안을 blur에서만 지우면
+  // 이 경로가 빠집니다 — 경로를 열거하면 늘 하나 빠진다는 이 저장소의 교훈 그대로입니다.
+  it("초안이 남은 채로 Reset을 누르면 칸이 기본값으로 돌아간다", () => {
+    renderEditor("dark");
+    const teal = card("강조색");
+    const fallback = teal.text().value;
+    teal.type("#112233").type("#44");
+
+    fireEvent.click(teal.reset());
+
+    expect(teal.text().value).toBe(fallback);
+  });
+
+  // **대조군 — 견본은 원래 되던 것이고 계속 돼야 합니다.** 고침이 텍스트 칸 쪽만
+  // 건드리는지 지킵니다.
+  it("견본으로 고른 값은 칸에 바로 비친다", () => {
+    renderEditor("dark");
+    const teal = card("강조색");
+    fireEvent.change(teal.swatch, { target: { value: "#445566" } });
+
+    expect(teal.text().value).toBe("#445566");
+  });
+});

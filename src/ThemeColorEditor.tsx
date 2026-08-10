@@ -57,6 +57,20 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS 
   /** 토큰별 직전 값 스택. Undo가 여기서 하나씩 꺼냅니다. */
   const [history, setHistory] = useState<Record<string, string[]>>({});
 
+  /**
+   * 헥스 칸에서 **치는 중인 원문**. 한 번에 한 칸만 편집하므로 하나면 충분합니다.
+   *
+   * ⚠️ **이게 없으면 칸을 지울 수가 없습니다.** 칸이 완전 통제(controlled)라 `value`가
+   * 커밋된 색에서만 오는데 `setToken`은 파싱에 실패하면 상태를 안 바꿉니다. 그래서
+   * 비우거나 `#12`까지만 친 순간 **React가 옛 값으로 되돌려 그립니다**(실측:
+   * `expected '#000000' to be ''`). 견본(`type="color"`)이 멀쩡했던 이유도 같습니다 —
+   * 그건 언제나 유효한 `#rrggbb`를 뱉으니 파싱이 실패할 일이 없습니다.
+   *
+   * **커밋할 때는 지우지 않습니다.** 지우면 `#abc`를 치는 순간 정규화된 `#aabbcc`가
+   * 칸에 들어가 커서가 튑니다. 정리는 칸을 떠날 때와 버튼을 누를 때만 합니다.
+   */
+  const [draft, setDraft] = useState<{ name: string; text: string } | null>(null);
+
   /* 피커를 끌면 색이 초당 수십 번 바뀝니다. 그걸 그대로 쌓으면 Undo가 끄는 동안의
    * 잔상을 하나씩 되짚게 되므로, 한 번의 조작을 한 칸으로 묶습니다.
    * 세션은 포커스가 떠나거나 잠시 멈추면 끝납니다. */
@@ -80,6 +94,7 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS 
     setLoadedTheme(theme);
     setOverrides(readTokenOverrides(theme, tokens));
     setHistory({});
+    setDraft(null);
     endSession();
   }
 
@@ -109,7 +124,10 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS 
   /** 견본·입력칸에서 들어오는 값. 같은 조작이 이어지는 동안은 기록을 남기지 않습니다. */
   function setToken(token: ThemeToken, raw: string) {
     const normalized = normalizeColor(raw);
-    if (!normalized) return;   // 입력 중인 값은 무시하고 타이핑을 막지 않습니다
+    // 파싱 안 되는 값은 **적용하지 않습니다.** 여기 한동안 "타이핑을 막지 않습니다"라고
+    // 적혀 있었는데 거짓이었습니다 — 칸이 통제 입력이라, 이 return이 곧 타이핑을 막는
+    // 동작이었습니다. 지금은 초안(`draft`)이 화면을 맡고 이 함수는 적용만 맡습니다.
+    if (!normalized) return;
     const previous = valueOf(token);
     if (normalized === previous) return;
     if (sessionRef.current?.name !== token.name) pushHistory(token, previous);
@@ -120,6 +138,7 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS 
   function undoToken(token: ThemeToken) {
     const stack = history[token.name] ?? [];
     if (!stack.length) return;
+    setDraft(null);
     endSession();   // 버튼을 누른 건 별개의 조작이다
     setHistory((current) => ({ ...current, [token.name]: stack.slice(0, -1) }));
     commit(withValue(token, stack[stack.length - 1]));
@@ -129,6 +148,7 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS 
     const previous = valueOf(token);
     const fallback = defaultTokenValue(token, theme, tokens);
     if (previous === fallback) return;
+    setDraft(null);
     endSession();
     pushHistory(token, previous);
     commit(withValue(token, fallback));
@@ -138,6 +158,7 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS 
     // 지금 값들을 기록해 두면 카드마다 Undo로 되살릴 수 있습니다.
     const changed = Object.keys(overrides);
     if (!changed.length) return;
+    setDraft(null);
     endSession();
     setHistory((current) => {
       const next = { ...current };
@@ -178,7 +199,9 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS 
               value={value}
               aria-label={`${token.label} 색상 선택`}
               title="눌러서 색 고르기"
-              onChange={(event) => setToken(token, event.target.value)}
+              /* 견본으로 고르면 초안은 버립니다 — 안 그러면 헥스 칸이 치다 만 글자를
+                 계속 보여, 화면의 글자와 실제 색이 갈라진 채로 남습니다. */
+              onChange={(event) => { setDraft(null); setToken(token, event.target.value); }}
               onBlur={endSession}
             />
             <span className="theme-color-copy">
@@ -203,13 +226,15 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS 
                 onClick={() => resetToken(token)}
               ><ResetIcon /></button>
             </span>
+            {/* 치는 중에는 초안을, 아니면 커밋된 값을 보입니다 — 초안 없이 커밋된 값만
+                걸면 파싱에 실패하는 순간 되돌려 그려져 지울 수가 없습니다(초안 선언부 참고). */}
             <input
               className="theme-color-text"
-              value={value}
+              value={draft?.name === token.name ? draft.text : value}
               aria-label={`${token.label} 색상 값`}
               spellCheck={false}
-              onChange={(event) => setToken(token, event.target.value)}
-              onBlur={endSession}
+              onChange={(event) => { setDraft({ name: token.name, text: event.target.value }); setToken(token, event.target.value); }}
+              onBlur={() => { setDraft(null); endSession(); }}
             />
           </div>;
         })}
