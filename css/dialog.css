@@ -89,7 +89,10 @@
 .dialog-actions .primary { color: #fff; border-color: var(--accent); background: var(--accent); }
 .dialog-actions .primary:hover:not(:disabled) { color: #fff; background: color-mix(in srgb, var(--accent) 88%, #000); }
 /* 파괴적 액션은 왼쪽 끝으로 밀어 확인 버튼과 멀리 떨어뜨립니다 */
-.dialog-actions .danger { margin-right: auto; color: #bd554d; border-color: color-mix(in srgb, #bd554d 45%, var(--line)); }
+/* 색은 .danger-button(controls.css:24)과 같은 토큰·같은 관용구를 씁니다. 한동안
+ * #bd554d 리터럴이었고 다크 규칙이 아예 없어, 같은 "삭제"가 자리에 따라 다른 빨강이었고
+ * 다크에서는 대비 3.72로 읽기 어려웠습니다(토큰으로 7.53). */
+.dialog-actions .danger { margin-right: auto; color: var(--red); border-color: color-mix(in srgb, var(--red) 45%, var(--line)); }
 
 @media (max-width: 760px), (hover: none) and (pointer: coarse) {
   .dialog-backdrop { padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); }

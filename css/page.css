@@ -27,8 +27,7 @@
 .summary-card strong { font-size: clamp(20px, 2vw, 29px); letter-spacing: -.04em; }
 .summary-card.teal { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 25%, var(--line)); }
 .summary-card.green { color: var(--green); background: var(--green-soft); border-color: color-mix(in srgb, var(--green) 27%, var(--line)); }
-.summary-card.orange { color: #975129; background: #fff2e8; border-color: #f0d5c2; }
-[data-theme="dark"] .summary-card.orange { color: #f0ad7d; background: #3a2924; border-color: #654133; }
+.summary-card.orange { color: var(--orange); background: var(--orange-soft); border-color: color-mix(in srgb, var(--orange) 25%, var(--line)); }
 
 /* 콘텐츠는 작업 영역 전체 폭의 .panel에서 시작합니다.
  * 반응형 그리드는 이 부모 폭을 나눠 쓰고, 더 좁은 컨테이너를 새로 만들지 않습니다. */

@@ -38,6 +38,7 @@ export const THEME_TOKEN_GROUPS: ThemeTokenGroup[] = [
       { name: "--green-soft", label: "초록 배경", description: "성공 상태의 옅은 배경" },
       { name: "--red", label: "빨강", description: "위험·경고" },
       { name: "--orange", label: "주황", description: "주의" },
+      { name: "--orange-soft", label: "주황 배경", description: "주의 상태의 옅은 배경" },
       { name: "--gold", label: "금색", description: "보조 강조" },
     ],
   },
