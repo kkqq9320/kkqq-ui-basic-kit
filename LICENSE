@@ -2,6 +2,10 @@ MIT License
 
 Copyright (c) 2026 KKQQ
 
+This license covers the source code, stylesheets and documentation in this
+repository. It does NOT cover the bundled font under `fonts/` — see "Bundled
+font" below. References to "the Software" in the MIT terms exclude those files.
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -19,3 +23,27 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+-----------------------------------------------------------
+Bundled font — NOT covered by the MIT license above
+-----------------------------------------------------------
+
+`fonts/PretendardVariable.woff2`
+
+  Copyright (c) 2021, Kil Hyung-jin
+  (https://github.com/orioncactus/pretendard),
+  with Reserved Font Name Pretendard.
+
+  Licensed under the SIL Open Font License, Version 1.1. The full text is
+  distributed with the font at `fonts/OFL.txt`.
+
+Redistribution and web embedding are both permitted. The condition is that
+`fonts/OFL.txt` travels with the font file — that is why both are listed in
+`package.json`'s `files`, and why `css/fonts.css` points at the font in place
+rather than inlining it.
+
+If you remove `fonts/PretendardVariable.woff2`, remove `fonts/OFL.txt` with it.
+
+Note the Reserved Font Name: a modified version of the font may not be
+distributed under the name "Pretendard".
