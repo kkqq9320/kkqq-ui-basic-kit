@@ -3098,6 +3098,21 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
       .toEqual([["dropdown-value-commit", ["year", "month", "day"]]]);
   });
 
+  // **위 CSS 계약이 다 옳아도, 선택자 경로가 실제 DOM에 안 생기면 펄스는 안 돈다.**
+  // 그 경로(트리거 > 펄스 컨테이너 > 활성 세그먼트)가 확정 순간에 실제로 만들어지는지는
+  // 소스로 알 수 없고 여기서만 답할 수 있다. `:focus-within`은 CSS 전용이라
+  // `querySelector`에 넣지 않는다 — 그 조건은 §6.2가 따로 지킨다.
+  //
+  // **이것이 반전 칩에서 핵심 위험이다.** 트리거 DOM을 손보면서 펄스 클래스를 세그먼트
+  // 쪽으로 옮기거나 한 겹 더 감싸면, CSS는 그대로인데 반전 칩만 확정 신호에서 조용히
+  // 빠진다 — 그리고 그것은 jsdom에서 애니메이션이 안 도므로 다른 어떤 테스트도 못 잡는다.
+  it("확정 순간 펄스 컨테이너 안에 활성 세그먼트가 들어 있다 — 펄스 선택자가 닿는 경로", async () => {
+    const trigger = await openAndBuffer("2026-07-12", ["3", "1"]);
+    fireEvent.keyDown(trigger, { key: "Enter" });
+
+    expect(document.querySelector(".date-wheel-trigger .dropdown-value-commit .date-wheel-segment.active")).not.toBeNull();
+  });
+
   // jsdom은 캐스케이드를 계산하지 않으므로 소스 텍스트로 고정한다 — 이 파일 위쪽
   // "CSS 계약" 블록과 같은 idiom이다.
   //
@@ -3181,32 +3196,37 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     });
 
     // 포커스 없는 필드에 활성 표시가 남으면 그 필드가 입력을 받는 중으로 읽힌다(§4.5).
-    // 선택자를 **통째로** 신원 비교한다 — 스펙 §4.5가 이름 대고 금지한
-    // `.date-wheel-picker.open …` 보정이 별도 규칙으로 오든 같은 규칙의 선택자 목록에
-    // 끼어 오든 둘 다 터진다. (예전 형태는 뒤엣것을 놓쳤다: 죽은 선택자를 첫 줄에 두면
-    // 그 줄에 `{`가 없어 매칭 자체가 안 됐다.)
-    it("활성 세그먼트를 그리는 규칙은 포커스로 게이트된 하나뿐이다", () => {
-      const active = cssRules(datePickerCssSource).filter((rule) => /\.date-wheel-segment\.active/.test(rule.selector));
-      expect(active.map((rule) => rule.selector)).toEqual([".date-wheel-trigger:focus-within .date-wheel-segment.active"]);
+    //
+    // ⚠️ **이 테스트가 묻는 것이 바뀌었다. 지키려는 계약은 그대로다.**
+    // 예전에는 "`.date-wheel-segment.active`에 매칭되는 규칙이 통틀어 하나"였다. 반전 칩이
+    // 들어오면서 그 세그먼트를 겨냥하는 규칙이 하나 더 생겼는데(확정 펄스를 명시로 거는
+    // 규칙), **그것은 정지 상태의 그림을 그리지 않는다** — `animation` 하나만 선언한다.
+    // 지키려던 것은 규칙 개수가 아니라 **"활성 표시를 그리는 자리가 하나이고 그것이 포커스로
+    // 게이트돼 있다"**였으므로, 이제 `background`를 선언하는 규칙으로 좁혀 같은 것을 묻는다.
+    // 스펙 §4.5가 이름 대고 금지한 `.date-wheel-picker.open …` 보정은 별도 규칙으로 오든
+    // 같은 규칙의 선택자 목록에 끼어 오든 여전히 둘 다 터진다.
+    it("활성 세그먼트의 정지 그림을 그리는 규칙은 포커스로 게이트된 하나뿐이다", () => {
+      const painting = cssRules(datePickerCssSource)
+        .filter((rule) => /\.date-wheel-segment\.active/.test(rule.selector) && /(^|[\s;])background\s*:/.test(rule.body));
+      expect(painting.map((rule) => rule.selector)).toEqual([".date-wheel-trigger:focus-within .date-wheel-segment.active"]);
     });
 
-    // 확정 피드백(css/surfaces.css의 `dropdown-commit` 키프레임)은 **컨테이너의 `color`를**
-    // 애니메이션하고, 세그먼트는 그것을 **상속**받아 함께 반짝인다. 세그먼트에 매칭되는
-    // 규칙이 자기 `color`를 선언하는 순간 그 상속이 끊겨 그 세그먼트만 신호에서 빠진다.
-    //
-    // **jsdom은 애니메이션을 돌리지 않으므로 이 결함은 DOM 테스트로 절대 안 잡힌다.**
-    // 활성 표시를 글자색이 아니라 배경으로 그린 이유가 이것이라, 이유가 규칙보다 오래
-    // 살아남도록 여기서 고정한다.
-    //
-    // 세그먼트·구두점을 겨냥한 규칙 **전부**를 선택자와 `color` 선언 여부까지 묶어
-    // 신원으로 본다. 규칙을 하나 덧붙이면 목록 길이가 달라져 터지고, 규칙이 통째로
-    // 사라져도 빈 배열이 기대와 달라 터진다 — 어느 쪽도 조용히 지나가지 않는다.
     /** 토큰 블록 하나에서 커스텀 프로퍼티 값을 읽는다. 블록 안에 중첩 규칙이 없다는 전제. */
     function tokenIn(block: string, name: string) {
       const start = tokensCssSource.indexOf(block);
       if (start < 0) return null;
       const body = tokensCssSource.slice(start, tokensCssSource.indexOf("}", start));
       return new RegExp(`${name}:\\s*([^;]+)`).exec(body)?.[1].trim() ?? null;
+    }
+    /**
+     * 선언은 `:root` 한 곳이지만 값이 `var(--text)`처럼 **테마 토큰을 참조**하므로, 실제 색을
+     * 보려면 참조를 그 테마 블록에서 한 겹 풀어야 한다. 반전 칩이 두 테마에서 저절로 맞는
+     * 이유가 이 참조이고, 그래서 대비를 재려면 여기를 지나야 한다.
+     */
+    function resolved(block: string, name: string) {
+      const raw = tokenIn(":root {", name);
+      const reference = /var\((--[\w-]+)\)/.exec(raw ?? "")?.[1];
+      return reference ? tokenIn(block, reference) ?? tokenIn(":root {", reference) : raw;
     }
     /** WCAG 2.x 상대 휘도 대비. 알파 없는 hex만 받는다. */
     function contrast(a: string, b: string) {
@@ -3220,50 +3240,105 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
       return (high + 0.05) / (low + 0.05);
     }
 
-    // ── 활성 세그먼트 색 ────────────────────────────────────────────────────
+    // ── 반전 칩과 확정 펄스 ─────────────────────────────────────────────────
     //
-    // 값이 **규칙이 아니라 토큰에** 있어야 하는 이유는 위 두 계약("규칙은 정확히 하나",
-    // "color를 선언하지 않는다")과 같은 뿌리다. 테마별로 다른 값을 규칙에 박으면 세그먼트에
-    // 매칭되는 규칙이 둘이 되어 그 둘이 함께 깨진다. 토큰이면 규칙은 하나로 남는다.
+    // 확정 피드백(css/surfaces.css의 `dropdown-commit`)은 **컨테이너의 `color`를**
+    // 애니메이션하고, 세그먼트는 그것을 **상속**받아 함께 반짝인다. 세그먼트가 자기
+    // `color`를 선언하면 그 상속이 끊겨 그 세그먼트만 신호에서 빠진다.
     //
-    // **그리고 값 자체가 계약이다.** 오너가 실기기에서 두 번 되돌려 보냈다:
-    //   accent 20% — 라이트 필드대비 1.32 / 다크 1.20 → "어느 세그먼트인지 판단이 안 된다"
-    //   accent 55% — 라이트 2.31 / 다크 1.75 → 라이트는 "글씨가 검정이라 잘 안 보인다",
-    //                다크는 "액센트 말고 다른 식으로"
-    // 그래서 필드 대비의 바닥을 **알려진 실패값(1.75)보다 위인 2.0**에 두고, 글자 대비는
-    // WCAG AA(4.5)로 둔다. `color`를 못 쓰므로(위 계약) 글자는 두 테마 모두 `--text`이고,
-    // 그것이 이 배경 위에서 읽혀야 한다는 뜻이다.
-    it("활성 세그먼트 배경은 값을 박지 않고 토큰을 참조한다", () => {
-      const rule = cssRules(datePickerCssSource).find((candidate) => candidate.selector === ".date-wheel-trigger:focus-within .date-wheel-segment.active");
-      expect(/background:s*([^;]+)/.exec(rule?.body ?? "")?.[1].trim()).toBe("var(--date-segment-active-background)");
-    });
-
-    it("그 토큰이 라이트·다크 두 블록에 다 정의돼 있다", () => {
-      expect([
-        [":root", tokenIn(":root {", "--date-segment-active-background")],
-        ['[data-theme="dark"]', tokenIn('[data-theme="dark"] {', "--date-segment-active-background")],
-      ].map(([block, value]) => [block, value !== null])).toEqual([[":root", true], ['[data-theme="dark"]', true]]);
-    });
-
-    // 두 테마를 **따로** 본다. `expect()`가 단락하므로 한 블록에 넣으면 라이트가 터질 때
-    // 다크는 실행조차 되지 않는다 — 어느 쪽이 안 읽히는지가 실패 메시지에 남아야 한다.
-    it("라이트에서 글자는 AA를 넘고 배경은 필드와 갈라진다", () => {
-      const segment = tokenIn(":root {", "--date-segment-active-background")!;
-      expect(contrast(segment, tokenIn(":root {", "--text")!)).toBeGreaterThanOrEqual(4.5);
-      expect(contrast(segment, tokenIn(":root {", "--input")!)).toBeGreaterThanOrEqual(2);
-    });
-
-    it("다크에서 글자는 AA를 넘고 배경은 필드와 갈라진다", () => {
-      const segment = tokenIn('[data-theme="dark"] {', "--date-segment-active-background")!;
-      expect(contrast(segment, tokenIn('[data-theme="dark"] {', "--text")!)).toBeGreaterThanOrEqual(4.5);
-      expect(contrast(segment, tokenIn('[data-theme="dark"] {', "--input")!)).toBeGreaterThanOrEqual(2);
-    });
-    it("세그먼트에 닿는 규칙이 정확히 둘이고 어느 쪽도 color를 선언하지 않는다", () => {
+    // ⚠️ **계약이 바뀌었다. 예전 형태는 "세그먼트는 `color`를 선언하지 않는다"였다.**
+    // 오너가 반전을 요구하면서(라이트 = 어두운 칩에 흰 글자 / 다크 = 밝은 칩에 검은 글자)
+    // 세그먼트는 자기 `color`를 가져야 한다. **금지를 그냥 깬 것이 아니라, 금지가 막으려던
+    // 결과를 다른 방법으로 막는다** — 확정 펄스를 그 세그먼트에 `animation`으로 **명시해서**
+    // 건다. 새 계약은 "`color`를 선언하지 않는다"가 아니라 **"`color`를 선언하는 규칙은
+    // 펄스를 명시로 받는 그 자리 하나뿐이다"**이다.
+    //
+    // **jsdom은 애니메이션을 돌리지 않으므로** 아래 셋은 CSS 소스로 본다. 네 번째(경로가
+    // 실제로 생기는가)는 소스로 알 수 없어 DOM에서 따로 본다 — 이 블록 바깥에 있다.
+    it("세그먼트에 닿는 규칙 셋 중 color를 선언하는 것은 포커스로 게이트된 활성 규칙뿐이다", () => {
       const targeted = cssRules(datePickerCssSource).filter((rule) => /\.date-wheel-(segment|punctuation)/.test(rule.selector));
       expect(targeted.map((rule) => [rule.selector, declaresColor(rule.body)])).toEqual([
         [".date-wheel-segment", false],
-        [".date-wheel-trigger:focus-within .date-wheel-segment.active", false],
+        [".date-wheel-trigger:focus-within .date-wheel-segment.active", true],
+        [".date-wheel-trigger:focus-within .dropdown-value-commit .date-wheel-segment.active", false],
       ]);
+    });
+
+    // 펄스 규칙도 **포커스로 게이트한다.** 칩이 안 보이는 동안(포커스 없음) 세그먼트는 자기
+    // 색을 갖지 않고 컨테이너의 `color`를 그대로 상속받으므로 예전 경로가 그대로 옳다.
+    // 게이트하지 않으면 배경 없는 자리에서 글자만 칩 글자색(라이트에서 흰색)으로
+    // 애니메이트되어 **230ms 동안 글자가 사라진다.**
+    it("자기 color를 갖는 대신, 확정 펄스가 활성 세그먼트에 명시적으로 걸린다", () => {
+      const rule = cssRules(datePickerCssSource).find((candidate) => candidate.selector === ".date-wheel-trigger:focus-within .dropdown-value-commit .date-wheel-segment.active");
+      expect(rule?.body ?? "(펄스 규칙이 없다)").toMatch(/animation:\s*date-segment-commit\s+230ms\s+cubic-bezier\(\.18,\s*1\.15,\s*\.35,\s*1\)/);
+    });
+
+    // 규칙이 있는 것과 그 키프레임이 **옳은 것**은 다른 사실이다. 그리고 `expect()`가
+    // 단락하므로 시작색과 끝색을 한 블록에 넣으면 앞이 터질 때 뒤가 실행조차 되지 않는다.
+    it("그 키프레임은 accent에서 시작한다 — 킷의 다른 확정과 같은 말", () => {
+      const keyframes = /@keyframes date-segment-commit\s*\{[\s\S]*?\n\}/.exec(datePickerCssSource)?.[0] ?? "(키프레임이 없다)";
+      expect(keyframes).toMatch(/0%\s*\{\s*color:\s*var\(--accent\)/);
+    });
+
+    // 끝색이 세그먼트 자신의 글자색이 아니면 펄스가 끝나는 순간 칩 위 글자가 튄다
+    // (애니메이션이 걷히며 저자 선언으로 돌아가므로).
+    it("그 키프레임은 세그먼트 자신의 글자색으로 끝난다", () => {
+      const keyframes = /@keyframes date-segment-commit\s*\{[\s\S]*?\n\}/.exec(datePickerCssSource)?.[0] ?? "(키프레임이 없다)";
+      expect(keyframes).toMatch(/100%\s*\{\s*color:\s*var\(--date-segment-active-text\)/);
+    });
+
+    // ── 반전 칩의 값 ────────────────────────────────────────────────────────
+    //
+    // 값이 **규칙이 아니라 토큰에** 있어야 하는 이유는 위 계약과 같은 뿌리다. 테마별로 다른
+    // 값을 규칙에 박으면 세그먼트에 매칭되는 규칙이 늘어 위 둘이 함께 깨진다.
+    //
+    // **그리고 값 자체가 계약이다.** 오너가 실기기에서 세 번 되돌려 보냈다:
+    //   accent 20%   라이트 글자/필드 10.35 / 1.32 · 다크 – / 1.20   "어느 세그먼트인지 모르겠다"
+    //   accent 55%   라이트 5.91 / 2.31 · 다크 7.63 / 1.75           "글씨가 검정이라 안 보인다"
+    //   중성 칩      라이트 5.54 / 2.47 · 다크 5.89 / 2.26           "선택 글씨를 반전시켜 달라"
+    //   반전(지금)   라이트 13.66 / 13.66 · 다크 13.33 / 13.33
+    // 바닥은 글자 4.5(WCAG AA)와 필드 2.0이고, 2.0은 **알려진 실패값(다크 1.75) 바로 위**다.
+    //
+    // ⚠️ 반전에서는 글자색 = 필드색이므로 **두 대비가 같은 수가 된다.** 그래도 둘 다 두는
+    // 이유는 서로 다른 요구이기 때문이다 — 하나는 "칩 위 글자가 읽히는가", 다른 하나는
+    // "칩이 필드에서 도드라지는가"다. 반전을 그만두는 순간 두 수는 갈라진다.
+    it("활성 세그먼트의 배경과 글자색은 값을 박지 않고 토큰을 참조한다", () => {
+      const rule = cssRules(datePickerCssSource).find((candidate) => candidate.selector === ".date-wheel-trigger:focus-within .date-wheel-segment.active");
+      expect([
+        /(^|[\s;])background:\s*([^;]+)/.exec(rule?.body ?? "")?.[2].trim() ?? null,
+        /(^|[\s;])color:\s*([^;]+)/.exec(rule?.body ?? "")?.[2].trim() ?? null,
+      ]).toEqual(["var(--date-segment-active-background)", "var(--date-segment-active-text)"]);
+    });
+
+    // **두 토큰은 `:root` 한 곳에만 있다.** 테마 블록마다 복사하지 않는 이유는 값이
+    // `var(--text)`·`var(--input)`이기 때문이다 — 그 둘이 이미 테마별로 재정의되므로 선언
+    // 하나가 두 테마에서 저절로 맞고, **복사본이 없으니 갈라질 수도 없다.** 반전이란
+    // "칩은 글자색, 글자는 필드색"이고 그 문장이 그대로 값이다.
+    it("두 토큰은 :root 한 곳에서 테마 토큰을 참조한다", () => {
+      expect([
+        tokenIn(":root {", "--date-segment-active-background"),
+        tokenIn(":root {", "--date-segment-active-text"),
+      ]).toEqual(["var(--text)", "var(--input)"]);
+    });
+
+    // 테마와 축을 **전부 따로** 본다. `expect()`가 단락하므로 묶으면 앞이 터질 때 뒤가
+    // 실행조차 되지 않고, 어느 테마의 어느 축이 무너졌는지가 실패 메시지에 남아야 한다.
+    it("라이트에서 칩 위 글자는 AA를 넘는다", () => {
+      expect(contrast(resolved(":root {", "--date-segment-active-background")!, resolved(":root {", "--date-segment-active-text")!)).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it("라이트에서 칩은 필드와 갈라진다", () => {
+      expect(contrast(resolved(":root {", "--date-segment-active-background")!, tokenIn(":root {", "--input")!)).toBeGreaterThanOrEqual(2);
+    });
+
+    it("다크에서 칩 위 글자는 AA를 넘는다", () => {
+      const dark = '[data-theme="dark"] {';
+      expect(contrast(resolved(dark, "--date-segment-active-background")!, resolved(dark, "--date-segment-active-text")!)).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it("다크에서 칩은 필드와 갈라진다", () => {
+      const dark = '[data-theme="dark"] {';
+      expect(contrast(resolved(dark, "--date-segment-active-background")!, tokenIn(dark, "--input")!)).toBeGreaterThanOrEqual(2);
     });
   });
 });
