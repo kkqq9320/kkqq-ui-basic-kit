@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DateWheelPicker, type DateWheelUnit } from "../src/DateWheelPicker";
 import { Dialog } from "../src/Dialog";
 import datePickerCssSource from "../css/date-picker.css?raw";
+import tokensCssSource from "../css/tokens.css?raw";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
@@ -3076,6 +3077,63 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     // 세그먼트·구두점을 겨냥한 규칙 **전부**를 선택자와 `color` 선언 여부까지 묶어
     // 신원으로 본다. 규칙을 하나 덧붙이면 목록 길이가 달라져 터지고, 규칙이 통째로
     // 사라져도 빈 배열이 기대와 달라 터진다 — 어느 쪽도 조용히 지나가지 않는다.
+    /** 토큰 블록 하나에서 커스텀 프로퍼티 값을 읽는다. 블록 안에 중첩 규칙이 없다는 전제. */
+    function tokenIn(block: string, name: string) {
+      const start = tokensCssSource.indexOf(block);
+      if (start < 0) return null;
+      const body = tokensCssSource.slice(start, tokensCssSource.indexOf("}", start));
+      return new RegExp(`${name}:\\s*([^;]+)`).exec(body)?.[1].trim() ?? null;
+    }
+    /** WCAG 2.x 상대 휘도 대비. 알파 없는 hex만 받는다. */
+    function contrast(a: string, b: string) {
+      const luminance = (hex: string) => {
+        const channels = [1, 3, 5]
+          .map((index) => parseInt(hex.slice(index, index + 2), 16) / 255)
+          .map((value) => (value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4));
+        return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+      };
+      const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+      return (high + 0.05) / (low + 0.05);
+    }
+
+    // ── 활성 세그먼트 색 ────────────────────────────────────────────────────
+    //
+    // 값이 **규칙이 아니라 토큰에** 있어야 하는 이유는 위 두 계약("규칙은 정확히 하나",
+    // "color를 선언하지 않는다")과 같은 뿌리다. 테마별로 다른 값을 규칙에 박으면 세그먼트에
+    // 매칭되는 규칙이 둘이 되어 그 둘이 함께 깨진다. 토큰이면 규칙은 하나로 남는다.
+    //
+    // **그리고 값 자체가 계약이다.** 오너가 실기기에서 두 번 되돌려 보냈다:
+    //   accent 20% — 라이트 필드대비 1.32 / 다크 1.20 → "어느 세그먼트인지 판단이 안 된다"
+    //   accent 55% — 라이트 2.31 / 다크 1.75 → 라이트는 "글씨가 검정이라 잘 안 보인다",
+    //                다크는 "액센트 말고 다른 식으로"
+    // 그래서 필드 대비의 바닥을 **알려진 실패값(1.75)보다 위인 2.0**에 두고, 글자 대비는
+    // WCAG AA(4.5)로 둔다. `color`를 못 쓰므로(위 계약) 글자는 두 테마 모두 `--text`이고,
+    // 그것이 이 배경 위에서 읽혀야 한다는 뜻이다.
+    it("활성 세그먼트 배경은 값을 박지 않고 토큰을 참조한다", () => {
+      const rule = cssRules(datePickerCssSource).find((candidate) => candidate.selector === ".date-wheel-trigger:focus-within .date-wheel-segment.active");
+      expect(/background:s*([^;]+)/.exec(rule?.body ?? "")?.[1].trim()).toBe("var(--date-segment-active-background)");
+    });
+
+    it("그 토큰이 라이트·다크 두 블록에 다 정의돼 있다", () => {
+      expect([
+        [":root", tokenIn(":root {", "--date-segment-active-background")],
+        ['[data-theme="dark"]', tokenIn('[data-theme="dark"] {', "--date-segment-active-background")],
+      ].map(([block, value]) => [block, value !== null])).toEqual([[":root", true], ['[data-theme="dark"]', true]]);
+    });
+
+    // 두 테마를 **따로** 본다. `expect()`가 단락하므로 한 블록에 넣으면 라이트가 터질 때
+    // 다크는 실행조차 되지 않는다 — 어느 쪽이 안 읽히는지가 실패 메시지에 남아야 한다.
+    it("라이트에서 글자는 AA를 넘고 배경은 필드와 갈라진다", () => {
+      const segment = tokenIn(":root {", "--date-segment-active-background")!;
+      expect(contrast(segment, tokenIn(":root {", "--text")!)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(segment, tokenIn(":root {", "--input")!)).toBeGreaterThanOrEqual(2);
+    });
+
+    it("다크에서 글자는 AA를 넘고 배경은 필드와 갈라진다", () => {
+      const segment = tokenIn('[data-theme="dark"] {', "--date-segment-active-background")!;
+      expect(contrast(segment, tokenIn('[data-theme="dark"] {', "--text")!)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(segment, tokenIn('[data-theme="dark"] {', "--input")!)).toBeGreaterThanOrEqual(2);
+    });
     it("세그먼트에 닿는 규칙이 정확히 둘이고 어느 쪽도 color를 선언하지 않는다", () => {
       const targeted = cssRules(datePickerCssSource).filter((rule) => /\.date-wheel-(segment|punctuation)/.test(rule.selector));
       expect(targeted.map((rule) => [rule.selector, declaresColor(rule.body)])).toEqual([
