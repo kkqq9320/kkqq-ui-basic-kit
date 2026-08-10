@@ -768,10 +768,17 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     const host = candidates.find((element) => element.scrollHeight > element.clientHeight) ?? candidates[0];
     if (!host) return;
     // **범위가 모자라면 늘립니다.** 트리거가 문서 끝에 있으면 스크롤을 요청해도 더 내려갈
-    // 곳이 없어 아무 일도 일어나지 않고, 아래 공간이 그대로라 maxHeight가 줄면서 팝오버에
-    // 스크롤바가 납니다(오너 실기기). 이 킷이 가상 키보드에서 padding-bottom으로 자리를
-    // 예약하는 것과 같은 계열입니다. 원하는 높이를 줄이는 대안은 "열 다섯 줄이 보인다"는
-    // §5 계약을 건드리고, 위로 뒤집는 것은 §7.0이 금지합니다.
+    // 곳이 없어 아무 일도 일어나지 않고, 아래 공간이 그대로라 상자가 좁게 잘립니다. 이 킷이
+    // 가상 키보드에서 padding-bottom으로 자리를 예약하는 것과 같은 계열입니다.
+    //
+    // ⚠️ **오너가 리포트한 "팝오버 스크롤바"의 원인은 이것이 아니었습니다.** 그건
+    // `maxHeight`가 상수로 잘리던 것이었고(위 `desiredHeight` 주석), 그때 호스트에는 범위가
+    // 708px 남아 있었습니다 — **이 분기는 그 캡처에서 아예 돌지 않았습니다.**
+    //
+    // 그래도 남겨 둡니다: 트리거가 **문서 맨 끝 가까이**(대략 문턱만큼 이내) 있고 호스트에
+    // 남은 범위가 그보다 작으면, 스크롤로는 자리를 못 만들고 이것만이 만들 수 있습니다.
+    // 마지막 필드가 날짜인 폼이 그렇습니다. **다만 데모 페이지로는 그 배치를 만들지 못해**
+    // **실브라우저로 확인하지 못했습니다** — jsdom 테스트가 기제(요청량과 되돌림)만 고정합니다.
     const room = Math.max(0, host.scrollHeight - host.clientHeight - host.scrollTop);
     const shortfall = amount - room;
     if (shortfall > 0 && !reservedRoomRef.current) {
