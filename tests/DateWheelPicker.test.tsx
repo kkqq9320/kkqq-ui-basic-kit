@@ -647,6 +647,28 @@ describe("DateWheelPicker 스와이프", () => {
     fireEvent.click(row);
     expect(onChange.mock.calls.flat()).toEqual(["2025-07-12"]);
   });
+  // **`moveSwipe`의 억제가 실제로 일하는 자리는 여기 하나다.** 뮤테이션으로 확인했다:
+  // 그 줄을 통째로 지워도(또는 임계값을 30으로 올려도) 위 셋은 전부 초록이다 — 놓을 때
+  // 18px을 넘겨 있으면 `finishSwipe`가 자기 자리에서 플래그를 세우기 때문이다. 그래서
+  // 그 줄이 없어도 "끌다가 놓고 클릭"은 막힌다.
+  //
+  // 안 막히는 것은 **멀리 갔다가 되돌아와서 놓는** 제스처다. 25px 끌었다가 5px 자리로
+  // 돌아와 놓으면 `finishSwipe`는 5px만 보고 아무것도 안 한다. 손가락은 휠을 25px 굴렸는데
+  // 놓는 순간 그 아래 행이 선택되면, 사용자가 하지도 않은 선택이 된다.
+  //
+  // 이것이 그 줄의 고유 킬이다. (위 셋만 두면 "억제를 통째로 삭제"가 0 red로 통과한다 —
+  // 등가라서가 아니라 **미도달**이었다. 도달하는 제스처를 여기서 쓴다.)
+  it("멀리 끌었다가 되돌아와 놓으면, 그것은 여전히 스와이프다", () => {
+    const { onChange, year } = openWheel();
+    const row = [...year.querySelectorAll(".date-wheel-values button")][4];
+    onChange.mockClear();
+    pointer("pointerDown", row, { pointerId: 2, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", row, { pointerId: 2, clientY: 125, buttons: 1 });   // 25px — 스와이프다
+    pointer("pointerMove", row, { pointerId: 2, clientY: 105, buttons: 1 });   // 되돌아옴
+    pointer("pointerUp", row, { pointerId: 2, clientY: 105 });                 // 5px — finishSwipe는 아무것도 안 한다
+    fireEvent.click(row);
+    expect(onChange).not.toHaveBeenCalled();
+  });
   // ── 무장 해제는 행을 갈아치우지 않는다 ──────────────────────────────────────
   //
   // 위 무장 해제는 처음에 `sequence`를 0으로 되돌리는 방식이었고, **그것이 회귀를
