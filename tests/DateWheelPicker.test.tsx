@@ -510,6 +510,52 @@ describe("DateWheelPicker 스와이프", () => {
     expect(year.className).not.toMatch(/moving-/);
   });
 
+  // ── 무장 해제는 행을 갈아치우지 않는다 ──────────────────────────────────────
+  //
+  // 위 무장 해제는 처음에 `sequence`를 0으로 되돌리는 방식이었고, **그것이 회귀를
+  // 만들었다.** 값 컨테이너의 key가 `${unit}-${sequence}`라 0으로 되돌리는 것도
+  // key 변경이고, 그래서 pointerdown이 행 일곱 개를 통째로 갈아치웠다. 오너 리포트:
+  // **"7로 선택돼 있을 때 9를 클릭해도 선택되게 하고 싶다"** — 기능은 이미 있었고
+  // 안 먹던 것이다. 무장된 열에서만, 그래서 **한 번 걸러 한 번씩** 실패했다
+  // (커밋할 때마다 열이 다시 무장되므로).
+  //
+  // ⚠️ **실브라우저와 jsdom이 같은 이유로 빨개지지 않는다. 둘 다 재서 확인했다.**
+  // 브라우저에서는 mousedown을 받은 노드가 mouseup 전에 사라지므로 `click`이 행이 아니라
+  // **공통 조상**에 발생한다(코디네이터 실측: 무장 상태에서 `isConnected: false`, 값 안 바뀜
+  // / 비무장에서는 살아 있고 값 바뀜 / 다시 무장에서 또 안 바뀜). jsdom은 리타기팅을
+  // 구현하지 않지만, **떨어져 나간 노드에 보낸 이벤트는 React 루트의 위임 리스너에 닿지
+  // 못하므로** 행의 `onClick`이 역시 안 돈다. 기제는 다르고 **뿌리와 관측값은 같다** —
+  // 누르고 떼는 사이에 노드가 사라졌다는 것, 그리고 그 행의 `onClick`이 안 돈다는 것.
+  //
+  // 그래서 **누르기 전에 잡아 둔 노드**를 클릭한다. 다시 조회하면 새 노드를 얻어
+  // 통과해 버린다(계측: 새 노드로 클릭하면 값이 바뀐다) — 그게 이 결함이 오랫동안
+  // 안 보였을 모양이다.
+  it("무장된 열에서, 누른 그 행을 클릭하면 값이 바뀐다", () => {
+    const { onChange, year } = openWheel();
+    fireEvent.click(screen.getByRole("button", { name: "연도 이전" }));   // 이 열을 무장시킨다
+    const row = [...year.querySelectorAll(".date-wheel-values button")][4];   // 오프셋 +1 = 2027
+    onChange.mockClear();
+    pointer("pointerDown", row, { pointerId: 3, clientY: 100, buttons: 1, button: 0 });
+    fireEvent.click(row);
+    expect(onChange).toHaveBeenCalledWith("2027-07-12");
+  });
+
+  // 위 테스트의 **기제**를 따로 본다. 같은 뮤테이션에 함께 죽지만(독립된 킬이 아니다),
+  // 위가 "행 클릭이 산다"는 계약이라면 이것은 **"무장 해제가 key를 안 건드린다"**는 이
+  // 고침의 형태 자체다. `sequence`(= "값이 바뀌었으니 슬라이드를 다시 재생하라", 리마운트)와
+  // `moving-*`(= "재생할 슬라이드가 있다")는 다른 관심사이고, **무장 해제는 뒤엣것만**
+  // **건드려야 한다.**
+  //
+  // 이 짝의 나머지 반쪽은 위 "앞선 착지가 무장시킨 moving-*을 새 스와이프가 비우고
+  // 시작한다"이다 — 그쪽이 "클래스는 꺼진다", 이쪽이 "key는 그대로다"를 지킨다.
+  // 둘 중 하나만 두면 무장 해제를 통째로 지우거나 리마운트로 되돌리는 것이 통과한다.
+  it("무장 해제는 행 노드를 갈아치우지 않는다", () => {
+    const { year } = openWheel();
+    fireEvent.click(screen.getByRole("button", { name: "연도 이전" }));
+    const row = [...year.querySelectorAll(".date-wheel-values button")][4];
+    pointer("pointerDown", row, { pointerId: 3, clientY: 100, buttons: 1, button: 0 });
+    expect(row.isConnected).toBe(true);
+  });
   // **대조군.** 놓을 때의 커밋(18px 임계값)은 애니메이션을 그대로 둔다 — 손가락이 떠난
   // 뒤의 **이산적인 착지**라 슬라이드가 맞는 모션이고, `clearSwipeVisual`이
   // `.dragging`을 먼저 지우므로 거기서는 정상 재생된다.

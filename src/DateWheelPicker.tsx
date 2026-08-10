@@ -82,7 +82,25 @@ function shiftDateValue(value: string, unit: DateWheelUnit, direction: number) {
 
 /** 양끝 ±3은 보이지 않지만 미리 그려두는 프리로드 행입니다. */
 const DATE_WHEEL_OFFSETS = [-3, -2, -1, 0, 1, 2, 3];
-type DateWheelMotion = { sequence: number; direction: "next" | "previous" };
+/**
+ * 열의 휠 이동 모션. **필드 셋이 서로 다른 것을 몰고 있고, 그게 요점입니다.**
+ *
+ * - `sequence` — 값 컨테이너의 `key`(`${unit}-${sequence}`)를 만듭니다. 바뀌면 행
+ *   일곱 개가 **리마운트**되고, 그 리마운트가 슬라이드를 처음부터 재생시킵니다.
+ *   뜻은 "값이 바뀌었으니 다시 재생하라"입니다. **커밋할 때만 올립니다.**
+ * - `playing` — `moving-*` 클래스를 붙일지입니다. 뜻은 "재생할 슬라이드가 있다"이고,
+ *   CSS는 이 클래스로 애니메이션을 **무장**합니다.
+ * - `direction` — 어느 쪽 키프레임인지.
+ *
+ * ⚠️ **`playing`을 따로 두지 않고 `sequence`가 클래스까지 몰게 하면 안 됩니다.**
+ * 한동안 className이 `sequence ? moving-${direction} : ""`였고, 그래서 무장을 해제하려면
+ * `sequence`를 0으로 되돌려야 했는데 **그것도 key 변경이라 리마운트를 일으켰습니다.**
+ * 결과: 스와이프 pointerdown이 행을 갈아치워, mousedown을 받은 노드가 mouseup 전에
+ * 사라지고 브라우저가 `click`을 공통 조상으로 리타기팅해 **행 클릭이 죽었습니다**
+ * (오너 리포트 "7일 때 9를 눌러도 안 바뀐다"; 무장된 열에서만이라 한 번 걸러 한 번씩).
+ * 무장 해제는 클래스만 끄고 key는 그대로 두어야 합니다.
+ */
+type DateWheelMotion = { sequence: number; direction: "next" | "previous"; playing: boolean };
 
 function validDateValue(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -205,9 +223,9 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   useEscapeToClose(open, () => { setTyping(null); setOpen(false); });
   const [position, setPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const [columnMotion, setColumnMotion] = useState<Record<DateWheelUnit, DateWheelMotion>>({
-    year: { sequence: 0, direction: "next" },
-    month: { sequence: 0, direction: "next" },
-    day: { sequence: 0, direction: "next" },
+    year: { sequence: 0, direction: "next", playing: false },
+    month: { sequence: 0, direction: "next", playing: false },
+    day: { sequence: 0, direction: "next", playing: false },
   });
   const [activeUnit, setActiveUnit] = useState<DateWheelUnit>(fields[0] ?? "year");
   // activeUnit은 소비자가 런타임에 fields를 바꿀 수 있어(예: 일간/월간 토글) fields
@@ -546,7 +564,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     if (amount) {
       setColumnMotion((current) => ({
         ...current,
-        [unit]: { sequence: current[unit].sequence + 1, direction: amount > 0 ? "next" : "previous" },
+        [unit]: { sequence: current[unit].sequence + 1, direction: amount > 0 ? "next" : "previous", playing: true },
       }));
     }
   }
@@ -579,15 +597,17 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 토글되든 만들어질 애니메이션이 없습니다. `finishSwipe`의 놓을 때 커밋이 다시
    * 무장시키므로 **착지 슬라이드는 그대로 남습니다**(대조군이 지킵니다).
    *
-   * 이미 0이면 같은 객체를 돌려주어 리렌더를 만들지 않습니다 — 0을 다시 쓰면 값 컨테이너의
-   * key(`${unit}-${sequence}`)는 그대로지만 스와이프 프레임마다 무의미한 렌더가 붙습니다.
+   * 이미 꺼져 있으면 같은 객체를 돌려주어 리렌더를 만들지 않습니다.
    *
-   * ⚠️ **0으로 되돌리면 key가 바뀌므로 리마운트가 일어납니다.** 그런데도 애니메이션이
-   * 새로 생기지 않는 것은 **같은 렌더에서 `moving-*`이 함께 빠지기 때문**입니다 —
-   * 추론이 아니라 실브라우저에서 쟀습니다: ± 버튼으로 무장시킨 뒤 pointerdown을 보내면
-   * 그 자리에서 `className`이 `date-wheel-column active`, `getAnimations()`가 `[]`,
-   * computed transform이 저자 선언(`matrix(1, 0, 0, 1, 0, -30)`)으로 돌아옵니다
-   * (컨테이너 노드는 실제로 교체됐습니다).
+   * ⚠️ **`playing`만 끕니다. `sequence`는 건드리지 않습니다 — 그게 이 함수의 요점입니다.**
+   * 처음 판에서는 `sequence`를 0으로 되돌렸고, className이 `sequence ? …`였으니 그것이
+   * 무장 해제 방법이었습니다. 그런데 `sequence`는 값 컨테이너의 key이기도 해서 **무장
+   * 해제가 곧 리마운트**였고, pointerdown이 행 일곱 개를 갈아치웠습니다. mousedown을 받은
+   * 노드가 mouseup 전에 사라지면 브라우저는 `click`을 공통 조상으로 리타기팅하므로 행의
+   * `onClick`이 안 돕니다 — 오너 리포트 "7일 때 9를 눌러도 안 바뀐다"가 그것이고,
+   * 무장된 열에서만 그러므로 **한 번 걸러 한 번씩** 실패했습니다(코디네이터 실브라우저
+   * 실측: 무장 `isConnected: false` 값 안 바뀜 / 비무장 살아 있고 값 바뀜 / 다시 무장
+   * 안 바뀜). `DateWheelMotion` 타입 주석에 그 셋의 분업이 적혀 있습니다.
    *
    * **`.dragging`을 제스처 전체에 거는 안을 기각한 이유**(같은 구멍을 겨냥한 다른
    * 후보였습니다): 그쪽은 무장을 **무음 처리만** 하므로 `clearSwipeVisual`이
@@ -598,7 +618,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * — 그건 새 제스처가 앞 모션을 대체하는 것이라 맞습니다.
    */
   function clearColumnMotion(unit: DateWheelUnit) {
-    setColumnMotion((current) => (current[unit].sequence === 0 ? current : { ...current, [unit]: { ...current[unit], sequence: 0 } }));
+    setColumnMotion((current) => (current[unit].playing ? { ...current, [unit]: { ...current[unit], playing: false } } : current));
   }
 
   function commitShift(sourceValue: string, unit: DateWheelUnit, amount: number, motion: "wheel" | "none" = "wheel") {
@@ -1186,7 +1206,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
 
             `onPointerDown`의 `setActiveUnit(unit)`이 **포인터 경로가 활성 세그먼트를 따라가는
             유일한 길**입니다(열의 `onFocus`가 하던 일). 지우지 마세요. */}
-        {fields.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${motion.sequence ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${dateWheelLabel(baseValue, unit, labels.weekdays)}`} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue }; if (typeof event.currentTarget.setPointerCapture === "function") event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {fields.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${dateWheelLabel(baseValue, unit, labels.weekdays)}`} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue }; if (typeof event.currentTarget.setPointerCapture === "function") event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
