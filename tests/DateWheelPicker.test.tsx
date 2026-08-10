@@ -422,6 +422,77 @@ describe("DateWheelPicker 스와이프", () => {
     pointer("pointerUp", year, { pointerId: 7, clientY: 80 });
     expect(onChange).toHaveBeenCalledWith("2027-07-12");
   });
+
+  // ── 드래그 중 커밋은 휠 이동 애니메이션을 재생하지 않는다 ─────────────────────
+  //
+  // 설계 스펙 §6.1이 **타이핑에 대해 이미 내린 판단과 같은 근거**다. `commitShift`는
+  // `markColumnMotion`으로 그 열의 sequence를 올리고, 값 컨테이너의 key가
+  // `${unit}-${sequence}`라서 행 일곱 개가 통째로 리마운트되며 210ms 슬라이드가
+  // 재생된다. **드래그 중에는 손가락이 이미 모션을 주고 있으므로 그 슬라이드는 두 번째
+  // 모션이고, 둘이 싸운다.**
+  //
+  // 오너 실기기 트레이스(2026-08-10, 178프레임/커밋 7회)가 그 싸움을 잡았다: 커밋 직후
+  // delta가 0~2px이 되는 프레임에 `.dragging`이 빠지고(`Math.abs(offset) > 2`),
+  // 그 한 프레임에 `.dragging { animation: none !important }`가 사라져 방금 리마운트된
+  // 컨테이너에서 슬라이드가 **시작**된다. `@keyframes date-wheel-slide-previous`의
+  // `from`이 `translateY(-45px) scale(.975) opacity:.58`이고 애니메이션은 저자
+  // 선언을 이기므로, 계산된 `translateY(-28.75px)` 대신 `-45px`가 그려진다 —
+  // 16px 밖으로, 58% 투명도로 한 프레임. 캡처에서 7번.
+  //
+  // ⚠️ **jsdom에서는 CSS 애니메이션이 진행하지 않으므로 `getAnimations()`로 볼 수
+  // 없다.** 관측 가능한 대리물은 셋이고 아래에서 하나씩 본다 — 값 컨테이너의 리마운트,
+  // 슬라이드를 무장시키는 `moving-*` 클래스, 액센트 행 버튼의 리마운트.
+  // **셋은 독립된 킬이 아니다**: 전부 "sequence가 안 올랐다"는 한 사실의 서로 다른
+  // 소비자라 뮤테이션 하나에 함께 죽는다. 그래도 나눠 두는 이유는 두 가지다 —
+  // `expect()`가 단락하므로 한 블록에 넣으면 뒤 단언이 실행조차 되지 않고,
+  // 셋이 **서로 다른 CSS 규칙**을 가리키기 때문이다(컨테이너의 slide / 그 slide를
+  // 무장시키는 클래스 / 버튼의 `date-wheel-selected-pop`).
+  //
+  // 기존 테스트 "타이핑은 휠 이동 애니메이션을 재생하지 않는다"가 같은 문제를 이미
+  // 같은 모양으로 풀어 두었다.
+  it("드래그 중 커밋은 값 컨테이너를 리마운트하지 않는다", () => {
+    const { year } = openWheel();
+    const rowsBefore = year.querySelector(".date-wheel-values");
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", year, { pointerId: 7, clientY: 60, buttons: 1 });
+    expect(year.querySelector(".date-wheel-values")).toBe(rowsBefore);
+  });
+
+  it("드래그 중 커밋은 moving-* 클래스를 붙이지 않는다", () => {
+    const { year } = openWheel();
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", year, { pointerId: 7, clientY: 60, buttons: 1 });
+    expect(year.className).not.toMatch(/moving-/);
+  });
+
+  // 액센트 행(선택 행)은 `.dragging`이 **덮지 못한다** — 그 규칙은
+  // `.date-wheel-column.dragging .date-wheel-values`라 컨테이너의 애니메이션만 끄고,
+  // `date-wheel-selected-pop`(230ms, scale .88 → 1.09 → 1)은 그 **자식 버튼**에 걸려
+  // 있다. 그래서 드래그 중 리마운트가 나면 팝이 매 커밋마다 처음부터 다시 시작한다 —
+  // 100~150ms마다 커밋되는 스와이프에서는 230ms 팝이 **끝나는 일이 없다.**
+  // 리마운트가 없어지면 다시 시작할 계기 자체가 사라진다(클래스 토글로는 시작되지 않는다).
+  it("드래그 중 커밋은 액센트 행을 리마운트하지 않는다", () => {
+    const { year } = openWheel();
+    const selectedBefore = year.querySelector(".date-wheel-values button.selected");
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", year, { pointerId: 7, clientY: 60, buttons: 1 });
+    expect(year.querySelector(".date-wheel-values button.selected")).toBe(selectedBefore);
+  });
+
+  // **대조군.** 놓을 때의 커밋(18px 임계값)은 애니메이션을 그대로 둔다 — 손가락이 떠난
+  // 뒤의 **이산적인 착지**라 슬라이드가 맞는 모션이고, `clearSwipeVisual`이
+  // `.dragging`을 먼저 지우므로 거기서는 정상 재생된다.
+  //
+  // 이 테스트는 고치기 전에도 초록이다. 그래도 값이 있는 이유는 **과잉 뮤테이션을 죽이기**
+  // 때문이다: `commitShift`에서 `markColumnMotion` 호출을 통째로 지우거나 두 스와이프
+  // 경로 모두에서 억제하면 위 셋은 여전히 초록인데 이것만 빨개진다. 없으면 "드래그 중에만
+  // 껐다"와 "휠 이동 애니메이션을 없앴다"를 구분하지 못한다.
+  it("놓을 때의 커밋은 휠 이동 애니메이션을 재생한다", () => {
+    const { year } = openWheel();
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerUp", year, { pointerId: 7, clientY: 80 });
+    expect(year.classList.contains("moving-next")).toBe(true);
+  });
 });
 
 describe("DateWheelPicker 키보드 진입", () => {

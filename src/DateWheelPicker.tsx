@@ -551,10 +551,19 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     }
   }
 
-  function commitShift(sourceValue: string, unit: DateWheelUnit, amount: number) {
+  /**
+   * 한 칸 확정합니다. `motion`이 `"wheel"`이면 휠 이동 애니메이션까지 재생합니다 —
+   * `markColumnMotion`이 열의 sequence를 올리고, 값 컨테이너의 key가
+   * `${unit}-${sequence}`라서 행 일곱 개가 리마운트되는 것이 그 트리거입니다.
+   * `"none"`이면 값만 확정합니다.
+   *
+   * **`"none"`을 쓰는 자리는 드래그 중 커밋 하나뿐입니다**(`moveSwipe`). 근거는 그
+   * 호출부에 적혀 있습니다.
+   */
+  function commitShift(sourceValue: string, unit: DateWheelUnit, amount: number, motion: "wheel" | "none" = "wheel") {
     const next = shiftedFrom(sourceValue, unit, amount);
     if (!next) return null;
-    markColumnMotion(unit, amount);
+    if (motion === "wheel") markColumnMotion(unit, amount);
     onChange(next);
     return next;
   }
@@ -929,7 +938,21 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     let delta = clientY - start.y;
     if (Math.abs(delta) >= 30) {
       const direction = delta < 0 ? 1 : -1;
-      const next = commitShift(start.value, unit, direction);
+      // **드래그 중 커밋은 휠 이동 애니메이션을 재생하지 않습니다.** 손가락이 이미
+      // 컨테이너를 끌고 있으므로 210ms 슬라이드는 **두 번째 모션**이고, 둘이 싸웁니다 —
+      // 설계 스펙 §6.1이 타이핑에 대해 내린 판단과 같은 근거입니다("타이핑은 휠 이동이
+      // 아니다"). 오너 실기기 트레이스(2026-08-10)가 그 싸움을 두 가지로 잡았습니다:
+      // 커밋 직후 delta가 0~2px이 되는 프레임에 `.dragging`이 빠지면서 슬라이드가
+      // `from`(`translateY(-45px)`, `opacity: .58`)으로 한 프레임 번쩍이고,
+      // 리마운트된 액센트 행에서 230ms `date-wheel-selected-pop`이 매 커밋마다 처음부터
+      // 다시 시작합니다 — 커밋 간격이 100~150ms이라 그 팝은 **끝나는 일이 없습니다.**
+      //
+      // **CSS로 끄지 않고 여기서 안 붙이는 이유:** `.dragging`은 컨테이너만 덮고
+      // 자식 버튼은 안 덮지만, 선택자를 버튼까지 넓혀도 같은 구멍이 남습니다 —
+      // `.dragging`은 `Math.abs(offset) > 2`로 켜지므로 **커밋 직후 한 프레임 빠지고,
+      // 측정된 번쩍임이 정확히 그 프레임입니다.** 애초에 무장하지 않으면 그 구멍이
+      // 없습니다. 그래서 CSS는 그대로 두고 `moving-*`을 안 붙입니다.
+      const next = commitShift(start.value, unit, direction, "none");
       if (next) {
         start.value = next;
         start.y += direction > 0 ? -30 : 30;
@@ -964,6 +987,9 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       const delta = clientY - start.y;
       if (Math.abs(delta) >= 18) {
         suppressColumnClickRef.current = true;
+        // 놓을 때의 커밋은 기본값(`"wheel"`)입니다. 손가락이 떠난 뒤의 **이산적인**
+        // 착지라 슬라이드가 맞는 모션이고, `clearSwipeVisual`이 `.dragging`을 이미
+        // 지웠으므로 정상 재생됩니다 — 위 드래그 중 커밋과 다른 상황입니다.
         commitShift(start.value, unit, delta > 0 ? -1 : 1);
       }
     }
