@@ -2981,6 +2981,103 @@ describe("DateWheelPicker 트리거 접근성 이름", () => {
   });
 });
 
+// 오너: "필수 날짜 픽커 열 때 휠들이 애니메이션이 생기면서 열리는데 이거 좋은 것 같은데,
+// 다른 픽커들은 적용이 안 돼 있네."
+//
+// **오너가 좋아한 그것은 기능이 아니라 결함이었습니다.** 새로 로드하면 어느 픽커도 하지
+// 않고, ±로 한 칸 옮긴 열만 `moving-*`를 **영원히** 달고 있다가 닫았다 열 때마다
+// `date-wheel-slide-previous`를 다시 재생했습니다(코디네이터 실브라우저 측정). 즉
+// **"값이 움직였다"는 신호가 아무것도 안 움직인 열림에서 재생**되고 있었고, 그 열만 되고
+// 나머지는 안 되던 이유도 그것입니다.
+//
+// 그래서 둘로 나눕니다 — 거짓 신호를 없애고(아래 첫 테스트), 오너가 원한 **진입**
+// 애니메이션을 **모든 열에 균일하게** 따로 만듭니다.
+//
+// ⚠️ **두 신호는 이름도 대상도 달라야 합니다.** 진입을 슬라이드로 재사용하면 방금 없앤
+// 거짓 신호가 그대로 돌아옵니다. 슬라이드는 `.date-wheel-values`(값이 움직였다),
+// 진입은 `.date-wheel-column`(팝오버가 열렸다)입니다.
+describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
+  function openPicker() {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} />);
+    const trigger = fieldOf("거래 날짜");
+    fireEvent.click(trigger);
+    return trigger;
+  }
+  const columns = () => [...document.querySelectorAll(".date-wheel-column")];
+
+  // 이동 신호는 **그 이동에만** 붙어 있어야 합니다. 세션 내내 남으면 다음 열림이 그것을
+  // 물려받아, 아무것도 안 움직였는데 움직였다고 말합니다.
+  it("닫았다 열면 지난 이동의 moving-*이 남아 있지 않다", async () => {
+    const trigger = openPicker();
+    fireEvent.click(screen.getByRole("button", { name: "연도 이전" }));   // 연 열을 무장시킨다
+
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+    await waitFor(() => expect(document.querySelector(".date-wheel-column")).toBeNull());
+    fireEvent.click(trigger);
+    await waitFor(() => expect(document.querySelector(".date-wheel-column")).not.toBeNull());
+
+    expect(columns().map((column) => /moving-\w+/.exec(column.className)?.[0] ?? null)).toEqual([null, null, null]);
+  });
+
+  // 진입은 **방향이 없습니다** — 열릴 때 아무것도 움직이지 않았기 때문입니다. 그래서 모든
+  // 열이 같은 것을 같은 순간에 합니다. 슬라이드의 `from`에서 `translateY`만 뺀 모양이라
+  // 같은 계열로 읽히면서도 "어느 쪽으로 굴렀다"는 말은 하지 않습니다.
+  it("진입 애니메이션은 열에 걸린다 — 값 컨테이너가 아니다", () => {
+    expect(datePickerCssSource).toMatch(/\.date-wheel-column \{[^}]*animation: date-wheel-enter 210ms cubic-bezier\(\.2, \.9, \.25, 1\)/);
+  });
+
+  it("진입 키프레임이 있다", () => {
+    expect(datePickerCssSource).toMatch(/@keyframes date-wheel-enter/);
+  });
+
+  // ⚠️ **아래는 혼자서는 공허 통과합니다.** 키프레임이 아예 없으면 대체 문자열이 들어가고,
+  // 그 문자열에는 `translate`가 없으므로 초록이 됩니다(실제로 고치기 전에 초록이었습니다).
+  // **전제는 바로 위 테스트가 집니다** — 키프레임이 사라지면 이 테스트가 조용히 통과하는
+  // 대신 위가 빨개집니다. 둘을 나눈 이유는 `expect()`가 단락하기 때문입니다.
+  // **이 단언이 두 신호를 갈라 둡니다.** 진입 키프레임에 `translateY`가 들어오는 순간 그것은
+  // "이 방향으로 굴렀다"가 되어 슬라이드와 같은 말을 하게 되고, 거짓 신호가 돌아옵니다.
+  it("진입 키프레임에는 방향이 없다", () => {
+    const keyframes = /@keyframes date-wheel-enter\s*\{[\s\S]*?\n\}/.exec(datePickerCssSource)?.[0] ?? "(진입 키프레임이 없다)";
+    expect(keyframes).not.toMatch(/translate/);
+  });
+
+  // PRINCIPLES §12 — reduced-motion에서는 duration을 줄이는 것이 아니라 이동·확대 자체를
+  // 끕니다. 이 파일의 이웃 규칙들이 이미 그 형태입니다.
+  it("reduced-motion에서 진입 애니메이션이 꺼진다", () => {
+    const reduced = /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\n\}/.exec(datePickerCssSource)?.[0] ?? "(reduced 블록이 없다)";
+    expect(reduced).toMatch(/\.date-wheel-column\s*,/);
+  });
+
+  // ── 아래 둘은 대조군입니다(고치기 전에도 초록) ──────────────────────────────
+  //
+  // 진입을 **왜 열에 걸었는지**를 고정합니다. jsdom은 애니메이션을 안 돌리므로 "다시
+  // 재생된다/안 된다"를 직접 볼 수 없고, CSS 애니메이션이 다시 시작하는 계기는 **노드가**
+  // **새로 마운트되는 것**이므로 노드 신원이 그 대리물입니다.
+  it("열 때마다 열 노드가 새로 생긴다 — 진입이 열림마다 재생되는 근거", async () => {
+    const trigger = openPicker();
+    const first = columns()[0];
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+    await waitFor(() => expect(document.querySelector(".date-wheel-column")).toBeNull());
+    fireEvent.click(trigger);
+    await waitFor(() => expect(document.querySelector(".date-wheel-column")).not.toBeNull());
+
+    expect(columns()[0]).not.toBe(first);
+  });
+
+  // 그리고 **커밋마다는 재생되지 않아야** 합니다. 커밋은 값 컨테이너만 갈아치우고 열은
+  // 그대로 두므로, 진입이 열에 걸려 있는 한 커밋이 그것을 다시 시작시킬 수 없습니다.
+  // 진입을 `.date-wheel-values`로 옮기면 **커밋마다 진입이 재생**되어 슬라이드와 겹칩니다.
+  it("커밋은 열 노드를 그대로 두고 값 컨테이너만 갈아치운다 — 진입이 커밋마다 재생되지 않는 근거", () => {
+    openPicker();
+    const column = columns()[0];
+    const values = column.querySelector(".date-wheel-values");
+
+    fireEvent.click(screen.getByRole("button", { name: "연도 이전" }));
+
+    expect([columns()[0] === column, column.querySelector(".date-wheel-values") === values]).toEqual([true, false]);
+  });
+});
+
 describe("DateWheelPicker 트리거 세그먼트", () => {
   function segmentUnits(trigger: HTMLElement) {
     return [...trigger.querySelectorAll(".date-wheel-segment")].map((element) => element.getAttribute("data-unit"));

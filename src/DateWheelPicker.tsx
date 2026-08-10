@@ -397,6 +397,19 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     clearedRef.current = false;
     sessionStartValueRef.current = committedOnCloseRef.current ?? value;
     committedOnCloseRef.current = null;
+    // **이동 신호도 여기서 끕니다.** `markColumnMotion`은 `playing`을 켜기만 하고, 끄는
+    // 것은 스와이프 시작(`clearColumnMotion`)뿐이었습니다. 그래서 ±로 한 칸 옮긴 열은
+    // 그 클래스를 **세션 내내** 달고 있었고, 팝오버는 닫힐 때 언마운트되므로 **다시 열 때
+    // 새 노드에서 슬라이드가 처음부터 재생**됐습니다 — 아무것도 안 움직인 열림에서
+    // "값이 움직였다"가 재생된 것입니다. 오너가 그것을 기능으로 보고 "다른 픽커에도
+    // 적용해 달라"고 했는데(진짜 진입 애니메이션은 css/date-picker.css의
+    // `date-wheel-enter`가 따로 맡습니다), 신호로서는 거짓말이었습니다.
+    //
+    // `sequence`는 건드리지 않습니다 — 그것은 값 컨테이너의 key이고, 여기서 0으로
+    // 되돌리면 R1에서 고친 리마운트 결함이 그대로 돌아옵니다.
+    setColumnMotion((current) => (Object.values(current).some((motion) => motion.playing)
+      ? { year: { ...current.year, playing: false }, month: { ...current.month, playing: false }, day: { ...current.day, playing: false } }
+      : current));
   }, [open]);
 
   // 팝오버가 닫히면 버퍼를 버립니다. 닫힘은 "세그먼트를 떠난다"의 상위 집합이라, 확정하지

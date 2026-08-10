@@ -146,7 +146,21 @@
 /* fields prop로 열 개수가 줄면(연·월 픽커 등) 트랙 수도 따라갑니다. 열 높이는 그대로입니다. */
 .date-wheel-columns[data-fields="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .date-wheel-columns[data-fields="1"] { grid-template-columns: minmax(0, 1fr); }
-.date-wheel-column { width: 100%; min-width: 0; height: 212px; display: grid; grid-template-rows: 30px 150px 30px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--line) 82%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--surface-soft) 78%, transparent); outline: none; touch-action: none; user-select: none; transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease; }
+/* 진입 애니메이션은 **열(`.date-wheel-column`)에 겁니다. 값 컨테이너가 아닙니다.**
+ * 열은 팝오버와 함께 마운트되므로 **열릴 때 한 번** 재생되고, 커밋은 값 컨테이너만
+ * 갈아치우므로(key가 `${unit}-${sequence}`) 여기까지 다시 시작시키지 못합니다.
+ * 값 컨테이너에 걸면 **커밋마다** 진입이 재생되어 슬라이드와 겹칩니다.
+ *
+ * **슬라이드와 다른 신호입니다.** 슬라이드(`date-wheel-slide-*`)는 "이 열이 이 방향으로
+ * 굴렀다"이고, 진입은 "팝오버가 열렸다"입니다. 열릴 때는 아무것도 안 움직였으므로
+ * **방향이 없고**, 그래서 모든 열이 같은 것을 같은 순간에 합니다. 모양은 슬라이드의
+ * `from`에서 `translateY`만 뺀 것이라 같은 계열로 읽히면서도 방향을 말하지 않습니다.
+ *
+ * ⚠️ **여기에 `translateY`를 넣지 마세요.** 넣는 순간 진입이 "어느 쪽으로 굴렀다"가 되어
+ * 슬라이드와 같은 말을 하게 되고, 이 애니메이션이 생긴 계기였던 거짓 신호가 돌아옵니다.
+ * (오너가 좋아했던 "열 때 애니메이션"은 원래 그 거짓 신호였습니다 — 한 열이 이동 클래스를
+ * 세션 내내 달고 있다가 열 때마다 재생한 것이고, 그래서 그 열만 되고 나머지는 안 됐습니다.) */
+.date-wheel-column { width: 100%; min-width: 0; height: 212px; display: grid; grid-template-rows: 30px 150px 30px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--line) 82%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--surface-soft) 78%, transparent); outline: none; touch-action: none; user-select: none; animation: date-wheel-enter 210ms cubic-bezier(.2, .9, .25, 1); transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease; }
 .date-wheel-column.active, .date-wheel-column:focus-visible { border-color: color-mix(in srgb, var(--accent) 72%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 48%, var(--surface-soft)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent); }
 @media (hover: hover) and (pointer: fine) {
   .date-wheel-column:hover { border-color: color-mix(in srgb, var(--accent) 48%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 28%, var(--surface-soft)); }
@@ -197,12 +211,18 @@
   65% { opacity: 1; }
   to { opacity: 1; transform: translateY(-30px) scale(1); }
 }
+/* 진입 — 방향 없음. 슬라이드와 같은 210ms·같은 커브라 한 계열로 읽힙니다. */
+@keyframes date-wheel-enter {
+  from { opacity: .58; transform: scale(.975); }
+  to { opacity: 1; transform: scale(1); }
+}
 @keyframes date-wheel-selected-pop {
   0% { transform: scale(.88); }
   62% { transform: scale(1.09); }
   100% { transform: scale(1.025); }
 }
 @media (prefers-reduced-motion: reduce) {
+  .date-wheel-column,
   .date-wheel-values,
   .date-wheel-column:is(.moving-next, .moving-previous) .date-wheel-values,
   .date-wheel-column:is(.moving-next, .moving-previous) .date-wheel-values button.selected { animation: none; transition: none; }
