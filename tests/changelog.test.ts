@@ -40,4 +40,13 @@ describe("CHANGELOG와 package.json이 같은 버전을 말한다", () => {
   it("태그로 거는 설치 명령을 적어 둔다", () => {
     expect(changelogText).toContain(`#v${packageVersion}`);
   });
+
+  // **소비자가 설치본 안에서 읽을 수 있어야 합니다.** 버전을 올리기 전에 "무엇이 깨지고
+  // 무엇을 눈으로 볼지"를 보는 자리가 여기인데, `files`에 없으면 `node_modules`에
+  // 안 들어갑니다. `PRINCIPLES.md`를 함께 싣는 것과 같은 이유입니다 — 계약은 코드가
+  // 있는 자리에 있어야 합니다. (킷 스킬이 "CHANGELOG를 읽으세요"라고 안내하므로,
+  // 이게 빠지면 스킬이 없는 파일을 가리키게 됩니다.)
+  it("CHANGELOG가 배포 목록에 있다", () => {
+    expect((JSON.parse(packageJsonText) as { files: string[] }).files).toContain("CHANGELOG.md");
+  });
 });
