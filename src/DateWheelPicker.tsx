@@ -119,6 +119,18 @@ const DATE_WHEEL_OFFSETS = [-3, -2, -1, 0, 1, 2, 3];
  */
 const SWIPE_SLOP = 18;
 
+/**
+ * 팝오버 진입 애니메이션이 **다 끝나는** 시각(ms) — 마지막 열의 시차까지 포함합니다
+ * (320ms + 60ms x 2). 이 시각에 `entering`을 걷습니다.
+ *
+ * ⚠️ **걷는 것이 중요합니다.** 남겨 두면 스와이프 pointerdown이 `moving-*`을 떼는 순간
+ * 값 컨테이너의 animation-name이 이동 → 진입으로 **바뀌면서 진입이 세션 도중에**
+ * **재생됩니다.** 애니메이션 종료 이벤트로 걷지 않는 이유: `animationend`는 자식의
+ * `date-wheel-selected-pop`에서도 버블해 올라오고, `prefers-reduced-motion`에서는
+ * 애니메이션이 아예 안 돌아 **영영 안 옵니다.** 시간으로 걷으면 두 경우 다 성립합니다.
+ */
+const DATE_WHEEL_ENTER_TOTAL_MS = 440;
+
 type DateWheelMotion = { sequence: number; direction: "next" | "previous"; playing: boolean };
 
 function validDateValue(value: string) {
@@ -246,6 +258,21 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     month: { sequence: 0, direction: "next", playing: false },
     day: { sequence: 0, direction: "next", playing: false },
   });
+  /**
+   * 팝오버가 막 열렸는가. 열 셋이 함께 굴러 들어오는 진입 애니메이션의 **게이트**입니다
+   * (css/date-picker.css의 `.date-wheel-column.entering .date-wheel-values`).
+   *
+   * `useLayoutEffect`인 이유는 **첫 페인트 전에** 클래스가 붙어야 하기 때문입니다.
+   * `useEffect`로 붙이면 한 프레임은 제자리로 그려졌다가 다음 프레임에 시작 위치로
+   * 튀어 올라간 뒤 굴러 내려옵니다 — 진입이 **역방향 튐**으로 보입니다.
+   */
+  const [entering, setEntering] = useState(false);
+  useLayoutEffect(() => {
+    if (!open) { setEntering(false); return; }
+    setEntering(true);
+    const timer = window.setTimeout(() => setEntering(false), DATE_WHEEL_ENTER_TOTAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [open]);
   const [activeUnit, setActiveUnit] = useState<DateWheelUnit>(fields[0] ?? "year");
   // activeUnit은 소비자가 런타임에 fields를 바꿀 수 있어(예: 일간/월간 토글) fields
   // 밖의 열을 계속 가리킬 수 있습니다. 그 원본 상태를 그대로 믿지 않고, 매 렌더
@@ -1312,7 +1339,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
 
             `onPointerDown`의 `setActiveUnit(unit)`이 **포인터 경로가 활성 세그먼트를 따라가는
             유일한 길**입니다(열의 `onFocus`가 하던 일). 지우지 마세요. */}
-        {fields.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${dateWheelLabel(baseValue, unit, labels.weekdays)}`} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {fields.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${dateWheelLabel(baseValue, unit, labels.weekdays)}`} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이

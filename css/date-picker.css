@@ -160,7 +160,14 @@
  * 슬라이드와 같은 말을 하게 되고, 이 애니메이션이 생긴 계기였던 거짓 신호가 돌아옵니다.
  * (오너가 좋아했던 "열 때 애니메이션"은 원래 그 거짓 신호였습니다 — 한 열이 이동 클래스를
  * 세션 내내 달고 있다가 열 때마다 재생한 것이고, 그래서 그 열만 되고 나머지는 안 됐습니다.) */
-.date-wheel-column { width: 100%; min-width: 0; height: 212px; display: grid; grid-template-rows: 30px 150px 30px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--line) 82%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--surface-soft) 78%, transparent); outline: none; touch-action: none; user-select: none; animation: date-wheel-enter 210ms cubic-bezier(.2, .9, .25, 1); transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease; }
+.date-wheel-column { width: 100%; min-width: 0; height: 212px; display: grid; grid-template-rows: 30px 150px 30px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--line) 82%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--surface-soft) 78%, transparent); outline: none; touch-action: none; user-select: none; transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease; }
+/* 진입 시차 — 열마다 다른 것은 **이것 하나뿐**입니다. `animation-delay`를 별도 규칙으로
+ * 주면 그 규칙이 아래 이동 규칙보다 특이도가 높아져 **커밋 프레임의 슬라이드에까지**
+ * 지연이 붙습니다. 커스텀 프로퍼티로 주면 진입 규칙이 하나로 유지돼 그 문제가 없습니다.
+ * 60ms는 연속된 사건이 "동시"가 아니라 "차례로"로 읽히기 시작하는 대략의 경계이고,
+ * 두 칸이면 총 길이가 440ms로 0.5초 안에 들어옵니다. */
+.date-wheel-column:nth-child(2) { --date-wheel-enter-delay: 60ms; }
+.date-wheel-column:nth-child(3) { --date-wheel-enter-delay: 120ms; }
 .date-wheel-column.active, .date-wheel-column:focus-visible { border-color: color-mix(in srgb, var(--accent) 72%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 48%, var(--surface-soft)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent); }
 @media (hover: hover) and (pointer: fine) {
   .date-wheel-column:hover { border-color: color-mix(in srgb, var(--accent) 48%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 28%, var(--surface-soft)); }
@@ -176,6 +183,26 @@
  * 미리 그려두는 프리로드 행이라 스와이프 중 빈 칸이 생기지 않습니다. */
 .date-wheel-viewport { width: 100%; height: 150px; overflow: hidden; border-top: 1px solid color-mix(in srgb, var(--line) 68%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--line) 68%, transparent); }
 .date-wheel-values { width: 100%; height: 210px; display: grid; grid-template-rows: repeat(7, 30px); overflow: hidden; transform: translateY(calc(-30px + var(--date-wheel-drag-offset, 0px))); transform-origin: 50% 50%; transition: transform 110ms cubic-bezier(.22, .8, .3, 1); will-change: transform, opacity; }
+/* 팝오버 진입 — **열 셋이 함께 한 행만큼 굴러 내려와 멎습니다**(오너: "휠이 드르륵
+ * 움직이는 것 같은 애니메이션"). 이동 신호와 넷으로 갈라 둡니다: 모든 열이 함께 움직인다
+ * (이동은 한 열만) · 이름이 다르다 · 게이트가 다르다(`.entering`은 열림 창에만) ·
+ * 길이와 커브가 다르다(320ms 감속 + 멎음 / 210ms).
+ *
+ * ⚠️ **대상은 이동과 같은 `.date-wheel-values`입니다. 나눌 수가 없습니다** — CSS
+ * 애니메이션은 선언된 그 요소만 변형하고, 굴러야 하는 것은 행입니다. 열을 옮기면 ± 버튼과
+ * 테두리까지 든 상자가 통째로 미끄러집니다. 대상을 나눠 얻으려던 것("커밋마다 진입이
+ * 재생되지 않는다")은 **순서로** 지킵니다: 아래 이동 규칙이 이것과 특이도가 같고
+ * (둘 다 (0,3,0)) 파일에서 뒤에 오므로, 커밋 프레임에서는 이동이 이깁니다.
+ * **이동 규칙을 이 규칙 위로 옮기지 마세요.**
+ *
+ * travel 30px은 기하 상한입니다 — 값 컨테이너 210px(7행), 뷰포트 150px이므로 뷰포트가
+ * 보는 구간 [Y, Y+150]에서 Y는 0~60만 가능하고, 기본이 -30px이라 시작점은 -60px이
+ * 한계입니다. 더 멀리서 굴리면 뷰포트 끝에 행이 없는 빈 띠가 생깁니다. 드래그 클램프
+ * ±30과 같은 기하, 같은 수입니다.
+ *
+ * `backwards`가 필요합니다 — 시차를 기다리는 동안 2·3번 열이 제자리로 보였다가 시작
+ * 위치로 튀는 것을 막습니다. */
+.date-wheel-column.entering .date-wheel-values { animation: date-wheel-enter 320ms cubic-bezier(.18, .85, .28, 1) var(--date-wheel-enter-delay, 0ms) backwards; }
 .date-wheel-column.dragging .date-wheel-values { animation: none !important; transition: none; }
 .date-wheel-column.moving-next .date-wheel-values { animation: date-wheel-slide-next 210ms cubic-bezier(.2, .9, .25, 1); }
 .date-wheel-column.moving-previous .date-wheel-values { animation: date-wheel-slide-previous 210ms cubic-bezier(.2, .9, .25, 1); }
@@ -211,10 +238,12 @@
   65% { opacity: 1; }
   to { opacity: 1; transform: translateY(-30px) scale(1); }
 }
-/* 진입 — 방향 없음. 슬라이드와 같은 210ms·같은 커브라 한 계열로 읽힙니다. */
+/* 진입 — 한 행 위에서 굴러 내려와 5px 지나쳤다가 제자리에 멎습니다("드르륵"의 멎는 맛). */
 @keyframes date-wheel-enter {
-  from { opacity: .58; transform: scale(.975); }
-  to { opacity: 1; transform: scale(1); }
+  0% { opacity: .35; transform: translateY(-60px); }
+  62% { opacity: 1; }
+  78% { transform: translateY(-25px); }
+  100% { opacity: 1; transform: translateY(-30px); }
 }
 @keyframes date-wheel-selected-pop {
   0% { transform: scale(.88); }
@@ -222,7 +251,7 @@
   100% { transform: scale(1.025); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .date-wheel-column,
+  .date-wheel-column.entering .date-wheel-values,
   .date-wheel-values,
   .date-wheel-column:is(.moving-next, .moving-previous) .date-wheel-values,
   .date-wheel-column:is(.moving-next, .moving-previous) .date-wheel-values button.selected { animation: none; transition: none; }

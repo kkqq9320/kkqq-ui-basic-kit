@@ -3107,62 +3107,99 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
     expect(columns().map((column) => /moving-\w+/.exec(column.className)?.[0] ?? null)).toEqual([null, null, null]);
   });
 
-  // 진입은 **방향이 없습니다** — 열릴 때 아무것도 움직이지 않았기 때문입니다. 그래서 모든
-  // 열이 같은 것을 같은 순간에 합니다. 슬라이드의 `from`에서 `translateY`만 뺀 모양이라
-  // 같은 계열로 읽히면서도 "어느 쪽으로 굴렀다"는 말은 하지 않습니다.
-  it("진입 애니메이션은 열에 걸린다 — 값 컨테이너가 아니다", () => {
-    expect(datePickerCssSource).toMatch(/\.date-wheel-column \{[^}]*animation: date-wheel-enter 210ms cubic-bezier\(\.2, \.9, \.25, 1\)/);
+  // ⚠️ **진입에서 "방향 없음" 계약은 걷혔습니다.** 오너가 뒤집었습니다:
+  // **"날짜 피커 열 때 휠이 드르륵 움직이는 것 같은 애니메이션 적용해."**
+  // 구르는 진입은 "값이 이쪽으로 움직였다"는 **주장이 아니라 컨트롤이 도착했다는 연출**이라,
+  // 금지의 근거였던 "진입에는 방향이 없다"가 성립하지 않습니다.
+  //
+  // **그러나 지키려던 진짜 계약은 남습니다: 진입과 이동은 서로 구분돼야 한다.** 없으면
+  // 잔재가 거짓 신호로 재생되던 그 결함이 형태만 바꿔 돌아옵니다. 네 축으로 갈라 둡니다:
+  //
+  //   1. **모든 열이 함께** 구른다 (이동은 한 열만) — 눈에 가장 먼저 들어오는 차이
+  //   2. 다른 이름 (`date-wheel-enter` / `date-wheel-slide-*`)
+  //   3. 다른 **게이트** (`.entering`은 열림 창에만 / `.moving-*`은 값이 움직였을 때)
+  //   4. 다른 길이·커브 (320ms 감속+멎음 / 210ms)
+  //
+  // ⚠️ **대상은 갈라 두지 못했습니다 — 물리적으로 불가능합니다.** 지난 라운드에는 진입이
+  // `.date-wheel-column`에 있었는데, CSS 애니메이션은 **선언된 그 요소만** 변형할 수 있고
+  // 굴러야 하는 것은 **행**(`.date-wheel-values`)입니다. 열을 세로로 옮기면 ± 버튼과
+  // 테두리까지 든 상자가 통째로 미끄러지는 것이지 휠이 구르는 것이 아닙니다.
+  //
+  // 대상을 나눠 얻으려던 것("커밋마다 진입이 재생되지 않는다")은 **다른 방법으로 지킵니다:**
+  // 이동 규칙이 진입 규칙과 **같은 특이도**이고 파일에서 **뒤에** 오므로, 커밋 프레임에서는
+  // 이동이 이깁니다. 아래 "이동 규칙이 뒤에 온다"가 그것을 고정합니다.
+  it("진입은 값 컨테이너를 굴리고, 열의 entering이 그것을 연다", () => {
+    expect(datePickerCssSource).toMatch(/\.date-wheel-column\.entering \.date-wheel-values \{[^}]*animation: date-wheel-enter 320ms/);
   });
 
   it("진입 키프레임이 있다", () => {
     expect(datePickerCssSource).toMatch(/@keyframes date-wheel-enter/);
   });
 
-  // ⚠️ **아래는 혼자서는 공허 통과합니다.** 키프레임이 아예 없으면 대체 문자열이 들어가고,
-  // 그 문자열에는 `translate`가 없으므로 초록이 됩니다(실제로 고치기 전에 초록이었습니다).
-  // **전제는 바로 위 테스트가 집니다** — 키프레임이 사라지면 이 테스트가 조용히 통과하는
-  // 대신 위가 빨개집니다. 둘을 나눈 이유는 `expect()`가 단락하기 때문입니다.
-  // **이 단언이 두 신호를 갈라 둡니다.** 진입 키프레임에 `translateY`가 들어오는 순간 그것은
-  // "이 방향으로 굴렀다"가 되어 슬라이드와 같은 말을 하게 되고, 거짓 신호가 돌아옵니다.
-  it("진입 키프레임에는 방향이 없다", () => {
+  // **이제는 방향이 있어야 합니다.** 없으면 "드르륵"이 아니라 예전의 방향 없는 진입입니다.
+  // 전제(키프레임이 있다)는 바로 위 테스트가 집니다.
+  it("진입 키프레임은 굴러 내려온다", () => {
     const keyframes = /@keyframes date-wheel-enter\s*\{[\s\S]*?\n\}/.exec(datePickerCssSource)?.[0] ?? "(진입 키프레임이 없다)";
-    expect(keyframes).not.toMatch(/translate/);
+    expect(keyframes).toMatch(/0%\s*\{[^}]*translateY\(-60px\)/);
   });
 
-  // PRINCIPLES §12 — reduced-motion에서는 duration을 줄이는 것이 아니라 이동·확대 자체를
-  // 끕니다. 이 파일의 이웃 규칙들이 이미 그 형태입니다.
-  it("reduced-motion에서 진입 애니메이션이 꺼진다", () => {
-    const reduced = /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\n\}/.exec(datePickerCssSource)?.[0] ?? "(reduced 블록이 없다)";
-    expect(reduced).toMatch(/\.date-wheel-column\s*,/);
+  // **travel은 프리로드가 감당하는 30px이 상한입니다.** 값 컨테이너 210px(7행), 뷰포트
+  // 150px이므로 뷰포트가 보는 구간은 [Y, Y+150]이고 Y는 0~60만 가능합니다. 기본이 -30px
+  // 이므로 시작점은 -60px보다 위로 갈 수 없습니다 — 넘기면 뷰포트 끝에 행이 없는 빈 띠가
+  // 생깁니다. F1의 드래그 클램프 ±30과 **같은 기하에서 나온 같은 수**입니다.
+  it("진입은 -60px에서 시작해 기본 자리 -30px로 멎는다", () => {
+    const keyframes = /@keyframes date-wheel-enter\s*\{[\s\S]*?\n\}/.exec(datePickerCssSource)?.[0] ?? "(진입 키프레임이 없다)";
+    expect(keyframes).toMatch(/100%\s*\{[^}]*translateY\(-30px\)/);
   });
 
-  // ── 아래 둘은 대조군입니다(고치기 전에도 초록) ──────────────────────────────
+  // **모든 열이 함께 구릅니다** — 축 1. 규칙은 하나이고, 열마다 다른 것은 **시차뿐**입니다.
+  // 시차를 `animation-delay` 규칙으로 따로 주면 그 규칙이 이동 규칙보다 특이도가 높아져
+  // 커밋 프레임의 슬라이드에까지 지연이 붙습니다. 커스텀 프로퍼티로 주면 진입 규칙이
+  // **하나로 유지**되어 그 문제가 없습니다.
+  it("열마다 다른 것은 시차뿐이다", () => {
+    expect([
+      /\.date-wheel-column:nth-child\(2\) \{[^}]*--date-wheel-enter-delay:\s*([^;]+)/.exec(datePickerCssSource)?.[1]?.trim() ?? null,
+      /\.date-wheel-column:nth-child\(3\) \{[^}]*--date-wheel-enter-delay:\s*([^;]+)/.exec(datePickerCssSource)?.[1]?.trim() ?? null,
+    ]).toEqual(["60ms", "120ms"]);
+  });
+
+  // **이동이 진입을 이겨야 합니다** — 커밋 프레임에서 값 컨테이너가 리마운트되는데, 그때
+  // 진입이 다시 재생되면 슬라이드와 겹칩니다. 둘은 특이도가 같으므로(둘 다 (0,3,0))
+  // **파일 안의 순서**가 승부를 가릅니다. 이동을 뒤에 둡니다.
+  it("이동 규칙이 진입 규칙보다 파일에서 뒤에 온다", () => {
+    const enter = datePickerCssSource.indexOf(".date-wheel-column.entering .date-wheel-values");
+    const move = datePickerCssSource.indexOf(".date-wheel-column.moving-next .date-wheel-values");
+    expect([enter >= 0, move >= 0, enter < move]).toEqual([true, true, true]);
+  });
+
+  // PRINCIPLES §12 — reduced-motion에서 **이동을 뺍니다.** 지난 판의 진입에는 이동이 없어
+  // 이 조항에 안 걸렸는데, 구르는 진입은 정면으로 대상입니다.
   //
-  // 진입을 **왜 열에 걸었는지**를 고정합니다. jsdom은 애니메이션을 안 돌리므로 "다시
-  // 재생된다/안 된다"를 직접 볼 수 없고, CSS 애니메이션이 다시 시작하는 계기는 **노드가**
-  // **새로 마운트되는 것**이므로 노드 신원이 그 대리물입니다.
-  it("열 때마다 열 노드가 새로 생긴다 — 진입이 열림마다 재생되는 근거", async () => {
-    const trigger = openPicker();
-    const first = columns()[0];
-    fireEvent.click(screen.getByRole("button", { name: "완료" }));
-    await waitFor(() => expect(document.querySelector(".date-wheel-column")).toBeNull());
-    fireEvent.click(trigger);
-    await waitFor(() => expect(document.querySelector(".date-wheel-column")).not.toBeNull());
-
-    expect(columns()[0]).not.toBe(first);
+  // ⚠️ 특이도를 맞춰야 합니다. reduced 블록의 맨 앞 `.date-wheel-values`는 (0,1,0)이라
+  // 진입 규칙 (0,3,0)을 **못 이깁니다.** 그래서 진입의 선택자를 그대로 목록에 넣습니다 —
+  // 이웃한 이동 규칙이 이미 같은 이유로 그렇게 돼 있습니다.
+  it("reduced-motion에서 진입의 이동이 제거된다", () => {
+    const reduced = /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\n\}/.exec(datePickerCssSource)?.[0] ?? "(reduced 블록이 없다)";
+    expect(reduced).toMatch(/\.date-wheel-column\.entering \.date-wheel-values/);
   });
 
-  // 그리고 **커밋마다는 재생되지 않아야** 합니다. 커밋은 값 컨테이너만 갈아치우고 열은
-  // 그대로 두므로, 진입이 열에 걸려 있는 한 커밋이 그것을 다시 시작시킬 수 없습니다.
-  // 진입을 `.date-wheel-values`로 옮기면 **커밋마다 진입이 재생**되어 슬라이드와 겹칩니다.
-  it("커밋은 열 노드를 그대로 두고 값 컨테이너만 갈아치운다 — 진입이 커밋마다 재생되지 않는 근거", () => {
+  // ── DOM: 게이트가 실제로 열리고 닫히는가 ────────────────────────────────────
+  //
+  // CSS가 옳아도 `.entering`이 안 붙으면 아무 일도 안 일어나고, **안 걷히면** 더 나쁩니다:
+  // 스와이프 pointerdown이 `moving-*`을 떼는 순간 값 컨테이너의 animation-name이
+  // 이동 → 진입으로 **바뀌면서 진입이 세션 도중에 재생**됩니다. 그래서 창이 닫히는 것까지
+  // 고정합니다.
+  it("팝오버가 열리면 세 열 모두 entering이 붙는다", () => {
     openPicker();
-    const column = columns()[0];
-    const values = column.querySelector(".date-wheel-values");
+    expect(columns().map((column) => column.classList.contains("entering"))).toEqual([true, true, true]);
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: "연도 이전" }));
-
-    expect([columns()[0] === column, column.querySelector(".date-wheel-values") === values]).toEqual([true, false]);
+  // 위가 전제입니다 — 클래스가 아예 안 붙으면 이 테스트는 공허 통과합니다.
+  it("진입 창이 지나면 entering이 걷힌다", () => {
+    vi.useFakeTimers();
+    openPicker();
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(columns().map((column) => column.classList.contains("entering"))).toEqual([false, false, false]);
   });
 });
 
