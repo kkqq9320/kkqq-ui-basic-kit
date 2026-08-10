@@ -654,6 +654,40 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     return () => { document.removeEventListener("pointerdown", closeOutside, true); };
   }, [open]);
 
+  /**
+   * 모바일에서 아래로 열 자리를 만듭니다(스펙 §7.0). **팝오버가 마운트된 뒤에** 돕니다 —
+   * 그래야 필요한 높이를 상수로 짐작하지 않고 **실제로 잰 값**으로 정할 수 있습니다.
+   *
+   * ⚠️ **`below`를 클램프한 값으로 부족분을 계산하면 안 됩니다.** `dropdownViewportSpace`는
+   * `below`를 `Math.max(0, …)`로 자르는데, 트리거가 하단 바 자리보다 **아래**에 있으면 진짜
+   * 아래 공간은 음수이고 그 음수만큼이 부족분에 더해져야 합니다. 잘린 0을 쓰면 딱 그만큼
+   * 덜 움직입니다 — 실측: trueBelow −78.5인데 0으로 읽어 324를 요청했고(옳은 값 402.5),
+   * 적용 뒤에도 68px이 잘린 채 남아 `오늘`·`완료`가 잘렸습니다(오너 리포트).
+   *
+   * ⚠️ **필요한 높이는 상수가 아니라 잰 값입니다.** `desiredHeight`는 **바닥**으로만 씁니다 —
+   * 내용 높이는 소비자가 주는 라벨·힌트 텍스트에 따라 달라집니다(데모 308, 오너 앱 321).
+   * 팝오버는 잘린 채로도 `scrollHeight`로 제 내용 높이를 알려줍니다.
+   *
+   * 열림당 한 번입니다. 매번 다시 밀면 스크롤이 제 꼬리를 물고, 사용자가 그 사이 되돌려도
+   * 컨트롤이 다시 뺏습니다.
+   */
+  useLayoutEffect(() => {
+    if (!open || !position || roomRequestedRef.current) return;
+    const trigger = triggerRef.current;
+    const popover = popoverRef.current;
+    if (!trigger || !popover) return;
+    roomRequestedRef.current = true;
+    if (window.innerWidth > 760) return;   // 데스크톱은 그대로 — 뒤집기가 맡습니다
+    const rect = trigger.getBoundingClientRect();
+    const viewportTop = window.visualViewport?.offsetTop ?? 0;
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const trueBelow = viewportTop + viewportHeight - mobileBottomInset - rect.bottom;
+    const needed = Math.max(318, popover.scrollHeight) + 6;
+    // **필드를 화면 위로 밀어내지 않습니다.** 위로 갈 수 있는 여유는 트리거 위 여백까지입니다.
+    const shift = Math.min(needed - trueBelow, Math.max(0, rect.top - 8));
+    if (shift > 0) scrollRoomBy(shift);
+  }, [open, position, mobileBottomInset]);
+
   // 컬럼 위에서 휠을 굴릴 때 뒤 페이지가 같이 스크롤되지 않게 막습니다.
   useEffect(() => {
     const popover = popoverRef.current;
@@ -698,17 +732,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       // 두 번 열 때 **자리를 오락가락**하게 만들어 조준을 다시 하게 합니다. 데스크톱에서는
       // 뒤집기가 여전히 옳습니다 — 포인터가 내용을 가리지 않고 화면이 넓습니다.
       const openAbove = !isMobile && below < desiredHeight && above > below;
-      // 아래가 모자라면 **자리를 만듭니다.** 뒤집는 대신 스크롤 호스트를 필요한 만큼만
-      // 내려서 트리거를 위로 올립니다. 사용자는 아무것도 더 하지 않습니다 — 스크롤하는
-      // 것은 컨트롤 자신입니다(PRINCIPLES §3이 금지한 것은 **사용자에게** 스크롤을 시키는
-      // 것이고, 그 구분이 §7.0에 적혀 있습니다).
-      if (isMobile && !roomRequestedRef.current) {
-        roomRequestedRef.current = true;
-        const missing = desiredHeight + gap - below;
-        // **필드를 화면 위로 밀어내지 않습니다.** 위로 갈 수 있는 여유는 트리거 위 여백까지입니다.
-        const shift = Math.min(missing, Math.max(0, rect.top - edge));
-        if (shift > 0) scrollRoomBy(shift);
-      }
+      // 자리 확보는 팝오버가 마운트된 뒤에 합니다 — 아래 `makeRoomForPopover` 이펙트.
       // 상자 높이는 **남은 자리로만** 정합니다. 넉넉하면 내용 높이로 알아서 잡히고(그래서
       // 스크롤바가 없고), 좁을 때만 잘립니다 — 잘릴 때 스크롤바가 나는 것은 옳습니다.
       // `Math.max(230, …)`의 바닥은 그대로 둡니다: 그것마저 없으면 아주 좁은 자리에서
