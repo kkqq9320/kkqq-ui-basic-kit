@@ -10,7 +10,7 @@
  *     절대 다른 컬럼으로 자리올림하지 않습니다
  *   · 데스크톱 휠·화살표는 커서가 있는 컬럼만, 모바일 스와이프·키보드는 활성 컬럼만
  */
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type WheelEvent as ReactWheelEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
 import { createPortal } from "react-dom";
 
 import { flushBuffer, lastDayOf, typeDigit, withUnitValue } from "./dateWheelTyping";
@@ -237,7 +237,14 @@ export type DateWheelPickerProps = {
    *  min/max 비교도 남은 최소 단위(연·월·일)로만 이뤄집니다. 값 형식은 늘 YYYY-MM-DD. */
   fields?: DateWheelUnit[];
   allowClear?: boolean;
-  ariaLabel?: string;
+  /** **필수입니다**(PRINCIPLES §11). 스크린리더 때문만이 아니라 **팝오버 머리말로 그대로
+   *  그려지기 때문입니다** — 기본값을 두면 한 폼의 날짜 필드가 전부 같은 머리말을 답니다.
+   *  트리거의 접근성 이름에서는 이 값 **뒤에 지금 보이는 값이 붙습니다**(§11). */
+  ariaLabel: string;
+  /** 팝오버 머리말에 **보이는** 글자. 기본은 `ariaLabel`입니다.
+   *  292px 머리말에는 `"날짜"`가 맞고 접근성 이름으로는 `"거래 발생 날짜"`가 맞을 때
+   *  둘을 갈라놓는 자리입니다. 접근성 이름은 이걸 넘겨도 `ariaLabel` 쪽을 씁니다. */
+  heading?: ReactNode;
   id?: string;
   disabled?: boolean;
   /** 기본값은 한국어. 필요한 키만 덮어쓰면 됩니다. */
@@ -248,7 +255,7 @@ export type DateWheelPickerProps = {
   mobileBottomInset?: number;
 };
 
-export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DATE_WHEEL_FIELDS, allowClear = false, ariaLabel = "날짜", id, disabled = false, labels: labelOverrides, timeZone = "Asia/Seoul", mobileBottomInset = 78 }: DateWheelPickerProps) {
+export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DATE_WHEEL_FIELDS, allowClear = false, ariaLabel, heading, id, disabled = false, labels: labelOverrides, timeZone = "Asia/Seoul", mobileBottomInset = 78 }: DateWheelPickerProps) {
   const labels = { ...DEFAULT_DATE_WHEEL_LABELS, ...labelOverrides, units: { ...DEFAULT_DATE_WHEEL_LABELS.units, ...labelOverrides?.units } };
   const [open, setOpen] = useState(false);
   // 겹쳐 있으면 가장 안쪽만 닫힙니다 — 다이얼로그 안에서 열렸을 때 다이얼로그까지 닫으면 안 됩니다.
@@ -1579,7 +1586,9 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         `wheel`·`touchstart`·`touchmove`에 대한 것이고 `mousedown`은 passive로 등록되지
         않으므로 여기서 preventDefault가 실제로 먹습니다. */}
     {open && position && createPortal(<div ref={popoverRef} id={popoverId} className="date-wheel-popover dropdown-menu-surface" role="dialog" aria-modal="false" aria-label={`${ariaLabel} ${labels.select}`} onMouseDown={(event) => event.preventDefault()} style={{ top: position.top, bottom: position.bottom, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
-      <div className="date-wheel-heading"><strong>{ariaLabel}</strong><span>{labels.hint}</span></div>
+      {/* 보이는 머리말만 `heading`으로 갈립니다 — 위 `aria-label`과 `triggerName`은 계속
+          `ariaLabel`을 씁니다(§11). 안 넘기면 둘이 같은 값이라 지금까지와 동일합니다. */}
+      <div className="date-wheel-heading"><strong>{heading ?? ariaLabel}</strong><span>{labels.hint}</span></div>
       <div className="date-wheel-columns" data-fields={fields.length}>
         {/* 열은 **포커스를 받지 않고 키도 받지 않습니다**(설계 스펙 §5·§6.2) — `tabIndex`가
             없고 `onKeyDown`도 없습니다. 활성 표시는 `resolvedActiveUnit`이 붙이는 `.active`
