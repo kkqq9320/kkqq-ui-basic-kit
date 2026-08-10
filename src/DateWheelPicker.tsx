@@ -950,8 +950,22 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       // **CSS로 끄지 않고 여기서 안 붙이는 이유:** `.dragging`은 컨테이너만 덮고
       // 자식 버튼은 안 덮지만, 선택자를 버튼까지 넓혀도 같은 구멍이 남습니다 —
       // `.dragging`은 `Math.abs(offset) > 2`로 켜지므로 **커밋 직후 한 프레임 빠지고,
-      // 측정된 번쩍임이 정확히 그 프레임입니다.** 애초에 무장하지 않으면 그 구멍이
-      // 없습니다. 그래서 CSS는 그대로 두고 `moving-*`을 안 붙입니다.
+      // 측정된 번쩍임이 정확히 그 프레임입니다.** 그래서 CSS는 그대로 두고
+      // `moving-*`을 안 붙입니다.
+      //
+      // ⚠️ **그래도 구멍이 다 막히지는 않습니다 — 이 변경이 완전히 깨끗하게 만드는 것은
+      // sequence가 아직 0인 열의 드래그입니다.** `markColumnMotion`은 sequence를 올리기만
+      // 하고 아무도 0으로 되돌리지 않고, 열의 className이 `sequence ? moving-${direction}`
+      // 이라서 **한 번이라도 커밋한 열은 그 클래스를 계속 답니다** — 아래 `finishSwipe`의
+      // 놓을 때 커밋도 그렇습니다(그래서 두 번째 스와이프부터가 그 상태입니다). 그 상태에서
+      // `.dragging`이 한 프레임 빠지면 **리마운트 없이도** 슬라이드가 처음부터 다시
+      // 시작합니다 — 실브라우저 `getAnimations()`로 쟀습니다: `.dragging`을 붙이면
+      // 애니메이션이 파괴되고(`[]`), 떼면 `currentTime: 0`짜리가 새로 생기며 computed
+      // transform이 `matrix(0.975, 0, 0, 0.975, 0, -45)`가 됩니다.
+      //
+      // 남은 경로를 막는 최소 후보는 `.dragging`을 **제스처 전체**에 거는 것(pointerdown에서
+      // 붙이고 `clearSwipeVisual`에서 뗌)인데, 그러면 휠을 그냥 탭하는 것도 직전 커밋의
+      // 애니메이션을 끊습니다. 그 판단은 아직 안 내렸습니다 — SEG Task 9 보고서 §5.
       const next = commitShift(start.value, unit, direction, "none");
       if (next) {
         start.value = next;
