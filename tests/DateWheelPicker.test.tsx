@@ -510,6 +510,30 @@ describe("DateWheelPicker 스와이프", () => {
     expect(year.className).not.toMatch(/moving-/);
   });
 
+  // ── 화면은 손가락의 절반만 움직인다 ─────────────────────────────────────────
+  //
+  // 오너 판정(실기기 A/B): "움직이는 px을 반으로 줄이는 게 낫다". **감쇠로 구현한다** —
+  // 클램프만 낮추면 실기기에서 잰 데드존(손가락은 가는데 화면이 서 있는 구간, 최대
+  // 102ms)이 오히려 커진다. 감쇠는 손가락 전 구간을 화면에 대응시키므로 데드존이 없다.
+  //
+  // **클램프 15는 기하가 아니라 커밋 경계에서 나온다.** 커밋이 |delta| >= 30에서 먼저
+  // 일어나므로 보통 경로의 |offset|은 15 미만이고, 클램프는 **한 프레임에 30px 넘게**
+  // 뛰었을 때만 물린다(그때 남는 잔여 delta가 15를 넘을 수 있다). 15는 프리로드가
+  // 감당하는 기하 상한 ±30 안쪽이라 빈 띠가 생기지 않는다.
+  it("커밋 경계 아래에서 오프셋은 손가락 거리의 절반이다", () => {
+    const { year } = openWheel();
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", year, { pointerId: 7, clientY: 72, buttons: 1 });   // delta -28
+    expect(year.style.getPropertyValue("--date-wheel-drag-offset")).toBe("-14px");
+  });
+
+  it("한 프레임에 크게 뛰어도 오프셋은 ±15를 넘지 않는다", () => {
+    const { year } = openWheel();
+    // 100 -> 0. delta -100 -> 한 칸 커밋(start.y가 30만큼 따라옴) -> delta -70 -> 감쇠 -35 -> 클램프.
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", year, { pointerId: 7, clientY: 0, buttons: 1 });
+    expect(year.style.getPropertyValue("--date-wheel-drag-offset")).toBe("-15px");
+  });
   // ── 무장 해제는 행을 갈아치우지 않는다 ──────────────────────────────────────
   //
   // 위 무장 해제는 처음에 `sequence`를 0으로 되돌리는 방식이었고, **그것이 회귀를

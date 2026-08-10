@@ -1030,7 +1030,27 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       }
     }
     if (Math.abs(delta) > 2) suppressColumnClickRef.current = true;
-    const offset = Math.max(-24, Math.min(24, delta));
+    // **화면은 손가락의 절반만 움직입니다**(오너 실기기 판정: "움직이는 px을 반으로").
+    // 클램프만 낮추지 않고 감쇠로 하는 이유: 클램프는 그 위 구간을 **정지**시키므로
+    // 실기기에서 잰 데드존(최대 102ms)이 오히려 커집니다. 감쇠는 손가락 전 구간을 화면에
+    // 대응시켜 그 구간이 아예 없습니다.
+    //
+    // ⚠️ **트레이드오프를 알고 고른 값입니다.** 값 V의 화면 위치는 `p - 30 + offset`이고
+    // 커밋 직전/직후로 재면:
+    //
+    //     감쇠 없음, 클램프 24   p-6  -> p    6px 점프,  따라오는 거리 24px
+    //     감쇠 0.5,  클램프 15   p-15 -> p   15px 점프,  따라오는 거리 15px   ← 지금
+    //     감쇠 없음, 클램프 30   p    -> p    점프 없음,  따라오는 거리 30px
+    //
+    // **따라 내려가는 거리를 줄이면 커밋 순간의 점프가 커집니다.** 셋 중 어느 것도 둘 다
+    // 잡지 못합니다. 둘 다 잡는 모델은 하이라이트 교대(액센트를 뷰포트 중앙에 가장 가까운
+    // 행에 주는 것)뿐이고, 오너가 실기기 A/B에서 **기각했습니다**("오히려 더 어색하다").
+    //
+    // 클램프 15는 기하가 아니라 **커밋 경계 30 x 감쇠 0.5**입니다. 커밋이 먼저 일어나므로
+    // 보통 경로에서는 물리지 않고, 한 프레임에 30px 넘게 뛸 때만 물립니다. 프리로드가
+    // 감당하는 기하 상한(±30, 값 컨테이너 210px - 뷰포트 150px - 기본 translateY -30px)
+    // 안쪽이라 뷰포트 끝에 빈 띠가 생기지 않습니다.
+    const offset = Math.max(-15, Math.min(15, delta * 0.5));
     column.classList.toggle("dragging", Math.abs(offset) > 2);
     column.style.setProperty("--date-wheel-drag-offset", `${offset}px`);
   }
