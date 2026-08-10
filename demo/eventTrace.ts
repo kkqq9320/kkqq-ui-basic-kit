@@ -557,6 +557,98 @@ function startOpenTrace(reason: string) {
   });
 }
 
+/* ── 스와이프 프레임 트레이스 ────────────────────────────────────────────────
+ *
+ * 오너 리포트(2026-08-10, 실기기): "휠 스와이프 애니메이션이 튀거나 끊긴다."
+ * pane에서는 확인이 구조적으로 불가능하다 — rAF가 안 돌고 CSS 전환이 진행되지 않는다.
+ *
+ * **이 트레이스는 킷 로직을 복제하지 않는다.** 킷의 상수(30px 경계, ±24px 클램프)를
+ * 다시 계산하지 않고 DOM에 실제로 찍힌 것만 읽는다 — CSS 변수의 현재 값, 클래스,
+ * 그리고 `getAnimations()`. 이 파일의 다른 미러가 드리프트로 값을 치른 적이 있다.
+ *
+ * 코드를 읽어 나온 후보는 둘이고, 로그가 그 둘을 가른다:
+ *
+ *   A. 노치 끝의 죽는 구간 — offset은 ±24로 잘리는데 커밋 경계는 30px이라, 손가락이
+ *      24→30px를 지나는 동안 화면이 안 움직인다. => 같은 `off=` 값이 **연달아** 찍힌 뒤
+ *      0으로 리셋되면 A다. `maxSameOffRun`이 그 지문이다.
+ *   B. 애니메이션이 켜졌다 잘림 — 커밋 직후 delta가 0~5px이라 `.dragging`이 한 프레임
+ *      빠질 수 있고, 그 프레임에 방금 리마운트된 값 컨테이너에서 210ms 슬라이드가
+ *      시작됐다가 다음 프레임의 `animation: none !important`에 잘린다.
+ *      => `drag=Y→N→Y`와 함께 `anim`이 0→1→0이고 `at=`이 210에 한참 못 미치면 B다.
+ *
+ * 둘 다 아니면 로그가 그렇게 말해 줄 것이다. 그때는 이 패널을 더 늘린다. */
+type SwipeSample = { off: string; drag: boolean; mv: string; anim: number; trans: number; at: string; gen: number };
+
+let swipeStop: (() => void) | null = null;
+
+function readValuesEl(column: Element): HTMLElement | null {
+  return column.querySelector<HTMLElement>(".date-wheel-values");
+}
+
+function sampleSwipe(column: Element, values: HTMLElement, generation: number): SwipeSample {
+  const running = typeof values.getAnimations === "function" ? values.getAnimations() : [];
+  // 애니메이션과 전환을 나눠 센다 — 이 요소는 `transition: transform 110ms`도 갖고 있어서
+  // 합쳐 세면 어느 쪽이 돌았는지 알 수 없다.
+  let anim = 0;
+  let trans = 0;
+  let at = "-";
+  for (const a of running) {
+    if ((a.constructor?.name ?? "") === "CSSTransition") { trans += 1; continue; }
+    anim += 1;
+    if (at === "-") at = typeof a.currentTime === "number" ? String(Math.round(a.currentTime)) : String(a.currentTime);
+  }
+  const cls = column.classList;
+  return {
+    off: getComputedStyle(values).getPropertyValue("--date-wheel-drag-offset").trim() || "0px",
+    drag: cls.contains("dragging"),
+    mv: cls.contains("moving-next") ? "next" : cls.contains("moving-previous") ? "prev" : "-",
+    anim, trans, at, gen: generation,
+  };
+}
+
+/** 포인터를 내린 순간부터 뗄 때까지 매 프레임 샘플링하고, 값이 바뀐 프레임만 남긴다. */
+function startSwipeTrace(column: Element) {
+  swipeStop?.();
+  const started = performance.now();
+  let frames = 0;
+  let changed = 0;
+  let lastKey = "";
+  let lastValues = readValuesEl(column);
+  let generation = 0;   // 값 컨테이너가 리마운트된 횟수 = 커밋 횟수의 **관측값**
+  let plateauMax = 0;   // 같은 off가 연달아 유지된 최대 프레임 수 — 후보 A의 지문
+  let plateauRun = 0;
+  let lastOff = "";
+  let raf = 0;
+
+  append("swipe start — 매 프레임 샘플링(값이 바뀐 프레임만 남깁니다)");
+
+  const tick = () => {
+    frames += 1;
+    const values = readValuesEl(column);
+    if (values) {
+      if (values !== lastValues) { generation += 1; lastValues = values; }
+      const s = sampleSwipe(column, values, generation);
+      if (s.off === lastOff) { plateauRun += 1; if (plateauRun > plateauMax) plateauMax = plateauRun; }
+      else { plateauRun = 1; lastOff = s.off; }
+      const key = `${s.off}|${s.drag}|${s.mv}|${s.anim}|${s.trans}|${s.gen}`;
+      if (key !== lastKey) {
+        lastKey = key;
+        changed += 1;
+        append(`  swipe f${String(frames).padStart(3)} +${Math.round(performance.now() - started)}ms  off=${s.off.padEnd(7)} drag=${s.drag ? "Y" : "N"} mv=${s.mv.padEnd(4)} anim=${s.anim} at=${s.at.padEnd(4)} trans=${s.trans} gen=${s.gen}`);
+      }
+    }
+    if (frames < 600) raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+
+  swipeStop = () => {
+    cancelAnimationFrame(raf);
+    swipeStop = null;
+    append(`swipe end   frames=${frames} changed=${changed} commits(gen)=${generation} maxSameOffRun=${plateauMax}`);
+    append("  읽는 법: 같은 off가 연달아 여러 프레임이면 노치 끝의 죽는 구간(A). drag가 Y→N→Y로 깜빡이며 anim이 0→1→0이고 at이 210에 못 미치면 잘린 애니메이션(B).");
+  };
+}
+
 function append(text: string) {
   const now = performance.now();
   // 새 배열을 만들어 교체합니다(push로 제자리 변경 금지) — React 상태로 그대로 흘려보내는
@@ -585,8 +677,18 @@ export function installEventTrace() {
   for (const type of POINTER_LIKE_EVENTS) {
     document.addEventListener(type, (event) => {
       append(`${type.padEnd(11)} target=${describeTarget(event.target)}  menu=${menuPresent()}`);
+      // 날짜 열 위에서 시작한 포인터만 프레임 트레이스를 켠다. 뗄 때(또는 취소될 때) 끈다.
+      if (type === "pointerdown" && event.target instanceof Element) {
+        const column = event.target.closest(".date-wheel-column");
+        if (column) startSwipeTrace(column);
+      }
+      if (type === "pointerup") swipeStop?.();
     }, { capture: true, passive: true });
   }
+  // pointercancel은 POINTER_LIKE_EVENTS에 없다(그 목록은 "탭이 무엇을 만드는가"를 보려고
+  // 만든 것이다). 스와이프 트레이스는 취소로도 끝나므로 여기서 따로 받는다 — 안 그러면
+  // 손가락이 화면 밖으로 나간 캡처에서 rAF 루프가 600프레임까지 계속 돈다.
+  document.addEventListener("pointercancel", () => { swipeStop?.(); }, { capture: true, passive: true });
 
   window.addEventListener("popstate", () => {
     append(`popstate    stackLen=${popupStackLength()}  menu=${menuPresent()}`);
