@@ -581,6 +581,21 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    *
    * 이미 0이면 같은 객체를 돌려주어 리렌더를 만들지 않습니다 — 0을 다시 쓰면 값 컨테이너의
    * key(`${unit}-${sequence}`)는 그대로지만 스와이프 프레임마다 무의미한 렌더가 붙습니다.
+   *
+   * ⚠️ **0으로 되돌리면 key가 바뀌므로 리마운트가 일어납니다.** 그런데도 애니메이션이
+   * 새로 생기지 않는 것은 **같은 렌더에서 `moving-*`이 함께 빠지기 때문**입니다 —
+   * 추론이 아니라 실브라우저에서 쟀습니다: ± 버튼으로 무장시킨 뒤 pointerdown을 보내면
+   * 그 자리에서 `className`이 `date-wheel-column active`, `getAnimations()`가 `[]`,
+   * computed transform이 저자 선언(`matrix(1, 0, 0, 1, 0, -30)`)으로 돌아옵니다
+   * (컨테이너 노드는 실제로 교체됐습니다).
+   *
+   * **`.dragging`을 제스처 전체에 거는 안을 기각한 이유**(같은 구멍을 겨냥한 다른
+   * 후보였습니다): 그쪽은 무장을 **무음 처리만** 하므로 `clearSwipeVisual`이
+   * `.dragging`을 떼는 순간 애니메이션이 **다시 만들어집니다** — 번쩍임이 드래그 중에서
+   * **놓는 순간으로 옮겨갈** 뿐입니다(같은 측정: `.dragging`을 붙이면 `[]`, 떼면
+   * `currentTime: 0`짜리가 새로 생깁니다). 여기서는 무장 자체를 지우므로 다시 만들어질
+   * 것이 없습니다. **진행 중이던 애니메이션을 pointerdown에서 끊는 것은 두 안이 같습니다**
+   * — 그건 새 제스처가 앞 모션을 대체하는 것이라 맞습니다.
    */
   function clearColumnMotion(unit: DateWheelUnit) {
     setColumnMotion((current) => (current[unit].sequence === 0 ? current : { ...current, [unit]: { ...current[unit], sequence: 0 } }));
