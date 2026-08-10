@@ -1431,6 +1431,69 @@ describe("DateWheelPicker 닫힌 채로 조작한다", () => {
 // **`2003-08-13`으로 확정된다.** 치다 만 `3`이 사라지는 것이 아니라 **살아남아 세션 끝에
 // 연도를 2003년으로 만든다.** 같은 상태에서 `Tab`은 §3 계약과 반대로 버리고, `Backspace`는
 // no-op이 되고, `←`/`→`는 확정도 폐기도 안 한다 — **증상이 넷이고 원인이 하나다.**
+// 오너: **"마우스로 숫자를 누른다고 픽커가 닫히면 안 돼."**
+//
+// 세그먼트는 `<span>`이라 클릭이 트리거의 `onClick`에 그대로 올라가고, 그 핸들러가 여닫기
+// **토글**이었습니다. 그래서 팝오버가 열린 채로 월을 눌러 월로 옮기려던 사람이 **팝오버를**
+// **잃었습니다**(코디네이터 실브라우저 실측: open true → false, 활성은 year → month).
+//
+// 스펙 §6.4가 새 계약입니다: **세그먼트 클릭은 토글이 아닙니다.** 닫혀 있으면 열고, 열려
+// 있으면 그대로 둡니다. 트리거의 나머지(여백·달력 아이콘)는 그대로 토글입니다. 가르는 선은
+// "세그먼트를 눌렀는가" 하나이고 네이티브와도 같습니다 — 숫자는 캐럿을 옮기고 아이콘이
+// 달력을 여닫습니다.
+//
+// ⚠️ **§4.2의 "세그먼트 클릭 → 버퍼 확정"은 그대로입니다.** 자리를 옮기는 조작이니까요.
+// 바뀐 것은 여닫기뿐이고, 그 계약은 아래 "버퍼의 수명" 블록이 계속 지킵니다.
+//
+// ⚠️ **490개가 초록인 채로 이 결함이 지나갔습니다.** 세그먼트 클릭 뒤 `open`이 어떻게
+// 되는지를 **보는 테스트가 하나도 없었기 때문**입니다 — 활성 세그먼트가 옮겨졌는지만 봤고,
+// 그건 결함이 있어도 옳게 동작했습니다.
+describe("DateWheelPicker 세그먼트 클릭은 여닫기 토글이 아니다", () => {
+  function openState() {
+    return screen.queryByRole("dialog", { name: "거래 날짜 선택" }) !== null;
+  }
+  function segment(unit: string) {
+    return document.querySelector<HTMLElement>(`.date-wheel-segment[data-unit="${unit}"]`)!;
+  }
+
+  // ⚠️ **"닫지 않는다"를 "아무것도 안 한다"로 구현하면 마우스 사용자가 팝오버를 못 엽니다.**
+  // 닫힌 채로 세그먼트를 누르는 것이 마우스로 이 컨트롤에 들어가는 경로입니다.
+  it("닫힌 채로 세그먼트를 누르면 열리고, 그 세그먼트가 활성이 된다", async () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.click(segment("month"));
+
+    await waitFor(() => expect(openState()).toBe(true));
+    expect(activeSegment()).toBe("month");
+  });
+
+  // **이번 결함.** 두 사실을 한 단언으로 본다 — `expect()`가 단락하므로 나눠 쓰면 앞이
+  // 터질 때 뒤가 실행조차 안 되고, 여기서 알고 싶은 것은 **"열린 채로 옮겨졌는가"라는 한
+  // 쌍**이다. 고치기 전에는 [false, "month"]다 — 옮기기는 옳게 하면서 닫아 버린다.
+  it("열린 채로 세그먼트를 누르면 열린 채로 있고, 그 세그먼트가 활성이 된다", async () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    fireEvent.click(segment("month"));
+
+    expect([openState(), activeSegment()]).toEqual([true, "month"]);
+  });
+
+  // **대조군.** 트리거의 세그먼트가 **아닌** 곳(버튼 자신 = 여백·아이콘 자리)은 그대로
+  // 토글이다. 이것이 없으면 "세그먼트 클릭이 아무것도 안 한다"는 물론 "트리거 클릭이 절대
+  // 안 닫는다"로 고쳐도 위 둘이 통과한다.
+  it("세그먼트가 아닌 곳을 누르면 그대로 닫힌다", async () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const field = fieldOf("거래 날짜");
+    fireEvent.click(field);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    fireEvent.click(field);
+
+    await waitFor(() => expect(openState()).toBe(false));
+  });
+});
+
 describe("DateWheelPicker 버퍼의 수명 — 확정은 버퍼 자신의 unit으로", () => {
   function ControlledWithSpy({ initialValue, onChange }: { initialValue: string; onChange: (value: string) => void }) {
     const [value, setValue] = useState(initialValue);
