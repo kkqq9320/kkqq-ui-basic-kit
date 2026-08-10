@@ -1632,6 +1632,29 @@ describe("DateWheelPicker 모바일에서는 아래로 열고 자리를 만든�
     expect(popover().style.maxHeight).toBe("255px");
   });
 
+  // 아주 좁을 때의 **바닥**. 뮤테이션으로 확인했더니 위 두 테스트로는 도달하지 않습니다
+  // (둘 다 남은 자리가 230보다 커서 바닥이 안 걸립니다) — 등가가 아니라 미도달이라,
+  // 바닥이 실제로 무는 자리를 따로 만듭니다. 바닥이 없으면 상자가 몇십 px로 줄어
+  // 아무것도 못 고릅니다.
+  it("자리가 아주 좁아도 최소 높이 아래로는 줄지 않는다", async () => {
+    setViewport(390, 300);
+    openAt(40);   // 아래 공간 300 - 78 - 81 = 141 -> 바닥이 없으면 135px
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    expect(popover().style.maxHeight).toBe("230px");
+  });
+
+  // 뒤집기 **문턱**이 실제로 `desiredHeight`라는 것. 이것도 미도달이었습니다 — 기존 데스크톱
+  // 테스트는 아래 공간이 171px이라 문턱이 230이든 318이든 똑같이 뒤집힙니다. 그 사이 값
+  // (270)에서만 갈립니다.
+  it("데스크톱 뒤집기 문턱은 원하는 높이다 — 최소 높이가 아니다", async () => {
+    setViewport(1024, 780);
+    const trigger = openAt(461);   // 아래 공간 780 - 8 - 502 = 270
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    expect(parseFloat(popover().style.top)).toBeLessThan(trigger.getBoundingClientRect().top);
+  });
+
   // 오너 실기기: **아주 아래에 있는 피커를 열면 팝오버에 스크롤바가 생깁니다.**
   // U2가 만든 자리입니다 — 스크롤을 요청해도 **호스트에 더 내려갈 범위가 없으면** 아무 일도
   // 일어나지 않고, 아래 공간이 그대로라 `maxHeight`가 줄면서 `.date-wheel-popover`의
