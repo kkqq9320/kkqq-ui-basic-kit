@@ -107,6 +107,60 @@ describe("DateWheelPicker", () => {
     expect(onChange).toHaveBeenCalledWith("2026-07-12");
   });
 
+  // ── `오늘`도 휠 이동이다 ─────────────────────────────────────────────────────
+  //
+  // 오너: "오늘 버튼 클릭했을 때 선택한 애니메이션이 없이 바뀌어서 어색해."
+  // `오늘`은 `onChange`를 직접 불러 `markColumnMotion`을 안 탔으므로 값만 갈렸다.
+  //
+  // ⚠️ **§12의 "트리거 확정 펄스"와 다른 신호다.** §12는 `오늘`·`비우기`가 트리거의
+  // 확정 펄스를 켜지 않는다고 정했고 그건 그대로다. 여기서 말하는 것은 **팝오버 안 휠의**
+  // **슬라이드**다. 두 신호는 서로 다른 것을 뜻하고 충돌하지 않는다 — 하나는 "필드에
+  // 값이 확정됐다", 다른 하나는 "이 열이 움직였다".
+  //
+  // 매핑을 **한 단언으로** 본다. 열마다 나눠 단언하면 `expect()`가 단락해 첫 열이 터질 때
+  // 나머지가 실행조차 안 되고, 여기서 알고 싶은 것은 정확히 **세 열의 조합**이다
+  // (바뀌는 열에만, 방향까지 맞게). 월은 안 바뀌므로 null이어야 한다 — 안 바뀐 열까지
+  // 무장시키는 결함이 이 자리에서 잡힌다.
+  it("오늘 버튼은 바뀌는 열에만, 방향에 맞는 휠 슬라이드를 붙인다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 6, 12, 12));   // 2026-07-12
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2024-07-05" onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    const columns = [...document.querySelectorAll(".date-wheel-column")];
+
+    fireEvent.click(screen.getByRole("button", { name: "오늘" }));
+
+    // 연 2024 -> 2026 (앞으로), 월 07 -> 07 (그대로), 일 05 -> 12 (앞으로)
+    expect(columns.map((column) => /moving-\w+/.exec(column.className)?.[0] ?? null)).toEqual(["moving-next", null, "moving-next"]);
+  });
+
+  // 뒤로 가는 방향도 본다. 앞 테스트만 있으면 방향을 `"next"`로 고정하는 결함이 통과한다.
+  it("과거로 가는 오늘도 방향이 맞는다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 6, 12, 12));
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2028-09-30" onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    const columns = [...document.querySelectorAll(".date-wheel-column")];
+
+    fireEvent.click(screen.getByRole("button", { name: "오늘" }));
+
+    expect(columns.map((column) => /moving-\w+/.exec(column.className)?.[0] ?? null)).toEqual(["moving-previous", "moving-previous", "moving-previous"]);
+  });
+
+  // 버튼과 Ctrl+;는 **같은 동작**이어야 한다. 이 킷에서 같은 규칙이 두 곳에 복제됐을 때
+  // 갈라지지 않은 적이 없어서(`commitAndClose`가 생긴 이유가 그것이다) 짝으로 고정한다.
+  it("Ctrl+;도 같은 슬라이드를 재생한다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 6, 12, 12));
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2024-07-05" onChange={() => undefined} />);
+    const field = fieldOf("거래 날짜");
+    fireEvent.click(field);
+    const columns = [...document.querySelectorAll(".date-wheel-column")];
+
+    fireEvent.keyDown(field, { code: "Semicolon", ctrlKey: true });
+
+    expect(columns.map((column) => /moving-\w+/.exec(column.className)?.[0] ?? null)).toEqual(["moving-next", null, "moving-next"]);
+  });
   it("moves the year, month, and day by one with the step buttons", () => {
     const onChange = vi.fn();
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={onChange} />);

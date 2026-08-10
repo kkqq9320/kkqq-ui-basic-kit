@@ -629,6 +629,32 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     return next;
   }
 
+  /**
+   * `오늘`(팝오버 버튼과 `Ctrl+;`가 공유)입니다. **여러 칸을 건너뛰더라도 휠 슬라이드를**
+   * **재생합니다** — 오너 리포트: "오늘 버튼 클릭했을 때 선택한 애니메이션이 없이 바뀌어서
+   * 어색해". 예전에는 `onChange`를 직접 불러 `markColumnMotion`을 안 탔습니다.
+   *
+   * ⚠️ **§12의 트리거 확정 펄스와 다른 신호입니다.** §12는 `오늘`·`비우기`가 **트리거의**
+   * 확정 펄스를 켜지 않는다고 정했고 그건 그대로입니다. 이것은 **팝오버 안 휠의**
+   * 슬라이드입니다. 두 신호는 뜻이 다르고 충돌하지 않습니다 — 하나는 "필드에 값이
+   * 확정됐다", 다른 하나는 "이 열이 움직였다".
+   *
+   * **버튼과 단축키가 이 함수를 공유합니다.** 이 킷에서 같은 규칙이 두 곳에 복제됐을 때
+   * 갈라지지 않은 적이 없습니다(`commitAndClose`가 생긴 이유가 그것입니다).
+   *
+   * 방향은 **그 열 자신의 수가 움직인 방향**입니다. 날짜가 나아가는 방향이 아닙니다 —
+   * 예를 들어 12월에서 1월로 가면 월 열은 화면에서 **뒤로** 굴러가므로 `previous`가
+   * 맞습니다. 열이 그리는 것이 그 열의 수이기 때문입니다.
+   */
+  function commitToday() {
+    const next = clampToRange(todayIn(timeZone));
+    const numbersOf = (value: string) => value.split("-").map(Number);
+    const index: Record<DateWheelUnit, number> = { year: 0, month: 1, day: 2 };
+    const [from, to] = [numbersOf(baseValue), numbersOf(next)];
+    for (const unit of fields) markColumnMotion(unit, Math.sign(to[index[unit]] - from[index[unit]]));
+    onChange(next);
+  }
+
   function applyShift(unit: DateWheelUnit, amount: number) {
     commitShift(baseValue, unit, amount);
   }
@@ -771,7 +797,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     if ((event.ctrlKey || event.metaKey) && event.code === "Semicolon") {
       event.preventDefault();
       setTyping(null);
-      onChange(clampToRange(todayIn(timeZone)));
+      commitToday();
       return true;
     }
     if (event.ctrlKey || event.metaKey) return false;
@@ -1239,7 +1265,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
           이 버튼들은 그 단축키의 동등물이므로(title에 단축키를 적어 뒀다), 버퍼를 안 지우면
           같은 뜻의 단축키와 버튼이 다르게 굴며, 남은 버퍼가 이 버튼이 방금 설정한 값을
           나중에(예: 다음 Tab) 도로 덮어쓸 수 있다. */}
-      <div className="date-wheel-actions"><button type="button" tabIndex={-1} title={`${labels.today} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" onClick={() => { setTyping(null); onChange(clampToRange(todayIn(timeZone))); }}>{labels.today}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" onClick={() => { setTyping(null); clearedRef.current = true; onChange(""); }}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" aria-keyshortcuts="Enter" onClick={commitAndClose}>{labels.done}</button></div>
+      <div className="date-wheel-actions"><button type="button" tabIndex={-1} title={`${labels.today} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" onClick={() => { setTyping(null); commitToday(); }}>{labels.today}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" onClick={() => { setTyping(null); clearedRef.current = true; onChange(""); }}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" aria-keyshortcuts="Enter" onClick={commitAndClose}>{labels.done}</button></div>
     </div>, document.body)}
   </div>;
 }
