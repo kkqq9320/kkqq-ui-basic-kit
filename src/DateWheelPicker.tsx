@@ -270,6 +270,20 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * "그만 본다"에 가깝고, 묶는 것은 별개 판단이라 스펙이 지금 동작(마지막 값 유지)을
    * 그대로 두라고 명시했습니다.
    */
+  /**
+   * 취소하며 닫습니다 — `Escape`와 뒤로가기가 **공유**합니다(스펙 §3의 표).
+   *
+   * 각자 구현하면 갈라집니다. 이 파일은 이미 값을 치렀습니다: `Enter`와 `완료`가 따로
+   * 닫다가 한쪽이 `flushTyping`을 빠뜨려 치던 숫자를 버렸고, 그래서 `commitAndClose`로
+   * 합쳤습니다.
+   *
+   * ⚠️ **이 함수는 `value`를 클로저에서 읽습니다. 렌더마다 다시 만들어지는 자리에서만**
+   * **부르세요.** `useEscapeToClose`·`useBackToClose`는 둘 다 `closeRef.current = onClose`로
+   * 매 렌더 갱신하므로 안전합니다. `[open]` deps를 가진 이펙트 안에서 부르면 그 클로저의
+   * `value`는 **열린 순간의 값**이라 `openStartValueRef`와 언제나 같고, 되돌림이 조용히
+   * 아무것도 안 합니다. (뮤테이션으로 실제로 확인했습니다 — 바깥 클릭 이펙트에 이 함수를
+   * 꽂는 뮤테이션이 **0 red**였고, 등가라서가 아니라 그 클로저가 낡아서였습니다.)
+   */
   function cancelAndClose() {
     setTyping(null);
     if (openStartValueRef.current !== value) onChange(openStartValueRef.current);
