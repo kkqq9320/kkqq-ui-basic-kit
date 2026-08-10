@@ -85,7 +85,11 @@ export function scrollActiveOptionIntoView(menu: HTMLDivElement, activeIndex: nu
   if (optionBottom > menu.scrollTop + menuHeight) menu.scrollTop = optionBottom - menuHeight;
 }
 
-type MenuPosition = { top: number; left: number; width: number; maxHeight: number };
+// 세로 앵커는 **둘 중 하나만** 씁니다 — 아래로 열면 `top`, 위로 뒤집으면 `bottom`.
+// 둘 다 넣으면 상자 높이가 그 둘로 고정되어 `maxHeight`가 무력해집니다.
+// **포털일 때만** 쓰입니다 — 비-포털 메뉴는 인라인 좌표를 아예 안 받고
+// `css/select.css:52`가 `bottom: calc(100% + 5px)`로 앵커를 잡습니다.
+type MenuPosition = { top?: number; bottom?: number; left: number; width: number; maxHeight: number };
 
 export function Select({ value, options, onChange, ariaLabel, placeholder = "선택하세요", align = "left", className = "", disabled = false, portal = false, mobileBottomInset = 78 }: SelectProps) {
   const [open, setOpen] = useState(false);
@@ -294,7 +298,13 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
       const width = Math.min(rect.width, viewportWidth - edge * 2);
       const left = Math.min(Math.max(viewportLeft + edge, rect.left), viewportLeft + viewportWidth - width - edge);
       setOpenAbove(above_);
-      setPosition({ top: above_ ? Math.max(edge, rect.top - maxHeight - gap) : rect.bottom + gap, left, width, maxHeight });
+      // ⚠️ **위로 뒤집을 때 `top`을 계산하지 마세요.** 그러려면 메뉴의 실제 높이가 필요한데
+      // 이 함수는 메뉴가 마운트되기 전에 처음 돕니다. 한동안 높이 대신 `maxHeight`를 뺐고,
+      // `menuLimit` 덕분에 어긋남이 `menuLimit − 내용 높이`로 **묶였을 뿐** 사라지지는
+      // 않았습니다 — 실측(Chromium 700×560, 트리거 top 429.6): `top` 116.6에 메뉴 높이 150,
+      // **트리거와 163px** 벌어졌습니다. 날짜 피커에서 고친 것과 같은 결함입니다.
+      // `bottom`은 잰 트리거 rect만으로 정해지므로 마운트 전에도 정확합니다.
+      setPosition({ ...(above_ ? { bottom: window.innerHeight - rect.top + gap } : { top: rect.bottom + gap }), left, width, maxHeight });
     }
     placeMenu();
     window.addEventListener("resize", placeMenu);
@@ -439,7 +449,7 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
     className={`app-select-menu dropdown-menu-surface${portal ? " app-select-menu-portaled" : ""}${portal && openAbove ? " drop-up" : ""}`}
     role="listbox"
     aria-label={ariaLabel}
-    style={portal && position ? { top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight } : undefined}
+    style={portal && position ? { top: position.top, bottom: position.bottom, left: position.left, width: position.width, maxHeight: position.maxHeight } : undefined}
     onPointerDownCapture={() => { selectionScrollRef.current = captureScrollSnapshot(); }}
     onKeyDown={handleKeyDown}
   >

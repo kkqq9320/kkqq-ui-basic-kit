@@ -961,3 +961,56 @@ describe("Select", () => {
     });
   });
 });
+
+// ⚠️ **포털 메뉴가 위로 뒤집힐 때 트리거에서 떨어집니다.** 날짜 피커에서 고친 것과 **같은**
+// **결함이고**(PR #7), 같은 한 줄입니다 — `top`을 메뉴의 **실제 높이**가 아니라 **위에 남은**
+// **공간**(`maxHeight`)에서 뺍니다. 날짜 피커 쪽은 `Math.min` 상한이 없어져 어긋남이
+// 무제한이었고, 여기는 `menuLimit`(`Math.min(320, innerHeight*.55)`)이 남아 있어
+// **`menuLimit − 내용 높이`만큼으로 묶일 뿐** 사라지지는 않습니다.
+//
+// 실측(Chromium 700×560, 포털 Select, 트리거 top 429.6): `style.top` 116.6 /
+// `maxHeight` 308 / 메뉴 실제 높이 150 → **아래끝과 트리거 사이 163px**(옳은 값은 gap 5).
+//
+// **비-포털은 이 결함이 없습니다** — 인라인 좌표를 아예 안 쓰고
+// `css/select.css:52`(`.app-select.drop-up .app-select-menu { top: auto; bottom: calc(100% + 5px) }`)
+// 가 앵커를 잡습니다. 같은 캡처에서 간격 5px로 정확했습니다. 그래서 고침도 **포털 경로만**
+// 건드립니다.
+describe("Select 포털 메뉴는 위로 뒤집혀도 트리거에 붙는다", () => {
+  function setViewportHeight(height: number) {
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: height });
+  }
+  afterEach(() => setViewportHeight(768));
+
+  function openFlippedUp() {
+    render(<ControlledPortalSelect />);
+    const trigger = screen.getByRole("button", { name: "항목" });
+    setViewportHeight(560);
+    stubRect(trigger, 430);   // 아래 82 < 문턱, 위 422 — 뒤집힌다
+    fireEvent.click(trigger);
+    return document.querySelector<HTMLElement>(".app-select-menu")!;
+  }
+
+  // 560(뷰포트) - 430(트리거 top) + 5(gap) = 135.
+  it("뒤집힌 포털 메뉴는 bottom으로 앵커한다", () => {
+    expect(openFlippedUp().style.bottom).toBe("135px");
+  });
+
+  // **`it`을 나눕니다** — 둘은 같은 한 줄이 만드는 서로 다른 증상이라 한 블록에 두면
+  // 앞엣것이 터질 때 뒤엣것이 실행조차 안 됩니다.
+  it("뒤집힌 포털 메뉴는 top을 쓰지 않는다", () => {
+    expect(openFlippedUp().style.top).toBe("");
+  });
+
+  // **대조군 — 아래로 열 때는 그대로 `top`입니다.** 고침 전에도 초록이므로 결함의 증거가
+  // 아니고, 잡는 것은 고침이 넘쳐 아래로 열 때까지 `bottom`을 다는 것입니다.
+  it("아래로 열리는 포털 메뉴는 여전히 top으로 앵커한다", () => {
+    render(<ControlledPortalSelect />);
+    const trigger = screen.getByRole("button", { name: "항목" });
+    setViewportHeight(900);
+    stubRect(trigger, 100);   // 아래가 넉넉하다
+    fireEvent.click(trigger);
+    const menu = document.querySelector<HTMLElement>(".app-select-menu")!;
+
+    expect(menu.style.bottom).toBe("");
+  });
+});
