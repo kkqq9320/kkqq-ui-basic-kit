@@ -98,24 +98,22 @@
  * **규칙은 여전히 하나입니다.** 테마별로 다른 값이 필요해도 규칙을 나누지 않습니다 —
  * 나누는 순간 이 세그먼트에 매칭되는 규칙이 둘이 되어 위 특이도 계산과 tests의
  * "규칙은 정확히 하나" 계약이 함께 깨집니다. 토큰이 그 요구를 규칙 밖에서 흡수합니다. */
-.date-wheel-trigger:focus-within .date-wheel-segment.active { border-radius: 4px; color: var(--date-segment-active-text); background: var(--date-segment-active-background); }
-/* 위 규칙이 `color`를 선언해 상속이 끊긴 자리를, 같은 타이밍의 펄스로 **명시해서** 메웁니다.
+.date-wheel-trigger.editing:focus-within .date-wheel-segment.active { border-radius: 4px; color: var(--date-segment-active-text); background: var(--date-segment-active-background); }
+/* ⚠️ **여기 세그먼트 전용 확정 펄스 규칙이 있었습니다. 지웠습니다 — 목적이 사라졌습니다.**
+ * 그 규칙은 "칩이 자기 `color`를 선언해 확정 펄스의 상속에서 빠지는 것"을 메우려고 있었는데,
+ * 표시 게이트가 포커스에서 **편집 중**으로 바뀌면서(스펙 §4.5) **칩과 펄스가 겹칠 수가**
+ * **없어졌습니다:** 확정하며 닫는 것이 곧 편집의 끝이라, 펄스가 재생되는 그 순간 `.editing`이
+ * 이미 빠져 있고 세그먼트는 자기 색을 갖지 않아 컨테이너 색을 그대로 **상속**받습니다.
+ * (실측: 확정 직후 pulse=true / editing=false.)
  *
- * **포커스로 게이트하는 것이 규칙의 절반입니다.** 칩이 안 보이는 동안(포커스 없음)에는 위
- * 규칙도 안 걸려 세그먼트가 자기 색을 갖지 않고 컨테이너 `color`를 그대로 상속받으므로,
- * 예전 경로가 그대로 옳습니다. 게이트하지 않으면 배경 없는 자리에서 글자만 칩 글자색
- * (라이트에서 흰색)으로 애니메이트되어 **230ms 동안 글자가 사라집니다.**
+ * 남겨 두면 해롭기까지 합니다. `commitPulse`는 리셋되지 않아 `.dropdown-value-commit`이
+ * 세션 내내 붙어 있으므로, 그 규칙은 확정과 무관하게 계속 매칭됩니다. 그 상태에서 활성
+ * 세그먼트가 `←`/`→`로 옮겨지면 새 세그먼트에서 animation-name이 바뀌며 **확정하지도**
+ * **않았는데 accent가 번쩍입니다** — 이 파일이 두 번 고친 `moving-*` 잔재와 같은 종류입니다.
  *
- * 키프레임이 `dropdown-commit`과 따로 있는 이유: 그쪽 100%는 `color: inherit`이라 여기서는
- * **부모의 색**(= `--text`)으로 끝나 칩 위에서 글자가 튑니다. 이동·투명도는 컨테이너가 이미
- * 애니메이트하고 세그먼트는 그 안에 있으므로 여기서는 **색만** 다룹니다 — 두 번 움직이면
- * 안 됩니다. */
-.date-wheel-trigger:focus-within .dropdown-value-commit .date-wheel-segment.active { animation: date-segment-commit 230ms cubic-bezier(.18, 1.15, .35, 1); }
-@keyframes date-segment-commit {
-  0% { color: var(--accent); }
-  65% { color: var(--date-segment-active-text); }
-  100% { color: var(--date-segment-active-text); }
-}
+ * **계약은 사라진 것이 아니라 형태가 바뀌었습니다:** 값 안쪽 조각이 `color`를 선언하려면
+ * 확정 펄스와 **겹치지 않거나**, 겹친다면 펄스를 명시로 함께 받아야 합니다. 지금은 앞쪽으로
+ * 성립하고, 그 사실을 tests가 DOM에서 고정합니다. */
 /* 비활성 날짜 필드 — select.css의 비활성 트리거와 같은 값, 같은 이유.
  * 테두리·배경은 shell이 그리므로 shell째 흐리게 한다(:18이 이미 쓰는 :has() idiom).
  * 안쪽 버튼에 opacity를 주면 shell 테두리만 또렷하게 남아 어중간해진다. */

@@ -1455,6 +1455,111 @@ describe("DateWheelPicker 닫힌 채로 조작한다", () => {
 // ⚠️ **490개가 초록인 채로 이 결함이 지나갔습니다.** 세그먼트 클릭 뒤 `open`이 어떻게
 // 되는지를 **보는 테스트가 하나도 없었기 때문**입니다 — 활성 세그먼트가 옮겨졌는지만 봤고,
 // 그건 결함이 있어도 옳게 동작했습니다.
+// 오너: **"완료 누르면 날짜에 선택돼 있는 것도 같이 안 보이게."**
+//
+// 활성 세그먼트 표시가 **포커스**에 걸려 있었습니다. 그런데 §6.2가 "이 컨트롤이 키보드를
+// 받는 동안 포커스는 언제나 트리거"라고 정해 두었으므로, `완료`로 확정해 닫아도 포커스는
+// 트리거에 그대로이고 **표시가 살아남습니다.** 확정한 뒤의 컨트롤은 **쉬는 중**이지 입력을
+// 받는 중이 아닙니다(스펙 §4.5).
+//
+// 그래서 게이트가 **"편집 중"**으로 바뀝니다. 포커스 게이트는 **그대로 둡니다** — 편집 중은
+// 포커스가 있어야 시작되지만, 둘을 다 걸어 두면 어느 하나가 새도 표시가 안 남습니다.
+//
+// **관측 대상은 트리거의 `editing` 클래스입니다.** `.active`는 컴포넌트가 활성 unit에 계속
+// 붙이고(닫힌 채 `←`/`→`로 옮기는 계약이 그것을 씁니다), **감추는 일은 CSS가** 합니다 —
+// 그 구조는 `activeSegment()` 헬퍼 주석에 있는 것과 같습니다.
+describe("DateWheelPicker 활성 표시는 편집 중에만", () => {
+  function open() {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = fieldOf("거래 날짜");
+    trigger.focus();
+    fireEvent.click(trigger);
+    return trigger;
+  }
+  const editing = (trigger: HTMLElement) => trigger.classList.contains("editing");
+
+  it("팝오버를 열면 편집이 시작된다", async () => {
+    const trigger = open();
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    expect(editing(trigger)).toBe(true);
+  });
+
+  // **오너가 말한 그것.**
+  it("완료로 확정하면 편집이 끝난다", async () => {
+    const trigger = open();
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+
+    await waitFor(() => expect(editing(trigger)).toBe(false));
+  });
+
+  // `Enter`는 `완료`와 같은 `commitAndClose`를 탄다. 같은 뮤테이션에 함께 죽지만, 이 킷에서
+  // 같은 규칙이 두 곳에 복제됐을 때 갈라지지 않은 적이 없어 짝으로 고정한다.
+  it("Enter로 확정해도 편집이 끝난다", async () => {
+    const trigger = open();
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    fireEvent.keyDown(trigger, { key: "Enter" });
+
+    await waitFor(() => expect(editing(trigger)).toBe(false));
+  });
+
+  // **끝났다고 영영 끝난 것이 아닙니다** — 다시 세그먼트를 겨냥한 조작을 하면 돌아옵니다.
+  // 이것이 없으면 "확정 뒤 영영 표시 없음"으로 고쳐도 위가 통과합니다.
+  it("확정한 뒤 숫자를 치면 편집이 다시 시작된다", async () => {
+    const trigger = open();
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+    await waitFor(() => expect(editing(trigger)).toBe(false));
+
+    fireEvent.keyDown(trigger, { key: "2" });
+
+    expect(editing(trigger)).toBe(true);
+  });
+
+  it("확정한 뒤 ←/→로 세그먼트를 옮겨도 편집이 다시 시작된다", async () => {
+    const trigger = open();
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+    await waitFor(() => expect(editing(trigger)).toBe(false));
+
+    fireEvent.keyDown(trigger, { key: "ArrowRight" });
+
+    expect(editing(trigger)).toBe(true);
+  });
+
+  it("포커스를 잃으면 편집이 끝난다", async () => {
+    const trigger = open();
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    fireEvent.blur(trigger);
+
+    expect(editing(trigger)).toBe(false);
+  });
+
+  // ⚠️ **이 하나는 오너가 말한 범위를 넘습니다.** 오너는 `완료`만 말했고, `Escape`를 끝으로
+  // 보는 것은 스펙 §4.5가 명시적으로 "실기기에서 보고 정할 항목"으로 표시해 둔 판단입니다
+  // ("값을 바꾸지 않고 떠난다"로 볼 수도, "되돌린 뒤 계속 편집"으로 볼 수도 있습니다).
+  // 되돌리기 쉽도록 **테스트를 따로** 두었습니다 — 판단이 뒤집히면 이 it 하나만 지웁니다.
+  it("Escape로 닫으면 편집이 끝난다 — 오너 범위 밖, 실기기 판단 항목", async () => {
+    const trigger = open();
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() => expect(editing(trigger)).toBe(false));
+  });
+
+  // **포커스 게이트를 지웠는지 본다.** 게이트가 하나로 줄면 편집 중인 채 포커스를 잃는
+  // 경로에서 표시가 남습니다. 규칙은 여전히 **하나**이고 조건이 하나 붙었을 뿐입니다.
+  it("규칙은 하나이고, 포커스와 편집 중 둘 다 건다", () => {
+    const rules = datePickerCssSource.replace(/\/\*[\s\S]*?\*\//g, "").match(/[^{}]+(?=\{)/g) ?? [];
+    const painting = rules.map((r) => r.replace(/\s+/g, " ").trim()).filter((r) => /\.date-wheel-segment\.active/.test(r));
+    expect(painting).toEqual([".date-wheel-trigger.editing:focus-within .date-wheel-segment.active"]);
+  });
+});
+
 describe("DateWheelPicker 세그먼트 클릭은 여닫기 토글이 아니다", () => {
   function openState() {
     return screen.queryByRole("dialog", { name: "거래 날짜 선택" }) !== null;
@@ -3504,19 +3609,23 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
       .toEqual([["dropdown-value-commit", ["year", "month", "day"]]]);
   });
 
-  // **위 CSS 계약이 다 옳아도, 선택자 경로가 실제 DOM에 안 생기면 펄스는 안 돈다.**
-  // 그 경로(트리거 > 펄스 컨테이너 > 활성 세그먼트)가 확정 순간에 실제로 만들어지는지는
-  // 소스로 알 수 없고 여기서만 답할 수 있다. `:focus-within`은 CSS 전용이라
-  // `querySelector`에 넣지 않는다 — 그 조건은 §6.2가 따로 지킨다.
+  // **CSS만으로는 알 수 없는 것: 칩과 확정 펄스가 겹치는가.**
   //
-  // **이것이 반전 칩에서 핵심 위험이다.** 트리거 DOM을 손보면서 펄스 클래스를 세그먼트
-  // 쪽으로 옮기거나 한 겹 더 감싸면, CSS는 그대로인데 반전 칩만 확정 신호에서 조용히
-  // 빠진다 — 그리고 그것은 jsdom에서 애니메이션이 안 도므로 다른 어떤 테스트도 못 잡는다.
-  it("확정 순간 펄스 컨테이너 안에 활성 세그먼트가 들어 있다 — 펄스 선택자가 닿는 경로", async () => {
+  // 세그먼트가 자기 `color`를 선언하면 확정 펄스의 상속이 끊깁니다. 지금 그것이 문제가
+  // 되지 않는 이유는 **겹치지 않기 때문**입니다 — 확정하며 닫는 것이 곧 편집의 끝이라,
+  // 펄스가 재생되는 그 순간 `.editing`이 이미 빠져 있고 칩은 그려지지 않습니다.
+  //
+  // **이 하나가 세그먼트 전용 펄스 규칙을 지운 근거 전부입니다.** 여기가 빨개지면 그
+  // 규칙(또는 그에 상응하는 것)이 돌아와야 합니다 — 겹치는 순간 반전 칩만 확정 신호에서
+  // 조용히 빠지고, **jsdom은 애니메이션을 안 돌리므로 다른 어떤 테스트도 못 잡습니다.**
+  it("확정 펄스가 붙는 순간 칩은 그려지지 않는다 — 그래서 상속이 끊기지 않는다", async () => {
     const trigger = await openAndBuffer("2026-07-12", ["3", "1"]);
     fireEvent.keyDown(trigger, { key: "Enter" });
 
-    expect(document.querySelector(".date-wheel-trigger .dropdown-value-commit .date-wheel-segment.active")).not.toBeNull();
+    expect([
+      document.querySelector(".dropdown-value-commit") !== null,
+      trigger.classList.contains("editing"),
+    ]).toEqual([true, false]);
   });
 
   // jsdom은 캐스케이드를 계산하지 않으므로 소스 텍스트로 고정한다 — 이 파일 위쪽
@@ -3614,7 +3723,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     it("활성 세그먼트의 정지 그림을 그리는 규칙은 포커스로 게이트된 하나뿐이다", () => {
       const painting = cssRules(datePickerCssSource)
         .filter((rule) => /\.date-wheel-segment\.active/.test(rule.selector) && /(^|[\s;])background\s*:/.test(rule.body));
-      expect(painting.map((rule) => rule.selector)).toEqual([".date-wheel-trigger:focus-within .date-wheel-segment.active"]);
+      expect(painting.map((rule) => rule.selector)).toEqual([".date-wheel-trigger.editing:focus-within .date-wheel-segment.active"]);
     });
 
     /** 토큰 블록 하나에서 커스텀 프로퍼티 값을 읽는다. 블록 안에 중첩 규칙이 없다는 전제. */
@@ -3652,45 +3761,29 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     // 애니메이션하고, 세그먼트는 그것을 **상속**받아 함께 반짝인다. 세그먼트가 자기
     // `color`를 선언하면 그 상속이 끊겨 그 세그먼트만 신호에서 빠진다.
     //
-    // ⚠️ **계약이 바뀌었다. 예전 형태는 "세그먼트는 `color`를 선언하지 않는다"였다.**
-    // 오너가 반전을 요구하면서(라이트 = 어두운 칩에 흰 글자 / 다크 = 밝은 칩에 검은 글자)
-    // 세그먼트는 자기 `color`를 가져야 한다. **금지를 그냥 깬 것이 아니라, 금지가 막으려던
-    // 결과를 다른 방법으로 막는다** — 확정 펄스를 그 세그먼트에 `animation`으로 **명시해서**
-    // 건다. 새 계약은 "`color`를 선언하지 않는다"가 아니라 **"`color`를 선언하는 규칙은
-    // 펄스를 명시로 받는 그 자리 하나뿐이다"**이다.
+    // ⚠️ **계약이 두 번 바뀌었다.** 처음엔 "세그먼트는 `color`를 선언하지 않는다"였고(상속이
+    // 끊기므로), 반전 칩이 들어오면서 "선언하려면 펄스를 명시로 함께 받아라"가 됐다. 지금은
+    // 표시 게이트가 **편집 중**으로 바뀌면서(스펙 §4.5) **칩과 펄스가 겹칠 수가 없어졌다** —
+    // 확정하며 닫는 것이 곧 편집의 끝이라, 펄스가 재생되는 순간 칩은 이미 없다.
     //
-    // **jsdom은 애니메이션을 돌리지 않으므로** 아래 셋은 CSS 소스로 본다. 네 번째(경로가
-    // 실제로 생기는가)는 소스로 알 수 없어 DOM에서 따로 본다 — 이 블록 바깥에 있다.
-    it("세그먼트에 닿는 규칙 셋 중 color를 선언하는 것은 포커스로 게이트된 활성 규칙뿐이다", () => {
+    // 그래서 명시 펄스 규칙을 지웠고, 계약은 이렇게 남는다: **`color`를 선언하는 규칙은
+    // 편집 중으로 게이트된 그 자리 하나뿐이고, 그 자리는 펄스와 겹치지 않는다.** 겹치지
+    // 않는다는 것은 소스로 알 수 없으므로 이 블록 바깥의 DOM 테스트가 진다.
+    it("세그먼트에 닿는 규칙 둘 중 color를 선언하는 것은 편집 중으로 게이트된 활성 규칙뿐이다", () => {
       const targeted = cssRules(datePickerCssSource).filter((rule) => /\.date-wheel-(segment|punctuation)/.test(rule.selector));
       expect(targeted.map((rule) => [rule.selector, declaresColor(rule.body)])).toEqual([
         [".date-wheel-segment", false],
-        [".date-wheel-trigger:focus-within .date-wheel-segment.active", true],
-        [".date-wheel-trigger:focus-within .dropdown-value-commit .date-wheel-segment.active", false],
+        [".date-wheel-trigger.editing:focus-within .date-wheel-segment.active", true],
       ]);
     });
 
-    // 펄스 규칙도 **포커스로 게이트한다.** 칩이 안 보이는 동안(포커스 없음) 세그먼트는 자기
-    // 색을 갖지 않고 컨테이너의 `color`를 그대로 상속받으므로 예전 경로가 그대로 옳다.
-    // 게이트하지 않으면 배경 없는 자리에서 글자만 칩 글자색(라이트에서 흰색)으로
-    // 애니메이트되어 **230ms 동안 글자가 사라진다.**
-    it("자기 color를 갖는 대신, 확정 펄스가 활성 세그먼트에 명시적으로 걸린다", () => {
-      const rule = cssRules(datePickerCssSource).find((candidate) => candidate.selector === ".date-wheel-trigger:focus-within .dropdown-value-commit .date-wheel-segment.active");
-      expect(rule?.body ?? "(펄스 규칙이 없다)").toMatch(/animation:\s*date-segment-commit\s+230ms\s+cubic-bezier\(\.18,\s*1\.15,\s*\.35,\s*1\)/);
-    });
-
-    // 규칙이 있는 것과 그 키프레임이 **옳은 것**은 다른 사실이다. 그리고 `expect()`가
-    // 단락하므로 시작색과 끝색을 한 블록에 넣으면 앞이 터질 때 뒤가 실행조차 되지 않는다.
-    it("그 키프레임은 accent에서 시작한다 — 킷의 다른 확정과 같은 말", () => {
-      const keyframes = /@keyframes date-segment-commit\s*\{[\s\S]*?\n\}/.exec(datePickerCssSource)?.[0] ?? "(키프레임이 없다)";
-      expect(keyframes).toMatch(/0%\s*\{\s*color:\s*var\(--accent\)/);
-    });
-
-    // 끝색이 세그먼트 자신의 글자색이 아니면 펄스가 끝나는 순간 칩 위 글자가 튄다
-    // (애니메이션이 걷히며 저자 선언으로 돌아가므로).
-    it("그 키프레임은 세그먼트 자신의 글자색으로 끝난다", () => {
-      const keyframes = /@keyframes date-segment-commit\s*\{[\s\S]*?\n\}/.exec(datePickerCssSource)?.[0] ?? "(키프레임이 없다)";
-      expect(keyframes).toMatch(/100%\s*\{\s*color:\s*var\(--date-segment-active-text\)/);
+    // 지운 것이 되살아나지 않게 못 박는다 — 세그먼트를 겨냥한 `animation` 규칙은 없어야 한다.
+    // 되살리려면 먼저 "칩과 펄스가 겹치는가"를 다시 재야 하고, 겹치지 않는 한 그 규칙은
+    // 확정과 무관하게 계속 매칭돼 활성 세그먼트가 옮겨질 때마다 accent를 번쩍이게 한다.
+    it("세그먼트 전용 확정 펄스 규칙은 없다", () => {
+      const animated = cssRules(datePickerCssSource)
+        .filter((rule) => /\.date-wheel-segment/.test(rule.selector) && /(^|[\s;])animation/.test(rule.body));
+      expect(animated.map((rule) => rule.selector)).toEqual([]);
     });
 
     // ── 반전 칩의 값 ────────────────────────────────────────────────────────
@@ -3709,7 +3802,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     // 이유는 서로 다른 요구이기 때문이다 — 하나는 "칩 위 글자가 읽히는가", 다른 하나는
     // "칩이 필드에서 도드라지는가"다. 반전을 그만두는 순간 두 수는 갈라진다.
     it("활성 세그먼트의 배경과 글자색은 값을 박지 않고 토큰을 참조한다", () => {
-      const rule = cssRules(datePickerCssSource).find((candidate) => candidate.selector === ".date-wheel-trigger:focus-within .date-wheel-segment.active");
+      const rule = cssRules(datePickerCssSource).find((candidate) => candidate.selector === ".date-wheel-trigger.editing:focus-within .date-wheel-segment.active");
       expect([
         /(^|[\s;])background:\s*([^;]+)/.exec(rule?.body ?? "")?.[2].trim() ?? null,
         /(^|[\s;])color:\s*([^;]+)/.exec(rule?.body ?? "")?.[2].trim() ?? null,

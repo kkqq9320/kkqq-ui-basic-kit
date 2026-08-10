@@ -256,7 +256,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 부르지 않고 버퍼만 버립니다. 다른 모든 떠나는 경로(Tab·화살표·**열림 상태의**
   // Enter·Space·완료·세그먼트 클릭·blur)와의 유일한 예외입니다. (닫힘 상태의 Enter는
   // 떠나는 경로가 아니라 **여는 키**입니다 — 버퍼를 들고 엽니다. 스펙 §3·§4.2.)
-  useEscapeToClose(open, () => { setTyping(null); setOpen(false); });
+  useEscapeToClose(open, () => { setTyping(null); setEditing(false); setOpen(false); });
   const [position, setPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const [columnMotion, setColumnMotion] = useState<Record<DateWheelUnit, DateWheelMotion>>({
     year: { sequence: 0, direction: "next", playing: false },
@@ -333,6 +333,22 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 타이핑 자체(자릿수가 차서 즉시 확정되는 경우 포함)·오늘·비우기 같은 다른 값 변경
   // 경로는 건드리지 않습니다 — 그 경로들은 "완료"가 아니라 매 조작마다 반짝이면 신호가
   // 아니라 소음이 됩니다. 계약은 PRINCIPLES.md §12.
+  /**
+   * **편집 중인가.** 활성 세그먼트 표시의 게이트입니다(스펙 §4.5).
+   *
+   * 한동안 표시는 **포커스**에만 걸려 있었는데, §6.2가 "이 컨트롤이 키보드를 받는 동안
+   * 포커스는 언제나 트리거"라고 정해 두었으므로 `완료`로 확정해 닫아도 포커스가 남아
+   * **표시가 살아남았습니다**(오너: "완료 누르면 날짜에 선택돼 있는 것도 같이 안 보이게").
+   * 확정한 뒤의 컨트롤은 **쉬는 중**이지 입력을 받는 중이 아닙니다.
+   *
+   * **시작** — 세그먼트를 겨냥한 조작: 숫자·`Backspace`·`←`/`→`·`↑`/`↓`, 세그먼트 클릭,
+   * 팝오버 열기. **끝** — 확정하며 닫기(`Enter`·`완료`), `Escape`, 포커스 상실.
+   *
+   * ⚠️ **포커스 게이트는 그대로 둡니다.** 편집 중은 포커스가 있어야 시작되지만, 둘을 다
+   * 걸어 두면 어느 하나가 새도 표시가 안 남습니다. CSS 규칙은 여전히 **하나**이고
+   * 조건이 하나 붙었을 뿐이라 "세그먼트에 매칭되는 규칙은 정확히 하나" 계약은 그대로입니다.
+   */
+  const [editing, setEditing] = useState(false);
   const [commitPulse, setCommitPulse] = useState(0);
   // 이번 세션에 비우기·Delete로 값을 지운 적이 있는가. commitAndClose의
   // "비어 있으면 baseValue로 채운다" 되살림 분기(아래)를 막는 유일한 용도입니다 — 이게
@@ -795,6 +811,9 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * ArrowUp/ArrowDown에서 flushTyping이 이미 겪은 것과 같은 결함입니다.
    */
   function commitAndClose() {
+    // 확정하며 닫는 것은 **편집의 끝**입니다(스펙 §4.5). 포커스는 트리거에 남지만
+    // (§6.2) 컨트롤은 쉬는 중이므로 활성 세그먼트 표시가 사라져야 합니다.
+    setEditing(false);
     const flushed = flushTyping();
     // 이 함수가 최종적으로 확정하는 값. 아래에서 실제로 바뀐 값이 있으면만 갱신합니다 —
     // 아무것도 안 바뀌면(예: 이미 오늘인 값 그대로 완료) committed는 value와 같은
@@ -961,6 +980,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       // 이 파일에서 **근거 없이 적은 순서 계약이 두 번 거짓으로 밝혀졌으므로**(Task 5의
       // `Escape` 스왑, 위 `[fields]` 이펙트 근거) 이번에는 뮤테이션을 먼저 돌렸습니다.
       setActiveUnit(unit);
+      setEditing(true);
       const buffer = resolvedTyping?.unit === unit ? resolvedTyping.digits : "";
       const step = typeDigit(unit, buffer, key);
       if (step.commit !== null) {
@@ -975,6 +995,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
 
     if (key === "Backspace") {
       event.preventDefault();
+      setEditing(true);
       if (resolvedTyping?.digits) {
         // 버퍼가 없다는 상태는 항상 null 하나로만 표현합니다 — 빈 문자열 버퍼를
         // 살려두면 읽는 쪽마다 ""를 "없음"으로 따로 알아야 하고, 그 결과가 바로
@@ -1004,6 +1025,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     // 방향키는 안에서만 움직인다 — 끝에서는 제자리이고 팝오버를 닫지 않는다.
     if (key === "ArrowRight" || key === "ArrowLeft") {
       event.preventDefault();
+      setEditing(true);
       flushTyping();
       moveColumn(unit, key === "ArrowRight" ? 1 : -1);
       return;
@@ -1060,13 +1082,14 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     // ⚠️ **여기에 `setActiveUnit(fields[0] ?? "year")`를 되살리지 마세요.** 그 시드가
     // 있으면 `→`·`→`로 일에 가 있다가 `↓`로 열 때 활성이 연도로 되돌아간다(스펙 §6.4(3)).
     // 트리거 onClick에도 같은 시드가 있었고, 둘 다 지웠다 — 하나만 지우면 반쪽이다.
-    if (!open) { setOpen(true); return; }
+    if (!open) { setEditing(true); setOpen(true); return; }
     if (key === "Enter" || key === " ") {
       // 완료 버튼과 같은 동작 — commitAndClose가 치던 숫자를 먼저 확정한 뒤 닫는다.
       commitAndClose();
       return;
     }
     setActiveUnit(unit);
+    setEditing(true);
     // 버퍼가 있으면 먼저 확정하고, 그 값에서 이어서 한 칸 움직인다. applyShift는
     // baseValue(이 렌더에서 고정된 옛 값)를 읽으므로 여기서 그대로 쓰면 방금
     // commitTyped가 넘긴 값을 뒤이은 onChange가 덮어써 버퍼 확정이 무효가 된다 —
@@ -1252,7 +1275,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         포커스된 버튼을 언마운트하면 focus만 기록되고 blur는 없으며 activeElement는 body로
         갑니다). 그래서 이 핸들러와 그 규칙이 충돌하지 않습니다. tests의 "버퍼를 든 채
         언마운트되면 확정하지 않고 버린다"가 그 전제까지 함께 지킵니다. */}
-    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className="date-wheel-trigger" aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onBlur={() => flushTyping()} onClick={(event) => {
+    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className={editing ? "date-wheel-trigger editing" : "date-wheel-trigger"} aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onBlur={() => { setEditing(false); flushTyping(); }} onClick={(event) => {
       // **세그먼트를 직접 누르면 그 세그먼트가 활성이 됩니다**(설계 스펙 §6.4(3)) —
       // 네이티브 날짜 필드가 그렇게 합니다. 세그먼트는 <span>이라 클릭이 여기로 그대로
       // 올라오고, 그 전에 `event.target`의 `data-unit`을 읽습니다. 구두점·아이콘·여백에는
@@ -1297,12 +1320,13 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         //
         // ⚠️ **`return`이지 "아무것도 안 함"이 아닙니다.** 닫힌 채로 세그먼트를 누르면
         // **열어야** 합니다 — 그게 마우스로 이 컨트롤에 들어가는 경로입니다.
+        setEditing(true);
         setOpen(true);
         return;
       }
       // 세그먼트가 아닌 곳(여백·달력 아이콘)은 그대로 토글입니다. 가르는 선은 "세그먼트를
       // 눌렀는가" 하나입니다.
-      setOpen((current) => !current);
+      setOpen((current) => { if (!current) setEditing(true); return !current; });
     }} onKeyDown={handleFieldKey}>{/* 이 <span> 하나가 §12의 확정 신호를 재생하는 자리입니다 — key={commitPulse}가 커밋마다
         이 노드를 리마운트시켜 .dropdown-value-commit 애니메이션을 다시 틉니다.
         **key를 세그먼트로 내리지 마세요** — 확정은 날짜 하나에 대한 사건이지 세그먼트에 대한
