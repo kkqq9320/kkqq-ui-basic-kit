@@ -290,7 +290,10 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     setOpen(false);
   }
   useEscapeToClose(open, cancelAndClose);
-  const [position, setPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
+  // 세로 앵커는 **둘 중 하나만** 씁니다 — 아래로 열면 `top`, 위로 뒤집으면 `bottom`.
+  // 둘 다 넣으면 상자 높이가 그 둘로 고정되어 `maxHeight`가 무력해집니다. 왜 위쪽이
+  // `bottom`이어야 하는지는 `placePicker`의 주석에 있습니다.
+  const [position, setPosition] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
   const [columnMotion, setColumnMotion] = useState<Record<DateWheelUnit, DateWheelMotion>>({
     year: { sequence: 0, direction: "next", playing: false },
     month: { sequence: 0, direction: "next", playing: false },
@@ -742,8 +745,22 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
       const width = Math.min(Math.max(rect.width, 292), viewportWidth - edge * 2);
       const left = Math.min(Math.max(viewportLeft + edge, rect.left), viewportLeft + viewportWidth - width - edge);
+      // ⚠️ **위로 뒤집을 때 `top`을 계산하지 마세요.** 그러려면 팝오버의 실제 높이가 필요한데
+      // 이 함수는 팝오버가 마운트되기 **전에** 처음 돕니다 — 잴 대상이 아직 없습니다. 한동안
+      // 높이 대신 `maxHeight`를 뺐고(`rect.top - maxHeight - gap`), `maxHeight`가
+      // `Math.min(desiredHeight, …)`로 318에 묶여 있는 동안에만 그 값이 우연히 맞았습니다.
+      // `5207c9c`가 그 상한을 없애면서(내용이 상수보다 커서 잘리던 것을 고친, 옳은 변경입니다)
+      // 이 뺄셈이 같이 무너졌습니다 — 그 커밋은 아래로 여는 경우만 확인했습니다.
+      //
+      // 실측(Chromium 1280×1000, 트리거 top 715.4): `maxHeight` 701.4를 빼면 음수라 `edge`로
+      // 잘려 `top = 8`, 팝오버는 높이 310.8로 화면 꼭대기에 붙고 **트리거와 396.6px 벌어졌습니다.**
+      //
+      // `bottom`은 높이를 몰라도 정해집니다. 그래서 마운트 전에도 정확하고, 잘릴 때도
+      // 아래끝이 트리거에 붙은 채로 위쪽만 `maxHeight`에서 멈춥니다. `position: fixed`의
+      // `bottom`은 레이아웃 뷰포트 기준이므로 `innerHeight`를 씁니다 — 뒤집기는 데스크톱
+      // 전용(`!isMobile`)이라 가상 키보드가 뷰포트를 줄이는 경로와 겹치지 않습니다.
       setPosition({
-        top: openAbove ? Math.max(edge, rect.top - maxHeight - gap) : rect.bottom + gap,
+        ...(openAbove ? { bottom: window.innerHeight - rect.top + gap } : { top: rect.bottom + gap }),
         left,
         width,
         maxHeight,
@@ -1561,7 +1578,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         ⚠️ PRINCIPLES §5의 passive 함정과는 **다른 자리**입니다 — 그 조항은
         `wheel`·`touchstart`·`touchmove`에 대한 것이고 `mousedown`은 passive로 등록되지
         않으므로 여기서 preventDefault가 실제로 먹습니다. */}
-    {open && position && createPortal(<div ref={popoverRef} id={popoverId} className="date-wheel-popover dropdown-menu-surface" role="dialog" aria-modal="false" aria-label={`${ariaLabel} ${labels.select}`} onMouseDown={(event) => event.preventDefault()} style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
+    {open && position && createPortal(<div ref={popoverRef} id={popoverId} className="date-wheel-popover dropdown-menu-surface" role="dialog" aria-modal="false" aria-label={`${ariaLabel} ${labels.select}`} onMouseDown={(event) => event.preventDefault()} style={{ top: position.top, bottom: position.bottom, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
       <div className="date-wheel-heading"><strong>{ariaLabel}</strong><span>{labels.hint}</span></div>
       <div className="date-wheel-columns" data-fields={fields.length}>
         {/* 열은 **포커스를 받지 않고 키도 받지 않습니다**(설계 스펙 §5·§6.2) — `tabIndex`가
