@@ -100,6 +100,25 @@ const DATE_WHEEL_OFFSETS = [-3, -2, -1, 0, 1, 2, 3];
  * (오너 리포트 "7일 때 9를 눌러도 안 바뀐다"; 무장된 열에서만이라 한 번 걸러 한 번씩).
  * 무장 해제는 클래스만 끄고 key는 그대로 두어야 합니다.
  */
+/**
+ * **탭과 스와이프를 가르는 유일한 수(px).** 이 거리 미만으로 움직였다 놓으면 탭이고
+ * (커밋 없음 + 클릭 그대로 통과), 이상이면 스와이프입니다(놓을 때 한 칸 커밋 + 클릭 억제).
+ *
+ * **두 자리가 이 하나를 씁니다** — `moveSwipe`의 클릭 억제와 `finishSwipe`의 놓을 때 커밋.
+ * 두 수가 갈라지면 그 사이가 **죽은 구간**이 됩니다: 커밋도 안 되는데 클릭은 막히는 거리라,
+ * 손가락을 그만큼 움직인 사용자에게는 아무 일도 안 일어납니다.
+ *
+ * ⚠️ **여기를 작게 만들지 마세요.** 한동안 억제 쪽만 2px이었고, **마우스 클릭은 누르고 떼는
+ * 사이에 2~3px, 터치 탭은 그보다 더 흔들리는 것이 정상**이라 실사용 클릭이 거의 다 걸렸습니다
+ * (오너: "클릭해도 선택 안 되고 열만 활성화된다"; 실측 0px 선택됨 / 3px 안 됨 / 8px 안 됨).
+ * 행은 휠 표면 그 자체라 `startsOnStepControl` 같은 대상 기반 예외를 쓸 수 없고, 거리로만
+ * 가를 수 있습니다.
+ *
+ * 터치에서 18px이 충분히 관대한지는 **실기기에서 재야 합니다**(지금 값은 마우스 실측과
+ * 놓을 때 커밋 임계값의 일치에서 나왔습니다).
+ */
+const SWIPE_SLOP = 18;
+
 type DateWheelMotion = { sequence: number; direction: "next" | "previous"; playing: boolean };
 
 function validDateValue(value: string) {
@@ -1055,7 +1074,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         delta = 0;
       }
     }
-    if (Math.abs(delta) > 2) suppressColumnClickRef.current = true;
+    if (Math.abs(delta) >= SWIPE_SLOP) suppressColumnClickRef.current = true;
     // **화면은 손가락의 절반만 움직입니다**(오너 실기기 판정: "움직이는 px을 반으로").
     // 클램프만 낮추지 않고 감쇠로 하는 이유: 클램프는 그 위 구간을 **정지**시키므로
     // 실기기에서 잰 데드존(최대 102ms)이 오히려 커집니다. 감쇠는 손가락 전 구간을 화면에
@@ -1114,7 +1133,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     if (!start || start.unit !== unit || start.pointerId !== pointerId) { releaseColumnClickSuppression(); return; }
     if (Number.isFinite(start.y) && Number.isFinite(clientY)) {
       const delta = clientY - start.y;
-      if (Math.abs(delta) >= 18) {
+      if (Math.abs(delta) >= SWIPE_SLOP) {
         suppressColumnClickRef.current = true;
         // 놓을 때의 커밋은 기본값(`"wheel"`)입니다. 손가락이 떠난 뒤의 **이산적인**
         // 착지라 슬라이드가 맞는 모션이고, `clearSwipeVisual`이 `.dragging`을 이미

@@ -588,6 +588,65 @@ describe("DateWheelPicker 스와이프", () => {
     pointer("pointerMove", year, { pointerId: 7, clientY: 0, buttons: 1 });
     expect(year.style.getPropertyValue("--date-wheel-drag-offset")).toBe("-15px");
   });
+  // ── 탭인가 스와이프인가는 숫자 하나가 정한다 ─────────────────────────────────
+  //
+  // 오너: "마우스 클릭이나 터치로 클릭해도 선택 안 되고 그냥 열만 활성화된다."
+  // 코디네이터가 같은 픽커·같은 행에서 움직임만 바꿔 재현했다:
+  //
+  //     0px  선택됨 / 3px  안 됨 / 8px  안 됨 / 0px  선택됨
+  //
+  // `moveSwipe`의 억제 임계값이 **2px**이었다. **마우스 클릭은 누르고 떼는 사이에 2~3px,
+  // 터치 탭은 그보다 더 흔들리는 것이 정상**이라 실사용 클릭이 거의 다 걸렸다.
+  // ± 버튼은 `startsOnStepControl`로 풀렸지만 **행은 휠 표면 그 자체라 같은 방법을 못 쓴다.**
+  //
+  // 고침은 그 임계값을 `finishSwipe`의 놓을 때 커밋 임계값과 **같은 수**로 맞추는 것이다.
+  // 그러면 숫자 하나가 탭과 스와이프를 가르고 **죽은 구간이 없다:**
+  //
+  //     |delta| <  18   놓아도 커밋 없음 + 클릭 안 막힘  ->  행이 선택된다 (탭)
+  //     |delta| >= 18   놓을 때 한 칸 커밋 + 클릭 막힘   ->  스와이프
+  //
+  // 한 제스처 안에서 30px 커밋이 난 뒤 delta가 작게 리셋돼도 억제는 유지된다 — 커밋 분기가
+  // 자기 자리에서 플래그를 세우고, 그것을 내리는 것은 `releaseColumnClickSuppression`뿐이다
+  // (pointerup/cancel의 rAF). 그래서 위 두 줄 사이에 빈틈이 생기지 않는다.
+  it("행 위에서 3px 흔들려도 그 행이 선택된다", () => {
+    const { onChange, year } = openWheel();
+    const row = [...year.querySelectorAll(".date-wheel-values button")][4];   // 오프셋 +1 = 2027
+    onChange.mockClear();
+    pointer("pointerDown", row, { pointerId: 2, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", row, { pointerId: 2, clientY: 103, buttons: 1 });   // 손떨림
+    pointer("pointerUp", row, { pointerId: 2, clientY: 103 });
+    fireEvent.click(row);
+    expect(onChange).toHaveBeenCalledWith("2027-07-12");
+  });
+
+  // 8px도 같은 구간이다. 3px만 고정하면 임계값을 4나 5로 올리는 것도 통과한다 —
+  // **오너가 실제로 걸린 거리**를 따로 못 박는다.
+  it("행 위에서 8px 흔들려도 그 행이 선택된다", () => {
+    const { onChange, year } = openWheel();
+    const row = [...year.querySelectorAll(".date-wheel-values button")][4];
+    onChange.mockClear();
+    pointer("pointerDown", row, { pointerId: 2, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", row, { pointerId: 2, clientY: 108, buttons: 1 });
+    pointer("pointerUp", row, { pointerId: 2, clientY: 108 });
+    fireEvent.click(row);
+    expect(onChange).toHaveBeenCalledWith("2027-07-12");
+  });
+
+  // **대조군.** 18px을 넘겨 끌면 그것은 스와이프다 — 놓을 때 한 칸 커밋되고 **그 뒤의 클릭은**
+  // **삼켜져야 한다.** 이게 없으면 "억제를 통째로 없앤다"가 위 둘을 통과한다.
+  //
+  // 호출 목록을 통째로 신원 비교한다: 스와이프 커밋 하나만 있어야 하고, 클릭이 살아 있었다면
+  // 행 값(2027)이 뒤에 하나 더 붙어 실패 메시지가 그것을 그대로 보여준다.
+  it("18px을 넘겨 끌면 스와이프이고, 뒤따르는 클릭은 삼켜진다", () => {
+    const { onChange, year } = openWheel();
+    const row = [...year.querySelectorAll(".date-wheel-values button")][4];
+    onChange.mockClear();
+    pointer("pointerDown", row, { pointerId: 2, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", row, { pointerId: 2, clientY: 120, buttons: 1 });
+    pointer("pointerUp", row, { pointerId: 2, clientY: 120 });
+    fireEvent.click(row);
+    expect(onChange.mock.calls.flat()).toEqual(["2025-07-12"]);
+  });
   // ── 무장 해제는 행을 갈아치우지 않는다 ──────────────────────────────────────
   //
   // 위 무장 해제는 처음에 `sequence`를 0으로 되돌리는 방식이었고, **그것이 회귀를
