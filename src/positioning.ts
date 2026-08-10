@@ -39,6 +39,46 @@ export function isPrimaryButton(event: { button?: number }) {
   return (event.button ?? 0) <= 0;
 }
 
+/**
+ * 앵커드 팝업의 좌표를 다시 재야 하는 **모든** 신호를 한 자리에 모읍니다. 해제 함수를
+ * 돌려주므로 `useEffect`의 cleanup에 그대로 씁니다.
+ *
+ * PRINCIPLES §3이 "포털 좌표는 스크롤·리사이즈·visualViewport 변화마다 다시 계산"이라고
+ * 적어 뒀는데, `Select`와 `DateWheelPicker`가 각각 **셋만** 등록하고 있었습니다. 빠진 것은
+ * **`visualViewport`의 `scroll`**입니다.
+ *
+ * ⚠️ `document.addEventListener("scroll", …, true)`로는 못 잡습니다 — 그건 DOM 트리의
+ * 스크롤이고, `VisualViewport`는 별개의 이벤트 타겟입니다. 그래서 **핀치줌으로 확대한 채
+ * 패닝하면** `offsetTop`·`offsetLeft`만 바뀌고 `resize`도 document `scroll`도 나지 않아
+ * 좌표가 통째로 낡습니다 — 그런데 `dropdownViewportSpace`와 두 컴포넌트의 `left` 계산이
+ * 바로 그 offset을 읽습니다.
+ *
+ * 정답은 이미 이 저장소 안에 있었습니다: `src/hooks.ts`의 `useVisualViewportBox`가
+ * `resize`와 `scroll`을 둘 다 등록하고 그 이유까지 적어 뒀습니다("뷰포트가 스크롤되면
+ * offsetTop이 바뀌므로 inset도 다시 재야 합니다").
+ *
+ * **정직한 범위:** 가상 키보드가 열릴 때는 높이도 변해 `resize`가 나므로 그 경로는 이전에도
+ * 부분적으로 보정됐습니다. 가드가 정말 없던 구간은 **핀치줌 상태의 팬**입니다.
+ *
+ * `capture: true`인 이유는 `scroll`이 버블하지 않아서입니다 — 안쪽 스크롤 컨테이너가
+ * 움직이는 것은 capture로만 document에서 보입니다.
+ */
+export function onViewportChange(handler: () => void): () => void {
+  // ⚠️ **등록 시점의 객체를 붙듭니다.** 해제할 때 `window.visualViewport`를 다시 읽으면,
+  // 그 사이 뷰포트 객체가 갈린 경우 **옛 객체에 리스너가 그대로 남습니다.**
+  const viewport = window.visualViewport;
+  window.addEventListener("resize", handler);
+  document.addEventListener("scroll", handler, true);
+  viewport?.addEventListener("resize", handler);
+  viewport?.addEventListener("scroll", handler);
+  return () => {
+    window.removeEventListener("resize", handler);
+    document.removeEventListener("scroll", handler, true);
+    viewport?.removeEventListener("resize", handler);
+    viewport?.removeEventListener("scroll", handler);
+  };
+}
+
 export type ScrollSnapshot = Array<{ element: Element; top: number; left: number }>;
 
 /**
