@@ -1499,6 +1499,7 @@ describe("DateWheelPicker 모바일에서는 아래로 열고 자리를 만든�
   afterEach(() => {
     setViewport(1024, 768);
     host().scrollTop = 0;
+    host().style.paddingBottom = "";
   });
 
   function openAt(top: number) {
@@ -1595,6 +1596,70 @@ describe("DateWheelPicker 모바일에서는 아래로 열고 자리를 만든�
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
 
     expect(host().scrollTop).toBe(223);
+  });
+
+  // 오너 실기기: **아주 아래에 있는 피커를 열면 팝오버에 스크롤바가 생깁니다.**
+  // U2가 만든 자리입니다 — 스크롤을 요청해도 **호스트에 더 내려갈 범위가 없으면** 아무 일도
+  // 일어나지 않고, 아래 공간이 그대로라 `maxHeight`가 줄면서 `.date-wheel-popover`의
+  // `overflow-y: auto`가 스크롤바를 냅니다.
+  //
+  // **고침: 팝오버가 열려 있는 동안 스크롤 호스트의 범위를 그만큼 늘립니다.** 이 킷이 가상
+  // 키보드에서 `padding-bottom`으로 자리를 예약하는 것과 같은 계열입니다. 트리거가 문서
+  // 끝에 있어도 필요한 만큼 내려갈 수 있게 됩니다. 원하는 높이를 줄이는 대안은 "열 다섯
+  // 줄이 보인다"는 §5 계약을 건드리므로 안 골랐습니다. 위로 뒤집는 것은 §7.0이 금지합니다.
+  //
+  // ⚠️ **늘렸으면 닫을 때 되돌려야 합니다** — 안 그러면 페이지가 영영 길어집니다.
+  // **스크롤 위치는 안 되돌립니다**(§7.0 Agency). 되돌리는 것은 **예약뿐**입니다.
+  //
+  // ⚠️ jsdom은 레이아웃이 없어 `scrollHeight`·`clientHeight`가 0이므로 "남은 범위"가 언제나
+  // 0으로 읽힙니다. 그래서 여기서 보는 것은 **요청한 예약량**이고, "실기기에서 스크롤바가
+  // 사라지는가"는 이 블록 맨 위 주석의 한계 그대로 **실기기 항목**입니다.
+  it("아래 범위가 모자라면 스크롤 호스트에 그만큼 자리를 예약한다", async () => {
+    setViewport(390, 780);
+    openAt(560);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    expect(host().style.paddingBottom).toBe("223px");
+  });
+
+  it("닫으면 예약을 되돌린다", async () => {
+    setViewport(390, 780);
+    openAt(560);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
+
+    expect(host().style.paddingBottom).toBe("");
+  });
+
+  // 되돌리는 것은 **예약뿐**입니다. 스크롤 위치까지 되돌리면 사용자의 자리를 뺏습니다.
+  it("예약을 되돌려도 스크롤 위치는 그대로다", async () => {
+    setViewport(390, 780);
+    openAt(560);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    const moved = host().scrollTop;
+
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
+
+    expect([moved > 0, host().scrollTop]).toEqual([true, moved]);
+  });
+
+  it("데스크톱에서는 자리를 예약하지 않는다", async () => {
+    setViewport(1024, 780);
+    openAt(560);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    expect(host().style.paddingBottom).toBe("");
+  });
+
+  it("모바일이라도 자리가 충분하면 예약하지 않는다", async () => {
+    setViewport(390, 780);
+    openAt(100);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    expect(host().style.paddingBottom).toBe("");
   });
 
   // **닫을 때 되돌리지 않습니다.** `apple-design` §16.2 Agency — 그 사이 사용자가 스크롤했을

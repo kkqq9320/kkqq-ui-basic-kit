@@ -387,6 +387,12 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    */
   const openStartValueRef = useRef(value);
   const roomRequestedRef = useRef(false);
+  /**
+   * 팝오버가 열려 있는 동안 스크롤 호스트에 **늘려 둔 자리**(있으면). 닫을 때 되돌립니다.
+   * 안 되돌리면 페이지가 영영 길어집니다. **스크롤 위치는 되돌리지 않습니다**(§7.0 Agency) —
+   * 되돌리는 것은 **예약뿐**입니다.
+   */
+  const reservedRoomRef = useRef<{ host: HTMLElement; previous: string } | null>(null);
   const [editing, setEditing] = useState(false);
   const [commitPulse, setCommitPulse] = useState(0);
   // 이번 세션에 비우기·Delete로 값을 지운 적이 있는가. commitAndClose의
@@ -693,6 +699,9 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       // 한 번 내린 결론입니다 — 그 사이 사용자가 스크롤했을 수도 있고, 컨트롤이 사용자의
       // 자리를 뺏으면 안 됩니다. 자리를 만든 것은 사용자가 요청한 조작의 일부였습니다.
       roomRequestedRef.current = false;
+      // 늘려 둔 자리는 되돌립니다. 스크롤 위치는 그대로 둡니다(§7.0 Agency).
+      const reserved = reservedRoomRef.current;
+      if (reserved) { reserved.host.style.paddingBottom = reserved.previous; reservedRoomRef.current = null; }
     };
   }, [open, mobileBottomInset]);
 
@@ -718,6 +727,18 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       .filter((element): element is HTMLElement => element instanceof HTMLElement);
     const host = candidates.find((element) => element.scrollHeight > element.clientHeight) ?? candidates[0];
     if (!host) return;
+    // **범위가 모자라면 늘립니다.** 트리거가 문서 끝에 있으면 스크롤을 요청해도 더 내려갈
+    // 곳이 없어 아무 일도 일어나지 않고, 아래 공간이 그대로라 maxHeight가 줄면서 팝오버에
+    // 스크롤바가 납니다(오너 실기기). 이 킷이 가상 키보드에서 padding-bottom으로 자리를
+    // 예약하는 것과 같은 계열입니다. 원하는 높이를 줄이는 대안은 "열 다섯 줄이 보인다"는
+    // §5 계약을 건드리고, 위로 뒤집는 것은 §7.0이 금지합니다.
+    const room = Math.max(0, host.scrollHeight - host.clientHeight - host.scrollTop);
+    const shortfall = amount - room;
+    if (shortfall > 0 && !reservedRoomRef.current) {
+      const previous = host.style.paddingBottom;
+      reservedRoomRef.current = { host, previous };
+      host.style.paddingBottom = `${(parseFloat(window.getComputedStyle(host).paddingBottom) || 0) + shortfall}px`;
+    }
     const smooth = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     if (smooth && typeof host.scrollTo === "function") host.scrollTo({ top: host.scrollTop + amount, behavior: "smooth" });
     else host.scrollTop += amount;
