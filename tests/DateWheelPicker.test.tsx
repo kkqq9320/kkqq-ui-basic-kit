@@ -1632,6 +1632,28 @@ describe("DateWheelPicker 모바일에서는 아래로 열고 자리를 만든�
     expect(popover().style.maxHeight).toBe("255px");
   });
 
+  // **끝까지 스크롤해도 모자라는 경우가 남습니다**(뷰포트가 아주 낮거나 트리거 위 여유가
+  // 작을 때). 그때는 §7.0대로 `maxHeight`로 줄이는 것이 맞지만, 줄이면 **잘리는 쪽이**
+  // **하필 액션 행**입니다 — 그리고 `오늘`·`완료`는 **이 컨트롤을 끝내는 유일한 버튼**입니다.
+  //
+  // 그래서 액션 행을 팝오버 바닥에 **붙입니다**(sticky). 잘리는 것은 휠 쪽이고 버튼은 언제나
+  // 손에 닿습니다. 이 킷은 같은 문제를 `Dialog`에서 이미 같은 방법으로 풀었습니다
+  // (`css/dialog.css`의 `.dialog-scroll > .dialog-actions`) — 음수 `bottom`으로 컨테이너
+  // 패딩을 상쇄하고, 뒤 내용이 비치지 않게 불투명 배경을 깝니다.
+  //
+  // ⚠️ jsdom은 레이아웃이 없어 sticky가 **실제로 붙는지**는 볼 수 없습니다. 여기서 보는 것은
+  // 규칙의 존재와 값이고, 붙는 모습은 실기기 항목입니다.
+  it("액션 행은 팝오버 바닥에 붙는다 — 잘려도 오늘·완료에 닿는다", () => {
+    const rule = /\.date-wheel-actions \{[^}]*\}/.exec(datePickerCssSource)?.[0] ?? "(액션 규칙이 없다)";
+    expect(rule).toMatch(/position:\s*sticky;[^}]*bottom:\s*-12px/);
+  });
+
+  // 붙기만 하고 배경이 없으면 아래로 지나가는 휠이 버튼 위로 비칩니다.
+  it("그 행은 불투명 배경을 갖는다", () => {
+    const rule = /\.date-wheel-actions \{[^}]*\}/.exec(datePickerCssSource)?.[0] ?? "(액션 규칙이 없다)";
+    expect(rule).toMatch(/background:\s*var\(--surface\)/);
+  });
+
   // 오너: **"피커는 괜찮은데 오늘/완료 버튼이 잘려서 스크롤이 되네."**
   //
   // **트리거가 하단 바 자리(bottomInset)보다 아래에 있을 때**입니다. `dropdownViewportSpace`가
