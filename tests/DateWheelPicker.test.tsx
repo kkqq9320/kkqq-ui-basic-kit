@@ -1551,12 +1551,66 @@ describe("DateWheelPicker 모바일에서는 아래로 열고 자리를 만든�
   // **대조군 — 데스크톱은 그대로입니다.** 뒤집기는 데스크톱에서 여전히 옳습니다(포인터가
   // 내용을 가리지 않고, 화면이 넓어 뒤집혀도 조준이 안 흔들립니다). 경계는 이 파일이 이미
   // 쓰는 모바일 판정(`window.innerWidth <= 760`)을 **재사용**하고 새로 만들지 않습니다.
+  // ⚠️ 이 단정은 한동안 `parseFloat(style.top) < trigger.top`이었습니다. **그 형태로는 아무것도**
+  // **증명되지 않습니다** — 팝오버가 트리거에서 396px 떨어져 화면 꼭대기(top 8)에 붙어도
+  // `8 < 560`이라 통과했고, 실제로 그 결함이 살아 있는 동안 내내 초록이었습니다.
+  // 위로 열 때의 앵커가 `bottom`이 된 지금은 **정확한 값**으로 못박습니다: 780 - 560 + 6.
   it("데스크톱에서는 아래가 모자라면 위로 뒤집는다", async () => {
     setViewport(1024, 780);
-    const trigger = openAt(560);
+    openAt(560);
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
 
-    expect(parseFloat(popover().style.top)).toBeLessThan(trigger.getBoundingClientRect().top);
+    expect(popover().style.bottom).toBe("226px");
+  });
+
+  // ⚠️ **바로 위 테스트는 "위에 있다"만 봅니다 — 그것으로는 아무것도 증명되지 않습니다.**
+  // 결함이 완전히 살아 있는 상태에서도 통과합니다: 팝오버가 화면 꼭대기(top 8)에 붙어 버려도
+  // `8 < 560`이라 참입니다. 실측(Chromium 1280×1000, 트리거 top 715.4, 데모 `거래 날짜`):
+  // `style.top = 8`, `style.maxHeight = 701.4`, 팝오버 실제 높이 310.8 —
+  // **아래끝과 트리거 윗변 사이가 396.6px 비었습니다.**
+  //
+  // 원인은 `top`을 팝오버의 **실제 높이**가 아니라 **위에 남은 공간 전체**(`maxHeight`)에서
+  // 빼는 것입니다. `maxHeight`가 `Math.min(desiredHeight, …)`로 318에 묶여 있던 동안에는
+  // 그 뺄셈이 우연히 맞았고, `5207c9c`가 그 상한을 없애면서(옳은 변경이었습니다) 같이
+  // 무너졌습니다 — 그 커밋은 **아래로 여는 경우만** 검증했습니다.
+  //
+  // 그래서 "붙어 있다"를 **값으로** 못박고, 앵커를 `bottom`으로 바꿉니다. `bottom`은 팝오버
+  // 높이를 몰라도 정해집니다 — 첫 배치는 팝오버가 마운트되기 전이라 실브라우저에서도 높이를
+  // 잴 수 없고, jsdom은 레이아웃 자체가 없어 영원히 못 잽니다.
+  //
+  // 지오메트리는 **오너가 실제로 본 그 배치**입니다(1280×1000, 트리거 top 715):
+  // `bottom = 1000 - 715 + 6 = 291`. 고치기 전 이 자리의 실제 값은 `top: 8px` / `bottom: ''`.
+  it("위로 뒤집으면 팝오버 아래끝이 트리거 바로 위에 붙는다", async () => {
+    setViewport(1280, 1000);
+    openAt(715);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    expect(popover().style.bottom).toBe("291px");
+  });
+
+  // **`it`을 나눈 이유:** 위 단정이 먼저 터지면 아래는 실행조차 안 되고, 둘은 같은 한 줄
+  // (`setPosition`의 인자)이 만드는 서로 다른 증상이라 순서를 바꿔도 서로를 가립니다.
+  //
+  // 위로 열 때 `top`이 함께 남아 있으면 상자의 높이가 고정된 것처럼 되어, `maxHeight`로
+  // 잘리는 순간 아래끝이 다시 트리거에서 떨어집니다.
+  it("위로 뒤집으면 top은 비어 있다", async () => {
+    setViewport(1280, 1000);
+    openAt(715);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    expect(popover().style.top).toBe("");
+  });
+
+  // **대조군 — 아래로 열 때는 `bottom`을 쓰지 않습니다.** 이 단정은 고치기 전에도 초록이고
+  // 그래서 결함의 증거가 아닙니다. 잡는 것은 **고침이 넘치는 것**입니다: `bottom`을 분기
+  // 없이 항상 넣으면 상자가 위아래로 동시에 묶여 `maxHeight`를 무시하고 늘어납니다.
+  // (뮤테이션: `setPosition`에서 `openAbove ?` 삼항을 떼고 `bottom`을 무조건 넘기면 빨개집니다.)
+  it("아래로 열 때는 bottom을 쓰지 않는다", async () => {
+    setViewport(1024, 1200);
+    openAt(100);   // 아래로 1092 — 넉넉하므로 뒤집지 않는다
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    expect(popover().style.bottom).toBe("");
   });
 
   // 그리고 데스크톱에서는 **스크롤을 건드리지 않습니다.**
@@ -1717,10 +1771,12 @@ describe("DateWheelPicker 모바일에서는 아래로 열고 자리를 만든�
   // (270)에서만 갈립니다.
   it("데스크톱 뒤집기 문턱은 원하는 높이다 — 최소 높이가 아니다", async () => {
     setViewport(1024, 780);
-    const trigger = openAt(461);   // 아래 공간 780 - 8 - 502 = 270
+    openAt(461);   // 아래 공간 780 - 8 - 502 = 270
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
 
-    expect(parseFloat(popover().style.top)).toBeLessThan(trigger.getBoundingClientRect().top);
+    // 뒤집혔다는 관측 대상이 `bottom`으로 바뀌었습니다(위 "아래가 모자라면 위로 뒤집는다"의
+    // 주석 참고). 780 - 461 + 6 = 325. 문턱이 230이면 뒤집지 않아 `bottom`이 빈 문자열입니다.
+    expect(popover().style.bottom).toBe("325px");
   });
 
   // 오너 실기기: **아주 아래에 있는 피커를 열면 팝오버에 스크롤바가 생깁니다.**
