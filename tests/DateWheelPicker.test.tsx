@@ -1598,6 +1598,40 @@ describe("DateWheelPicker 모바일에서는 아래로 열고 자리를 만든�
     expect(host().scrollTop).toBe(223);
   });
 
+  // ⚠️ **팝오버 스크롤바의 진짜 원인은 자리가 아니라 상한이었습니다.** 제 첫 진단("스크롤
+  // 범위가 없어서")은 **틀렸고 코디네이터가 실브라우저 트레이스로 반증했습니다** — 열리는
+  // 순간 호스트에 708px이 더 남아 있었고 실제로 324px 스크롤도 됐는데 스크롤바가 났습니다.
+  //
+  // 실측: 뷰포트 375x812, 트리거가 **화면 위쪽**(top 36)이라 아래가 812px 통째로 비어 있어도
+  // `styleMaxHeight 318 / clientHeight 316 / scrollHeight 321`. **자리와 무관하게 항상**
+  // **넘칩니다.** `maxHeight = Math.min(desiredHeight, available)`에서 `desiredHeight = 318`이
+  // 하드코딩인데 실제 내용은 그보다 큽니다. `main`에도 글자까지 같은 결함입니다.
+  //
+  // 고침은 `desiredHeight`의 **두 역할을 가르는 것**입니다 — "이만큼 있으면 좋겠다"는 문턱은
+  // 남기고, **높이 상한 역할은 뺍니다.** 자리가 넉넉하면 상자는 내용 높이로 잡히고 좁을 때만
+  // 잘립니다.
+  //
+  // 아래 계산: 뷰포트 780 - 78(bottomInset) - 77(트리거 bottom) = 625가 아래 공간이고,
+  // `available = max(230, 625 - 6)` = 619입니다. 고치기 전에는 318로 잘렸습니다.
+  it("자리가 넉넉하면 팝오버 높이가 상수로 잘리지 않는다", async () => {
+    setViewport(390, 780);
+    openAt(36);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    expect(popover().style.maxHeight).toBe("619px");
+  });
+
+  // 좁을 때는 여전히 잘립니다 — 그때 스크롤바가 나는 것은 옳습니다. 상한을 통째로 없애면
+  // (예: maxHeight를 안 걺) 팝오버가 화면 밖으로 자랍니다.
+  it("자리가 좁으면 남은 만큼으로 잘린다", async () => {
+    setViewport(390, 420);
+    openAt(40);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    // 420 - 78 - 81 = 261 -> available = max(230, 261 - 6) = 255
+    expect(popover().style.maxHeight).toBe("255px");
+  });
+
   // 오너 실기기: **아주 아래에 있는 피커를 열면 팝오버에 스크롤바가 생깁니다.**
   // U2가 만든 자리입니다 — 스크롤을 요청해도 **호스트에 더 내려갈 범위가 없으면** 아무 일도
   // 일어나지 않고, 아래 공간이 그대로라 `maxHeight`가 줄면서 `.date-wheel-popover`의

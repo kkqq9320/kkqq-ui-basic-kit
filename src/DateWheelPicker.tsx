@@ -670,6 +670,21 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     if (!open || !triggerRef.current) { setPosition(null); return; }
     function placePicker() {
       if (!triggerRef.current) return;
+      // **문턱입니다. 높이 상한이 아닙니다.** "이만큼 있으면 좋겠다"를 뜻하고 두 곳에서만
+      // 쓰입니다 — 데스크톱에서 위로 뒤집을지, 모바일에서 자리를 얼마나 만들지.
+      //
+      // ⚠️ **이 값을 `maxHeight`에 다시 물리지 마세요.** 한동안 그랬고, 그래서 **자리가**
+      // **아무리 넉넉해도** 상자가 318에서 잘려 팝오버에 스크롤바가 났습니다(오너 실기기).
+      // 실측: 트리거가 화면 위쪽이라 아래가 812px 통째로 비어 있어도
+      // `styleMaxHeight 318 / clientHeight 316 / scrollHeight 321`. **배치와 무관한**
+      // **결함**이었고 `main`에도 글자까지 같습니다.
+      //
+      // 내용 높이는 **고정이 아닙니다.** 잰 구성(데모, 295px 폭): padding 12+12 · 머리말
+      // 29.8(한 줄) · 열 212 · 액션 42(padding-top 10 + 버튼 32) = **308**. 오너 앱에서는
+      // **321**이었는데, 머리말이 소비자가 주는 라벨·힌트 텍스트라 폭에 따라 줄이 늡니다.
+      // 그래서 이 상수는 "모든 소비자의 내용보다 크다"를 보장할 수 없고, **보장할 필요도**
+      // **없습니다** — 상한이 아니니까요. 모자라면 자리를 그만큼 덜 만들 뿐이고, 그 경우는
+      // 아래 자리 확보가 실제 팝오버 높이를 재서 메웁니다.
       const desiredHeight = 318;
       const gap = 6;
       // 모바일 판정은 **이 파일이 이미 쓰던 그것**입니다(bottomInset이 걸리는 조건).
@@ -694,8 +709,11 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         const shift = Math.min(missing, Math.max(0, rect.top - edge));
         if (shift > 0) scrollRoomBy(shift);
       }
-      const available = Math.max(230, (openAbove ? above : below) - gap);
-      const maxHeight = Math.min(desiredHeight, available);
+      // 상자 높이는 **남은 자리로만** 정합니다. 넉넉하면 내용 높이로 알아서 잡히고(그래서
+      // 스크롤바가 없고), 좁을 때만 잘립니다 — 잘릴 때 스크롤바가 나는 것은 옳습니다.
+      // `Math.max(230, …)`의 바닥은 그대로 둡니다: 그것마저 없으면 아주 좁은 자리에서
+      // 상자가 몇십 px로 줄어 아무것도 못 고릅니다.
+      const maxHeight = Math.max(230, (openAbove ? above : below) - gap);
       const viewportLeft = window.visualViewport?.offsetLeft ?? 0;
       const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
       const width = Math.min(Math.max(rect.width, 292), viewportWidth - edge * 2);
