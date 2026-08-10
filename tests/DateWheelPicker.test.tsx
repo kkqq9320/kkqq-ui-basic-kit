@@ -4417,3 +4417,56 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     });
   });
 });
+
+// PRINCIPLES §11 — **보이는 머리말과 접근성 이름은 갈라놓을 수 있다.** 292px 머리말에는
+// `"날짜"`가 맞고 이름으로는 `"거래 발생 날짜"`가 맞는데, `ariaLabel` 하나가 둘 다이면
+// 한쪽을 맞추는 순간 다른 쪽이 망가진다. `heading`이 그 자리이고, 기본값이 `ariaLabel`이라
+// 안 넘기면 지금까지와 동일하다.
+//
+// ⚠️ **`it`을 나눈 이유:** 머리말·팝오버 이름·트리거 이름은 전부 같은 한 값에서 갈라져 나온
+// 것이라, 한 블록에 모으면 `heading`이 이름 쪽으로 새는 순간 첫 단정이 터지고 **나머지는
+// 실행조차 안 된다** — 정확히 이 저장소가 일곱 번 밟은 자리다.
+describe("DateWheelPicker heading — 보이는 머리말과 접근성 이름을 가른다", () => {
+  function openWithHeading(heading?: string) {
+    render(<DateWheelPicker ariaLabel="거래 발생 날짜" heading={heading} value="2026-07-12" onChange={() => undefined} />);
+    const field = fieldOf("거래 발생 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    return field;
+  }
+  const headingText = () => document.querySelector<HTMLElement>(".date-wheel-heading strong")!.textContent;
+
+  // 뮤테이션: `heading ?? ariaLabel`을 `ariaLabel`로 되돌리면 `"거래 발생 날짜"`가 나온다.
+  it("heading을 넘기면 팝오버 머리말에 그 글자가 보인다", async () => {
+    openWithHeading("날짜");
+    await screen.findByRole("dialog", { name: "거래 발생 날짜 선택" });
+
+    expect(headingText()).toBe("날짜");
+  });
+
+  // 뮤테이션: 팝오버의 `aria-label`을 `heading ?? ariaLabel`로 바꾸면 `"날짜 선택"`이 되어
+  // 이 findByRole이 못 찾고 터진다.
+  it("heading을 넘겨도 팝오버의 접근성 이름은 ariaLabel이 정한다", async () => {
+    openWithHeading("날짜");
+
+    expect(await screen.findByRole("dialog", { name: "거래 발생 날짜 선택" })).toBeTruthy();
+  });
+
+  // 트리거 이름은 `${ariaLabel}, ${값}`이다(§11). 뮤테이션: `triggerName`을 `heading`에서
+  // 만들게 하면 `"날짜, 2026. 07. 12."`가 되어 빨개진다.
+  it("heading을 넘겨도 트리거의 접근성 이름은 ariaLabel이 정한다", async () => {
+    const field = openWithHeading("날짜");
+    await screen.findByRole("dialog", { name: "거래 발생 날짜 선택" });
+
+    expect(field.getAttribute("aria-label")).toBe("거래 발생 날짜, 2026. 07. 12.");
+  });
+
+  // **대조군 — 안 넘기면 지금까지와 같다.** 고침 전에도 초록이므로 결함의 증거가 아니고,
+  // 잡는 것은 `heading ?? ariaLabel`이 `heading`으로 무너져 머리말이 비는 것이다.
+  it("heading을 안 넘기면 머리말은 ariaLabel 그대로다", async () => {
+    openWithHeading();
+    await screen.findByRole("dialog", { name: "거래 발생 날짜 선택" });
+
+    expect(headingText()).toBe("거래 발생 날짜");
+  });
+});
