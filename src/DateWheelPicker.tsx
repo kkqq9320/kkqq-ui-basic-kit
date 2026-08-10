@@ -256,7 +256,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 부르지 않고 버퍼만 버립니다. 다른 모든 떠나는 경로(Tab·화살표·**열림 상태의**
   // Enter·Space·완료·세그먼트 클릭·blur)와의 유일한 예외입니다. (닫힘 상태의 Enter는
   // 떠나는 경로가 아니라 **여는 키**입니다 — 버퍼를 들고 엽니다. 스펙 §3·§4.2.)
-  useEscapeToClose(open, () => { setTyping(null); setEditing(false); setOpen(false); });
+  useEscapeToClose(open, () => { setTyping(null); setOpen(false); });
   const [position, setPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const [columnMotion, setColumnMotion] = useState<Record<DateWheelUnit, DateWheelMotion>>({
     year: { sequence: 0, direction: "next", playing: false },
@@ -448,6 +448,15 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 지웠습니다.
   useEffect(() => {
     if (open) return;
+    // **팝오버가 닫히는 것 자체가 편집의 끝입니다**(스펙 §4.5). 경로를 세지 않습니다 —
+    // 한동안 `Enter`·`완료`·`Escape`·blur로 **열거**하고 있었고 뒤로가기가 빠졌습니다
+    // (오너 실기기: "뒤로가기로 닫으면 활성 세그먼트가 안 없어진다"). 바깥 클릭도 같은
+    // 구멍이었습니다. 닫는 경로는 이미 여섯이고 앞으로도 늘어나므로, 세는 방식은 셀
+    // 때마다 하나씩 빠집니다.
+    //
+    // ⚠️ **"닫혀 있다"가 아니라 "닫히는 순간"입니다.** 이 이펙트는 `open`이 바뀔 때만
+    // 돌므로, 닫힌 채 숫자를 쳐서 편집이 다시 시작되는 경로(§3)를 건드리지 않습니다.
+    setEditing(false);
     clearedRef.current = false;
     sessionStartValueRef.current = committedOnCloseRef.current ?? value;
     committedOnCloseRef.current = null;
@@ -869,9 +878,6 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * ArrowUp/ArrowDown에서 flushTyping이 이미 겪은 것과 같은 결함입니다.
    */
   function commitAndClose() {
-    // 확정하며 닫는 것은 **편집의 끝**입니다(스펙 §4.5). 포커스는 트리거에 남지만
-    // (§6.2) 컨트롤은 쉬는 중이므로 활성 세그먼트 표시가 사라져야 합니다.
-    setEditing(false);
     const flushed = flushTyping();
     // 이 함수가 최종적으로 확정하는 값. 아래에서 실제로 바뀐 값이 있으면만 갱신합니다 —
     // 아무것도 안 바뀌면(예: 이미 오늘인 값 그대로 완료) committed는 value와 같은

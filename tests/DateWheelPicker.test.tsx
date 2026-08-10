@@ -1697,6 +1697,42 @@ describe("DateWheelPicker 활성 표시는 편집 중에만", () => {
     expect(editing(trigger)).toBe(false);
   });
 
+  // **끝은 경로를 세지 않고 "닫힌다" 자체입니다**(스펙 §4.5). 한동안 끝을
+  // `Enter`·`완료`·`Escape`·blur로 **열거**하고 있었고 뒤로가기가 빠져 있었습니다 —
+  // 오너가 실기기에서 잡았습니다: **"뒤로가기로 피커를 닫았을 때 활성 세그먼트가 안
+  // 없어진다."** 바깥 클릭도 같은 구멍이었습니다. 닫는 경로는 이미 여섯이고 앞으로도
+  // 늘어나므로, **세는 방식은 셀 때마다 하나씩 빠집니다.**
+  it("뒤로가기로 닫아도 편집이 끝난다", async () => {
+    const trigger = open();
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    fireEvent.popState(window, { state: null });
+
+    await waitFor(() => expect(editing(trigger)).toBe(false));
+  });
+
+  it("바깥을 눌러 닫아도 편집이 끝난다", async () => {
+    const trigger = open();
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    fireEvent.pointerDown(document.body, { button: 0 });
+
+    await waitFor(() => expect(editing(trigger)).toBe(false));
+  });
+
+  // ⚠️ **"닫혀 있다"가 아니라 "닫히는 순간"입니다.** 닫힌 채 숫자를 치는 것은 (가)안의
+  // 핵심이고(스펙 §3), 그때 편집은 **계속돼야** 합니다. "닫혀 있으면 편집 아님"으로
+  // 구현하면 위 둘은 통과하면서 이것이 빨개집니다.
+  it("닫힌 채로 숫자를 치면 편집이 계속된다", () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = fieldOf("거래 날짜");
+    trigger.focus();
+
+    fireEvent.keyDown(trigger, { key: "2" });
+
+    expect([screen.queryByRole("dialog", { name: "거래 날짜 선택" }) === null, editing(trigger)]).toEqual([true, true]);
+  });
+
   // ⚠️ **이 하나는 오너가 말한 범위를 넘습니다.** 오너는 `완료`만 말했고, `Escape`를 끝으로
   // 보는 것은 스펙 §4.5가 명시적으로 "실기기에서 보고 정할 항목"으로 표시해 둔 판단입니다
   // ("값을 바꾸지 않고 떠난다"로 볼 수도, "되돌린 뒤 계속 편집"으로 볼 수도 있습니다).
