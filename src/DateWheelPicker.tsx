@@ -121,7 +121,12 @@ const SWIPE_SLOP = 18;
 
 /**
  * 팝오버 진입 애니메이션이 **다 끝나는** 시각(ms) — 마지막 열의 시차까지 포함합니다
- * (320ms + 60ms x 2). 이 시각에 `entering`을 걷습니다.
+ * (280ms + 40ms x 2). 이 시각에 `entering`을 걷습니다.
+ *
+ * ⚠️ **이 수는 css/date-picker.css의 지속시간·시차와 같은 수입니다.** 두 파일에 흩어져
+ * 있으므로 테스트가 CSS에서 유도해 이 값과 비교합니다 — 한쪽만 바꾸면 빨개집니다.
+ * 짧으면 마지막 열이 멎기 전에 애니메이션이 잘리고, 길면 그 초과 구간에서 아래 함정에
+ * 걸립니다.
  *
  * ⚠️ **걷는 것이 중요합니다.** 남겨 두면 스와이프 pointerdown이 `moving-*`을 떼는 순간
  * 값 컨테이너의 animation-name이 이동 → 진입으로 **바뀌면서 진입이 세션 도중에**
@@ -129,7 +134,7 @@ const SWIPE_SLOP = 18;
  * `date-wheel-selected-pop`에서도 버블해 올라오고, `prefers-reduced-motion`에서는
  * 애니메이션이 아예 안 돌아 **영영 안 옵니다.** 시간으로 걷으면 두 경우 다 성립합니다.
  */
-const DATE_WHEEL_ENTER_TOTAL_MS = 440;
+const DATE_WHEEL_ENTER_TOTAL_MS = 360;
 
 type DateWheelMotion = { sequence: number; direction: "next" | "previous"; playing: boolean };
 

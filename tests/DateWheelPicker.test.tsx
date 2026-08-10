@@ -3129,7 +3129,7 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // 이동 규칙이 진입 규칙과 **같은 특이도**이고 파일에서 **뒤에** 오므로, 커밋 프레임에서는
   // 이동이 이깁니다. 아래 "이동 규칙이 뒤에 온다"가 그것을 고정합니다.
   it("진입은 값 컨테이너를 굴리고, 열의 entering이 그것을 연다", () => {
-    expect(datePickerCssSource).toMatch(/\.date-wheel-column\.entering \.date-wheel-values \{[^}]*animation: date-wheel-enter 320ms/);
+    expect(datePickerCssSource).toMatch(/\.date-wheel-column\.entering \.date-wheel-values \{[^}]*animation: date-wheel-enter 280ms/);
   });
 
   it("진입 키프레임이 있다", () => {
@@ -3160,7 +3160,7 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
     expect([
       /\.date-wheel-column:nth-child\(2\) \{[^}]*--date-wheel-enter-delay:\s*([^;]+)/.exec(datePickerCssSource)?.[1]?.trim() ?? null,
       /\.date-wheel-column:nth-child\(3\) \{[^}]*--date-wheel-enter-delay:\s*([^;]+)/.exec(datePickerCssSource)?.[1]?.trim() ?? null,
-    ]).toEqual(["60ms", "120ms"]);
+    ]).toEqual(["40ms", "80ms"]);
   });
 
   // **이동이 진입을 이겨야 합니다** — 커밋 프레임에서 값 컨테이너가 리마운트되는데, 그때
@@ -3199,6 +3199,39 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
     vi.useFakeTimers();
     openPicker();
     act(() => { vi.advanceTimersByTime(1000); });
+    expect(columns().map((column) => column.classList.contains("entering"))).toEqual([false, false, false]);
+  });
+
+  // ── 게이트 창과 CSS 총 길이는 **같은 수여야 합니다** ────────────────────────
+  //
+  // 진입이 끝나는 시각은 **CSS**에 있고(지속시간 + 마지막 열의 시차), 게이트를 걷는
+  // 시각은 **JS 상수**에 있습니다. 서로 모르는 두 파일의 두 숫자입니다.
+  //
+  // **갈라지면 둘 다 나쁩니다.** 게이트가 짧으면 마지막 열이 멎기 전에 클래스가 빠져
+  // **애니메이션이 중간에 잘리고**, 길면 그 초과 구간에서 스와이프 `pointerdown`이
+  // `moving-*`을 떼는 순간 animation-name이 이동 → 진입으로 바뀌며 **진입이 세션 도중**
+  // **재생**됩니다. 그래서 기대값을 상수로 적지 않고 **CSS에서 유도해** 비교합니다 —
+  // 한쪽만 바꾸면 곧바로 빨개집니다.
+  //
+  // 이 둘은 값을 바꾼 지금도 초록입니다(커플링이 지켜지고 있으므로). 빨개질 수 있다는
+  // 것은 뮤테이션으로 확인했습니다 — JS 상수만 줄이면 앞이, 늘리면 뒤가 죽습니다.
+  function enterTotalFromCss() {
+    const duration = /\.date-wheel-column\.entering \.date-wheel-values \{[^}]*animation: date-wheel-enter (\d+)ms/.exec(datePickerCssSource)?.[1];
+    const lastDelay = /\.date-wheel-column:nth-child\(3\) \{[^}]*--date-wheel-enter-delay:\s*(\d+)ms/.exec(datePickerCssSource)?.[1];
+    return Number(duration) + Number(lastDelay);
+  }
+
+  it("게이트는 마지막 열이 멎기 전에 걷히지 않는다", () => {
+    vi.useFakeTimers();
+    openPicker();
+    act(() => { vi.advanceTimersByTime(enterTotalFromCss() - 30); });
+    expect(columns().map((column) => column.classList.contains("entering"))).toEqual([true, true, true]);
+  });
+
+  it("게이트는 마지막 열이 멎은 직후 걷힌다", () => {
+    vi.useFakeTimers();
+    openPicker();
+    act(() => { vi.advanceTimersByTime(enterTotalFromCss() + 30); });
     expect(columns().map((column) => column.classList.contains("entering"))).toEqual([false, false, false]);
   });
 });
