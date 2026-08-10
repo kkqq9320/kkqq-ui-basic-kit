@@ -240,7 +240,8 @@ Next.js App Router처럼 마운트 지점을 직접 정할 수 없는 환경이�
 
 ```tsx
 <DateWheelPicker
-  ariaLabel="거래 날짜"
+  ariaLabel="거래 날짜"           // 필수 — 팝오버 머리말로도 그려집니다
+  heading="날짜"                  // 선택 — 머리말만 짧게 쓰고 싶을 때
   value={date}                   // "YYYY-MM-DD" 또는 ""
   onChange={setDate}
   min="2026-01-01" max="2026-12-31"
@@ -409,7 +410,8 @@ useEffect(() => localStorage.setItem("sidebarCollapsed", String(collapsed)), [co
 
 ```tsx
 <div data-keyboard-keep-visible>
-  <label>메모<AutoGrowTextarea ariaLabel="메모" value={memo} onChange={setMemo} /></label>
+  {/* 감싸는 label이 이미 이름을 주므로 ariaLabel은 선택입니다(PRINCIPLES §11) */}
+  <label>메모<AutoGrowTextarea value={memo} onChange={setMemo} /></label>
   <div className="button-row">
     <button type="button" className="secondary-button">취소</button>
     <button type="button" className="danger-button">삭제</button>
