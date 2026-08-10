@@ -1577,6 +1577,25 @@ describe("DateWheelPicker 모바일에서는 아래로 열고 자리를 만든�
     expect(host().scrollTop).toBe(0);
   });
 
+  // **한 번 요청하면 그 열림 동안은 다시 요청하지 않습니다.** 자리 확보 이펙트의 deps에
+  // `position`이 들어 있고 `placePicker`는 스크롤마다 새 객체를 내므로, 가드가 없으면
+  // **스크롤할 때마다 또 밀어** 스크롤이 제 꼬리를 뭅니다 — 그리고 사용자가 그 사이 되돌려도
+  // 컨트롤이 다시 뺏습니다.
+  //
+  // 뮤테이션으로 확인했더니 기존 테스트로는 **도달하지 않습니다**(스크롤 이벤트를 아무도
+  // 일으키지 않아 이펙트가 두 번 돌 일이 없었습니다). 등가가 아니라 미도달이라 여기서
+  // 스크롤을 한 번 일으켜 도달시킵니다.
+  it("한 열림 동안 자리 확보는 한 번만 요청한다", async () => {
+    setViewport(390, 780);
+    openAt(773);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    const afterOpen = host().scrollTop;
+
+    fireEvent.scroll(document);   // placePicker가 다시 돌고 position이 새 객체가 된다
+
+    expect([afterOpen, host().scrollTop]).toEqual([436, 436]);
+  });
+
   // **자리 확보는 열림마다 다시 합니다.** 요청은 열림당 한 번이지만 그 플래그는 닫힐 때
   // 되돌아가야 하고, 안 그러면 **두 번째 열림부터 자리를 안 만듭니다.**
   //
