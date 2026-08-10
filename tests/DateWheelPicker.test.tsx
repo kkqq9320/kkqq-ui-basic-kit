@@ -1576,6 +1576,27 @@ describe("DateWheelPicker 모바일에서는 아래로 열고 자리를 만든�
     expect(host().scrollTop).toBe(0);
   });
 
+  // **자리 확보는 열림마다 다시 합니다.** 요청은 열림당 한 번이지만 그 플래그는 닫힐 때
+  // 되돌아가야 하고, 안 그러면 **두 번째 열림부터 자리를 안 만듭니다.**
+  //
+  // 뮤테이션으로 확인했더니 위 테스트들로는 **도달하지 않습니다** — 매번 새로 render 하므로
+  // 컴포넌트가 새것이고 ref도 새것입니다. 등가가 아니라 미도달이라, 같은 컴포넌트에서 두 번
+  // 여는 경로를 따로 둡니다. (사용자가 그 사이 스크롤을 되돌린 상황을 흉내 내려고 0으로
+  // 돌려놓고 다시 엽니다.)
+  it("두 번째로 열 때도 자리를 다시 만든다", async () => {
+    setViewport(390, 780);
+    const trigger = openAt(560);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
+    host().scrollTop = 0;
+
+    fireEvent.click(trigger);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    expect(host().scrollTop).toBe(223);
+  });
+
   // **닫을 때 되돌리지 않습니다.** `apple-design` §16.2 Agency — 그 사이 사용자가 스크롤했을
   // 수도 있고, 컨트롤이 사용자의 자리를 뺏으면 안 됩니다. 이 킷은 같은 판단을 이미
   // 한 번 내렸습니다.
