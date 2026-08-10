@@ -33,11 +33,11 @@
 | 프롭 | 기본값 | 언제 바꾸나 |
 |---|---|---|
 | `fields` | `["year","month","day"]` | **연·월 픽커**(`["year","month"]`)나 연도만 픽커. 값은 늘 `YYYY-MM-DD`(빠진 열=01), min/max는 남은 최소 단위로 비교 |
-| `labels` | 한국어 | 다른 언어. `placeholder`·`hint`·`today`·`clear`·`done`·`setToday`·`previous`·`next`·`select`·`weekdays[7]`·`units{year,month,day}` 중 **필요한 키만** |
+| `labels` | 한국어 | 다른 언어. `placeholder`·`hint`·`today`·`clear`·`done`·`previous`·`next`·`select`·`weekdays[7]`·`units{year,month,day}` 중 **필요한 키만**. `hint`는 팝오버 머리말에만 나옵니다 — 키 조작은 팝오버를 열지 않아도 되므로 그 문구가 조작의 전부를 안내하지는 않습니다 |
 | `timeZone` | `"Asia/Seoul"` | "오늘"의 기준 시간대 |
 | `min` / `max` | 없음 | 선택 가능 범위(풀 ISO 날짜) |
 | `allowClear` | `false` | "비우기" 버튼 노출(선택형 날짜) |
-| `ariaLabel` | `"날짜"` | 접근성 이름(사실상 필수) |
+| `ariaLabel` | `"날짜"` | 접근성 이름의 **접두사**(사실상 필수). 트리거의 이름은 `"${ariaLabel}, ${보이는 값}"`이라 값이 함께 읽힙니다 |
 | `mobileBottomInset` | `78` | 모바일 하단 고정 바를 피할 높이 |
 
 ### Select (드롭다운)
@@ -102,6 +102,16 @@ CSS에서 같은 변수를 다시 정의**하면 그걸로 끝입니다. 라이�
 | 드롭다운 기하 | `--dropdown-inline-padding`(12), `--dropdown-icon-box`(18), `--dropdown-icon-size`(13), `--dropdown-option-hover-*` |
 | 사이드바 | `--sidebar-width`(238), `--sidebar-width-collapsed`(76), `--sidebar-motion`, `--sidebar-ease` |
 | 스크롤바·모션 | `--scrollbar-size`(4), `--scrollbar-thumb`, `--scrollbar-thumb-hover`, `--motion-fast`(140ms) |
+| 날짜 활성 세그먼트 | `--date-segment-active-background`, `--date-segment-active-text` (아래 주의) |
+
+> ⚠️ **날짜 활성 세그먼트 둘은 짝입니다.** 기본값이 `var(--text)`와 `var(--input)`이라
+> **반전**(칩은 글자색, 글자는 필드색)이고, 그래서 `--text`·`--input`만 바꿔도 저절로
+> 따라옵니다 — 보통은 이 둘을 **건드릴 필요가 없습니다.**
+>
+> 굳이 바꾼다면 **반드시 둘 다** 바꾸세요. 하나만 덮으면 반전 관계가 깨져 칩 위 글자가
+> 안 읽힐 수 있습니다. 킷의 대비 테스트는 **킷 자신의 값만** 검사하므로 소비자가 넣은
+> 값에 대해서는 아무것도 보장하지 않습니다. 기준은 킷이 쓰는 것과 같습니다 —
+> **칩 위 글자 대비 4.5 이상(WCAG AA), 칩과 `--input` 대비 2.0 이상.**
 
 ### 색을 바꾸는 두 갈래
 

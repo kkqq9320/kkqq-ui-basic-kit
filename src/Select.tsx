@@ -116,6 +116,28 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
   // 메뉴 안에서 시작된(아직 떼지 않은) 포인터 제스처 동안, 그 제스처가 만드는 체이닝된
   // 조상 스크롤이 트리거를 움직여도 닫기 판정에서 제외합니다 — 아래 closeIfAnchorMoved 참고.
   const pointerDownInsideMenuRef = useRef(false);
+  // 완료 피드백(css/surfaces.css .dropdown-value-commit) 커밋 카운터 — choose()에서만,
+  // 그것도 고른 값이 이 메뉴가 열렸을 때의 값(sessionStartValueRef, 아래)과 실제로
+  // 다를 때만 올립니다(이미 선택된 옵션을 다시 골라도 아무 신호가 없어야 합니다).
+  // 0에서 시작해 첫 마운트는 애니메이션이 돌지 않고, 메뉴를 열기만 하거나 방향키로
+  // 훑는 동작은 건드리지 않습니다 — DateWheelPicker.tsx의 commitPulse와 같은 이유입니다.
+  // 계약은 PRINCIPLES.md §12.
+  const [commitPulse, setCommitPulse] = useState(0);
+  // 이 메뉴가 열렸을 때 value가 무엇이었는지 — DateWheelPicker.tsx의 sessionStartValueRef와
+  // 같은 이유로 나란히 둡니다. Select는 방향키가 onChange를 부르지 않고 옵션을 고를 때
+  // 한 번만 커밋하므로, 커밋 시점 value와 비교해도(이 컴포넌트 혼자였다면) 실제로는
+  // 차이가 없습니다 — 그래도 두 컴포넌트가 "세션 시작 값과 비교한다"는 같은 규칙 하나로
+  // 설명되게 하려고 여기도 세션 시작 값을 기준으로 씁니다.
+  //
+  // **공유하는 것은 그 규칙까지이고, 세션의 *시작* 정의는 이제 갈립니다.** 여기는 메뉴가
+  // 열린 순간이고, 날짜 피커는 트리거가 포커스를 얻은 순간과 팝오버가 닫힌 순간입니다
+  // (날짜 피커 설계 스펙 §6.4). 갈리는 이유는 하나입니다 — 닫힌 채로도 값이 바뀔 수 있는
+  // 쪽이 날짜 피커뿐입니다(Delete·Ctrl+;). Select는 트리거 포커스와 메뉴 열림이 사실상
+  // 같은 순간이라 옮길 이유가 없고, 스펙 §6.4도 Select는 그대로 두라고 명시합니다.
+  const sessionStartValueRef = useRef(value);
+  useEffect(() => {
+    if (open) sessionStartValueRef.current = value;
+  }, [open]);
   const selected = options.find((option) => option.value === value);
   // 고를 수 있는 옵션이 하나도 없으면(전부 disabled이거나 목록이 비었으면) 이 컨트롤은
   // 사실상 조작할 수 없습니다 — 그래서 disabled로 렌더합니다.
@@ -394,6 +416,11 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
     onChange(nextValue);
     setOpen(false);
     setActiveValue(null);
+    // 고른 값이 이 메뉴가 열렸을 때의 값과 같으면(예: 열린 옵션을 다시 클릭) 실제로
+    // 바뀐 게 없으므로 커밋 신호를 켜지 않습니다 — 값 자체가 같은데 반짝이면 "뭔가
+    // 바뀌었다"는 신호가 거짓이 됩니다. sessionStartValueRef와 비교하는 이유(커밋 시점
+    // value가 아니라)는 그 선언부에 있습니다.
+    if (nextValue !== sessionStartValueRef.current) setCommitPulse((n) => n + 1);
     // 유령 click은 아래 rAF(포커스 복원)와 같은 프레임에서 나오는 것으로 보이므로,
     // 여기서 곧바로 풀면(같은 프레임) 아직 안 왔을 수 있다(실측 24ms). 한 프레임
     // 더 미뤄서 푼다 — 프레임 기준이라 느린 기기에서는 같이 늘어나 여유가 준다.
@@ -449,7 +476,7 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
         if (!open) setActiveValue(initialActiveValue(options, value));
         setOpen((current) => !current);
       }}
-    ><span>{selected?.label || placeholder}</span><i className="dropdown-chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></i></button>
+    ><span className={commitPulse ? "dropdown-value-commit" : undefined} key={commitPulse}>{selected?.label || placeholder}</span><i className="dropdown-chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></i></button>
     {open && (portal ? (position ? createPortal(menu, document.body) : null) : menu)}
   </div>;
 }
