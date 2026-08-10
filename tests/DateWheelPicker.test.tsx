@@ -1484,6 +1484,20 @@ describe("DateWheelPicker 활성 표시는 편집 중에만", () => {
     expect(editing(trigger)).toBe(true);
   });
 
+  // 위는 **클릭**으로 엽니다. 키보드로 여는 경로는 코드가 다르고, 뮤테이션으로 확인했더니
+  // 위 테스트로는 **도달하지 않습니다**(그 줄의 setEditing을 지워도 전부 초록이었습니다).
+  // 등가라서가 아니라 미도달이라, 도달하는 테스트를 따로 둡니다.
+  it("키보드로 열어도 편집이 시작된다", async () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = fieldOf("거래 날짜");
+    trigger.focus();
+
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    expect(trigger.classList.contains("editing")).toBe(true);
+  });
+
   // **오너가 말한 그것.**
   it("완료로 확정하면 편집이 끝난다", async () => {
     const trigger = open();
