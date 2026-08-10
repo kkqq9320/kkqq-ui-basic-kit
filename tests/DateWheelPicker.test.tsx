@@ -479,6 +479,36 @@ describe("DateWheelPicker 스와이프", () => {
     expect(year.querySelector(".date-wheel-values button.selected")).toBe(selectedBefore);
   });
 
+  // ── 새 스와이프는 앞선 모션을 비우고 시작한다 ────────────────────────────────
+  //
+  // 위 셋은 **sequence가 아직 0인 열**의 드래그만 덮는다. 실브라우저에서 재 보니 그것
+  // 으로는 모자랐다 — `markColumnMotion`은 sequence를 **올리기만** 하고 아무도 0으로
+  // 되돌리지 않으므로, 한 번이라도 커밋한 열은 `moving-*`을 계속 단다. 그 클래스가
+  // 210ms 슬라이드를 **무장**시키고, `.dragging`은 `Math.abs(offset) > 2`로 켜지므로
+  // 커밋 직후 한 프레임 빠진다. 그 프레임에 애니메이션이 **리마운트 없이** 새로 생긴다 —
+  // `getAnimations()`로 쟀다: `.dragging`을 붙이면 `[]`, 떼면 `currentTime: 0`짜리가
+  // 새로 생기고 computed transform이 `matrix(0.975, 0, 0, 0.975, 0, -45)`가 된다
+  // (`from` 키프레임, 저자 선언보다 14~16px 위).
+  //
+  // 그래서 **두 번째 스와이프부터** 번쩍임이 돌아왔다. 무장시킨 것은 바로 앞 스와이프의
+  // 놓을 때 커밋이다 — 그건 옳다(이산적 착지). 고침은 **새 스와이프가 시작될 때 그 열의
+  // 모션을 비우는 것**이다: 새 드래그가 시작됐다는 것은 애니메이션할 휠 이동이 없다는 뜻이다.
+  //
+  // ⚠️ 전제("놓을 때의 커밋이 무장시킨다")를 여기서 다시 단언하지 않는다. 바로 아래
+  // 대조군이 그것을 지키므로, 전제가 깨지면 이 테스트가 공허 통과하는 대신 **대조군이**
+  // **빨개진다.** 한 `it`에 전제와 본단언을 같이 넣으면 `expect()`가 단락해 전제가
+  // 터질 때 본단언이 실행조차 되지 않는다.
+  it("앞선 착지가 무장시킨 moving-*을 새 스와이프가 비우고 시작한다", () => {
+    const { year } = openWheel();
+    // 첫 스와이프 — 놓을 때의 커밋이 moving-next를 무장시킨다.
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerUp", year, { pointerId: 7, clientY: 80 });
+    // 두 번째 스와이프가 시작되는 순간. 여기서 비워지지 않으면 이 드래그 내내 슬라이드가
+    // 무장된 채라, .dragging이 빠지는 프레임마다 from 키프레임이 번쩍인다.
+    pointer("pointerDown", year, { pointerId: 8, clientY: 100, buttons: 1, button: 0 });
+    expect(year.className).not.toMatch(/moving-/);
+  });
+
   // **대조군.** 놓을 때의 커밋(18px 임계값)은 애니메이션을 그대로 둔다 — 손가락이 떠난
   // 뒤의 **이산적인 착지**라 슬라이드가 맞는 모션이고, `clearSwipeVisual`이
   // `.dragging`을 먼저 지우므로 거기서는 정상 재생된다.
