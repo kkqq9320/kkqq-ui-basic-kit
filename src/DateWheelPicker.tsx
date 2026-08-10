@@ -15,7 +15,7 @@ import { createPortal } from "react-dom";
 
 import { flushBuffer, lastDayOf, typeDigit, withUnitValue } from "./dateWheelTyping";
 import { useBackToClose, useEscapeToClose } from "./hooks";
-import { dropdownViewportSpace, isPrimaryButton } from "./positioning";
+import { dropdownViewportSpace, isPrimaryButton, onViewportChange } from "./positioning";
 
 export type DateWheelUnit = "year" | "month" | "day";
 
@@ -774,13 +774,11 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       });
     }
     placePicker();
-    window.addEventListener("resize", placePicker);
-    document.addEventListener("scroll", placePicker, true);
-    window.visualViewport?.addEventListener("resize", placePicker);
+    // §3의 네 신호를 한 자리에서 받습니다 — `visualViewport`의 `scroll`(핀치줌 팬)이
+    // 여기 세 줄로 손수 등록하던 시절에 빠져 있었습니다. `positioning.ts` 주석 참고.
+    const stopViewportWatch = onViewportChange(placePicker);
     return () => {
-      window.removeEventListener("resize", placePicker);
-      document.removeEventListener("scroll", placePicker, true);
-      window.visualViewport?.removeEventListener("resize", placePicker);
+      stopViewportWatch();
       // 다음 열림에서 다시 잴 수 있게 요청 플래그만 되돌립니다.
       //
       // ⚠️ **스크롤은 되돌리지 않습니다.** `apple-design` §16.2 Agency로 이 저장소가 이미

@@ -12,7 +12,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { useBackToClose, useEscapeToClose } from "./hooks";
-import { captureScrollSnapshot, dropdownViewportSpace, isPrimaryButton, restoreFocusWithoutScroll, shouldOpenDropdownAbove, type ScrollSnapshot } from "./positioning";
+import { captureScrollSnapshot, dropdownViewportSpace, isPrimaryButton, onViewportChange, restoreFocusWithoutScroll, shouldOpenDropdownAbove, type ScrollSnapshot } from "./positioning";
 import { firstEnabledValue, initialActiveValue, lastEnabledValue, stepEnabledValue } from "./selectKeyboard";
 
 export type SelectOption = { value: string; label: string; disabled?: boolean };
@@ -307,14 +307,10 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
       setPosition({ ...(above_ ? { bottom: window.innerHeight - rect.top + gap } : { top: rect.bottom + gap }), left, width, maxHeight });
     }
     placeMenu();
-    window.addEventListener("resize", placeMenu);
-    document.addEventListener("scroll", placeMenu, true);
-    window.visualViewport?.addEventListener("resize", placeMenu);
-    return () => {
-      window.removeEventListener("resize", placeMenu);
-      document.removeEventListener("scroll", placeMenu, true);
-      window.visualViewport?.removeEventListener("resize", placeMenu);
-    };
+    // §3의 네 신호를 한 자리에서 받습니다 — `visualViewport`의 `scroll`(핀치줌 팬)이
+    // 여기 세 줄로 손수 등록하던 시절에 빠져 있었습니다. `positioning.ts` 주석 참고.
+    const stopViewportWatch = onViewportChange(placeMenu);
+    return stopViewportWatch;
   }, [open, options.length, portal, mobileBottomInset]);
 
   // 메뉴가 열릴 때 딱 한 번 선택된 옵션으로 스크롤합니다. portal 모드는 position이
