@@ -1468,6 +1468,130 @@ describe("DateWheelPicker 닫힌 채로 조작한다", () => {
 // **관측 대상은 트리거의 `editing` 클래스입니다.** `.active`는 컴포넌트가 활성 unit에 계속
 // 붙이고(닫힌 채 `←`/`→`로 옮기는 계약이 그것을 씁니다), **감추는 일은 CSS가** 합니다 —
 // 그 구조는 `activeSegment()` 헬퍼 주석에 있는 것과 같습니다.
+// 오너 지시(실기기): **모바일에서는 날짜 팝오버를 위로 뒤집지 않습니다.** 아래로 열되,
+// 아래 공간이 모자라면 **스크롤 호스트를 움직여 자리를 만든 뒤** 아래로 엽니다(스펙 §7.0).
+//
+// 뒤집힘이 모바일에서 나쁜 이유 둘: 손가락이 필드 아래에 있는데 팝오버가 위에 뜨면 **손이**
+// **내용을 가리고**, 같은 필드를 두 번 열 때 **자리가 오락가락**해 조준을 다시 하게 만듭니다.
+//
+// ⚠️⚠️ **이 블록이 증명하는 것과 못 하는 것.**
+// **증명합니다:** 위로 뒤집지 않는다는 것, 그리고 **얼마나 움직이라고 요청했는가**.
+// **증명하지 못합니다:** 실제로 그 자리에 떴는가. jsdom은 레이아웃을 하지 않아
+// `getBoundingClientRect`가 전부 0이고(그래서 아래 헬퍼가 값을 심습니다), 스크롤을 줘도
+// **rect가 따라 움직이지 않습니다.** 실제 배치는 스크롤 뒤 다시 재는 것으로 맞추는데
+// (`placePicker`가 scroll 리스너에 물려 있습니다) 그 되먹임이 jsdom에는 없습니다.
+// **실기기 확인 항목입니다.**
+describe("DateWheelPicker 모바일에서는 아래로 열고 자리를 만든다", () => {
+  // jsdom은 rect를 항상 0으로 주므로 심습니다 — tests/AppShell.test.tsx가 쓰는 것과 같은 방법.
+  function putTriggerAt(trigger: HTMLElement, top: number, height = 41) {
+    Object.defineProperty(trigger, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({ top, bottom: top + height, left: 16, right: 300, width: 284, height, x: 16, y: top, toJSON: () => ({}) }),
+    });
+  }
+  function setViewport(width: number, height: number) {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: height });
+  }
+  // jsdom에서 document.scrollingElement가 null인 경우가 있어 소스와 같은 폴백을 씁니다.
+  const host = () => (document.scrollingElement ?? document.documentElement) as HTMLElement;
+
+  afterEach(() => {
+    setViewport(1024, 768);
+    host().scrollTop = 0;
+  });
+
+  function openAt(top: number) {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = fieldOf("거래 날짜");
+    putTriggerAt(trigger, top);
+    fireEvent.click(trigger);
+    return trigger;
+  }
+  const popover = () => document.querySelector<HTMLElement>(".date-wheel-popover")!;
+
+  // 팝오버는 `position: fixed`에 좌표가 인라인으로 들어갑니다. "아래로 열렸다"는
+  // **top이 트리거 아래**(bottom + gap)라는 것으로 봅니다.
+  it("모바일에서 아래가 모자라도 위로 뒤집지 않는다", async () => {
+    setViewport(390, 780);
+    const trigger = openAt(560);   // 아래로 220 - inset밖에 없어 318이 안 들어간다
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    expect(parseFloat(popover().style.top)).toBeGreaterThan(trigger.getBoundingClientRect().top);
+  });
+
+  // **필요한 만큼만** 움직입니다. 318 + 6(gap)에서 지금 아래 공간을 뺀 만큼.
+  //
+  // 아래 공간 = 780(뷰포트) - 78(bottomInset) - 601(트리거 bottom) = 101.
+  // 부족분 = 324 - 101 = **223**.
+  //
+  // ⚠️ 78은 `mobileBottomInset`의 기본값(모바일 하단 바가 차지하는 자리)이고, **모바일에서만**
+  // 쓰입니다 — 데스크톱은 8입니다. 그 분기가 곧 이 기능이 재사용하는 모바일 판정이라,
+  // 여기 숫자가 8이 아니라 78인 것 자체가 "새 경계를 만들지 않았다"는 증거입니다.
+  // (처음엔 8로 계산해 153을 기대했다가 실측 223에 부딪혀 바로잡았습니다.)
+  it("모자란 만큼만 스크롤 호스트를 움직인다", async () => {
+    setViewport(390, 780);
+    openAt(560);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    expect(host().scrollTop).toBe(223);
+  });
+
+  // **필드를 화면 위로 밀어내면 안 됩니다.** 트리거가 이미 위쪽(top 40)에 있으면 위로 갈 수
+  // 있는 여유는 40 - 8(edge) = 32뿐이고, 부족분이 그보다 커도 32만 움직입니다.
+  it("필드가 화면 위로 사라지도록 움직이지는 않는다", async () => {
+    setViewport(390, 420);
+    openAt(40);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    expect(host().scrollTop).toBe(32);
+  });
+
+  // **대조군 — 데스크톱은 그대로입니다.** 뒤집기는 데스크톱에서 여전히 옳습니다(포인터가
+  // 내용을 가리지 않고, 화면이 넓어 뒤집혀도 조준이 안 흔들립니다). 경계는 이 파일이 이미
+  // 쓰는 모바일 판정(`window.innerWidth <= 760`)을 **재사용**하고 새로 만들지 않습니다.
+  it("데스크톱에서는 아래가 모자라면 위로 뒤집는다", async () => {
+    setViewport(1024, 780);
+    const trigger = openAt(560);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    expect(parseFloat(popover().style.top)).toBeLessThan(trigger.getBoundingClientRect().top);
+  });
+
+  // 그리고 데스크톱에서는 **스크롤을 건드리지 않습니다.**
+  it("데스크톱에서는 스크롤 호스트를 움직이지 않는다", async () => {
+    setViewport(1024, 780);
+    openAt(560);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    expect(host().scrollTop).toBe(0);
+  });
+
+  // **자리가 충분하면 아무것도 안 움직입니다** — "모바일이면 무조건 스크롤"이 아닙니다.
+  it("모바일이라도 자리가 충분하면 스크롤하지 않는다", async () => {
+    setViewport(390, 780);
+    openAt(100);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+
+    expect(host().scrollTop).toBe(0);
+  });
+
+  // **닫을 때 되돌리지 않습니다.** `apple-design` §16.2 Agency — 그 사이 사용자가 스크롤했을
+  // 수도 있고, 컨트롤이 사용자의 자리를 뺏으면 안 됩니다. 이 킷은 같은 판단을 이미
+  // 한 번 내렸습니다.
+  it("닫아도 스크롤을 되돌리지 않는다", async () => {
+    setViewport(390, 780);
+    const trigger = openAt(560);
+    await screen.findByRole("dialog", { name: "거래 날짜 선택" });
+    const moved = host().scrollTop;
+
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "거래 날짜 선택" })).toBeNull());
+
+    expect([moved > 0, host().scrollTop]).toEqual([true, moved]);
+  });
+});
+
 describe("DateWheelPicker 활성 표시는 편집 중에만", () => {
   function open() {
     render(<ControlledDateWheel initialValue="2026-07-12" />);

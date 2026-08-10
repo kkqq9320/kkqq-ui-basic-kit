@@ -348,6 +348,12 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 걸어 두면 어느 하나가 새도 표시가 안 남습니다. CSS 규칙은 여전히 **하나**이고
    * 조건이 하나 붙었을 뿐이라 "세그먼트에 매칭되는 규칙은 정확히 하나" 계약은 그대로입니다.
    */
+  /**
+   * 이번 열림에서 **아래 자리를 이미 요청했는가.** `placePicker`는 scroll·resize마다 다시
+   * 도는데, 요청은 **열림당 한 번**이어야 합니다 — 매 프레임 다시 밀면 스크롤이 제 꼬리를
+   * 물고, 사용자가 그 사이 스크롤을 되돌려도 컨트롤이 다시 뺏습니다.
+   */
+  const roomRequestedRef = useRef(false);
   const [editing, setEditing] = useState(false);
   const [commitPulse, setCommitPulse] = useState(0);
   // 이번 세션에 비우기·Delete로 값을 지운 적이 있는가. commitAndClose의
@@ -596,9 +602,28 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       if (!triggerRef.current) return;
       const desiredHeight = 318;
       const gap = 6;
-      const bottomInset = window.innerWidth <= 760 ? mobileBottomInset : 8;
+      // 모바일 판정은 **이 파일이 이미 쓰던 그것**입니다(bottomInset이 걸리는 조건).
+      // 스펙 §7.0이 "새 경계를 만들지 마세요"라고 못 박은 자리입니다 — 경계가 둘이 되면
+      // 어느 폭에서 무엇이 참인지 아무도 못 셉니다.
+      const isMobile = window.innerWidth <= 760;
+      const bottomInset = isMobile ? mobileBottomInset : 8;
       const { rect, above, below, edge } = dropdownViewportSpace(triggerRef.current, bottomInset);
-      const openAbove = below < desiredHeight && above > below;
+      // **모바일에서는 위로 뒤집지 않습니다**(스펙 §7.0, 오너 실기기 지시). 손가락이 필드
+      // 아래에 있는데 팝오버가 위에 뜨면 **손이 내용을 가리고**, 뒤집힘 자체가 같은 필드를
+      // 두 번 열 때 **자리를 오락가락**하게 만들어 조준을 다시 하게 합니다. 데스크톱에서는
+      // 뒤집기가 여전히 옳습니다 — 포인터가 내용을 가리지 않고 화면이 넓습니다.
+      const openAbove = !isMobile && below < desiredHeight && above > below;
+      // 아래가 모자라면 **자리를 만듭니다.** 뒤집는 대신 스크롤 호스트를 필요한 만큼만
+      // 내려서 트리거를 위로 올립니다. 사용자는 아무것도 더 하지 않습니다 — 스크롤하는
+      // 것은 컨트롤 자신입니다(PRINCIPLES §3이 금지한 것은 **사용자에게** 스크롤을 시키는
+      // 것이고, 그 구분이 §7.0에 적혀 있습니다).
+      if (isMobile && !roomRequestedRef.current) {
+        roomRequestedRef.current = true;
+        const missing = desiredHeight + gap - below;
+        // **필드를 화면 위로 밀어내지 않습니다.** 위로 갈 수 있는 여유는 트리거 위 여백까지입니다.
+        const shift = Math.min(missing, Math.max(0, rect.top - edge));
+        if (shift > 0) scrollRoomBy(shift);
+      }
       const available = Math.max(230, (openAbove ? above : below) - gap);
       const maxHeight = Math.min(desiredHeight, available);
       const viewportLeft = window.visualViewport?.offsetLeft ?? 0;
@@ -620,8 +645,41 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       window.removeEventListener("resize", placePicker);
       document.removeEventListener("scroll", placePicker, true);
       window.visualViewport?.removeEventListener("resize", placePicker);
+      // 다음 열림에서 다시 잴 수 있게 요청 플래그만 되돌립니다.
+      //
+      // ⚠️ **스크롤은 되돌리지 않습니다.** `apple-design` §16.2 Agency로 이 저장소가 이미
+      // 한 번 내린 결론입니다 — 그 사이 사용자가 스크롤했을 수도 있고, 컨트롤이 사용자의
+      // 자리를 뺏으면 안 됩니다. 자리를 만든 것은 사용자가 요청한 조작의 일부였습니다.
+      roomRequestedRef.current = false;
     };
   }, [open, mobileBottomInset]);
+
+  /**
+   * 스크롤 호스트를 `amount`만큼 내려 팝오버가 들어갈 자리를 만듭니다.
+   *
+   * 호스트는 이 킷이 이미 아는 둘입니다 — 모바일에서 `AppShell`이 스크롤 호스트로 쓰는
+   * `#root`, 그리고 문서 자신(`captureScrollSnapshot`이 쓰는 것과 같은 짝입니다).
+   * 실제로 스크롤할 수 있는 쪽을 고르고, 판단이 안 되면 앞엣것을 씁니다.
+   *
+   * **움직인 뒤 다시 재는 일은 여기서 하지 않습니다.** `placePicker`가 이미 document의
+   * scroll 이벤트에 물려 있어(capture) 스크롤이 진행되는 동안 계속 다시 돌며 팝오버를
+   * 트리거에 붙여 둡니다. 여기서 스크롤 전 좌표로 배치까지 하면 **이중 보정**이 됩니다 —
+   * 이 킷이 가상 키보드에서 이미 밟은 함정이고 §9가 "뷰포트가 멎은 뒤 한 번만"으로 푼 것과
+   * 같은 종류입니다.
+   *
+   * 애니메이션은 §12를 따릅니다: 부드럽게 움직이되 `prefers-reduced-motion`이면 즉시
+   * 자리만 잡습니다. `scrollTo`가 없는 환경(jsdom)에서는 `scrollTop`을 직접 씁니다 —
+   * 그래서 테스트가 **얼마나 움직이라고 요청했는지**까지는 볼 수 있습니다.
+   */
+  function scrollRoomBy(amount: number) {
+    const candidates = [document.getElementById("root"), document.scrollingElement ?? document.documentElement]
+      .filter((element): element is HTMLElement => element instanceof HTMLElement);
+    const host = candidates.find((element) => element.scrollHeight > element.clientHeight) ?? candidates[0];
+    if (!host) return;
+    const smooth = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (smooth && typeof host.scrollTo === "function") host.scrollTo({ top: host.scrollTop + amount, behavior: "smooth" });
+    else host.scrollTop += amount;
+  }
 
   function shiftedFrom(sourceValue: string, unit: DateWheelUnit, amount: number) {
     const next = normalizeToFields(shiftDateValue(sourceValue, unit, amount), fields);
