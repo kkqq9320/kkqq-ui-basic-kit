@@ -523,6 +523,46 @@ describe("DateWheelPicker 스와이프", () => {
     pointer("pointerUp", year, { pointerId: 7, clientY: 80 });
     expect(year.classList.contains("moving-next")).toBe(true);
   });
+
+  // ── ± 버튼 위에서 시작한 누름은 스와이프가 아니다 ────────────────────────────
+  //
+  // 오너 리포트(데스크톱): "± 버튼이 안 먹을 때가 있다". 코디네이터가 pane에서 프레임
+  // 단위로 벌려 재현했다 — **가만히 클릭하면 4회 다 바뀌고, 누른 채 3px 움직이면 안
+  // 바뀐다.** `moveSwipe`의 `if (Math.abs(delta) > 2) suppressColumnClickRef.current = true`
+  // 가 서고, 열의 `onClickCapture`가 그 클릭을 삼킨다. **마우스는 누르고 떼는 사이에
+  // 2~3px 흔들리는 게 정상**이라 데스크톱에서 자주 걸린다.
+  //
+  // 뿌리는 열의 `onPointerDown`이 **대상을 안 보고** 무조건 `swipeRef`를 세우는 것이다.
+  // ± 버튼은 휠 표면이 아니라 **이산 컨트롤**이므로 거기서 시작한 누름은 스와이프가 아니다.
+  //
+  // ⚠️ **행 버튼(`.date-wheel-values button`)은 같이 빼면 안 된다** — 휠 표면 150px이
+  // 통째로 그 버튼들이라 스와이프가 통째로 죽는다. 아래 대조군이 그것을 지킨다.
+  //
+  // ⚠️ 기존 `moves the year, month, and day by one with the step buttons`는 **안 움직이고**
+  // 클릭하므로 이 결함에서 초록이다. 움직임이 있어야 빨개진다 — 그래서 이 테스트가 따로 있다.
+  // (`main`에도 글자까지 같은 결함이다. 이 브랜치가 만든 것이 아니다.)
+  it("± 버튼을 누른 채 3px 흔들려도 클릭이 살아 있다", () => {
+    const { onChange } = openWheel();
+    const previous = screen.getByRole("button", { name: "연도 이전" });
+    onChange.mockClear();
+    pointer("pointerDown", previous, { pointerId: 4, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", previous, { pointerId: 4, clientY: 103, buttons: 1 });   // 손떨림
+    pointer("pointerUp", previous, { pointerId: 4, clientY: 103 });
+    fireEvent.click(previous);
+    expect(onChange).toHaveBeenCalledWith("2025-07-12");
+  });
+
+  // **대조군.** 휠 표면(행 버튼) 위에서 시작한 누름은 **여전히 스와이프다.** 위 고침을
+  // `.date-wheel-values button`까지 넓히면 이것이 빨개진다 — 150px 표면이 통째로 그
+  // 버튼들이라 스와이프가 죽기 때문이다.
+  it("행 버튼 위에서 시작해도 스와이프는 그대로 커밋한다", () => {
+    const { onChange, year } = openWheel();
+    const row = year.querySelector(".date-wheel-values button")!;
+    onChange.mockClear();
+    pointer("pointerDown", row, { pointerId: 5, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", row, { pointerId: 5, clientY: 60, buttons: 1 });
+    expect(onChange).toHaveBeenCalledWith("2027-07-12");
+  });
 });
 
 describe("DateWheelPicker 키보드 진입", () => {
