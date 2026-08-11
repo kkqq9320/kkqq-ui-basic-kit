@@ -4,9 +4,6 @@
 컴포넌트를 **확장**하세요. 페이지 전용 오프셋, 자체 드롭다운, 자체 팝오버,
 자체 스크롤바 스타일을 새로 만들지 않습니다.
 
-원본: 가계부 프로젝트 `docs/budget-mvp-design-en.md`의 "Reusable UI design system" 절.
-프로젝트 고유 내용(계정과목, 복식부기 화면 등)은 걷어냈습니다.
-
 **먼저 읽을 것:** [`LAYOUT-PRINCIPLES.md`](LAYOUT-PRINCIPLES.md) — 배치·그리드·정렬의
 일반 규칙입니다. 이 파일은 그 규칙을 **이 킷에서 어떻게 구현했는가**를 적습니다.
 
@@ -517,7 +514,9 @@ eyebrow → 페이지 제목 → 설명 → (탭) → 섹션 제목 → 섹션 �
     **눈에 보이게 그려집니다**(`.date-wheel-heading`). 안 넘기면 스크린리더가 아니라
     **화면이** 망가집니다 — 한 폼의 날짜 필드가 전부 같은 머리말을 답니다. 그리고 이름이
     겹치면 `getByRole`이 "Found multiple elements"로 터져 **소비자의 테스트가** 먼저
-    막힙니다. 둘 다 보조기술과 무관한 비용입니다.
+    막힙니다. 둘 다 보조기술과 무관한 비용입니다. 네 컨트롤 모두 `ariaLabel: string`
+    (물음표 없음)이라, 값을 아예 안 넘기는 실수는 손으로 볼 필요 없이 `npm run typecheck`가
+    그 자리에서 잡습니다.
   - **선택 — 감싸는 `<label>`이 이미 이름을 주거나, 순수하게 `aria-label` 속성으로만
     나가고 화면에 아무 자국도 남기지 않을 때.** `AutoGrowTextarea`와 `MobileQuickBar`.
     앞엣것은 실사용에서 `<label>메모<AutoGrowTextarea/></label>` 꼴로 쓰여 암묵적 label이
