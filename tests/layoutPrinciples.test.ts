@@ -19,6 +19,7 @@ import { describe, expect, it } from "vitest";
 
 import indexSource from "../src/index.ts?raw";
 import layoutText from "../LAYOUT-PRINCIPLES.md?raw";
+import packageJsonText from "../package.json?raw";
 
 /** ```로 둘러싸인 구역을 지웁니다. 예시 코드 안의 px와 토큰 이름은 검사 대상이 아닙니다. */
 function withoutCodeFences(text: string): string {
@@ -134,5 +135,20 @@ describe("LAYOUT-PRINCIPLES.md는 4줄 형식을 지킨다", () => {
       .filter(({ next }) => next.trim() !== "" && !next.startsWith("**") && !next.startsWith("#"))
       .map(({ next }) => next.trim());
     expect(wrapped).toEqual([]);
+  });
+});
+
+describe("LAYOUT-PRINCIPLES.md가 설치본에 들어간다", () => {
+  const manifest = JSON.parse(packageJsonText) as { files: string[]; exports: Record<string, string> };
+
+  // 스킬이 `node_modules/kkqq-ui-basic-kit/LAYOUT-PRINCIPLES.md`를 첫 경로로 찾습니다.
+  // `files`에 없으면 스킬이 **없는 파일을 가리키게** 됩니다.
+  it("배포 목록에 있다", () => {
+    expect(manifest.files).toContain("LAYOUT-PRINCIPLES.md");
+  });
+
+  // `PRINCIPLES.md`와 같은 대우입니다 — 소비 코드가 경로로 집어갈 수 있어야 합니다.
+  it("exports로 집을 수 있다", () => {
+    expect(manifest.exports["./LAYOUT-PRINCIPLES.md"]).toBe("./LAYOUT-PRINCIPLES.md");
   });
 });
