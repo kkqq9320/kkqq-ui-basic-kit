@@ -133,6 +133,10 @@ const OLD_RULES = `
   .summary-grid { grid-template-columns: repeat(4, minmax(0,1fr)) !important; }
   .panel-grid { display: block !important; }
   .panel-grid > .panel { margin-bottom: 20px !important; }
+  /* 필드 쪽 "옛 규칙"은 데모가 자기 CSS로 쓰던 240px입니다(킷에는 아무것도 없었으므로
+     소비 앱의 옛 모습은 "한 열"입니다 — 여기서는 데모의 옛 모습을 재현합니다).
+     이 줄이 없으면 필드 행의 두 열이 언제나 같게 나와, 표가 "안 바뀌었다"고 거짓말합니다. */
+  .field-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)) !important; }
 `;
 
 type Reading = { cardCols: number; card: number; fieldCols: number; field: number; panelCols: number; panel: number; memo: number };
