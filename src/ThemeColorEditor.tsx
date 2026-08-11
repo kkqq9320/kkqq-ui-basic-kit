@@ -223,17 +223,13 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS,
                   인데 `{token.label}`은 **텍스트 노드**라 그 선택자에 안 걸렸습니다 —
                   실제로 걸려 있던 것은 `변경됨` 칩이었고, 이름은 보호를 못 받아 좁은
                   카드에서 두 줄로 쪼개졌습니다(오너 스크린샷의 "뱃/지"). */}
-              <strong><span>{token.label}</span></strong>
+              <strong><span title={token.label}>{token.label}</span>{changed && <em className="theme-color-changed" title={`기본값 ${fallback}`}>변경됨</em>}</strong>
               {/* RGB는 아래 칸이 **고칠 수 있는 값**으로 보여 줍니다. 여기 같이 두면 같은
                   숫자가 한 카드에 두 번 나오고, 그중 하나만 못 고쳐 오해를 만듭니다 —
                   오너가 "rgb를 넣을 방법이 없다"고 한 것이 정확히 그 오해였습니다. */}
               <small>{token.name}</small>
             </span>
-            {/* 칩은 **되돌리기 버튼 옆**에 둡니다(오너 요청). 이름 옆에 있으면 이름이
-                쓸 폭을 뺏어 긴 이름이 밀리고, 뜻으로도 "되돌릴 것이 있다"는 신호라
-                되돌리기 버튼 곁이 맞습니다. */}
             <span className="theme-color-actions">
-              {changed && <em className="theme-color-changed" title={`기본값 ${fallback}`}>변경됨</em>}
               <button
                 type="button"
                 className="theme-color-icon-button"

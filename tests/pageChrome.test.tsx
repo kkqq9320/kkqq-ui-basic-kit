@@ -146,16 +146,21 @@ describe("ThemeColorEditor: 앱이 안쪽을 겨눌 수 있다", () => {
     expect(strong.firstElementChild?.textContent).toBe("페이지 배경");
   });
 
-  /* 칩은 **되돌리기 버튼 옆**에 있습니다(오너 요청). 이름 옆에 있으면 이름이 쓸 폭을
-   * 뺏고, 뜻으로도 "되돌릴 것이 있다"는 신호라 되돌리기 곁이 맞습니다. */
-  it("변경됨 칩은 되돌리기 버튼과 같은 자리에 있다", () => {
+  /* 칩은 **이름 옆**입니다(오너가 액션 옆으로 옮겼다가 되돌렸습니다).
+   * 그래도 이름이 안 밀리는 것은 이름을 `span`으로 감쌌기 때문입니다 — 텍스트 노드였던
+   * 동안에는 말줄임 규칙이 칩에 걸려 있어서 좁은 카드에서 이름이 두 줄로 쪼개졌습니다. */
+  it("변경됨 칩은 이름 옆에 있고, 그래도 이름이 한 덩어리로 남는다", () => {
     const { container } = render(<ThemeColorEditor theme="dark" />);
     const hex = container.querySelectorAll(".theme-color-text")[1] as HTMLInputElement;
     fireEvent.change(hex, { target: { value: "#123456" } });
     const chip = container.querySelector(".theme-color-changed");
     expect(chip, "값을 바꿨는데 변경됨 칩이 없습니다").not.toBeNull();
-    expect(chip!.closest(".theme-color-actions"), "칩이 액션 묶음 밖에 있습니다").not.toBeNull();
-    expect(chip!.closest(".theme-color-copy"), "칩이 아직 이름 옆에 있습니다").toBeNull();
+    expect(chip!.closest(".theme-color-copy"), "칩이 이름 묶음 밖에 있습니다").not.toBeNull();
+    // 이름은 여전히 요소로 감싸여 있어야 말줄임이 걸립니다.
+    const strong = container.querySelector(".theme-color-copy strong") as HTMLElement;
+    expect(strong.firstElementChild?.tagName).toBe("SPAN");
+    // 좁은 카드에서 이름은 말줄임됩니다 — 잘린 글자를 볼 방법이 있어야 합니다.
+    expect(strong.firstElementChild?.getAttribute("title")).toBe("페이지 배경");
   });
 
   it("입력이 RGB·HEX 두 줄이다", () => {
