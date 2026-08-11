@@ -91,10 +91,16 @@ describe("LAYOUT-PRINCIPLES.md는 킷 없이 읽힌다", () => {
   it("펜스 제거가 산문을 삼키지 않았다", () => {
     expect(prose).toContain("한 상자 안에 여러 줄이 쌓이면");
   });
+
+  // 위 카나리아는 유일한 펜스보다 **앞**에 있습니다. 뒤쪽까지 삼키는 회귀를 보려면
+  // 마지막 펜스 **뒤**의 문장도 살아 있어야 합니다.
+  it("펜스 뒤의 산문도 남아 있다", () => {
+    expect(prose).toContain("호스트의 실제 소스나 화면에서 확인합니다");
+  });
 });
 
 describe("LAYOUT-PRINCIPLES.md는 4줄 형식을 지킨다", () => {
-  const headings = [...layoutText.matchAll(/^### (\d)\. /gm)].map((match) => Number(match[1]));
+  const headings = [...layoutText.matchAll(/^### (\d+)\. /gm)].map((match) => Number(match[1]));
   const ruleLines = [...layoutText.matchAll(/^\*\*규칙\*\* — (.+)$/gm)].map((match) => match[1]);
   const failureLines = [...layoutText.matchAll(/^\*\*실패한 자리\*\* — (.+)$/gm)].map((match) => match[1]);
 
@@ -155,21 +161,16 @@ describe("LAYOUT-PRINCIPLES.md가 설치본에 들어간다", () => {
 });
 
 describe("PRINCIPLES.md의 참조가 실재하는 절을 가리킨다", () => {
-  const sectionNumbers = [...layoutText.matchAll(/^### (\d)\. /gm)].map((match) => match[1]);
-  const references = [...principlesText.matchAll(/LAYOUT-PRINCIPLES\.md\)\s*§(\d)/g)].map((match) => match[1]);
+  const sectionNumbers = [...layoutText.matchAll(/^### (\d+)\. /gm)].map((match) => match[1]);
+  const references = [...principlesText.matchAll(/LAYOUT-PRINCIPLES\.md\)\s*§(\d+)/g)].map((match) => match[1]);
 
   /* 전제 — 참조가 0건이면 아래가 공허합니다.
    *
    * 정규식이 잡는 링크는 **다섯**입니다: §2→§4, §7→§5, §8→§7, §13→§1, §14→§6.
    * `(같은 §7)` 꼴의 뒷참조와 맨 위 머리말 링크는 `§N`이 링크 바로 뒤에 붙어 있지 않아
-   * 잡히지 않습니다. 임계값은 그 다섯과 **정확히 같게** 둡니다 — 이 검사는 공허 방지 겸
-   * **링크 유실 감지**이고, 링크가 하나라도 사라지면 빨개져야 합니다. 그것은 오탐이
-   * 아닙니다.
-   *
-   * ⚠️ 링크를 더하거나 빼면 **이 숫자도 같이 고쳐야 합니다.** 이 주석의 수치가 낡아
-   * 거짓이 된 것이 이미 두 번입니다. */
-  it("참조를 실제로 찾아냈다", () => {
-    expect(references.length).toBeGreaterThanOrEqual(5);
+   * 잡히지 않습니다. */
+  it("참조가 정확히 다섯이고 가리키는 절도 그대로다", () => {
+    expect(references).toEqual(["4", "5", "7", "1", "6"]);
   });
 
   it("가리키는 절이 전부 존재한다", () => {
