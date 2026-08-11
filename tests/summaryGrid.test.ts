@@ -178,4 +178,16 @@ describe("색상 편집기 목록도 들어가는 만큼 채운다", () => {
   it("카드 최소 폭 토큰이 :root에 정의돼 있다", () => {
     expect(tokensCssSource).toMatch(/--color-card-min:\s*\d+px/);
   });
+
+  /* **값 칸이 카드 폭을 다 먹으면 안 됩니다.** 담기는 가장 긴 값이 `rgb(255, 255, 255)`
+   * 열여덟 글자인데 2560에서 989px이었습니다(실측). `1fr`로 두면 카드를 넓힐 때마다
+   * 이 칸이 같이 늘어나므로, 폭을 **따로** 묶어야 앱이 카드만 조절할 수 있습니다. */
+  it("값 칸 폭이 1fr이 아니라 토큰으로 묶여 있다", () => {
+    const entry = /^\.theme-color-entry\s*\{([^}]*)\}/m.exec(themeEditorCssSource)?.[1] ?? "";
+    expect(entry).toMatch(/minmax\(\s*0\s*,\s*var\(--color-field-width,\s*\d+px\)/);
+  });
+
+  it("값 칸 폭 토큰이 :root에 정의돼 있다", () => {
+    expect(tokensCssSource).toMatch(/--color-field-width:\s*\d+px/);
+  });
 });

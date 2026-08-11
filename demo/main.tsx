@@ -340,6 +340,7 @@ function Demo() {
   const [memo, setMemo] = useState("");
   const [dialog, setDialog] = useState<"none" | "basic" | "scroll">("none");
   const [panelOrder, setPanelOrder] = useState(["messages", "short", "form"]);
+  const [panelStretch, setPanelStretch] = useState(false);
   const [navHidden] = useScrollDirectionHidden();
   const keyboardOpen = useVirtualKeyboardOpen();
   const pageTabs = useMobilePageTabs();
@@ -533,8 +534,14 @@ function Demo() {
             그대로**라 둘이 어긋납니다. 배열을 바꾸는 쪽이 맞습니다. */}
         <div className="button-row" style={{ marginBottom: 12 }}>
           <button type="button" className="secondary-button" onClick={() => setPanelOrder((current) => [...current.slice(1), current[0]])}>패널 순서 돌리기</button>
+          {/* 세 패널의 높이를 일부러 다르게 뒀으므로 이 버튼 하나로 차이가 그대로 보입니다.
+              끄면 각자 제 높이(짧은 쪽 아래가 빔), 켜면 한 줄이 같은 높이(빈 자리가 짧은
+              패널 **안쪽**으로 들어감). 없어지는 게 아니라 옮겨갈 뿐입니다. */}
+          <button type="button" className={panelStretch ? "primary" : "secondary-button"} aria-pressed={panelStretch} onClick={() => setPanelStretch((value) => !value)}>
+            {panelStretch ? "높이 맞춤 켜짐" : "높이 맞춤 꺼짐"}
+          </button>
         </div>
-        <PanelGrid>
+        <PanelGrid stretch={panelStretch}>
           {panelOrder.map((id) => LAYOUT_PANELS[id]())}
         </PanelGrid>
       </>}
