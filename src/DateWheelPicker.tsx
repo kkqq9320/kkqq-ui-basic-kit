@@ -15,7 +15,7 @@ import { createPortal } from "react-dom";
 
 import { flushBuffer, lastDayOf, typeDigit, withUnitValue } from "./dateWheelTyping";
 import { useBackToClose, useEscapeToClose } from "./hooks";
-import { dropdownViewportSpace, focusTriggerOnPointerDown, isPrimaryButton, onViewportChange } from "./positioning";
+import { dropdownViewportSpace, focusTriggerOnClick, isPrimaryButton, onViewportChange } from "./positioning";
 
 export type DateWheelUnit = "year" | "month" | "day";
 
@@ -1486,7 +1486,10 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         포커스된 버튼을 언마운트하면 focus만 기록되고 blur는 없으며 activeElement는 body로
         갑니다). 그래서 이 핸들러와 그 규칙이 충돌하지 않습니다. tests의 "버퍼를 든 채
         언마운트되면 확정하지 않고 버린다"가 그 전제까지 함께 지킵니다. */}
-    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className={editing ? "date-wheel-trigger editing" : "date-wheel-trigger"} aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onPointerDown={(event) => focusTriggerOnPointerDown(event.currentTarget)} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onBlur={() => { setEditing(false); flushTyping(); }} onClick={(event) => {
+    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className={editing ? "date-wheel-trigger editing" : "date-wheel-trigger"} aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onBlur={() => { setEditing(false); flushTyping(); }} onClick={(event) => {
+      // 맨 앞이어야 합니다 — 아래 어느 갈래로 빠지든 포커스는 트리거에 와야 합니다.
+      // 근거는 positioning.ts의 헬퍼 주석(맥은 mousedown에서 포커스를 걷어갑니다).
+      focusTriggerOnClick(event.currentTarget);
       // **세그먼트를 직접 누르면 그 세그먼트가 활성이 됩니다**(설계 스펙 §6.4(3)) —
       // 네이티브 날짜 필드가 그렇게 합니다. 세그먼트는 <span>이라 클릭이 여기로 그대로
       // 올라오고, 그 전에 `event.target`의 `data-unit`을 읽습니다. 구두점·아이콘·여백에는

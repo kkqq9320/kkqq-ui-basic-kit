@@ -103,6 +103,23 @@ export function captureScrollSnapshot(scrollRootId = "root"): ScrollSnapshot {
  *   맥     `click target=button.date-wheel-trigger` → `keydown … tgt=body`  처리됨=N
  *   윈도우 `click target=span`                      → `keydown … tgt=button…` 처리됨=Y
  *
+ * ⚠️ **`pointerdown`에서 부르면 안 됩니다 — 3ms만 살아 있습니다.** 첫 판이 그랬고,
+ * 두 번째 맥 캡처가 그 이유를 그대로 찍었습니다:
+ *
+ *     +0ms  pointerdown target=span
+ *     +4ms  focusin  foc=button.date-wheel-trigger   ← 여기서 우리가 줬다
+ *     +7ms  mousedown target=span
+ *     +9ms  focusout foc=body                        ← mousedown 기본 동작이 도로 걷어간다
+ *
+ * 맥은 버튼에 포커스를 **안 주는** 것이 아니라 `mousedown`의 기본 동작이 **적극적으로
+ * 걷어냅니다.** 그래서 `mousedown`보다 **뒤**에 오는 `click`에서 잡습니다.
+ *
+ * **`mousedown`을 `preventDefault`하는 표준 해법을 쓰지 않은 이유:** 터치에서 `mousedown`은
+ * `touchend` 뒤의 합성 이벤트이고, 그것을 막으면 뒤따르는 `click`이 삼켜지는 브라우저가
+ * 있습니다. 이 저장소에는 팝오버 표면에 이미 그 차단이 있고 **"터치 탭으로 버튼이 계속
+ * 눌리는가"가 미검증 항목으로 남아 있습니다.** 같은 미검증 가정을 하나 더 만드는 것보다,
+ * 위험이 없는 자리에서 잡는 쪽을 골랐습니다. `click`은 마우스·터치 양쪽에서 옵니다.
+ *
  * ⚠️ `DateWheelPicker`의 옛 주석이 "`tabIndex={-1}`인 버튼도 클릭하면 포커스를 받습니다"를
  * **사실로 단정**하고 있었고 §6.2의 불변식이 그 위에 서 있었습니다. 그 문장은 Windows
  * 에서만 참이었습니다. **불변식은 전제가 아니라 코드가 지킵니다.**
@@ -114,7 +131,7 @@ export function captureScrollSnapshot(scrollRootId = "root"): ScrollSnapshot {
  * 비활성 요소는 포커스를 받을 수 없으므로 여기서 `disabled`를 따로 보지 않습니다 —
  * 그 경우 `focus()`가 DOM 규칙상 아무 일도 하지 않습니다.
  */
-export function focusTriggerOnPointerDown(trigger: HTMLElement | null) {
+export function focusTriggerOnClick(trigger: HTMLElement | null) {
   trigger?.focus({ preventScroll: true });
 }
 
