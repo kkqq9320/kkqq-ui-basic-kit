@@ -66,6 +66,12 @@ export function FieldGrid({ children, min }: { children: ReactNode; min?: string
  * 화면 한쪽이 통째로 빕니다 — 오너가 정확히 그 모습을 기각했습니다(캡 안). 그래서
  * 빈 트랙을 접어 그룹이 줄을 다 쓰게 합니다.
  *
+ * **`stretch`를 켜면 한 줄의 패널이 같은 높이가 됩니다.** 기본은 자연 높이라 짧은 패널
+ * 아래가 비는데, 그 빈 자리를 **패널 안쪽으로** 옮기는 선택입니다. 어느 쪽이 나은지는
+ * 내용에 달렸습니다 — 카드처럼 아래 끝이 맞아야 보기 좋은 조합이면 켜고, 내용 길이가
+ * 제각각이면 끄는 편이 낫습니다(켜면 짧은 패널 안에 큰 여백이 생깁니다).
+ * 더 세밀하게 잡으려면 `Panel`의 `className`으로 높이를 직접 주세요.
+ *
  * **`min`으로 이 자리만 다르게 정할 수 있습니다** — 전역 토큰보다 우선합니다.
  * 좁은 화면부터 갈라도 되는 짧은 패널 쌍과, 넓어야만 갈라지는 표 패널을 한 화면에서
  * 다르게 둘 수 있습니다.
@@ -77,8 +83,8 @@ export function FieldGrid({ children, min }: { children: ReactNode; min?: string
  * </PanelGrid>
  * ```
  */
-export function PanelGrid({ children, min }: { children: ReactNode; min?: string }) {
-  return <div className="panel-grid" style={min ? ({ "--panel-min": min } as CSSProperties) : undefined}>{children}</div>;
+export function PanelGrid({ children, min, stretch = false }: { children: ReactNode; min?: string; stretch?: boolean }) {
+  return <div className={stretch ? "panel-grid stretch" : "panel-grid"} style={min ? ({ "--panel-min": min } as CSSProperties) : undefined}>{children}</div>;
 }
 
 /**
@@ -89,9 +95,13 @@ export function PanelGrid({ children, min }: { children: ReactNode; min?: string
  * 2102px 전폭으로만 쌓이는 결과를 낳았습니다(메모 칸 하나가 2056px). 나란히 놓고 싶으면
  * 위 `PanelGrid`로 묶으세요 — **금지는 "임의로 좁히지 마라"이지 "가로로 놓지 마라"가
  * 아닙니다.**
+ *
+ * `className`은 앱이 이 패널 하나에 무언가를 걸어야 할 때의 출구입니다(높이 고정,
+ * 내용이 넘칠 때의 스크롤 등). **이게 없어서 앱은 패널에 높이조차 줄 수 없었습니다** —
+ * `Select`가 진작부터 받고 있던 것과 같은 prop입니다.
  */
-export function Panel({ title, hint, actions, children }: { title?: ReactNode; hint?: ReactNode; actions?: ReactNode; children: ReactNode }) {
-  return <section className="panel">
+export function Panel({ title, hint, actions, className = "", children }: { title?: ReactNode; hint?: ReactNode; actions?: ReactNode; className?: string; children: ReactNode }) {
+  return <section className={`panel ${className}`.trim()}>
     {(title || hint || actions) && <div className="panel-heading"><div>{hint && <small>{hint}</small>}{title && <h2>{title}</h2>}</div>{actions}</div>}
     {children}
   </section>;
