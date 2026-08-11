@@ -6,7 +6,7 @@
  * **컴포넌트가 그 규칙에 닿는 표시를 실제로 붙이는가**를 봅니다 — 둘 중 하나만 있으면
  * 기능은 조용히 죽습니다(클래스는 붙는데 규칙이 없거나, 규칙은 있는데 안 붙거나).
  */
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { Panel, PanelGrid, FieldGrid } from "../src/PageChrome";
@@ -99,5 +99,30 @@ describe("ThemeColorEditor: 앱이 안쪽을 겨눌 수 있다", () => {
     const field = container.querySelector(".theme-color-text") as HTMLInputElement;
     expect(field.placeholder).toMatch(/87,\s*91,\s*212/);
     expect(field.title).toMatch(/RGB/i);
+  });
+
+  /* placeholder는 **칸이 빈 순간에만** 보이는데 이 칸은 늘 값이 차 있습니다. 그래서
+   * 붙박이 표시가 따로 필요합니다 — 이게 없으면 위 두 단언이 통과해도 화면에서는
+   * 아무것도 안 보입니다. */
+  it("형식 표시가 칸 옆에 늘 붙어 있다", () => {
+    const { container } = render(<ThemeColorEditor theme="dark" />);
+    const entry = container.querySelector(".theme-color-entry");
+    expect(entry?.querySelector("small")?.textContent).toMatch(/RGB/i);
+    expect(entry?.querySelector(".theme-color-text")).not.toBeNull();
+  });
+
+  /* 오너가 적어 준 네 형식이 **전부** 값으로 들어가는지. 파서 단위 테스트는 이미
+   * 있지만(ThemeColorEditor.test.tsx), 그건 함수만 봅니다 — 칸에 넣었을 때 실제로
+   * 색이 바뀌는지는 다른 질문이고, 오너가 "넣을 방법이 없다"고 한 것이 그 질문입니다. */
+  it.each([
+    ["87,11,11", "#570b0b"],
+    ["87 111 122", "#576f7a"],
+    ["87, 11, 122", "#570b7a"],
+    ["rgb(255,255,255)", "#ffffff"],
+  ])("칸에 %s 를 넣으면 견본이 %s 가 된다", (typed, expected) => {
+    const { container } = render(<ThemeColorEditor theme="dark" />);
+    const field = container.querySelector(".theme-color-text") as HTMLInputElement;
+    fireEvent.change(field, { target: { value: typed } });
+    expect((container.querySelector(".theme-color-swatch") as HTMLInputElement).value).toBe(expected);
   });
 });

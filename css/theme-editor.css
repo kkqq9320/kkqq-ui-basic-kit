@@ -46,7 +46,12 @@
 /* 모두 초기화 버튼의 개수 배지 */
 .theme-color-icon-button > b { position: absolute; top: -3px; right: -3px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 999px; color: #fff; background: var(--accent); font-size: 9px; font-weight: 800; line-height: 15px; }
 
-.theme-color-text { grid-column: 1 / -1; width: 100%; height: var(--compact-action-height); padding: 0 10px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+/* 값 칸과 그 옆의 붙박이 형식 표시. 표시가 **늘 보여야** 하는 이유는 이 칸이 늘 값이
+ * 차 있어 placeholder가 사실상 안 뜨고, 카드 위쪽의 읽기 전용 `R, G, B` 때문에 이 칸이
+ * 헥스 전용으로 보이기 때문입니다(오너 리포트). `label`이라 표시를 눌러도 칸이 잡힙니다. */
+.theme-color-entry { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; cursor: text; }
+.theme-color-entry > small { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; letter-spacing: .04em; white-space: nowrap; }
+.theme-color-text { width: 100%; height: var(--compact-action-height); padding: 0 10px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
 
 @media (max-width: 760px), (hover: none) and (pointer: coarse) {
   /* 좁은 화면에서는 카드 한 줄에 하나씩 */

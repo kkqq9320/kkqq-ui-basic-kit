@@ -239,7 +239,15 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS,
             </span>
             {/* 치는 중에는 초안을, 아니면 커밋된 값을 보입니다 — 초안 없이 커밋된 값만
                 걸면 파싱에 실패하는 순간 되돌려 그려져 지울 수가 없습니다(초안 선언부 참고). */}
-            <input
+            {/* **형식 표시는 항상 보여야 합니다.** placeholder는 칸이 빈 순간에만 뜨는데,
+                이 칸은 늘 값이 차 있어서 사실상 안 보입니다. 그리고 카드 1행에 읽기 전용
+                `--bg · 16, 17, 25`가 있어, 고칠 수 있는 칸은 헥스 전용으로 **보입니다** —
+                오너가 "rgb를 넣을 방법이 없다"고 한 것이 그 오해입니다(파서는 처음부터
+                `87,11,11`·`87 111 122`·`87, 11, 122`·`rgb(255,255,255)`를 전부 받습니다).
+                그래서 칸 옆에 붙박이 표시를 답니다. */}
+            <label className="theme-color-entry">
+              <small aria-hidden="true">HEX·RGB</small>
+              <input
               className="theme-color-text"
               value={draft?.name === token.name ? draft.text : value}
               aria-label={`${token.label} 색상 값`}
@@ -250,12 +258,13 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS,
                  **기능이 아니라 발견 가능성의 문제였으므로 안내를 쓰는 자리로 옮깁니다.**
                  placeholder는 칸을 비웠을 때만 보이는데, 그 순간이 정확히 형식을 알고
                  싶은 순간입니다. 늘 보이는 쪽은 title이 맡습니다. */
-              placeholder="#575bd4 또는 87, 91, 212"
-              title="헥스(#575bd4) 또는 RGB(87, 91, 212 · rgb(87,91,212))로 입력할 수 있습니다"
+              placeholder="#575bd4 · 87, 91, 212 · rgb(87,91,212)"
+              title="헥스와 RGB를 다 받습니다 — #575bd4 / 87,91,212 / 87 91 212 / rgb(87, 91, 212)"
               spellCheck={false}
               onChange={(event) => { setDraft({ name: token.name, text: event.target.value }); setToken(token, event.target.value); }}
               onBlur={() => { setDraft(null); endSession(); }}
-            />
+              />
+            </label>
           </div>;
         })}
       </div>
