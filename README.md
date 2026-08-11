@@ -351,6 +351,71 @@ macOS `Cmd+;`도 실기기로 확인했습니다(2026-08-11) — 동작합니다
 날짜 필드마다 안내 줄이 하나씩 붙는 비용이 커서 그대로 뒀습니다. **닫힌 상태의 키는
 한 번 열어 보기 전에는 눈에 띄지 않습니다 — 알려진 구멍입니다.**
 
+### 넓은 화면 배치 — SummaryGrid · PanelGrid · FieldGrid
+
+세 통이 모두 같은 손잡이를 갖습니다. **값은 앱이 정합니다**(PRINCIPLES §14).
+
+```tsx
+<SummaryGrid>                        {/* 요약 카드 — 들어가는 만큼 한 줄에 */}
+<PanelGrid stretch>                  {/* 패널을 가로로 — 같은 행 높이 맞춤 */}
+<FieldGrid>                          {/* 패널 안 입력 필드를 여러 열로 */}
+```
+
+| 손잡이 | 뜻 | 토큰(앱 전체) | prop(이 통만) |
+|---|---|---|---|
+| `min` | 이 폭보다 좁아지면 열이 줄어듭니다 | `--panel-min` | `min="300px"` |
+| `max` | 칸이 이보다 커지지 않습니다 | `--panel-max` | `max="500px"` |
+| `justify` | `max` 때문에 남는 폭을 어디에 둘지 | `--panel-justify` | `justify="center"` |
+
+요약 카드는 `--summary-card-*`, 필드는 `--field-*`, 색상 편집기 카드는 `--color-card-*`
+입니다. 기본값은 `max: 1fr`(제한 없음)·`justify: normal`(왼쪽)이라 **아무것도 안 하면
+지금까지와 같습니다.**
+
+⚠️ **`min`만으로는 칸을 줄일 수 없습니다.** `minmax()`의 위쪽이 `1fr`이면 트랙이 남는
+폭을 나눠 가지므로 항목이 적을수록 오히려 커집니다 — 2560에서 패널 둘이 `min`을 200으로
+내려도 1077px씩 먹습니다. 줄이려면 `max`를 주세요.
+
+⚠️ **`max`가 `min`보다 작으면 `min`이 이깁니다**(CSS `minmax()` 규칙). `--panel-min: 400px`
+에 `max="380px"`를 주면 400px입니다.
+
+⚠️ **`auto-fit`은 항목 수보다 많은 칸을 보여 주지 않습니다.** 패널이 둘이면 아무리 넓은
+화면에서도 두 칸이고, `max`는 칸을 늘리는 것이 아니라 **줄이고 남긴** 것입니다. 칸을 더
+원하면 항목을 더 넣어야 합니다.
+
+**어느 패널이 같이 서는지, 순서, 높이를 맞출지는 앱이 정합니다.** 킷은 통만 줍니다 —
+높이가 다른 패널을 나란히 놓으면 짧은 쪽 아래가 비는데, 그게 괜찮은 조합인지는 내용을
+아는 쪽만 압니다(CSS masonry는 아직 못 씁니다). 순서는 넘긴 자식 순서 그대로입니다:
+
+```tsx
+<PanelGrid>{order.map((id) => PANELS[id]())}</PanelGrid>
+```
+
+⚠️ CSS의 `order`로 옮기지 마세요 — 화면만 바뀌고 **Tab 순서와 읽기 순서는 그대로**라
+둘이 어긋납니다. 배열을 바꾸는 쪽이 맞습니다.
+
+카드 한 장만 넓히려면 트랙을 두 칸 차지하게 합니다(토큰은 트랙을 정하므로 카드마다
+다른 폭을 줄 수 없습니다):
+
+```tsx
+<SummaryCard className="wide" label="합계" value="…" />
+```
+```css
+.wide { grid-column: span 2; }
+```
+
+### 그 밖의 모든 것 — className
+
+**내보내는 컴포넌트는 예외 없이 `className`을 받습니다**(`tests/classNameContract.test.ts`가
+지킵니다). `align-items`·`gap`·`grid-auto-flow`처럼 이름이 끝없는 것들은 prop으로 따라갈
+수 없으므로, 자주 쓰는 것만 이름을 주고 나머지는 이 문으로 겁니다.
+
+```tsx
+<PanelGrid className="dense">…</PanelGrid>
+```
+```css
+.dense { gap: 8px; align-items: stretch; }
+```
+
 ### AutoGrowTextarea
 
 ```tsx
