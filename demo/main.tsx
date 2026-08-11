@@ -127,7 +127,6 @@ const CARD_MIN_CHOICES = ["200px", "240px", "280px"] as const;
 const PANEL_MIN_CHOICES = ["360px", "400px", "480px"] as const;
 const FIELD_MIN_CHOICES = ["200px", "230px", "260px"] as const;
 const COLOR_CARD_MIN_CHOICES = ["260px", "300px", "360px"] as const;
-const COLOR_FIELD_CHOICES = ["150px", "200px", "260px"] as const;
 
 /** 확인용 폭. 오너가 스크린샷을 보낸 세 자리 + 넓은 화면. */
 const WIDTH_PRESETS = [
@@ -148,7 +147,6 @@ const OLD_RULES = `
      이 줄이 없으면 필드 행의 두 열이 언제나 같게 나와, 표가 "안 바뀌었다"고 거짓말합니다. */
   .field-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)) !important; }
   .theme-color-list { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
-  .theme-color-entry { grid-template-columns: auto minmax(0,1fr) !important; }
 `;
 
 type Reading = { colorCols: number; colorCard: number; colorField: number; cardCols: number; card: number; fieldCols: number; field: number; panelCols: number; panel: number; memo: number };
@@ -158,7 +156,6 @@ function LayoutSwitch() {
   const [panelMin, setPanelMin] = useState<(typeof PANEL_MIN_CHOICES)[number]>("400px");
   const [fieldMin, setFieldMin] = useState<(typeof FIELD_MIN_CHOICES)[number]>("230px");
   const [colorCardMin, setColorCardMin] = useState<(typeof COLOR_CARD_MIN_CHOICES)[number]>("260px");
-  const [colorFieldWidth, setColorFieldWidth] = useState<(typeof COLOR_FIELD_CHOICES)[number]>("200px");
   const [fakeWidth, setFakeWidth] = useState(0);
   const [now, setNow] = useState<Reading | null>(null);
   const [before, setBefore] = useState<Reading | null>(null);
@@ -168,7 +165,6 @@ function LayoutSwitch() {
   useEffect(() => { document.documentElement.style.setProperty("--panel-min", panelMin); }, [panelMin]);
   useEffect(() => { document.documentElement.style.setProperty("--field-min", fieldMin); }, [fieldMin]);
   useEffect(() => { document.documentElement.style.setProperty("--color-card-min", colorCardMin); }, [colorCardMin]);
-  useEffect(() => { document.documentElement.style.setProperty("--color-field-width", colorFieldWidth); }, [colorFieldWidth]);
 
   /* **폭 흉내입니다. 창을 실제로 줄이는 게 아닙니다.** `.app-shell`을 좁혀 작업 영역이
      받는 폭만 그 값으로 만듭니다 — 이 그리드들이 보는 것은 창이 아니라 부모 폭이므로
@@ -248,7 +244,7 @@ function LayoutSwitch() {
     const timer = window.setInterval(measure, 400);
     window.addEventListener("resize", measure);
     return () => { window.clearInterval(timer); window.removeEventListener("resize", measure); };
-  }, [cardMin, panelMin, fieldMin, colorCardMin, colorFieldWidth, fakeWidth]);
+  }, [cardMin, panelMin, fieldMin, colorCardMin, fakeWidth]);
 
   const row = <T extends string>(label: string, choices: readonly T[], current: T, set: (value: T) => void) =>
     <div className="layout-switch-row">
@@ -273,7 +269,6 @@ function LayoutSwitch() {
     {row("--panel-min", PANEL_MIN_CHOICES, panelMin, setPanelMin)}
     {row("--field-min", FIELD_MIN_CHOICES, fieldMin, setFieldMin)}
     {row("--color-card-min", COLOR_CARD_MIN_CHOICES, colorCardMin, setColorCardMin)}
-    {row("--color-field-width", COLOR_FIELD_CHOICES, colorFieldWidth, setColorFieldWidth)}
     <div className="layout-switch-row">
       <strong>폭 흉내 (창은 그대로)</strong>
       <div className="layout-switch-buttons">

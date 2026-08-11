@@ -23,6 +23,7 @@ import pageCssSource from "../css/page.css?raw";
 import tokensCssSource from "../css/tokens.css?raw";
 import demoSource from "../demo/main.tsx?raw";
 import themeEditorCssSource from "../css/theme-editor.css?raw";
+import principlesSource from "../PRINCIPLES.md?raw";
 
 /** 줄 시작의 `.summary-grid { … }` 규칙 본문. 미디어 쿼리 안의 재정의와 섞이지 않게
  *  줄 시작으로 한정합니다(그쪽은 들여쓰기가 있습니다). */
@@ -179,15 +180,27 @@ describe("색상 편집기 목록도 들어가는 만큼 채운다", () => {
     expect(tokensCssSource).toMatch(/--color-card-min:\s*\d+px/);
   });
 
-  /* **값 칸이 카드 폭을 다 먹으면 안 됩니다.** 담기는 가장 긴 값이 `rgb(255, 255, 255)`
-   * 열여덟 글자인데 2560에서 989px이었습니다(실측). `1fr`로 두면 카드를 넓힐 때마다
-   * 이 칸이 같이 늘어나므로, 폭을 **따로** 묶어야 앱이 카드만 조절할 수 있습니다. */
-  it("값 칸 폭이 1fr이 아니라 토큰으로 묶여 있다", () => {
+  /* **값 칸의 오른쪽 끝은 윗줄 액션 버튼의 오른쪽 끝과 같아야 합니다**(PRINCIPLES §13).
+   * 마지막 트랙이 `1fr`이어야 카드 안쪽 폭까지 차서 두 끝이 맞습니다 — 폭을 px로 못 박으면
+   * 카드가 그보다 넓은 순간 어긋납니다. 한동안 `var(--color-field-width, 200px)`이었고,
+   * 오너가 화면에서 그 어긋남을 잡았습니다. */
+  it("값 칸이 카드 안쪽 끝까지 찬다 — 윗줄 액션과 오른쪽 끝을 맞추려면 1fr이어야 한다", () => {
     const entry = /^\.theme-color-entry\s*\{([^}]*)\}/m.exec(themeEditorCssSource)?.[1] ?? "";
-    expect(entry).toMatch(/minmax\(\s*0\s*,\s*var\(--color-field-width,\s*\d+px\)/);
+    expect(entry).toMatch(/minmax\(\s*0\s*,\s*1fr\s*\)/);
   });
 
-  it("값 칸 폭 토큰이 :root에 정의돼 있다", () => {
-    expect(tokensCssSource).toMatch(/--color-field-width:\s*\d+px/);
+  /* `justify-content: start`가 남아 있으면 트랙이 다 차 있어도 줄이 왼쪽으로 붙어
+   * 마지막 트랙이 안 늘어납니다 — 1fr을 무력화하는 조합입니다. */
+  it("줄을 왼쪽으로 붙이지 않는다", () => {
+    const entry = /^\.theme-color-entry\s*\{([^}]*)\}/m.exec(themeEditorCssSource)?.[1] ?? "";
+    expect(entry).not.toMatch(/justify-content:\s*start/);
+  });
+});
+
+/* §13이 실제로 문서에 있는지. 위 규칙들이 "PRINCIPLES §13"을 근거로 대는데 그 절이
+ * 없으면 **매달린 참조**가 됩니다 — 이 저장소에서 공개 스펙에 그 일이 한 번 있었습니다. */
+describe("가장자리 정렬 원칙이 문서에 있다", () => {
+  it("PRINCIPLES에 §13이 있다", () => {
+    expect(principlesSource).toMatch(/^## 13\. /m);
   });
 });
