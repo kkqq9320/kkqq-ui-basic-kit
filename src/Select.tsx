@@ -12,7 +12,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { useBackToClose, useEscapeToClose } from "./hooks";
-import { captureScrollSnapshot, dropdownViewportSpace, isPrimaryButton, onViewportChange, restoreFocusWithoutScroll, shouldOpenDropdownAbove, type ScrollSnapshot } from "./positioning";
+import { captureScrollSnapshot, dropdownViewportSpace, focusTriggerOnPointerDown, isPrimaryButton, onViewportChange, restoreFocusWithoutScroll, shouldOpenDropdownAbove, type ScrollSnapshot } from "./positioning";
 import { firstEnabledValue, initialActiveValue, lastEnabledValue, stepEnabledValue } from "./selectKeyboard";
 
 export type SelectOption = { value: string; label: string; disabled?: boolean };
@@ -473,6 +473,9 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
       aria-expanded={open}
       aria-controls={open ? menuId : undefined}
       disabled={inoperable}
+      /* 포커스를 직접 옮깁니다 — macOS는 버튼을 클릭해도 포커스를 주지 않아서, 마우스로
+         연 드롭다운이 키보드로는 조작이 안 됐습니다. 근거는 positioning.ts의 헬퍼 주석. */
+      onPointerDown={(event) => focusTriggerOnPointerDown(event.currentTarget)}
       onKeyDown={handleKeyDown}
       onClick={() => {
         if (suppressReopenRef.current) { suppressReopenRef.current = false; return; }   // 유령 click 삼키기 — 토글하지 않는다

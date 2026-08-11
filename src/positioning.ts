@@ -90,6 +90,34 @@ export function captureScrollSnapshot(scrollRootId = "root"): ScrollSnapshot {
   return [...new Set(elements)].map((element) => ({ element, top: element.scrollTop, left: element.scrollLeft }));
 }
 
+/**
+ * 포인터로 트리거를 누를 때 **포커스를 직접 옮깁니다.**
+ *
+ * **왜 브라우저에 맡기면 안 되는가.** macOS 브라우저는 버튼을 클릭해도 포커스를 주지
+ * 않습니다 — 시스템 설정의 "키보드 탐색"이 꺼져 있으면 버튼·링크는 클릭 대상이 되지
+ * 포커스 대상이 되지 않는 것이 그 플랫폼의 오랜 관례입니다. 이 킷의 팝업 컨트롤은
+ * **키 핸들러를 트리거 하나에만** 걸어 두므로(설계 스펙 §6.2), 포커스가 안 오면
+ * 방향키·숫자·Enter·`Ctrl+;`가 **전부** 닿지 않습니다.
+ *
+ * 오너 실기기 캡처(2026-08-11)가 같은 동작의 두 트레이스로 잡았습니다:
+ *   맥     `click target=button.date-wheel-trigger` → `keydown … tgt=body`  처리됨=N
+ *   윈도우 `click target=span`                      → `keydown … tgt=button…` 처리됨=Y
+ *
+ * ⚠️ `DateWheelPicker`의 옛 주석이 "`tabIndex={-1}`인 버튼도 클릭하면 포커스를 받습니다"를
+ * **사실로 단정**하고 있었고 §6.2의 불변식이 그 위에 서 있었습니다. 그 문장은 Windows
+ * 에서만 참이었습니다. **불변식은 전제가 아니라 코드가 지킵니다.**
+ *
+ * `preventScroll`인 이유는 `restoreFocusWithoutScroll`과 같습니다 — 모바일에서 포커스가
+ * 화면을 끌고 갑니다. `currentTarget`을 받으므로 트리거 **안의 세그먼트**를 눌러
+ * 이벤트가 버블해 온 경우에도 트리거가 잡힙니다(실제 클릭은 대개 그쪽입니다).
+ *
+ * 비활성 요소는 포커스를 받을 수 없으므로 여기서 `disabled`를 따로 보지 않습니다 —
+ * 그 경우 `focus()`가 DOM 규칙상 아무 일도 하지 않습니다.
+ */
+export function focusTriggerOnPointerDown(trigger: HTMLElement | null) {
+  trigger?.focus({ preventScroll: true });
+}
+
 /** 트리거로 포커스를 되돌리되 화면은 움직이지 않습니다. */
 export function restoreFocusWithoutScroll(element: HTMLElement | null, snapshot: ScrollSnapshot) {
   element?.focus({ preventScroll: true });
