@@ -232,7 +232,7 @@ body { margin: 0; min-width: 0; min-height: 100vh; color: var(--text); backgroun
   html, body { height: 100%; overflow: hidden; scrollbar-gutter: auto; }
   /* scroll-padding-bottom: 40dvh를 여기 뒀었다 — AppShell.tsx의
    * useKeyboardScrollCompensation이 생기기 전, 포커스된 필드를 키보드 위로 세우는
-   * 유일한(암묵적) 시도였다(git 히스토리 확인: budget 앱 베이스라인부터 주석 하나
+   * 유일한(암묵적) 시도였다(git 히스토리 확인: 조상 저장소의 베이스라인부터 주석 하나
    * 없이 있던 값 — 원래 의도를 기록한 커밋 메시지나 문서가 이 저장소에도 그
    * 조상 저장소에도 없다). 그 훅이 생긴 뒤로는 브라우저 자신의 네이티브
    * scrollIntoView(이 패딩이 그 기준)와 이 훅의 계산이 같은 포커스 이벤트에
