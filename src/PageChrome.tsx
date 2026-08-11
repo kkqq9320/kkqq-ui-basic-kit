@@ -41,13 +41,26 @@ function trackStyle(token: string, min?: string, max?: string, justify?: GridJus
  */
 export type GridJustify = "normal" | "start" | "center" | "end" | "space-between" | "space-around";
 
+/* **손잡이가 두 갈래인 이유.** 자주 쓰는 것(`min`·`max`·`justify`)은 prop과 토큰으로
+ * 열어 두고, 나머지는 `className`으로 앱이 직접 겁니다. 이 그리드들에 `className`이 없던
+ * 동안에는 **컨테이너 속성을 앱이 손댈 방법이 아예 없어서**, 필요한 속성이 생길 때마다
+ * 킷에 prop을 하나씩 더하는 왕복이 났습니다(min → max → justify로 세 번). `align-items`·
+ * `gap`·`grid-auto-flow`처럼 이름이 끝없는 것들은 그 방식으로 못 따라갑니다.
+ *
+ * ```tsx
+ * <PanelGrid className="dense">…</PanelGrid>
+ * ```
+ * ```css
+ * .dense { gap: 8px; align-items: stretch; grid-auto-flow: dense; }
+ * ``` */
+
 /**
  * `min`은 이 그리드 **하나에만** 걸립니다 — 전역 토큰(`--summary-card-min`)보다 우선합니다.
  * 토큰이 커스텀 프로퍼티라 상속되므로, 조상 어디에 걸어도 그 아래만 바뀝니다.
  * 이 prop은 그 흔한 경우에 CSS를 안 쓰게 해 주는 지름길입니다.
  */
-export function SummaryGrid({ children, min, max, justify }: { children: ReactNode; min?: string; max?: string; justify?: GridJustify }) {
-  return <div className="summary-grid" style={trackStyle("--summary-card", min, max, justify)}>{children}</div>;
+export function SummaryGrid({ children, min, max, justify, className = "" }: { children: ReactNode; min?: string; max?: string; justify?: GridJustify; className?: string }) {
+  return <div className={`summary-grid ${className}`.trim()} style={trackStyle("--summary-card", min, max, justify)}>{children}</div>;
 }
 
 /**
@@ -95,8 +108,8 @@ export function SummaryCard({ label, value, tone = "plain", className = "" }: { 
  * </Panel>
  * ```
  */
-export function FieldGrid({ children, min, max, justify }: { children: ReactNode; min?: string; max?: string; justify?: GridJustify }) {
-  return <div className="field-grid" style={trackStyle("--field", min, max, justify)}>{children}</div>;
+export function FieldGrid({ children, min, max, justify, className = "" }: { children: ReactNode; min?: string; max?: string; justify?: GridJustify; className?: string }) {
+  return <div className={`field-grid ${className}`.trim()} style={trackStyle("--field", min, max, justify)}>{children}</div>;
 }
 
 /**
@@ -130,8 +143,8 @@ export function FieldGrid({ children, min, max, justify }: { children: ReactNode
  * </PanelGrid>
  * ```
  */
-export function PanelGrid({ children, min, max, justify, stretch = false }: { children: ReactNode; min?: string; max?: string; justify?: GridJustify; stretch?: boolean }) {
-  return <div className={stretch ? "panel-grid stretch" : "panel-grid"} style={trackStyle("--panel", min, max, justify)}>{children}</div>;
+export function PanelGrid({ children, min, max, justify, stretch = false, className = "" }: { children: ReactNode; min?: string; max?: string; justify?: GridJustify; stretch?: boolean; className?: string }) {
+  return <div className={`panel-grid ${stretch ? "stretch" : ""} ${className}`.replace(/ +/g, " ").trim()} style={trackStyle("--panel", min, max, justify)}>{children}</div>;
 }
 
 /**

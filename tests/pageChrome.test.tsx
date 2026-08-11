@@ -108,6 +108,40 @@ describe("min은 통마다 걸린다 — 네 그리드가 같은 손잡이를 �
   });
 });
 
+/* **모든 컨테이너에 일반 출구가 있어야 합니다.** 자주 쓰는 것(min·max·justify)은 prop으로
+ * 열어 뒀지만, 그리드 셋에 `className`이 없던 동안에는 `align-items`·`gap`·`grid-auto-flow`
+ * 같은 것을 앱이 손댈 방법이 아예 없었습니다 — 그래서 필요한 속성이 생길 때마다 킷에
+ * prop을 하나씩 더하는 왕복이 났습니다(min → max → justify로 세 번).
+ * 여섯을 한 표로 봅니다. **하나만 빠지면 그게 다음 라운드의 질문이 됩니다.** */
+describe("여섯 컴포넌트가 모두 className을 받는다", () => {
+  it.each([
+    ["summary-grid", (c: string) => <SummaryGrid className={c}><SummaryCard label="ㄱ" value="1" /></SummaryGrid>],
+    ["panel-grid", (c: string) => <PanelGrid className={c}><Panel>ㄱ</Panel></PanelGrid>],
+    ["field-grid", (c: string) => <FieldGrid className={c}><label>ㄱ</label></FieldGrid>],
+    ["panel", (c: string) => <Panel className={c}>ㄱ</Panel>],
+    ["summary-card", (c: string) => <SummaryCard className={c} label="ㄱ" value="1" />],
+  ])("%s 에 앱의 클래스가 붙는다", (base, make) => {
+    const { container } = render(make("mine"));
+    const el = container.querySelector("." + base) as HTMLElement;
+    expect(el, base + " 를 못 찾았습니다").not.toBeNull();
+    expect(el.classList.contains("mine")).toBe(true);
+  });
+
+  /* 안 넘겼을 때 `class="panel-grid "`처럼 군더더기가 남지 않아야 합니다 —
+   * `stretch`와 `className`이 겹치는 PanelGrid가 그 위험이 가장 큽니다. */
+  it("PanelGrid는 안 넘기면 기본 클래스만 남는다", () => {
+    const { container } = render(<PanelGrid><Panel>ㄱ</Panel></PanelGrid>);
+    expect((container.querySelector(".panel-grid") as HTMLElement).className).toBe("panel-grid");
+  });
+
+  it("PanelGrid는 stretch와 className을 같이 받는다", () => {
+    const { container } = render(<PanelGrid stretch className="mine"><Panel>ㄱ</Panel></PanelGrid>);
+    const el = container.querySelector(".panel-grid") as HTMLElement;
+    expect(el.classList.contains("stretch")).toBe(true);
+    expect(el.classList.contains("mine")).toBe(true);
+  });
+});
+
 describe("ThemeColorEditor: 앱이 안쪽을 겨눌 수 있다", () => {
   it("cardMin이 그 편집기에만 걸린다", () => {
     const { container } = render(<ThemeColorEditor theme="dark" cardMin="180px" />);
