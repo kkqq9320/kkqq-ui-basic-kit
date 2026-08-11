@@ -258,6 +258,19 @@ describe("네 그리드가 위쪽 한계도 연다", () => {
 
   /* 기본값이 `1fr`이어야 **지금까지와 같습니다**. 길이로 박아 두면 이 짝을 넣은 것만으로
      모든 소비자의 화면이 바뀝니다. */
+  /* `max`를 주면 트랙이 줄고 **반드시 남는 폭이 생깁니다.** 그 폭을 어디에 둘지가 없으면
+     화면은 늘 왼쪽에 몰린 채로만 나옵니다 — 오너 스크린샷이 정확히 그 상태였습니다.
+     실측(패널 500px, 2560): 왼쪽 뒤 1154 / 가운데 앞뒤 577 / 양끝 사이 1174 / 오른쪽 앞 1154. */
+  it.each(cases)("%s 는 %s-justify 로 남는 폭의 자리를 연다", (selector, token, source) => {
+    expect(ruleOf(source, selector)).toContain("justify-content: var(" + token + "-justify, normal)");
+  });
+
+  it.each(cases.map(([, token]) => token))("%s-justify 기본값은 normal이다 — 지금까지와 같다", (token) => {
+    const at = tokensCssSource.indexOf(token + "-justify:");
+    expect(at, token + "-justify 정의를 못 찾았습니다").toBeGreaterThan(-1);
+    expect(tokensCssSource.slice(at, tokensCssSource.indexOf(";", at) + 1).split(" ").join("")).toBe(token + "-justify:normal;");
+  });
+
   it.each(cases.map(([, token]) => token))("%s-max 기본값이 :root에 있고 제한 없음이다", (token) => {
     expect(declOf(token), token + "-max 정의를 못 찾았습니다").toBeDefined();
     expect(declOf(token)).toBe(token + "-max:1fr;");

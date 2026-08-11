@@ -23,18 +23,31 @@ export function PageHeader({ eyebrow, title, description }: { eyebrow: ReactNode
  * 가지므로, 항목이 적을수록 오히려 커집니다 — 2560에서 패널 둘이 `min`을 200으로 내려도
  * 1077px씩 먹었습니다. 줄이려면 `max`를 주세요. 안 주면 지금까지와 같습니다.
  */
-function trackStyle(token: string, min?: string, max?: string): CSSProperties | undefined {
-  if (!min && !max) return undefined;
-  return { ...(min ? { [`${token}-min`]: min } : {}), ...(max ? { [`${token}-max`]: max } : {}) } as CSSProperties;
+function trackStyle(token: string, min?: string, max?: string, justify?: GridJustify): CSSProperties | undefined {
+  if (!min && !max && !justify) return undefined;
+  return {
+    ...(min ? { [`${token}-min`]: min } : {}),
+    ...(max ? { [`${token}-max`]: max } : {}),
+    ...(justify ? { [`${token}-justify`]: justify } : {}),
+  } as CSSProperties;
 }
+
+/**
+ * `max`를 주면 트랙이 줄어들고 **남는 폭이 생깁니다.** 그 폭을 줄 어디에 둘지입니다.
+ *
+ * ⚠️ **`auto-fit`은 항목 수보다 많은 칸을 보여 주지 않습니다.** 패널이 둘이면 아무리 넓은
+ * 화면에서도 두 칸이고, `max`는 칸을 늘리는 것이 아니라 **줄이고 남긴** 것입니다
+ * (실측 2560: `400px 400px 0px 0px 0px`). 칸을 더 원하면 항목을 더 넣어야 합니다.
+ */
+export type GridJustify = "normal" | "start" | "center" | "end" | "space-between" | "space-around";
 
 /**
  * `min`은 이 그리드 **하나에만** 걸립니다 — 전역 토큰(`--summary-card-min`)보다 우선합니다.
  * 토큰이 커스텀 프로퍼티라 상속되므로, 조상 어디에 걸어도 그 아래만 바뀝니다.
  * 이 prop은 그 흔한 경우에 CSS를 안 쓰게 해 주는 지름길입니다.
  */
-export function SummaryGrid({ children, min, max }: { children: ReactNode; min?: string; max?: string }) {
-  return <div className="summary-grid" style={trackStyle("--summary-card", min, max)}>{children}</div>;
+export function SummaryGrid({ children, min, max, justify }: { children: ReactNode; min?: string; max?: string; justify?: GridJustify }) {
+  return <div className="summary-grid" style={trackStyle("--summary-card", min, max, justify)}>{children}</div>;
 }
 
 /**
@@ -82,8 +95,8 @@ export function SummaryCard({ label, value, tone = "plain", className = "" }: { 
  * </Panel>
  * ```
  */
-export function FieldGrid({ children, min, max }: { children: ReactNode; min?: string; max?: string }) {
-  return <div className="field-grid" style={trackStyle("--field", min, max)}>{children}</div>;
+export function FieldGrid({ children, min, max, justify }: { children: ReactNode; min?: string; max?: string; justify?: GridJustify }) {
+  return <div className="field-grid" style={trackStyle("--field", min, max, justify)}>{children}</div>;
 }
 
 /**
@@ -117,8 +130,8 @@ export function FieldGrid({ children, min, max }: { children: ReactNode; min?: s
  * </PanelGrid>
  * ```
  */
-export function PanelGrid({ children, min, max, stretch = false }: { children: ReactNode; min?: string; max?: string; stretch?: boolean }) {
-  return <div className={stretch ? "panel-grid stretch" : "panel-grid"} style={trackStyle("--panel", min, max)}>{children}</div>;
+export function PanelGrid({ children, min, max, justify, stretch = false }: { children: ReactNode; min?: string; max?: string; justify?: GridJustify; stretch?: boolean }) {
+  return <div className={stretch ? "panel-grid stretch" : "panel-grid"} style={trackStyle("--panel", min, max, justify)}>{children}</div>;
 }
 
 /**

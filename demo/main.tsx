@@ -143,6 +143,9 @@ const MAX_AXES = [
 ] as const;
 
 /** 확인용 폭. 오너가 스크린샷을 보낸 세 자리 + 넓은 화면. */
+/** 남는 폭을 줄 어디에 둘지. `max`를 주면 반드시 남는 폭이 생기므로 짝입니다. */
+const JUSTIFY_CHOICES = ["normal", "center", "space-between", "end"] as const;
+
 const WIDTH_PRESETS = [
   { label: "860", width: 860, 볼것: "패널 안 필드가 2열" },
   { label: "1200", width: 1200, 볼것: "날짜 피커 패널이 드롭다운 옆" },
@@ -170,12 +173,16 @@ function LayoutSwitch() {
   const [now, setNow] = useState<Reading | null>(null);
   const [before, setBefore] = useState<Reading | null>(null);
   const [viewport, setViewport] = useState(0);
+  const [justify, setJustify] = useState<(typeof JUSTIFY_CHOICES)[number]>("normal");
   const [fakeWidth, setFakeWidth] = useState(0);
 
   useEffect(() => {
     for (const a of AXES) document.documentElement.style.setProperty(a.token, `${axis[a.token]}px`);
     // 0은 "제한 없음" — 길이가 아니라 `1fr`을 넣어야 트랙이 남는 폭을 나눠 가집니다.
     for (const a of MAX_AXES) document.documentElement.style.setProperty(a.token, axis[a.token] ? `${axis[a.token]}px` : "1fr");
+    for (const token of ["--summary-card-justify", "--panel-justify", "--field-justify", "--color-card-justify"]) {
+      document.documentElement.style.setProperty(token, justify);
+    }
   }, [axis]);
 
   /* **폭 흉내입니다. 창을 실제로 줄이는 게 아닙니다.** `.app-shell`을 좁혀 작업 영역이
@@ -256,7 +263,7 @@ function LayoutSwitch() {
     const timer = window.setInterval(measure, 400);
     window.addEventListener("resize", measure);
     return () => { window.clearInterval(timer); window.removeEventListener("resize", measure); };
-  }, [axis, fakeWidth]);
+  }, [axis, justify, fakeWidth]);
 
   const slider = (a: (typeof AXES)[number] | (typeof MAX_AXES)[number]) =>
     <div className="layout-switch-row" key={a.token}>
@@ -288,6 +295,18 @@ function LayoutSwitch() {
   return <div className="layout-switch">
     {AXES.map(slider)}
     {MAX_AXES.map(slider)}
+    <div className="layout-switch-row">
+      <strong>남는 폭 <code>--*-justify</code></strong>
+      <div className="layout-switch-buttons">
+        {JUSTIFY_CHOICES.map((choice) => <button
+          key={choice}
+          type="button"
+          className={choice === justify ? "primary" : "secondary-button"}
+          aria-pressed={choice === justify}
+          onClick={() => setJustify(choice)}
+        >{choice === "normal" ? "왼쪽" : choice === "center" ? "가운데" : choice === "end" ? "오른쪽" : "양끝"}</button>)}
+      </div>
+    </div>
     <div className="layout-switch-row">
       <strong>폭 흉내 <small>(창은 그대로)</small></strong>
       <div className="layout-switch-buttons">

@@ -34,7 +34,7 @@
  * 정확히 되돌아갑니다. `auto-fill`은 빈 트랙을 남겨 두므로 카드가 제 폭을 지킵니다.
  * 카드가 6·8장으로 늘어나는 화면에서는 두 값이 같아 보이므로, **데모의 4장짜리
  * 화면에서만 차이가 드러납니다.** tests/summaryGrid.test.ts가 못박습니다. */
-.summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--summary-card-min, 240px), var(--summary-card-max, 1fr))); gap: 14px; margin-bottom: 22px; }
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--summary-card-min, 240px), var(--summary-card-max, 1fr))); gap: 14px; margin-bottom: 22px;  justify-content: var(--summary-card-justify, normal);}
 .summary-card { min-height: 118px; display: flex; flex-direction: column; justify-content: space-between; padding: 20px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); }
 .summary-card span { color: var(--muted); font-size: 13px; }
 .summary-card strong { font-size: clamp(20px, 2vw, 29px); letter-spacing: -.04em; }
@@ -48,7 +48,7 @@
  * `display: grid`라(controls.css:14) 라벨과 컨트롤은 그대로 세로로 쌓입니다.
  * `PanelGrid`와 같은 이유로 `auto-fit`입니다 — 폼의 필드는 앱이 넣은 명시적 목록이라
  * 남는 폭을 비워 두면 줄 한쪽이 그냥 빕니다. */
-.field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--field-min, 230px), var(--field-max, 1fr))); gap: 16px; }
+.field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--field-min, 230px), var(--field-max, 1fr))); gap: 16px;  justify-content: var(--field-justify, normal);}
 
 /* 앱이 고른 패널들을 가로로 놓는 통(`PanelGrid`). `--panel-min`보다 좁아지면 한 열이
  * 되므로 좁은 화면 규칙을 따로 둘 필요가 없습니다.
@@ -60,7 +60,7 @@
  * 안쪽에 큰 빈 자리가 생깁니다. 빈 자리를 패널 **아래**로 내보내는 편이 낫습니다.
  * `> .panel`의 `margin-bottom: 0`도 한 벌입니다 — 안 끄면 아래 :40의 20px이 gap에
  * 더해져 가로 간격과 세로 간격이 어긋납니다. */
-.panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--panel-min, 640px), var(--panel-max, 1fr))); align-items: start; gap: 20px; margin-bottom: 20px; }
+.panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--panel-min, 640px), var(--panel-max, 1fr))); align-items: start; gap: 20px; margin-bottom: 20px;  justify-content: var(--panel-justify, normal);}
 .panel-grid > .panel { margin-bottom: 0; }
 /* `stretch`: 한 줄의 패널이 같은 높이가 됩니다(그리드 기본 정렬로 되돌리는 것).
  * 빈 자리가 짧은 패널 **아래**가 아니라 **안쪽**으로 옮겨갈 뿐이고, 어느 쪽이 나은지는
