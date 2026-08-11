@@ -135,6 +135,17 @@ describe("ThemeColorEditor: 앱이 안쪽을 겨눌 수 있다", () => {
    * 붙어 있는지를 못박습니다 — 기능이 있는데 안 보이면 없는 것과 같습니다. */
   /* 오너 요청: 라벨 옆의 읽기 전용 RGB를 빼고, **HEX 위에 RGB 칸**을 둬서 두 줄로.
    * 같은 숫자가 한 카드에 두 번 나오면서 그중 하나만 못 고치는 것이 오해의 원인이었습니다. */
+  /* ⚠️ **이름이 요소여야 말줄임이 걸립니다.** CSS는 `strong > :first-child`에 말줄임을
+   * 거는데 이름이 **텍스트 노드**였던 동안 그 규칙은 `변경됨` 칩에 걸려 있었고, 이름은
+   * 보호를 못 받아 좁은 카드에서 두 줄로 쪼개졌습니다(오너 스크린샷의 "뱃/지").
+   * 텍스트 노드는 스타일을 못 받는다는 것이 요점이라, 감쌌는지를 구조로 못박습니다. */
+  it("토큰 이름이 요소로 감싸여 있다 — 텍스트 노드면 말줄임이 안 걸린다", () => {
+    const { container } = render(<ThemeColorEditor theme="dark" />);
+    const strong = container.querySelector(".theme-color-copy strong") as HTMLElement;
+    expect(strong.firstElementChild?.tagName).toBe("SPAN");
+    expect(strong.firstElementChild?.textContent).toBe("페이지 배경");
+  });
+
   it("입력이 RGB·HEX 두 줄이다", () => {
     const { container } = render(<ThemeColorEditor theme="dark" />);
     const card = container.querySelector(".theme-color-card") as HTMLElement;

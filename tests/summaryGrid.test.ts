@@ -180,20 +180,34 @@ describe("색상 편집기 목록도 들어가는 만큼 채운다", () => {
     expect(tokensCssSource).toMatch(/--color-card-min:\s*\d+px/);
   });
 
-  /* **값 칸의 오른쪽 끝은 윗줄 액션 버튼의 오른쪽 끝과 같아야 합니다**(PRINCIPLES §13).
-   * 마지막 트랙이 `1fr`이어야 카드 안쪽 폭까지 차서 두 끝이 맞습니다 — 폭을 px로 못 박으면
-   * 카드가 그보다 넓은 순간 어긋납니다. 한동안 `var(--color-field-width, 200px)`이었고,
-   * 오너가 화면에서 그 어긋남을 잡았습니다. */
-  it("값 칸이 카드 안쪽 끝까지 찬다 — 윗줄 액션과 오른쪽 끝을 맞추려면 1fr이어야 한다", () => {
+  /* **값 칸의 왼쪽 끝은 이름 글자와, 오른쪽 끝은 윗줄 액션 버튼과 같아야 합니다**
+   * (PRINCIPLES §13). 그 정렬을 숫자로 맞추지 않고 **구조로** 얻습니다 — 입력 줄이
+   * `display: contents`로 카드 그리드에 그대로 타고, 표시는 견본과 같은 첫 칸에,
+   * 입력칸은 이름·액션이 쓰는 나머지 칸을 그대로 씁니다.
+   *
+   * 한동안 입력 줄이 **자기 그리드**(`max-content minmax(0,1fr)`, 표시 30px + 간격 8px)를
+   * 갖고 있었습니다. 입력칸이 카드 왼쪽에서 38px, 이름 글자는 34+10=44px이라 **6px
+   * 어긋났고** 오너가 화면에서 잡았습니다. 34/10을 여기 적어 맞출 수도 있었지만 그건
+   * 카드 그리드를 손으로 복제하는 것이라, 카드가 바뀌면 조용히 다시 어긋납니다. */
+  it("입력 줄이 카드 그리드에 그대로 탄다 — 자기 그리드를 새로 만들지 않는다", () => {
     const entry = /^\.theme-color-entry\s*\{([^}]*)\}/m.exec(themeEditorCssSource)?.[1] ?? "";
-    expect(entry).toMatch(/minmax\(\s*0\s*,\s*1fr\s*\)/);
+    expect(entry).toMatch(/display:\s*contents/);
+    expect(entry).not.toMatch(/grid-template-columns/);
   });
 
-  /* `justify-content: start`가 남아 있으면 트랙이 다 차 있어도 줄이 왼쪽으로 붙어
-   * 마지막 트랙이 안 늘어납니다 — 1fr을 무력화하는 조합입니다. */
-  it("줄을 왼쪽으로 붙이지 않는다", () => {
-    const entry = /^\.theme-color-entry\s*\{([^}]*)\}/m.exec(themeEditorCssSource)?.[1] ?? "";
-    expect(entry).not.toMatch(/justify-content:\s*start/);
+  it("표시는 견본과 같은 첫 칸에 들어간다", () => {
+    /* 규칙을 **먼저 뽑고** 봅니다. 통짜 정규식으로 파일 전체를 훑으면, 못 찾았을 때
+       "CSS 전체가 안 맞는다"는 메시지만 나와 무엇이 없는지 알 수 없습니다 — 실제로
+       이 단언이 그렇게 실패해서 원인을 찾는 데 시간을 썼습니다. */
+    const rule = themeEditorCssSource
+      .split(/\r?\n/)
+      .find((line) => line.trimStart().startsWith(".theme-color-entry > small") && line.includes("grid-column"));
+    expect(rule, ".theme-color-entry > small 에 grid-column 규칙이 없습니다").toBeDefined();
+    expect(rule).toMatch(/grid-column:\s*1\s*;/);
+  });
+
+  it("입력칸은 액션이 끝나는 칸까지 뻗는다 — 그래야 오른쪽 끝이 맞는다", () => {
+    expect(themeEditorCssSource).toMatch(/^\.theme-color-text\s*\{[^}]*grid-column:\s*2\s*\/\s*-1/m);
   });
 });
 
