@@ -5,7 +5,14 @@
  */
 .theme-color-group { margin-top: 20px; }
 .theme-color-group > h3 { margin: 0 0 10px; color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: .1em; }
-.theme-color-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: start; }
+/* ⚠️ **`repeat(2, …)` 2열 고정이었습니다 — `.summary-grid`의 4열 고정과 같은 결함입니다.**
+ * 카드가 화면을 2등분해서 가져가므로 넓은 화면일수록 커집니다: 2560에서 카드 한 장이
+ * 1038px였고, 그 안 헥스 칸이 `#101119` 일곱 글자에 그 폭을 다 썼습니다(실측).
+ * 이제 들어가는 만큼 채웁니다. `auto-fill`인 이유도 요약 카드와 같습니다 — 색상 토큰은
+ * **앱이 늘릴 수 있는 집합**이라(readThemeDefaults의 확장 목록) 카드가 제 폭을 지키고
+ * 빈 트랙을 남기는 쪽이 맞습니다. 아래 :46의 좁은 화면 규칙은 그대로 두어도 무해하지만
+ * (min보다 좁으면 어차피 1열) 명시를 남깁니다. */
+.theme-color-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--color-card-min, 360px), var(--color-card-max, 1fr))); gap: 8px; align-items: start;  justify-content: var(--color-card-justify, normal);}
 
 /* 카드에는 클릭 핸들러가 없습니다 — 목록을 훑다가 스치듯 눌러 색이 바뀌지 않도록,
  * 조작 지점은 견본과 입력칸으로 한정합니다. */
@@ -39,7 +46,40 @@
 /* 모두 초기화 버튼의 개수 배지 */
 .theme-color-icon-button > b { position: absolute; top: -3px; right: -3px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 999px; color: #fff; background: var(--accent); font-size: 9px; font-weight: 800; line-height: 15px; }
 
-.theme-color-text { grid-column: 1 / -1; width: 100%; height: var(--compact-action-height); padding: 0 10px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+/* 값 칸과 그 옆의 붙박이 형식 표시. 표시가 **늘 보여야** 하는 이유는 이 칸이 늘 값이
+ * 차 있어 placeholder가 사실상 안 뜨고, 카드 위쪽의 읽기 전용 `R, G, B` 때문에 이 칸이
+ * 헥스 전용으로 보이기 때문입니다(오너 리포트). `label`이라 표시를 눌러도 칸이 잡힙니다. */
+/* ⚠️ **값 칸의 오른쪽 끝은 윗줄 액션 버튼의 오른쪽 끝과 같아야 합니다**(PRINCIPLES §13).
+ * 그래서 마지막 트랙이 `1fr`입니다 — 카드 안쪽 폭까지 차야 두 끝이 맞습니다.
+ *
+ * 여기 한동안 `var(--color-field-width, 200px)`로 **폭을 못 박아** 뒀습니다. 칸이 카드보다
+ * 좁아 오른쪽 끝이 어긋났고, 오너가 그것을 잡았습니다. 그 토큰이 있었던 이유는 카드가
+ * 1060px이던 시절 칸이 989px이 됐기 때문인데, **원인은 칸이 아니라 카드였습니다** —
+ * 카드를 297px로 줄이자 칸이 끝까지 차도 ~217px입니다. 폭을 재는 손잡이는
+ * `--color-card-min` 하나면 충분하고, 둘로 나누면 그중 하나가 반드시 정렬을 깹니다.
+ *
+ * 첫 트랙이 `max-content`인 것도 같은 계약입니다 — `auto`면 남는 폭을 흡수해서
+ * 표시와 칸 사이가 벌어집니다(그것도 오너 스크린샷이 잡았습니다). */
+/* **`display: contents`로 카드 그리드에 그대로 태웁니다.** 표시는 견본과 같은 첫 칸(34px),
+ * 입력칸은 이름·액션이 쓰는 나머지 칸을 그대로 씁니다 — 그러면 왼쪽 끝은 이름 글자와,
+ * 오른쪽 끝은 액션 버튼과 **구조적으로** 맞습니다.
+ *
+ * 여기 한동안 `max-content minmax(0,1fr)`짜리 **자기 그리드**가 있었고, 표시 칸이 30px,
+ * 간격이 8px이라 입력칸이 카드 왼쪽에서 38px에서 시작했습니다. 이름 글자는 34+10=44px
+ * 이라 **6px 어긋났고**, 오너가 "정렬이 틀어져 보인다"고 잡았습니다.
+ * 숫자를 34/10으로 맞춰 적을 수도 있었지만 그건 **카드 그리드를 손으로 복제하는 것**이라,
+ * 카드가 바뀌면 조용히 다시 어긋납니다. 같은 그리드를 쓰게 하는 편이 낫습니다.
+ *
+ * `label`은 `display: contents`여도 클릭하면 안의 입력이 잡힙니다. */
+.theme-color-entry { display: contents; cursor: text; }
+/* 견본과 **가운데를 맞춥니다.** 첫 칸은 34px인데 `RGB`·`HEX` 글자는 그보다 좁아서,
+ * 왼쪽에 붙이면 견본의 중심선과 어긋나 보입니다(오너 지적). 칸의 가운데에 둡니다. */
+.theme-color-entry > small { grid-column: 1; justify-self: center; }
+/* 표시는 견본과 같은 첫 칸(34px)에 들어갑니다 — 폭을 여기서 따로 정하지 않습니다.
+ * 그래야 `RGB`와 `HEX`의 글자 폭 차이와 무관하게 두 입력칸의 왼쪽 끝이 같습니다
+ * (PRINCIPLES §13은 오른쪽만이 아니라 양쪽입니다). */
+.theme-color-entry > small { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; letter-spacing: .04em; white-space: nowrap; }
+.theme-color-text { grid-column: 2 / -1; width: 100%; height: var(--compact-action-height); padding: 0 10px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
 
 @media (max-width: 760px), (hover: none) and (pointer: coarse) {
   /* 좁은 화면에서는 카드 한 줄에 하나씩 */

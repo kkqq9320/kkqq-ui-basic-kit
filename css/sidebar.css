@@ -26,7 +26,7 @@
   display: flex;
   flex-direction: column;
   padding: 24px 18px;
-  color: #dedeee;
+  color: var(--sidebar-strong);
   background: var(--sidebar);
   transition: width var(--sidebar-motion) var(--sidebar-ease), padding var(--sidebar-motion) var(--sidebar-ease), transform var(--sidebar-motion) var(--sidebar-ease);
 }
@@ -38,7 +38,7 @@
  * auto→0이 보간되지 않아 버튼이 한 번 튑니다. 제목의 max-width가 줄어들면
  * 버튼이 연속적으로 왼쪽으로 미끄러지며 가운데에 안착합니다. */
 .sidebar-brand > strong { flex: 1 1 auto; max-width: var(--sidebar-label-max); overflow: hidden; white-space: nowrap; transition: max-width var(--sidebar-motion) var(--sidebar-ease), opacity calc(var(--sidebar-motion) * .55) var(--sidebar-ease); }
-.sidebar-collapse-button, .mobile-sidebar-close { flex: 0 0 auto; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; color: #aaaac3; background: transparent; transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease; }
+.sidebar-collapse-button, .mobile-sidebar-close { flex: 0 0 auto; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; color: var(--sidebar-muted); background: transparent; transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease; }
 .sidebar-collapse-button:hover { color: #fff; background: rgba(255,255,255,.09); }
 /* 어두운 면에서는 옅은 강조색 아웃라인이 거의 안 보입니다(실기기 관측: "너무 연하네").
  * 바로 아래 .sidebar-icon-button(:156)과 같은 처리를 씁니다 — 이 면의 공용 언어입니다. */
@@ -49,8 +49,8 @@
 /* 브랜드 아래 자유 슬롯 (작업 공간 전환기, 검색 등). 어두운 배경이라
  * 안에 들어가는 Select 트리거는 밝은 텍스트로 덮어씁니다. */
 .sidebar-slot { max-height: 240px; margin-bottom: 24px; padding: 13px; overflow: hidden; border-radius: 9px; background: rgba(255,255,255,.07); transition: max-height var(--sidebar-motion) var(--sidebar-ease), margin-bottom var(--sidebar-motion) var(--sidebar-ease), padding var(--sidebar-motion) var(--sidebar-ease), opacity calc(var(--sidebar-motion) * .5) var(--sidebar-ease); }
-.sidebar-slot > small { display: block; margin-bottom: 7px; color: #9c9cb8; white-space: nowrap; }
-.sidebar-slot .app-select-trigger { color: #fff; border-color: rgba(255,255,255,.15); background-color: #26273e; }
+.sidebar-slot > small { display: block; margin-bottom: 7px; color: var(--sidebar-muted); white-space: nowrap; }
+.sidebar-slot .app-select-trigger { color: #fff; border-color: rgba(255,255,255,.15); background-color: var(--sidebar-surface); }
 /* 위 줄이 호버·포커스·열림의 강조색 테두리를 덮어쓰고 있었습니다 — 특이도가 (0,2,0)로
  * 같은데 css/index.css가 select.css **다음에** sidebar.css를 임포트해서 나중 것이
  * 이겼습니다. 그래서 사이드바 안에서만 테두리 강조가 죽고 아웃라인만 남아, 다른
@@ -79,7 +79,7 @@
   min-height: 40px;
   padding: 9px 12px;
   border: 0;
-  color: #cacade;
+  color: var(--sidebar-text);
   background: transparent;
   border-radius: 7px;
   text-decoration: none;
@@ -147,7 +147,7 @@
   100% { transform: scale(1); }
 }
 
-.sidebar-nav-count { min-width: 20px; height: 20px; box-sizing: border-box; display: inline-grid; place-items: center; margin-left: 8px; padding: 1px 6px 0; border-radius: 10px; color: #fff; background: #d85d55; font-size: 11px; font-variant-numeric: tabular-nums; line-height: 19px; text-align: center; }
+.sidebar-nav-count { min-width: 20px; height: 20px; box-sizing: border-box; display: inline-grid; place-items: center; margin-left: 8px; padding: 1px 6px 0; border-radius: 10px; color: #fff; background: var(--badge); font-size: 11px; font-variant-numeric: tabular-nums; line-height: 19px; text-align: center; }
 
 /* 그룹 제목. 접히면 글자가 사라지면서 얇은 구분선으로 녹아듭니다. */
 .sidebar-nav-heading {
@@ -157,7 +157,7 @@
   padding: 0;
   overflow: visible;
   border-radius: 999px;
-  color: #8585a3;
+  color: var(--sidebar-dim);
   background: transparent;
   font-size: 11px;
   line-height: 15px;
@@ -182,9 +182,9 @@
 .sidebar-user-avatar svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .sidebar-user-copy { flex: 1 1 auto; min-width: 0; max-width: var(--sidebar-label-max); max-height: 40px; display: grid; gap: 2px; overflow: hidden; transition: max-width var(--sidebar-motion) var(--sidebar-ease), max-height var(--sidebar-motion) var(--sidebar-ease), opacity calc(var(--sidebar-motion) * .5) var(--sidebar-ease); }
 .sidebar-user-copy strong { overflow: hidden; color: #fff; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar-user-copy small { color: #9c9cb8; font-size: 11px; white-space: nowrap; }
+.sidebar-user-copy small { color: var(--sidebar-muted); font-size: 11px; white-space: nowrap; }
 .sidebar-user-actions { flex: 0 0 auto; display: flex; gap: 2px; transition: gap var(--sidebar-motion) var(--sidebar-ease); }
-.sidebar-icon-button { display: grid; place-items: center; width: 28px; height: 32px; padding: 0; border: 0; border-radius: 7px; color: #a0a0b9; background: transparent; transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease; }
+.sidebar-icon-button { display: grid; place-items: center; width: 28px; height: 32px; padding: 0; border: 0; border-radius: 7px; color: var(--sidebar-muted); background: transparent; transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease; }
 .sidebar-icon-button:hover, .sidebar-icon-button:focus-visible { color: #fff; background: rgba(255,255,255,.09); outline: none; }
 .sidebar-icon-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
@@ -230,7 +230,7 @@
   .sidebar-collapsed .sidebar-brand > strong { max-width: var(--sidebar-label-max); opacity: 1; }
   .sidebar-collapsed .sidebar-slot { max-height: 240px; margin-bottom: 24px; padding: 13px; opacity: 1; }
   .sidebar-collapsed .sidebar-user-copy { max-width: var(--sidebar-label-max); max-height: 40px; opacity: 1; }
-  .sidebar-collapsed .sidebar-nav-heading { height: 15px; margin: 18px 12px 4px; color: #8585a3; background: transparent; }
+  .sidebar-collapsed .sidebar-nav-heading { height: 15px; margin: 18px 12px 4px; color: var(--sidebar-dim); background: transparent; }
   .sidebar-collapse-button { display: none; }
   .mobile-sidebar-close { display: grid; }
   .sidebar nav, .sidebar-collapsed .sidebar nav { display: grid; grid-template-columns: 1fr; }
@@ -238,7 +238,7 @@
   .sidebar-collapsed .sidebar nav :is(a, button) > span { max-width: var(--sidebar-label-max); opacity: 1; }
   .sidebar-management-nav, .sidebar-collapsed .sidebar-management-nav { margin-top: auto; }
   /* 모바일은 접힘이 아니라 전체 폭 드로어라, 데스크톱 접힘의 세로 열을 되돌린다. */
-  .sidebar-footer, .sidebar-collapsed .sidebar-footer { position: sticky; bottom: 0; z-index: 1; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 10px; height: auto; margin-top: 10px; padding: 12px; background: color-mix(in srgb, #18192c 92%, transparent); backdrop-filter: blur(14px); }
+  .sidebar-footer, .sidebar-collapsed .sidebar-footer { position: sticky; bottom: 0; z-index: 1; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 10px; height: auto; margin-top: 10px; padding: 12px; background: color-mix(in srgb, var(--sidebar-deep) 92%, transparent); backdrop-filter: blur(14px); }
   .sidebar-collapsed .sidebar-user-actions { flex-direction: row; gap: 2px; }
   .mobile-sidebar-overlay { position: fixed; z-index: 55; inset: 0; display: block; width: 100%; padding: 0; border: 0; background: rgba(13, 14, 28, .5); backdrop-filter: blur(3px); }
 

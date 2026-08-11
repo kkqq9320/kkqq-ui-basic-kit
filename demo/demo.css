@@ -1,5 +1,7 @@
 /* 데모 페이지 전용 스타일. 디자인 시스템의 일부가 아닙니다. */
-.demo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+/* `.demo-grid`는 킷의 `FieldGrid`(css/page.css의 `.field-grid`)로 옮겨갔습니다 —
+ * 데모에만 있는 레이아웃은 소비 앱이 쓸 수 없어서, 패널 안을 여러 열로 놓는 방법이
+ * 킷에 아예 없었습니다. 이 클래스는 더 이상 쓰이지 않습니다. */
 .demo-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .demo-swatches > div { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 9px; }
 .demo-swatches i { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 7px; }
@@ -19,6 +21,37 @@
   opacity: .55; transition: opacity .15s ease;
 }
 .trace-toggle:hover, .trace-toggle:focus-visible, .trace-toggle[aria-pressed="true"] { opacity: 1; }
+
+/* `--summary-card-min` 비교판 — 데모 전용. TRACE 알약이 오른쪽 아래를 쓰므로 왼쪽 아래입니다.
+ * 킷의 최고 z-index(450)보다 위에 둡니다: 값을 바꾸면 레이아웃이 통째로 움직이는데
+ * 그때 조작판이 가려지면 되돌릴 방법이 사라집니다. */
+.layout-switch {
+  position: fixed; left: 8px; bottom: 8px; z-index: 999999;
+  display: grid; gap: 6px; padding: 9px 11px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); box-shadow: 0 6px 20px rgba(0, 0, 0, .18);
+}
+.layout-switch-row { display: grid; gap: 4px; }
+.layout-switch-row strong { color: var(--muted); font: 700 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .06em; }
+.layout-switch-buttons { display: flex; gap: 6px; }
+/* 축은 슬라이더입니다 — 값을 미리 못 박으면 고르려는 값이 범위 밖에 있을 때 왕복이 납니다. */
+.layout-switch-slider { display: grid; grid-template-columns: minmax(0, 1fr) 46px; align-items: center; gap: 8px; }
+.layout-switch-slider input[type="range"] { width: 100%; min-width: 0; margin: 0; accent-color: var(--accent); }
+.layout-switch-slider output { color: var(--text); font: 700 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace; text-align: right; }
+.layout-switch-row strong code { color: var(--muted); font-size: 10px; font-weight: 400; }
+/* 이 판의 버튼은 킷의 38px 액션이 아닙니다 — 화면 위에 겹친 진단 도구라 본문 높이
+ * 계층(41/38/32)에 참여하지 않습니다. 그래서 min-width도 풉니다. */
+.layout-switch-buttons button { min-width: 0; height: 28px; padding: 0 10px; font-size: 12px; }
+.layout-switch small { max-width: 320px; color: var(--muted); font: 11px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.layout-switch-table { border-collapse: collapse; font: 11px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.layout-switch-table th, .layout-switch-table td { padding: 2px 8px 2px 0; text-align: left; white-space: nowrap; }
+.layout-switch-table th { color: var(--muted); font-weight: 700; }
+/* "지금"이 눈에 먼저 들어와야 합니다 — 비교표의 요점은 옛 값이 아니라 바뀐 값입니다. */
+.layout-switch-table td:nth-child(2) { color: var(--accent); font-weight: 700; }
+.layout-switch-table td:nth-child(3) { color: var(--muted); }
+/* 좁은 화면에서는 숨깁니다 — 거기선 어차피 1열이라 고를 것이 없는데, 실측 375px에서
+ * 이 판이 367px을 먹어 모바일 데모(빠른 바·탭 카드)를 가립니다. */
+@media (max-width: 760px) { .layout-switch { display: none; } }
 
 .trace-panel {
   position: fixed; inset: auto 0 0 0; z-index: 999998;

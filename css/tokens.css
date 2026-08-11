@@ -14,6 +14,52 @@
   --font-size-section-title: 18px;
   --font-size-dialog-title: 20px;
   --font-size-page-title: 31px;
+  /* 요약 카드 한 장의 **최소** 폭. 이 값이 곧 "한 줄에 몇 장이 들어가는가"를 정합니다.
+   *
+   * 왜 필요한가: `.summary-grid`가 `repeat(4, minmax(0,1fr))` **4열 고정**이라, 카드가
+   * 화면 폭을 4등분해서 가져갔습니다. 2560에서 한 장이 533px입니다(실측) — 118px짜리
+   * 높이에 533px 폭이라 상자가 납작하게 늘어납니다(오너 리포트 "카드가 너무 커짐").
+   * **넓은 화면에서 카드가 커지는 이유는 폭이 남아서가 아니라 장수가 고정이라서입니다.**
+   *
+   * 240은 지금 화면을 안 바꾸는 값으로 골랐습니다 — 1440에서 4열 254px로 4열 고정
+   * 시절과 같고, 2560에서 8열 259px가 됩니다. 좁은 화면에서는 어차피 1열입니다. */
+  --summary-card-min: 240px;
+  /* 위쪽 한계. `1fr`은 "제한 없음"(트랙이 남는 폭을 나눠 가짐)이고, 길이를 주면 거기서
+   * 멈춥니다 — **`min`만으로는 못 줄인다**는 것이 이 짝이 필요한 이유입니다. 네 그리드가
+   * 모두 `--*-min` / `--*-max` 짝을 갖습니다. */
+  --summary-card-max: 1fr;
+  /* `max`를 주면 트랙이 줄어들고 **남는 폭이 생깁니다.** 그 폭을 줄 어디에 둘지가
+   * 이 축입니다 — 기본 `normal`은 왼쪽에 붙고 남는 폭이 오른쪽에 몰립니다.
+   * `center`·`space-between`·`end`를 쓸 수 있습니다.
+   *
+   * ⚠️ **`auto-fit`은 항목 수보다 많은 칸을 보여 주지 않습니다.** 패널이 둘이면 아무리
+   * 넓은 화면에서도 두 칸이고, `max`는 칸을 늘리는 게 아니라 **줄이고 남긴** 것입니다
+   * (실측: 2560에서 `400px 400px 0px 0px 0px`). 칸을 더 원하면 항목을 더 넣어야 합니다. */
+  --summary-card-justify: normal;
+  /* `PanelGrid`로 묶인 패널 한 장의 **최소** 폭. 이 값보다 좁아지면 한 열로 쌓입니다.
+   * 400은 오너가 스크린샷으로 지목한 자리에서 역산했습니다 — **화면 1202px(본문 840px)
+   * 에서 날짜 피커 패널이 드롭다운 패널 옆에 서야** 합니다. 두 열이 서려면
+   * `(840 − 20) / 2 = 410` 이하여야 합니다. 처음에 640으로 잡았던 것은 "보통 화면을
+   * 안 건드린다"를 우선한 값인데, **오너가 원한 것은 그 반대였습니다.**
+   * `PanelGrid`의 `min` prop이 이 값을 자리마다 덮어씁니다. */
+  --panel-min: 400px;
+  --panel-max: 1fr;
+  --panel-justify: normal;
+  /* `FieldGrid` 한 칸(입력 필드 하나)의 **최소** 폭.
+   *
+   * 230도 같은 자리에서 역산했습니다 — **화면 858px에서 패널 안쪽이 488px**이고,
+   * 거기서 두 열이 서려면 `(488 − 16) / 2 = 236` 이하여야 합니다. 데모가 쓰던 240은
+   * **간발의 차로** 한 열이 됐습니다. `FieldGrid`의 `min` prop이 자리마다 덮어씁니다. */
+  --field-min: 230px;
+  --field-max: 1fr;
+  --field-justify: normal;
+  /* 색상 편집기 카드 한 장의 **최소** 폭. 360은 지금 화면을 안 바꾸는 값입니다 —
+   * 1440에서 목록 폭이 1014px이라 2열(503px)로 지금과 같고, 2560에서 5열이 됩니다.
+   * 300 언저리로 낮추면 1440이 3열로 바뀝니다(카드 안이 스와치·헥스·액션 세 칸이라
+   * 좁히면 헥스가 먼저 눌립니다). */
+  --color-card-min: 240px;
+  --color-card-max: 1fr;
+  --color-card-justify: normal;
   font-family: var(--font-family-base);
   color: #2d2c35;
   background: #f6f4ef;
@@ -31,6 +77,7 @@
   --orange: #975129;
   --orange-soft: #fff2e8;
   --red: #b84d4d;
+  --badge: #d85d55;   /* 사이드바 개수 뱃지. sidebar.css:150이 리터럴로 갖고 있던 값 그대로입니다 */
   --green: #2f8a63;
   --green-soft: #eaf6ef;
   --gold: #bc8a37;
@@ -104,6 +151,24 @@
   --scrollbar-size: 4px;
   --scrollbar-thumb: color-mix(in srgb, var(--muted) 24%, transparent);
   --scrollbar-thumb-hover: color-mix(in srgb, var(--muted) 40%, transparent);
+  /* 사이드바는 라이트에서도 어두운 면이라(--sidebar가 두 테마 다 짙습니다) 아래 값들은
+   * 두 테마에서 같습니다. **여기 오기 전까지는 sidebar.css가 이 색들을 리터럴로 들고
+   * 있었고, 그래서 --sidebar를 바꿔도 그 위 글자는 안 따라왔습니다**(오너 지적). */
+  --sidebar-strong: #dedeee;
+  --sidebar-text: #cacade;
+  --sidebar-muted: #9c9cb8;
+  --sidebar-dim: #8585a3;
+  --sidebar-surface: #26273e;
+  --sidebar-deep: #18192c;
+  /* 메시지 색. **`--red`/`--green`을 그대로 쓰지 않는 이유**: 옅은 배경 위 13px 글자라
+   * 기준 대비가 4.5인데, `var(--red)`로 바꾸면 라이트가 정확히 4.50, 다크가 7.61 → 5.67로
+   * 떨어집니다. 그래서 "옅은 배경 위 작은 글자용" 역할 토큰을 따로 둡니다 — 이 결정이
+   * 한동안 미결로 남아 있었고, 값은 지금 화면 그대로입니다. */
+  --danger-text: #9f3f2d;
+  --danger-surface: #fff0ed;
+  --ok-text: #17665e;
+  --ok-surface: #e8f6f2;
+  --link: #aaaaf2;
 }
 [data-theme="dark"] {
   color: #ededf5;
@@ -122,9 +187,24 @@
   --orange: #f0ad7d;
   --orange-soft: #3a2924;
   --red: #ff8b81;
+  --badge: #d85d55;   /* 사이드바 개수 뱃지. sidebar.css:150이 리터럴로 갖고 있던 값 그대로입니다 */
   --green: #67c99a;
   --green-soft: #20382f;
   --gold: #dfb96d;
+  /* 사이드바는 라이트에서도 어두운 면이라(--sidebar가 두 테마 다 짙습니다) 아래 값들은
+   * 두 테마에서 같습니다. **여기 오기 전까지는 sidebar.css가 이 색들을 리터럴로 들고
+   * 있었고, 그래서 --sidebar를 바꿔도 그 위 글자는 안 따라왔습니다**(오너 지적). */
+  --sidebar-strong: #dedeee;
+  --sidebar-text: #cacade;
+  --sidebar-muted: #9c9cb8;
+  --sidebar-dim: #8585a3;
+  --sidebar-surface: #26273e;
+  --sidebar-deep: #18192c;
+  --danger-text: #ffb5a7;
+  --danger-surface: #472a2a;
+  --ok-text: #a8e3d2;
+  --ok-surface: #203b35;
+  --link: #aaaaf2;
 }
 
 /* 전역 리셋 — 스크롤바 굵기를 4px로 통일하고, 오버플로가 생겨도

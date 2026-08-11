@@ -32,7 +32,7 @@ label { display: grid; gap: 6px; color: var(--muted); font-size: var(--font-size
 .danger-button { border: 1px solid color-mix(in srgb, var(--red) 45%, var(--line)); color: var(--red); background: var(--surface); }
 .button-row { display: flex; justify-content: flex-end; gap: 8px; }
 .button-row button:not(.primary) { border: 1px solid var(--line); color: var(--text); background: var(--surface); }
-.text-button { padding: 8px 0 0; color: #aaaaf2; border: 0; background: transparent; font-size: 13px; }
+.text-button { padding: 8px 0 0; color: var(--link); border: 0; background: transparent; font-size: 13px; }
 .link-button { text-decoration: none; }
 
 /* 아래 세 블록은 킷이 렌더하는 나머지 포커스 가능 컨트롤을 덮습니다. PRINCIPLES §11은
@@ -79,8 +79,8 @@ label { display: grid; gap: 6px; color: var(--muted); font-size: var(--font-size
   outline: none;
 }
 
-.error { padding: 11px 13px; border-radius: 7px; color: #9f3f2d; background: #fff0ed; font-size: 13px; }
-.success { margin-top: 12px; padding: 11px 13px; border-radius: 7px; color: #17665e; background: #e8f6f2; font-size: 13px; }
+.error { padding: 11px 13px; border-radius: 7px; color: var(--danger-text); background: var(--danger-surface); font-size: 13px; }
+.success { margin-top: 12px; padding: 11px 13px; border-radius: 7px; color: var(--ok-text); background: var(--ok-surface); font-size: 13px; }
 .muted-copy { color: var(--muted); font-size: 13px; }
-[data-theme="dark"] .error { color: #ffb5a7; background: #472a2a; }
-[data-theme="dark"] .success { color: #a8e3d2; background: #203b35; }
+[data-theme="dark"] .error { color: var(--danger-text); background: var(--danger-surface); }
+[data-theme="dark"] .success { color: var(--ok-text); background: var(--ok-surface); }

@@ -227,6 +227,10 @@ function dateTriggerParts(source: string, fields: DateWheelUnit[], typing: { uni
 }
 
 export type DateWheelPickerProps = {
+  /** 앱이 이 컴포넌트를 겨눌 때의 출구. **내보내는 컴포넌트는 전부 이걸 받습니다** —
+   *  자주 쓰는 것만 prop으로 열고 나머지는 이걸로 겁니다(PageChrome.tsx의 GridJustify 옆 주석). */
+  className?: string;
+
   /** YYYY-MM-DD, 또는 빈 문자열 */
   value: string;
   onChange: (value: string) => void;
@@ -255,7 +259,7 @@ export type DateWheelPickerProps = {
   mobileBottomInset?: number;
 };
 
-export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DATE_WHEEL_FIELDS, allowClear = false, ariaLabel, heading, id, disabled = false, labels: labelOverrides, timeZone = "Asia/Seoul", mobileBottomInset = 78 }: DateWheelPickerProps) {
+export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DATE_WHEEL_FIELDS, allowClear = false, ariaLabel, heading, id, disabled = false, labels: labelOverrides, timeZone = "Asia/Seoul", mobileBottomInset = 78, className = "" }: DateWheelPickerProps) {
   const labels = { ...DEFAULT_DATE_WHEEL_LABELS, ...labelOverrides, units: { ...DEFAULT_DATE_WHEEL_LABELS.units, ...labelOverrides?.units } };
   const [open, setOpen] = useState(false);
   // 겹쳐 있으면 가장 안쪽만 닫힙니다 — 다이얼로그 안에서 열렸을 때 다이얼로그까지 닫으면 안 됩니다.
@@ -1451,7 +1455,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     releaseColumnClickSuppression();
   }
 
-  return <div className={open ? "date-wheel-picker open" : "date-wheel-picker"} ref={rootRef}>
+  return <div className={`date-wheel-picker${open ? " open" : ""} ${className}`.trim()} ref={rootRef}>
     {/* onFocus는 세션 기준값을 찍는 두 지점 중 나머지 하나입니다(다른 하나는 위의 닫힘
         이펙트) — 설계 스펙 §6.4. React의 onFocus는 native focusin에 대응합니다.
 

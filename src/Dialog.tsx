@@ -126,11 +126,11 @@ export function Dialog({ open, onClose, ariaLabel, children, onSubmit, wide = fa
 }
 
 /** 다이얼로그 머리말: 작은 강조색 eyebrow + 제목. */
-export function DialogHeading({ eyebrow, title }: { eyebrow?: ReactNode; title: ReactNode }) {
-  return <div className="dialog-heading">{eyebrow && <small>{eyebrow}</small>}<h2>{title}</h2></div>;
+export function DialogHeading({ eyebrow, title , className = "" }: { eyebrow?: ReactNode; title: ReactNode ; className?: string }) {
+  return <div className={`dialog-heading ${className}`.trim()}>{eyebrow && <small>{eyebrow}</small>}<h2>{title}</h2></div>;
 }
 
 /** 다이얼로그 액션 줄. 32px 조밀 버튼을 씁니다. `.primary` / `.danger`를 붙이세요. */
-export function DialogActions({ children }: { children: ReactNode }) {
-  return <div className="dialog-actions">{children}</div>;
+export function DialogActions({ children , className = "" }: { children: ReactNode ; className?: string }) {
+  return <div className={`dialog-actions ${className}`.trim()}>{children}</div>;
 }

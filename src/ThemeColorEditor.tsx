@@ -12,7 +12,7 @@
  *   Undo  직전 값으로 한 단계. 이것도 Reset도 서로를 취소할 수 있습니다.
  *   Reset 스타일시트 기본값으로 한 번에.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties} from "react";
 
 import {
   THEME_TOKEN_GROUPS,
@@ -47,9 +47,26 @@ export type ThemeColorEditorProps = {
    * 다릅니다("짙은 면"이 어디 쓰이는지는 그 앱만 압니다). 그래서 컴포넌트는
    * 그대로 쓰고 문구만 갈아 끼울 수 있게 열어 둡니다. */
   groups?: readonly ThemeTokenGroup[];
+  /** 이 편집기 **하나의** 색상 카드 최소 폭. 전역 `--color-card-min`보다 우선합니다.
+   *  `PanelGrid`·`FieldGrid`·`SummaryGrid`의 `min`과 같은 뜻입니다. */
+  cardMin?: string;
+  /** 색상 카드가 커질 수 있는 최대 폭. 안 주면 남는 폭을 나눠 가집니다(`1fr`) —
+   *  **`cardMin`만으로는 카드를 줄일 수 없습니다.** */
+  cardMax?: string;
+  /** 앱이 이 편집기 안을 겨눌 때의 출구. `Panel`의 것과 같은 뜻입니다.
+   *
+   * **이게 없어서 앱은 색상 카드에 높이조차 줄 수 없었습니다** — 편집기가 자기 패널을
+   * 직접 렌더하므로 바깥에서 감싸도 안쪽에 닿지 못합니다. 카드 폭은 `--color-card-min`
+   * 토큰으로 정하고, 높이처럼 토큰이 없는 것은 이 클래스로 겨누세요:
+   *
+   * ```css
+   * .my-editor .theme-color-card { min-height: 96px; }
+   * ```
+   */
+  className?: string;
 };
 
-export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS }: ThemeColorEditorProps) {
+export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS, className = "", cardMin, cardMax }: ThemeColorEditorProps) {
   // groups가 다룰 토큰의 전부입니다. 프로젝트가 groups에 새 토큰을 더하면 읽기·기본값·
   // 적용이 전부 이 목록으로 돌아가, 키트를 안 고쳐도 새 색이 편집·저장·적용됩니다.
   const tokens = groups.flatMap((group) => group.tokens);
@@ -169,7 +186,7 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS 
   }
 
   const changedCount = Object.keys(overrides).length;
-  return <section className="panel theme-color-panel">
+  return <section className={`panel theme-color-panel ${className}`.trim()} style={cardMin || cardMax ? ({ ...(cardMin ? { "--color-card-min": cardMin } : {}), ...(cardMax ? { "--color-card-max": cardMax } : {}) } as CSSProperties) : undefined}>
     <div className="panel-heading">
       <div><small>COLORS</small><h2>색상</h2></div>
       <button
@@ -205,8 +222,15 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS 
               onBlur={endSession}
             />
             <span className="theme-color-copy">
-              <strong>{token.label}{changed && <em className="theme-color-changed" title={`기본값 ${fallback}`}>변경됨</em>}</strong>
-              <small>{token.name} · {toRgbText(value)}</small>
+              {/* ⚠️ 이름을 `span`으로 감쌉니다. CSS의 말줄임 규칙이 `strong > :first-child`
+                  인데 `{token.label}`은 **텍스트 노드**라 그 선택자에 안 걸렸습니다 —
+                  실제로 걸려 있던 것은 `변경됨` 칩이었고, 이름은 보호를 못 받아 좁은
+                  카드에서 두 줄로 쪼개졌습니다(오너 스크린샷의 "뱃/지"). */}
+              <strong><span title={token.label}>{token.label}</span>{changed && <em className="theme-color-changed" title={`기본값 ${fallback}`}>변경됨</em>}</strong>
+              {/* RGB는 아래 칸이 **고칠 수 있는 값**으로 보여 줍니다. 여기 같이 두면 같은
+                  숫자가 한 카드에 두 번 나오고, 그중 하나만 못 고쳐 오해를 만듭니다 —
+                  오너가 "rgb를 넣을 방법이 없다"고 한 것이 정확히 그 오해였습니다. */}
+              <small>{token.name}</small>
             </span>
             <span className="theme-color-actions">
               <button
@@ -228,14 +252,50 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS 
             </span>
             {/* 치는 중에는 초안을, 아니면 커밋된 값을 보입니다 — 초안 없이 커밋된 값만
                 걸면 파싱에 실패하는 순간 되돌려 그려져 지울 수가 없습니다(초안 선언부 참고). */}
-            <input
+            {/* **형식 표시는 항상 보여야 합니다.** placeholder는 칸이 빈 순간에만 뜨는데,
+                이 칸은 늘 값이 차 있어서 사실상 안 보입니다. 그리고 카드 1행에 읽기 전용
+                `--bg · 16, 17, 25`가 있어, 고칠 수 있는 칸은 헥스 전용으로 **보입니다** —
+                오너가 "rgb를 넣을 방법이 없다"고 한 것이 그 오해입니다(파서는 처음부터
+                `87,11,11`·`87 111 122`·`87, 11, 122`·`rgb(255,255,255)`를 전부 받습니다).
+                그래서 칸 옆에 붙박이 표시를 답니다. */}
+            {/* **RGB 칸이 위, HEX 칸이 아래.** 둘 다 같은 `setToken`으로 들어가고, 파서가
+                형식을 알아서 가립니다 — 칸을 나눈 것은 **어디에 무엇을 붙여넣을지**를
+                눈으로 알 수 있게 하려는 것뿐입니다(오너 요청).
+                RGB 칸은 값이 바뀌면 늘 `R, G, B`로 되돌아옵니다. 치는 도중에는 초안이
+                맡으므로(`draft`) 중간 글자가 튕기지 않습니다 — 헥스 칸과 같은 장치입니다. */}
+            <label className="theme-color-entry">
+              <small aria-hidden="true">RGB</small>
+              <input
+                className="theme-color-text"
+                value={draft?.name === `${token.name}:rgb` ? draft.text : toRgbText(value)}
+                aria-label={`${token.label} RGB 값`}
+                placeholder="87, 91, 212"
+                title="R, G, B — 87, 91, 212 / 87 91 212 / rgb(87, 91, 212) 다 됩니다"
+                spellCheck={false}
+                onChange={(event) => { setDraft({ name: `${token.name}:rgb`, text: event.target.value }); setToken(token, event.target.value); }}
+                onBlur={() => { setDraft(null); endSession(); }}
+              />
+            </label>
+            <label className="theme-color-entry">
+              <small aria-hidden="true">HEX</small>
+              <input
               className="theme-color-text"
               value={draft?.name === token.name ? draft.text : value}
               aria-label={`${token.label} 색상 값`}
+              /* 이 칸은 **처음부터 RGB를 받았습니다**(`normalizeColor`가 `rgb(…)`·`rgba(…)`·
+                 맨숫자 `87, 91, 212`를 전부 파싱합니다). 그런데 그걸 아는 방법이 위 머리말
+                 한 줄뿐이라, 카드 열일곱 장을 스크롤한 자리에서는 보이지 않았습니다 —
+                 오너가 "rgb도 설정할 수 있어야 되는데"라고 한 것이 그 증거입니다.
+                 **기능이 아니라 발견 가능성의 문제였으므로 안내를 쓰는 자리로 옮깁니다.**
+                 placeholder는 칸을 비웠을 때만 보이는데, 그 순간이 정확히 형식을 알고
+                 싶은 순간입니다. 늘 보이는 쪽은 title이 맡습니다. */
+              placeholder="#575bd4"
+              title="헥스 — #575bd4 (이 칸도 RGB를 받습니다)"
               spellCheck={false}
               onChange={(event) => { setDraft({ name: token.name, text: event.target.value }); setToken(token, event.target.value); }}
               onBlur={() => { setDraft(null); endSession(); }}
-            />
+              />
+            </label>
           </div>;
         })}
       </div>

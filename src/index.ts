@@ -12,6 +12,6 @@ export { Dialog, DialogHeading, DialogActions, type DialogProps } from "./Dialog
 export { ThemeColorEditor, type ThemeColorEditorProps } from "./ThemeColorEditor";
 export { THEME_TOKEN_GROUPS, THEME_TOKENS, applyTokenOverrides, defaultTokenValue, normalizeColor, readThemeDefaults, readTokenOverrides, toRgbText, writeTokenOverrides, type ThemeName, type ThemeToken, type ThemeTokenGroup } from "./themeTokens";
 export { AutoGrowTextarea, type AutoGrowTextareaProps } from "./AutoGrowTextarea";
-export { PageHeader, SummaryGrid, SummaryCard, Panel, DismissibleDetails } from "./PageChrome";
+export { PageHeader, SummaryGrid, SummaryCard, PanelGrid, Panel, FieldGrid, DismissibleDetails, type GridJustify } from "./PageChrome";
 export { PopupDepthContext, useBackToClose, useEscapeToClose, useScrollDirectionHidden, useVisualViewportBox, useVirtualKeyboard, useVirtualKeyboardOpen, type VisualViewportBox, type VirtualKeyboard } from "./hooks";
 export { isPrimaryButton, dropdownViewportSpace, shouldOpenDropdownAbove, onViewportChange, captureScrollSnapshot, restoreFocusWithoutScroll, type ScrollSnapshot } from "./positioning";

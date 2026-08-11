@@ -11,13 +11,20 @@ export type ThemeTokenGroup = { title: string; tokens: ThemeToken[] };
 
 export const THEME_TOKEN_GROUPS: ThemeTokenGroup[] = [
   {
-    title: "바탕과 글자",
+    title: "바탕",
     tokens: [
       { name: "--bg", label: "페이지 배경", description: "작업 영역 전체의 바탕" },
       { name: "--surface", label: "카드 배경", description: "패널·다이얼로그·카드" },
       { name: "--surface-soft", label: "보조 배경", description: "카드 안의 옅은 영역" },
       { name: "--input", label: "입력칸 배경", description: "입력·드롭다운·날짜 필드" },
       { name: "--line", label: "테두리", description: "카드와 입력칸의 선" },
+    ],
+  },
+  {
+    // 글자를 바탕에서 떼어냅니다 — 배경을 고르는 일과 그 위 글자를 고르는 일은 서로
+    // 다른 판단이고, 대비를 볼 때 글자끼리 나란히 보이는 편이 낫습니다(오너 요청).
+    title: "글자",
+    tokens: [
       { name: "--text", label: "본문 글자", description: "기본 글자색" },
       { name: "--muted", label: "흐린 글자", description: "설명·보조 문구" },
     ],
@@ -27,8 +34,23 @@ export const THEME_TOKEN_GROUPS: ThemeTokenGroup[] = [
     tokens: [
       { name: "--accent", label: "강조색", description: "선택 상태·주요 버튼·링크" },
       { name: "--accent-soft", label: "강조 배경", description: "선택된 항목의 옅은 배경" },
-      { name: "--sidebar", label: "사이드바", description: "왼쪽 메뉴 배경" },
+      { name: "--link", label: "링크 글자", description: "텍스트 버튼·링크" },
       { name: "--deep", label: "짙은 면", description: "어두운 배경 면" },
+    ],
+  },
+  {
+    /* 사이드바는 라이트에서도 어두운 면이라 이 값들은 두 테마에서 같습니다.
+       **여기 오기 전까지는 sidebar.css가 색을 리터럴로 들고 있어서, `--sidebar`를 바꿔도
+       그 위 글자는 안 따라왔습니다** — 오너가 화면에서 잡았습니다. */
+    title: "사이드바",
+    tokens: [
+      { name: "--sidebar", label: "사이드바 배경", description: "왼쪽 메뉴 바탕" },
+      { name: "--sidebar-strong", label: "사이드바 제목", description: "브랜드 이름" },
+      { name: "--sidebar-text", label: "사이드바 글자", description: "메뉴 항목" },
+      { name: "--sidebar-muted", label: "사이드바 보조 글자", description: "설명·아이콘 버튼" },
+      { name: "--sidebar-dim", label: "사이드바 구역 제목", description: "메뉴 구역 머리말" },
+      { name: "--sidebar-surface", label: "사이드바 안 입력칸", description: "사이드바 안 드롭다운 배경" },
+      { name: "--sidebar-deep", label: "사이드바 푸터", description: "모바일 사이드바 아래 바탕" },
     ],
   },
   {
@@ -40,6 +62,14 @@ export const THEME_TOKEN_GROUPS: ThemeTokenGroup[] = [
       { name: "--orange", label: "주황", description: "주의" },
       { name: "--orange-soft", label: "주황 배경", description: "주의 상태의 옅은 배경" },
       { name: "--gold", label: "금색", description: "보조 강조" },
+      { name: "--badge", label: "뱃지", description: "사이드바 메뉴의 개수 뱃지" },
+      /* 메시지 색은 `--red`/`--green`을 그대로 쓰지 않습니다 — 옅은 배경 위 13px 글자라
+         기준 대비가 4.5인데 `var(--red)`는 라이트에서 정확히 4.50, 다크에서 5.67까지
+         떨어집니다. 그 미결이 이 역할 토큰들로 풀렸습니다(값은 화면 그대로). */
+      { name: "--danger-text", label: "오류 글자", description: "오류 메시지 글자" },
+      { name: "--danger-surface", label: "오류 배경", description: "오류 메시지 바탕" },
+      { name: "--ok-text", label: "성공 글자", description: "성공 메시지 글자" },
+      { name: "--ok-surface", label: "성공 배경", description: "성공 메시지 바탕" },
     ],
   },
 ];

@@ -916,6 +916,10 @@ function useReleasableKeyboardInset(keyboard: VirtualKeyboard, scrollRootId = "r
 }
 
 export type AppShellProps = {
+  /** 앱이 이 컴포넌트를 겨눌 때의 출구. **내보내는 컴포넌트는 전부 이걸 받습니다** —
+   *  자주 쓰는 것만 prop으로 열고 나머지는 이걸로 겁니다(PageChrome.tsx의 GridJustify 옆 주석). */
+  className?: string;
+
   sidebar: ReactNode;
   children: ReactNode;
   /** 데스크톱 사이드바 접힘. 모바일에서는 CSS가 무시합니다. */
@@ -933,7 +937,7 @@ export type AppShellProps = {
   overlayLabel?: string;
 };
 
-export function AppShell({ sidebar, children, collapsed = false, mobileOpen = false, onMobileClose, navHidden = false, keyboardOpen = false, quickBar, pageTabs, overlayLabel = "사이드바 닫기" }: AppShellProps) {
+export function AppShell({ sidebar, children, collapsed = false, mobileOpen = false, onMobileClose, navHidden = false, keyboardOpen = false, quickBar, pageTabs, overlayLabel = "사이드바 닫기", className = "" }: AppShellProps) {
   // 소비 앱은 보통 useVirtualKeyboardOpen()(불리언만)으로 keyboardOpen prop을 주므로,
   // 스크롤 보정에 필요한 inset은 여기서 직접 한 번 더 구독합니다 — Dialog.tsx가
   // useVisualViewportBox()를 prop이 아니라 직접 부르는 것과 같은 선례입니다.
@@ -974,11 +978,11 @@ export function AppShell({ sidebar, children, collapsed = false, mobileOpen = fa
   // 골랐습니다 — keyboard-inset-open과 같은 idiom이라 새 개념이 없고, 매 스크롤
   // 틱마다 강제 리플로우를 만들지 않습니다.
   const releaseInProgress = !keyboard.open && keyboardInset > 0;
-  const className = ["app-shell", collapsed && "sidebar-collapsed", navHidden && "mobile-nav-hidden", keyboardOpen && "mobile-keyboard-open", keyboard.open && "keyboard-inset-open", releaseInProgress && "keyboard-inset-holding"].filter(Boolean).join(" ");
+  const shellClassName = ["app-shell", className, collapsed && "sidebar-collapsed", navHidden && "mobile-nav-hidden", keyboardOpen && "mobile-keyboard-open", keyboard.open && "keyboard-inset-open", releaseInProgress && "keyboard-inset-holding"].filter(Boolean).join(" ");
   // .workspace(page.css)가 이 변수를 기존 하단 패딩에 더합니다. 키보드가 닫히면
   // (지금 스크롤 위치가 허락하는 만큼) 0으로 돌아가 레이아웃도 원래 폭으로 돌아갑니다.
   const style = { "--keyboard-inset": `${keyboardInset}px` } as CSSProperties;
-  return <div className={className} style={style}>
+  return <div className={shellClassName} style={style}>
     {mobileOpen && onMobileClose && <button type="button" className="mobile-sidebar-overlay" aria-label={overlayLabel} onClick={onMobileClose} />}
     {sidebar}
     <main className="workspace">{children}</main>
