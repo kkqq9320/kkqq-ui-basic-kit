@@ -84,8 +84,46 @@ describe("LAYOUT-PRINCIPLES.md는 킷 없이 읽힌다", () => {
     expect(fences.length % 2).toBe(0);
   });
 
-  // 펜스 제거가 산문을 통째로 삼키면 위 검사들이 **공허하게** 통과합니다.
+  // 펜스 제거가 산문을 통째로 삼키면 위 검사들이 **공허하게** 통과합니다. 비율로 재면
+  // 펜스가 많아진 문서에서 삼킴과 무관하게 빨개지므로, 산문 한 문장이 살아남았는지 봅니다.
   it("펜스 제거가 산문을 삼키지 않았다", () => {
-    expect(prose.length).toBeGreaterThan(layoutText.length * 0.5);
+    expect(prose).toContain("한 상자 안에 여러 줄이 쌓이면");
+  });
+});
+
+describe("LAYOUT-PRINCIPLES.md는 4줄 형식을 지킨다", () => {
+  const headings = [...layoutText.matchAll(/^### (\d)\. /gm)].map((match) => Number(match[1]));
+  const ruleLines = [...layoutText.matchAll(/^\*\*규칙\*\* — (.+)$/gm)].map((match) => match[1]);
+  const failureLines = [...layoutText.matchAll(/^\*\*실패한 자리\*\* — (.+)$/gm)].map((match) => match[1]);
+
+  // 전제 — 절을 못 찾으면 아래가 전부 공허합니다. 그리고 `실패한 자리` 줄이 하나도
+  // 없으면 위 describe의 px 검사가 **면제할 것이 없어** 공허하게 엄격해집니다.
+  // 단언 하나에 `it` 하나입니다 — 앞이 터지면 뒤는 실행조차 되지 않습니다.
+  it("절을 실제로 찾아냈다", () => {
+    expect(headings).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  });
+
+  it("실패 기록 줄을 실제로 찾아냈다", () => {
+    expect(failureLines.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("모든 절에 규칙 줄이 있다", () => {
+    expect(ruleLines.length).toBe(headings.length);
+  });
+
+  it("모든 절에 '내 상자 안'과 '상자 밖이면'이 있다", () => {
+    const sections = layoutText.split(/^### \d\. /gm).slice(1);
+    const missing = sections
+      .map((body, index) => ({ section: index + 1, body }))
+      .filter(({ body }) => !body.includes("**내 상자 안**") || !body.includes("**상자 밖이면**"))
+      .map(({ section }) => section);
+    expect(missing).toEqual([]);
+  });
+
+  // 실패 기록은 **한 줄**입니다. 여러 줄로 쓰면 위 describe의 px 면제 판정이 무너집니다
+  // — 둘째 줄부터는 `**실패한 자리**`로 시작하지 않아 처방으로 오인됩니다.
+  it("실패 기록이 한 줄을 넘지 않는다", () => {
+    const tooLong = failureLines.filter((line) => line.length > 200);
+    expect(tooLong).toEqual([]);
   });
 });
