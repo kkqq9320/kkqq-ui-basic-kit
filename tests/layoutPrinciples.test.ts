@@ -158,9 +158,12 @@ describe("PRINCIPLES.md의 참조가 실재하는 절을 가리킨다", () => {
   const sectionNumbers = [...layoutText.matchAll(/^### (\d)\. /gm)].map((match) => match[1]);
   const references = [...principlesText.matchAll(/LAYOUT-PRINCIPLES\.md\)\s*§(\d)/g)].map((match) => match[1]);
 
-  /* 전제 — 참조가 0건이면 아래가 공허합니다. 실제로는 다섯 개가 생기지만 임계값은 3으로
-   * 둡니다. 문장을 다르게 써서 넷이 됐을 때 빨개지면 그것은 오탐이고, 이 검사가 막으려는
-   * 것은 "참조가 하나도 없는데 통과"뿐입니다. */
+  /* 전제 — 참조가 0건이면 아래가 공허합니다.
+   *
+   * 정규식이 잡는 링크는 **셋**입니다(§2→§4, §7→§5, §8→§7). `(같은 §7)` 꼴의 뒷참조와
+   * 맨 위 머리말 링크는 `§N`이 링크 바로 뒤에 붙어 있지 않아 잡히지 않습니다.
+   * 임계값 3은 그 셋과 **정확히 같으므로**, 이 검사는 공허 방지 겸 **링크 유실 감지**로도
+   * 동작합니다 — 링크가 하나라도 사라지면 빨개집니다. 그것은 오탐이 아닙니다. */
   it("참조를 실제로 찾아냈다", () => {
     expect(references.length).toBeGreaterThanOrEqual(3);
   });
