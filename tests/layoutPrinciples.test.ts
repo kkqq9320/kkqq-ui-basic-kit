@@ -20,6 +20,7 @@ import { describe, expect, it } from "vitest";
 import indexSource from "../src/index.ts?raw";
 import layoutText from "../LAYOUT-PRINCIPLES.md?raw";
 import packageJsonText from "../package.json?raw";
+import principlesText from "../PRINCIPLES.md?raw";
 
 /** ```로 둘러싸인 구역을 지웁니다. 예시 코드 안의 px와 토큰 이름은 검사 대상이 아닙니다. */
 function withoutCodeFences(text: string): string {
@@ -150,5 +151,22 @@ describe("LAYOUT-PRINCIPLES.md가 설치본에 들어간다", () => {
   // `PRINCIPLES.md`와 같은 대우입니다 — 소비 코드가 경로로 집어갈 수 있어야 합니다.
   it("exports로 집을 수 있다", () => {
     expect(manifest.exports["./LAYOUT-PRINCIPLES.md"]).toBe("./LAYOUT-PRINCIPLES.md");
+  });
+});
+
+describe("PRINCIPLES.md의 참조가 실재하는 절을 가리킨다", () => {
+  const sectionNumbers = [...layoutText.matchAll(/^### (\d)\. /gm)].map((match) => match[1]);
+  const references = [...principlesText.matchAll(/LAYOUT-PRINCIPLES\.md\)\s*§(\d)/g)].map((match) => match[1]);
+
+  /* 전제 — 참조가 0건이면 아래가 공허합니다. 실제로는 다섯 개가 생기지만 임계값은 3으로
+   * 둡니다. 문장을 다르게 써서 넷이 됐을 때 빨개지면 그것은 오탐이고, 이 검사가 막으려는
+   * 것은 "참조가 하나도 없는데 통과"뿐입니다. */
+  it("참조를 실제로 찾아냈다", () => {
+    expect(references.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("가리키는 절이 전부 존재한다", () => {
+    const dangling = [...new Set(references)].filter((number) => !sectionNumbers.includes(number));
+    expect(dangling).toEqual([]);
   });
 });
