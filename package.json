@@ -1,6 +1,6 @@
 {
   "name": "kkqq-ui-basic-kit",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "React + 순수 CSS 디자인 시스템. 드롭다운·날짜 피커·다이얼로그·사이드바·토큰·폰트.",
   "type": "module",
   "license": "MIT AND OFL-1.1",
