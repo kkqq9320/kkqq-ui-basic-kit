@@ -11,6 +11,14 @@ button { cursor: pointer; }
 input, select, textarea { width: 100%; border: 1px solid var(--line); border-radius: 7px; background: var(--input); padding: 10px 11px; color: var(--text); }
 input:focus, select:focus, textarea:focus { outline: var(--focus-ring); border-color: var(--accent); }
 textarea { resize: vertical; line-height: 1.45; }
+/* 이 줄이 없어서 **비활성 입력에 킷의 모습이 아예 없었습니다** — 아래 :22가 버튼 셋만
+ * 덮고 있어, 잠긴 입력·메모 칸은 브라우저 기본값(플랫폼마다 다른 회색)으로 남았습니다.
+ * 값은 킷의 다른 비활성 표면과 같습니다(:22, select.css:35, dialog.css:88,
+ * date-picker.css:120) — select.css:57이 그 통일을 명시로 적어 뒀습니다.
+ * :hover 함정은 여기 없습니다 — 위 :12는 `:focus`뿐이고 비활성 요소는 포커스를 못
+ * 받으므로, select.css:23·date-picker.css:129가 `:not(:disabled)`를 달아야 했던
+ * 이유가 이 셋에는 생기지 않습니다. */
+input:disabled, select:disabled, textarea:disabled { opacity: .55; cursor: not-allowed; }
 label { display: grid; gap: 6px; color: var(--muted); font-size: var(--font-size-body); font-weight: 600; }
 
 /* 3줄에서 시작해 내부 스크롤바 없이 늘어나는 메모 입력 */

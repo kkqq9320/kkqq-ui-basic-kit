@@ -17,6 +17,14 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.2.0
 그 계약이 거짓으로 빨개집니다. 태그를 달 때 이 머리말을 `## v0.3.0 — …`으로 바꾸고
 `package.json`을 같이 올리세요.
 
+### 더해진 것 (깨지는 것 없음 — 둘 다 선택 prop)
+
+- **`AutoGrowTextarea`가 `disabled`를 받습니다.** `Select`·`DateWheelPicker`에는 있는데
+  이것만 없어서, 폼 전체를 잠그면 **메모 칸 하나만 살아 있는 "반쯤 잠긴 폼"**이 됐습니다.
+- **`AutoGrowTextarea`가 `id`를 받습니다.** 라벨을 컨트롤 바깥에 두고 `<label htmlFor>`로
+  묶는 배치가 가능해집니다. 바깥 라벨과 `ariaLabel`을 같이 넘기면 `aria-label`이 이기므로
+  **둘 중 하나만** 쓰세요.
+
 ### 고친 것
 
 - **macOS에서 `DateWheelPicker`가 마우스로 연 뒤 키보드로 조작되지 않던 것.** 맥
@@ -35,6 +43,17 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.2.0
 
   **Windows·안드로이드 사용자에게는 보이는 변화가 없습니다**(그쪽은 원래 브라우저가
   포커스를 줬습니다). 맥 사용자에게는 지금까지 안 되던 것이 됩니다.
+
+### 눈으로 볼 것
+
+- **비활성 입력·메모 칸의 모습이 바뀝니다.** `css/controls.css`의 `:disabled` 규칙이
+  버튼 셋만 덮고 있어서, 잠긴 `<input>`·`<textarea>`는 **킷의 모습이 아예 없이**
+  브라우저 기본값(플랫폼마다 다른 회색)으로 그려지고 있었습니다. 이제 킷의 다른 비활성
+  표면과 같은 `opacity: .55` + `cursor: not-allowed`를 씁니다.
+  **지금 이걸 받는 소비자는 없습니다**(실측 2026-08-11): `budget/frontend`는
+  `#baf5b22b5f…` SHA 핀이고, `homa_gwangju`는 `file:vendor/…`로 저장소에 커밋된
+  사본을 씁니다. 다음에 핀을 올릴 때 잠긴 입력이 있는 화면을 한 번 보세요 —
+  **없던 흐리기가 새로 생깁니다**(원래는 브라우저 기본값이었습니다).
 
 ---
 

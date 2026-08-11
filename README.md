@@ -351,6 +351,40 @@ macOS `Cmd+;`도 실기기로 확인했습니다(2026-08-11) — 동작합니다
 날짜 필드마다 안내 줄이 하나씩 붙는 비용이 커서 그대로 뒀습니다. **닫힌 상태의 키는
 한 번 열어 보기 전에는 눈에 띄지 않습니다 — 알려진 구멍입니다.**
 
+### AutoGrowTextarea
+
+```tsx
+<AutoGrowTextarea
+  value={memo}
+  onChange={setMemo}
+  placeholder="여러 줄을 입력해 보세요"
+  maxLength={500}
+  ariaLabel="메모"               // 감싸는 label이 있으면 선택입니다 (PRINCIPLES §11)
+  disabled={false}
+  id="memo-field"                // 라벨을 바깥에 둘 때만
+/>
+```
+
+3줄에서 시작해 내용만큼 늘어나고 **내부 스크롤바가 생기지 않습니다.** 값이 밖에서
+바뀌어도 높이를 다시 맞춥니다.
+
+**이름은 두 방법 중 하나로만 줍니다.** 감싸는 `<label>`(`css/controls.css:14`가
+`display: grid`라 이게 기본 배치입니다), 아니면 `id` + 바깥 `<label htmlFor>`.
+
+```tsx
+<label>메모<AutoGrowTextarea value={memo} onChange={setMemo} /></label>          {/* 감싸기 */}
+
+<label htmlFor="memo-field">메모</label>                                          {/* 바깥 라벨 */}
+<AutoGrowTextarea id="memo-field" value={memo} onChange={setMemo} />
+```
+
+⚠️ **바깥 라벨과 `ariaLabel`을 같이 넘기지 마세요** — `aria-label`이 `<label>`을 이기므로
+화면에 보이는 글자와 읽히는 이름이 갈립니다.
+
+`disabled`는 `Select`·`DateWheelPicker`와 같은 뜻이고, 흐리기도 킷의 다른 비활성
+표면과 같은 값입니다. **한동안 이 컨트롤에만 `disabled`가 없었습니다** — 폼 전체를
+잠그면 메모 칸 하나만 살아 있는 "반쯤 잠긴 폼"이 됐습니다.
+
 ### AppShell + Sidebar
 
 라우터·인증·API에 의존하지 않습니다. 컴포넌트에 넘기는 값은 controlled입니다.
