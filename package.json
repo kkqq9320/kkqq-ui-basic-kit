@@ -16,9 +16,10 @@
     "./css/*": "./css/*",
     "./fonts/*": "./fonts/*",
     "./src/*": "./src/*",
-    "./PRINCIPLES.md": "./PRINCIPLES.md"
+    "./PRINCIPLES.md": "./PRINCIPLES.md",
+    "./LAYOUT-PRINCIPLES.md": "./LAYOUT-PRINCIPLES.md"
   },
-  "files": ["src", "css", "fonts", "PRINCIPLES.md", "CUSTOMIZING.md", "CHANGELOG.md", "README.md", "LICENSE"],
+  "files": ["src", "css", "fonts", "PRINCIPLES.md", "LAYOUT-PRINCIPLES.md", "CUSTOMIZING.md", "CHANGELOG.md", "README.md", "LICENSE"],
   "peerDependencies": { "react": ">=18", "react-dom": ">=18" },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
