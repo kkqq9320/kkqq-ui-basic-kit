@@ -123,10 +123,15 @@ const LONG_DIALOG_FIELDS: LongDialogField[] = [
  * 감으로 돌아갑니다. **캡에서 산술로 유도하지 않고 레이아웃을 다시 잽니다** — 유도하면
  * 패딩과 스크롤바를 빼먹어 그럴듯하게 틀립니다.
  */
-const CARD_MIN_CHOICES = ["200px", "240px", "280px"] as const;
-const PANEL_MIN_CHOICES = ["360px", "400px", "480px"] as const;
-const FIELD_MIN_CHOICES = ["200px", "230px", "260px"] as const;
-const COLOR_CARD_MIN_CHOICES = ["260px", "300px", "360px"] as const;
+/** 조작판의 축들. **버튼 세 개가 아니라 슬라이더인 이유**: 오너가 두 번 연속으로
+ *  "더 작아지는 게 안 된다"고 했는데 둘 다 **제가 고른 세 값이 아래로 안 내려간 것**이
+ *  원인이었습니다. 고를 값을 미리 찍는 것 자체가 왕복을 만듭니다 — 범위를 열어 둡니다. */
+const AXES = [
+  { token: "--summary-card-min", label: "요약 카드", min: 120, max: 420, initial: 240 },
+  { token: "--panel-min", label: "패널", min: 200, max: 900, initial: 400 },
+  { token: "--field-min", label: "패널 안 필드", min: 140, max: 440, initial: 230 },
+  { token: "--color-card-min", label: "색상 카드", min: 160, max: 520, initial: 240 },
+] as const;
 
 /** 확인용 폭. 오너가 스크린샷을 보낸 세 자리 + 넓은 화면. */
 const WIDTH_PRESETS = [
@@ -152,19 +157,15 @@ const OLD_RULES = `
 type Reading = { colorCols: number; colorCard: number; colorField: number; cardCols: number; card: number; fieldCols: number; field: number; panelCols: number; panel: number; memo: number };
 
 function LayoutSwitch() {
-  const [cardMin, setCardMin] = useState<(typeof CARD_MIN_CHOICES)[number]>("240px");
-  const [panelMin, setPanelMin] = useState<(typeof PANEL_MIN_CHOICES)[number]>("400px");
-  const [fieldMin, setFieldMin] = useState<(typeof FIELD_MIN_CHOICES)[number]>("230px");
-  const [colorCardMin, setColorCardMin] = useState<(typeof COLOR_CARD_MIN_CHOICES)[number]>("260px");
-  const [fakeWidth, setFakeWidth] = useState(0);
+  const [axis, setAxis] = useState<Record<string, number>>(() => Object.fromEntries(AXES.map((a) => [a.token, a.initial])));
   const [now, setNow] = useState<Reading | null>(null);
   const [before, setBefore] = useState<Reading | null>(null);
   const [viewport, setViewport] = useState(0);
+  const [fakeWidth, setFakeWidth] = useState(0);
 
-  useEffect(() => { document.documentElement.style.setProperty("--summary-card-min", cardMin); }, [cardMin]);
-  useEffect(() => { document.documentElement.style.setProperty("--panel-min", panelMin); }, [panelMin]);
-  useEffect(() => { document.documentElement.style.setProperty("--field-min", fieldMin); }, [fieldMin]);
-  useEffect(() => { document.documentElement.style.setProperty("--color-card-min", colorCardMin); }, [colorCardMin]);
+  useEffect(() => {
+    for (const a of AXES) document.documentElement.style.setProperty(a.token, `${axis[a.token]}px`);
+  }, [axis]);
 
   /* **폭 흉내입니다. 창을 실제로 줄이는 게 아닙니다.** `.app-shell`을 좁혀 작업 영역이
      받는 폭만 그 값으로 만듭니다 — 이 그리드들이 보는 것은 창이 아니라 부모 폭이므로
@@ -244,13 +245,22 @@ function LayoutSwitch() {
     const timer = window.setInterval(measure, 400);
     window.addEventListener("resize", measure);
     return () => { window.clearInterval(timer); window.removeEventListener("resize", measure); };
-  }, [cardMin, panelMin, fieldMin, colorCardMin, fakeWidth]);
+  }, [axis, fakeWidth]);
 
-  const row = <T extends string>(label: string, choices: readonly T[], current: T, set: (value: T) => void) =>
-    <div className="layout-switch-row">
-      <strong>{label}</strong>
-      <div className="layout-switch-buttons">
-        {choices.map((choice) => <button key={choice} type="button" className={choice === current ? "primary" : "secondary-button"} aria-pressed={choice === current} onClick={() => set(choice)}>{choice}</button>)}
+  const slider = (a: (typeof AXES)[number]) =>
+    <div className="layout-switch-row" key={a.token}>
+      <strong>{a.label} <code>{a.token}</code></strong>
+      <div className="layout-switch-slider">
+        <input
+          type="range"
+          min={a.min}
+          max={a.max}
+          step={10}
+          value={axis[a.token]}
+          aria-label={`${a.label} 최소 폭`}
+          onChange={(event) => setAxis((current) => ({ ...current, [a.token]: Number(event.target.value) }))}
+        />
+        <output>{axis[a.token]}px</output>
       </div>
     </div>;
 
@@ -265,12 +275,9 @@ function LayoutSwitch() {
   const cell = (cols: number, px: number, where: string) => px ? `${cols ? cols + "칸 " : ""}${px}px` : where;
 
   return <div className="layout-switch">
-    {row("--summary-card-min", CARD_MIN_CHOICES, cardMin, setCardMin)}
-    {row("--panel-min", PANEL_MIN_CHOICES, panelMin, setPanelMin)}
-    {row("--field-min", FIELD_MIN_CHOICES, fieldMin, setFieldMin)}
-    {row("--color-card-min", COLOR_CARD_MIN_CHOICES, colorCardMin, setColorCardMin)}
+    {AXES.map(slider)}
     <div className="layout-switch-row">
-      <strong>폭 흉내 (창은 그대로)</strong>
+      <strong>폭 흉내 <small>(창은 그대로)</small></strong>
       <div className="layout-switch-buttons">
         {WIDTH_PRESETS.map((preset) => <button
           key={preset.label}

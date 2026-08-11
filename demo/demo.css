@@ -34,6 +34,11 @@
 .layout-switch-row { display: grid; gap: 4px; }
 .layout-switch-row strong { color: var(--muted); font: 700 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .06em; }
 .layout-switch-buttons { display: flex; gap: 6px; }
+/* 축은 슬라이더입니다 — 값을 미리 못 박으면 고르려는 값이 범위 밖에 있을 때 왕복이 납니다. */
+.layout-switch-slider { display: grid; grid-template-columns: minmax(0, 1fr) 46px; align-items: center; gap: 8px; }
+.layout-switch-slider input[type="range"] { width: 100%; min-width: 0; margin: 0; accent-color: var(--accent); }
+.layout-switch-slider output { color: var(--text); font: 700 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace; text-align: right; }
+.layout-switch-row strong code { color: var(--muted); font-size: 10px; font-weight: 400; }
 /* 이 판의 버튼은 킷의 38px 액션이 아닙니다 — 화면 위에 겹친 진단 도구라 본문 높이
  * 계층(41/38/32)에 참여하지 않습니다. 그래서 min-width도 풉니다. */
 .layout-switch-buttons button { min-width: 0; height: 28px; padding: 0 10px; font-size: 12px; }
