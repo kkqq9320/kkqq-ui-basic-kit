@@ -78,4 +78,14 @@ describe("LAYOUT-PRINCIPLES.md는 킷 없이 읽힌다", () => {
       .map((line) => line.trim());
     expect(offenders).toEqual([]);
   });
+
+  it("코드펜스가 짝을 이룬다", () => {
+    const fences = layoutText.match(/```/g) ?? [];
+    expect(fences.length % 2).toBe(0);
+  });
+
+  // 펜스 제거가 산문을 통째로 삼키면 위 검사들이 **공허하게** 통과합니다.
+  it("펜스 제거가 산문을 삼키지 않았다", () => {
+    expect(prose.length).toBeGreaterThan(layoutText.length * 0.5);
+  });
 });
