@@ -120,7 +120,7 @@ describe("LAYOUT-PRINCIPLES.md는 4줄 형식을 지킨다", () => {
   });
 
   it("모든 절에 '내 상자 안'과 '상자 밖이면'이 있다", () => {
-    const sections = layoutText.split(/^### \d\. /gm).slice(1);
+    const sections = layoutText.split(/^### \d+\. /gm).slice(1);
     const missing = sections
       .map((body, index) => ({ section: index + 1, body }))
       .filter(({ body }) => !body.includes("**내 상자 안**") || !body.includes("**상자 밖이면**"))
