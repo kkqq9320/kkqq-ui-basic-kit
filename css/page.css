@@ -21,7 +21,13 @@
 .page-header h1 { min-height: 39px; margin: 0; font-size: var(--font-size-page-title); line-height: 1.25; letter-spacing: -.035em; }
 .page-header p { min-height: 22px; margin: 0; color: var(--muted); line-height: 22px; }
 
-.summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; margin-bottom: 22px; }
+/* ⚠️ **`auto-fill`이지 `auto-fit`이 아닙니다. 한 글자 차이로 이 규칙이 무력해집니다.**
+ * `auto-fit`은 **빈 트랙을 접어** 남는 폭을 있는 카드들에게 다시 나눠 줍니다 — 카드가
+ * 4장뿐인 지금 화면에서는 2560에서 도로 4열 533px가 되어, 고치려던 그 모습으로
+ * 정확히 되돌아갑니다. `auto-fill`은 빈 트랙을 남겨 두므로 카드가 제 폭을 지킵니다.
+ * 카드가 6·8장으로 늘어나는 화면에서는 두 값이 같아 보이므로, **데모의 4장짜리
+ * 화면에서만 차이가 드러납니다.** tests/summaryGrid.test.ts가 못박습니다. */
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--summary-card-min, 240px), 1fr)); gap: 14px; margin-bottom: 22px; }
 .summary-card { min-height: 118px; display: flex; flex-direction: column; justify-content: space-between; padding: 20px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); }
 .summary-card span { color: var(--muted); font-size: 13px; }
 .summary-card strong { font-size: clamp(20px, 2vw, 29px); letter-spacing: -.04em; }

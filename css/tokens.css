@@ -14,6 +14,16 @@
   --font-size-section-title: 18px;
   --font-size-dialog-title: 20px;
   --font-size-page-title: 31px;
+  /* 요약 카드 한 장의 **최소** 폭. 이 값이 곧 "한 줄에 몇 장이 들어가는가"를 정합니다.
+   *
+   * 왜 필요한가: `.summary-grid`가 `repeat(4, minmax(0,1fr))` **4열 고정**이라, 카드가
+   * 화면 폭을 4등분해서 가져갔습니다. 2560에서 한 장이 533px입니다(실측) — 118px짜리
+   * 높이에 533px 폭이라 상자가 납작하게 늘어납니다(오너 리포트 "카드가 너무 커짐").
+   * **넓은 화면에서 카드가 커지는 이유는 폭이 남아서가 아니라 장수가 고정이라서입니다.**
+   *
+   * 240은 지금 화면을 안 바꾸는 값으로 골랐습니다 — 1440에서 4열 254px로 4열 고정
+   * 시절과 같고, 2560에서 8열 259px가 됩니다. 좁은 화면에서는 어차피 1열입니다. */
+  --summary-card-min: 240px;
   font-family: var(--font-family-base);
   color: #2d2c35;
   background: #f6f4ef;

@@ -20,6 +20,25 @@
 }
 .trace-toggle:hover, .trace-toggle:focus-visible, .trace-toggle[aria-pressed="true"] { opacity: 1; }
 
+/* `--summary-card-min` 비교판 — 데모 전용. TRACE 알약이 오른쪽 아래를 쓰므로 왼쪽 아래입니다.
+ * 킷의 최고 z-index(450)보다 위에 둡니다: 값을 바꾸면 레이아웃이 통째로 움직이는데
+ * 그때 조작판이 가려지면 되돌릴 방법이 사라집니다. */
+.grid-switch {
+  position: fixed; left: 8px; bottom: 8px; z-index: 999999;
+  display: grid; gap: 6px; padding: 9px 11px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); box-shadow: 0 6px 20px rgba(0, 0, 0, .18);
+}
+.grid-switch strong { color: var(--muted); font: 700 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .06em; }
+.grid-switch-buttons { display: flex; gap: 6px; }
+/* 이 판의 버튼은 킷의 38px 액션이 아닙니다 — 화면 위에 겹친 진단 도구라 본문 높이
+ * 계층(41/38/32)에 참여하지 않습니다. 그래서 min-width도 풉니다. */
+.grid-switch-buttons button { min-width: 0; height: 28px; padding: 0 10px; font-size: 12px; }
+.grid-switch small { color: var(--muted); font: 11px/1.3 ui-monospace, SFMono-Regular, Consolas, monospace; }
+/* 좁은 화면에서는 숨깁니다 — 거기선 어차피 1열이라 고를 것이 없는데, 실측 375px에서
+ * 이 판이 367px을 먹어 모바일 데모(빠른 바·탭 카드)를 가립니다. */
+@media (max-width: 760px) { .grid-switch { display: none; } }
+
 .trace-panel {
   position: fixed; inset: auto 0 0 0; z-index: 999998;
   display: flex; flex-direction: column; height: 46vh; max-height: 420px;

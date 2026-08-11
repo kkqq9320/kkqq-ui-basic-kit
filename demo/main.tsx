@@ -110,6 +110,61 @@ const LONG_DIALOG_FIELDS: LongDialogField[] = [
   { kind: "text", label: "마지막 칸", placeholder: "여기까지 스크롤해서 눌러 보세요" },
 ];
 
+/** `--summary-card-min` 후보를 **같은 화면에서 즉시** 갈아 끼우는 데모 전용 조작판.
+ *
+ * 별도 포트로 두 벌을 띄우는 방법도 있었지만 이쪽을 골랐습니다 — 2560에서는 두 창을
+ * 나란히 놓으면 각각 1280이 되어 **비교하려는 그 폭이 사라집니다.** 탭을 오가면 스크롤
+ * 위치와 테마도 갈립니다.
+ *
+ * 숫자를 같이 띄웁니다. "카드가 너무 크다"는 감각이 리포트의 출발점이었으므로, 고른
+ * 값이 카드를 실제로 몇 px로 만들고 한 줄에 몇 장을 넣는지 보이지 않으면 다음에 또
+ * 감으로 돌아갑니다. **캡에서 산술로 유도하지 않고 레이아웃을 다시 잽니다** — 유도하면
+ * 패딩과 스크롤바를 빼먹어 그럴듯하게 틀립니다.
+ */
+const CARD_MIN_CHOICES = ["200px", "240px", "280px"] as const;
+
+function SummaryCardMinSwitch() {
+  const [min, setMin] = useState<(typeof CARD_MIN_CHOICES)[number]>("240px");
+  const [size, setSize] = useState({ card: 0, columns: 0, viewport: 0 });
+
+  useEffect(() => { document.documentElement.style.setProperty("--summary-card-min", min); }, [min]);
+
+  useEffect(() => {
+    const measure = () => {
+      const grid = document.querySelector(".summary-grid");
+      const card = document.querySelector(".summary-card");
+      setSize({
+        card: card ? Math.round(card.getBoundingClientRect().width) : 0,
+        // 한 줄에 몇 칸인지는 카드 수가 아니라 **그리드가 만든 트랙 수**입니다 —
+        // 카드 4장이 8칸 중 왼쪽 4칸만 채우는 것이 이 방식의 요점이라, 카드만 세면
+        // 언제나 4가 나와 아무것도 안 보입니다.
+        columns: grid ? getComputedStyle(grid).gridTemplateColumns.split(" ").filter(Boolean).length : 0,
+        viewport: window.innerWidth,
+      });
+    };
+    const frame = requestAnimationFrame(measure);
+    window.addEventListener("resize", measure);
+    return () => { cancelAnimationFrame(frame); window.removeEventListener("resize", measure); };
+  }, [min]);
+
+  return <div className="grid-switch">
+    <strong>--summary-card-min</strong>
+    <div className="grid-switch-buttons">
+      {CARD_MIN_CHOICES.map((choice) => <button
+        key={choice}
+        type="button"
+        className={choice === min ? "primary" : "secondary-button"}
+        aria-pressed={choice === min}
+        onClick={() => setMin(choice)}
+      >{choice}</button>)}
+    </div>
+    <small>
+      화면 {size.viewport} · 한 줄 {size.columns || "—"}칸 · 카드 {size.card || "—"}px
+      {size.card ? "" : " (레이아웃 탭에서 보입니다)"}
+    </small>
+  </div>;
+}
+
 function Demo() {
   // 기본은 다크. 저장된 선택이 있으면 그게 우선.
   const [theme, setTheme] = useState<"light" | "dark">(() => {
@@ -170,6 +225,9 @@ function Demo() {
     {/* Select 터치 버그를 실제 휴대폰에서 진단하기 위한 임시 계측 패널. 기본은 닫혀
         있어 평소 데모 화면에 영향이 없습니다. demo/EventTracePanel.tsx 참고. */}
     <EventTracePanel />
+    {/* `--summary-card-min` 후보 비교용 조작판(데모 전용). 오너가 2560 화면에서 값을
+        고르면 그 값이 tokens.css의 기본값이 되고 이 조작판은 사라집니다. */}
+    <SummaryCardMinSwitch />
     <AppShell
       collapsed={collapsed}
       mobileOpen={mobileOpen}
