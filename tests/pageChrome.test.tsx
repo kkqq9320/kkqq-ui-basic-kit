@@ -10,6 +10,7 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { Panel, PanelGrid, FieldGrid } from "../src/PageChrome";
+import { ThemeColorEditor } from "../src/ThemeColorEditor";
 
 afterEach(cleanup);
 
@@ -72,5 +73,31 @@ describe("Panel: className", () => {
   it("안 넘기면 .panel 하나뿐이다", () => {
     const { container } = render(<Panel>내용</Panel>);
     expect((container.querySelector("section") as HTMLElement).className).toBe("panel");
+  });
+});
+
+describe("ThemeColorEditor: 앱이 안쪽을 겨눌 수 있다", () => {
+  /* 편집기가 **자기 패널을 직접 렌더**하므로 바깥에서 감싸도 안쪽에 못 닿습니다.
+   * 그래서 카드에 높이를 주려면 이 prop이 있어야 합니다. */
+  it("넘긴 className이 편집기 패널에 붙는다", () => {
+    const { container } = render(<ThemeColorEditor theme="dark" className="my-editor" />);
+    const panel = container.querySelector("section.theme-color-panel") as HTMLElement;
+    expect(panel.classList.contains("my-editor")).toBe(true);
+    expect(panel.classList.contains("panel")).toBe(true);
+  });
+
+  it("안 넘기면 기본 클래스 둘뿐이다", () => {
+    const { container } = render(<ThemeColorEditor theme="dark" />);
+    expect((container.querySelector("section.theme-color-panel") as HTMLElement).className).toBe("panel theme-color-panel");
+  });
+
+  /* **RGB 입력은 처음부터 됐습니다**(normalizeColor). 없던 것은 그걸 아는 방법이었고,
+   * 오너가 "rgb도 설정할 수 있어야 되는데"라고 물은 것이 그 증거입니다. 안내가 칸에
+   * 붙어 있는지를 못박습니다 — 기능이 있는데 안 보이면 없는 것과 같습니다. */
+  it("색상 값 칸이 RGB도 받는다고 스스로 알린다", () => {
+    const { container } = render(<ThemeColorEditor theme="dark" />);
+    const field = container.querySelector(".theme-color-text") as HTMLInputElement;
+    expect(field.placeholder).toMatch(/87,\s*91,\s*212/);
+    expect(field.title).toMatch(/RGB/i);
   });
 });

@@ -47,9 +47,20 @@ export type ThemeColorEditorProps = {
    * 다릅니다("짙은 면"이 어디 쓰이는지는 그 앱만 압니다). 그래서 컴포넌트는
    * 그대로 쓰고 문구만 갈아 끼울 수 있게 열어 둡니다. */
   groups?: readonly ThemeTokenGroup[];
+  /** 앱이 이 편집기 안을 겨눌 때의 출구. `Panel`의 것과 같은 뜻입니다.
+   *
+   * **이게 없어서 앱은 색상 카드에 높이조차 줄 수 없었습니다** — 편집기가 자기 패널을
+   * 직접 렌더하므로 바깥에서 감싸도 안쪽에 닿지 못합니다. 카드 폭은 `--color-card-min`
+   * 토큰으로 정하고, 높이처럼 토큰이 없는 것은 이 클래스로 겨누세요:
+   *
+   * ```css
+   * .my-editor .theme-color-card { min-height: 96px; }
+   * ```
+   */
+  className?: string;
 };
 
-export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS }: ThemeColorEditorProps) {
+export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS, className = "" }: ThemeColorEditorProps) {
   // groups가 다룰 토큰의 전부입니다. 프로젝트가 groups에 새 토큰을 더하면 읽기·기본값·
   // 적용이 전부 이 목록으로 돌아가, 키트를 안 고쳐도 새 색이 편집·저장·적용됩니다.
   const tokens = groups.flatMap((group) => group.tokens);
@@ -169,7 +180,7 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS 
   }
 
   const changedCount = Object.keys(overrides).length;
-  return <section className="panel theme-color-panel">
+  return <section className={`panel theme-color-panel ${className}`.trim()}>
     <div className="panel-heading">
       <div><small>COLORS</small><h2>색상</h2></div>
       <button
@@ -232,6 +243,15 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS 
               className="theme-color-text"
               value={draft?.name === token.name ? draft.text : value}
               aria-label={`${token.label} 색상 값`}
+              /* 이 칸은 **처음부터 RGB를 받았습니다**(`normalizeColor`가 `rgb(…)`·`rgba(…)`·
+                 맨숫자 `87, 91, 212`를 전부 파싱합니다). 그런데 그걸 아는 방법이 위 머리말
+                 한 줄뿐이라, 카드 열일곱 장을 스크롤한 자리에서는 보이지 않았습니다 —
+                 오너가 "rgb도 설정할 수 있어야 되는데"라고 한 것이 그 증거입니다.
+                 **기능이 아니라 발견 가능성의 문제였으므로 안내를 쓰는 자리로 옮깁니다.**
+                 placeholder는 칸을 비웠을 때만 보이는데, 그 순간이 정확히 형식을 알고
+                 싶은 순간입니다. 늘 보이는 쪽은 title이 맡습니다. */
+              placeholder="#575bd4 또는 87, 91, 212"
+              title="헥스(#575bd4) 또는 RGB(87, 91, 212 · rgb(87,91,212))로 입력할 수 있습니다"
               spellCheck={false}
               onChange={(event) => { setDraft({ name: token.name, text: event.target.value }); setToken(token, event.target.value); }}
               onBlur={() => { setDraft(null); endSession(); }}
