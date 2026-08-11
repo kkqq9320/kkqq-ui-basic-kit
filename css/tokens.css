@@ -59,6 +59,7 @@
   --orange: #975129;
   --orange-soft: #fff2e8;
   --red: #b84d4d;
+  --badge: #d85d55;   /* 사이드바 개수 뱃지. sidebar.css:150이 리터럴로 갖고 있던 값 그대로입니다 */
   --green: #2f8a63;
   --green-soft: #eaf6ef;
   --gold: #bc8a37;
@@ -150,6 +151,7 @@
   --orange: #f0ad7d;
   --orange-soft: #3a2924;
   --red: #ff8b81;
+  --badge: #d85d55;   /* 사이드바 개수 뱃지. sidebar.css:150이 리터럴로 갖고 있던 값 그대로입니다 */
   --green: #67c99a;
   --green-soft: #20382f;
   --gold: #dfb96d;

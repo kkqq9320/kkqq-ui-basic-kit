@@ -61,7 +61,11 @@
  * 첫 트랙이 `max-content`인 것도 같은 계약입니다 — `auto`면 남는 폭을 흡수해서
  * 표시와 칸 사이가 벌어집니다(그것도 오너 스크린샷이 잡았습니다). */
 .theme-color-entry { grid-column: 1 / -1; display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 8px; cursor: text; }
-.theme-color-entry > small { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; letter-spacing: .04em; white-space: nowrap; }
+/* 두 줄(RGB·HEX)의 표시 폭을 **같게** 못 박습니다 — 안 그러면 `RGB`와 `HEX`의 글자 폭이
+ * 달라 두 입력칸의 **왼쪽 끝**이 어긋납니다(PRINCIPLES §13은 오른쪽만이 아니라 양쪽입니다). */
+.theme-color-entry > small { min-width: 30px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; letter-spacing: .04em; white-space: nowrap; }
+/* 두 칸 사이 간격. 카드의 세로 gap(8px)이 그대로 걸리면 줄 사이가 넓어 보입니다. */
+.theme-color-entry + .theme-color-entry { margin-top: -2px; }
 .theme-color-text { width: 100%; height: var(--compact-action-height); padding: 0 10px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
 
 @media (max-width: 760px), (hover: none) and (pointer: coarse) {

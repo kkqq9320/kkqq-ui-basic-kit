@@ -220,7 +220,10 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS,
             />
             <span className="theme-color-copy">
               <strong>{token.label}{changed && <em className="theme-color-changed" title={`기본값 ${fallback}`}>변경됨</em>}</strong>
-              <small>{token.name} · {toRgbText(value)}</small>
+              {/* RGB는 아래 칸이 **고칠 수 있는 값**으로 보여 줍니다. 여기 같이 두면 같은
+                  숫자가 한 카드에 두 번 나오고, 그중 하나만 못 고쳐 오해를 만듭니다 —
+                  오너가 "rgb를 넣을 방법이 없다"고 한 것이 정확히 그 오해였습니다. */}
+              <small>{token.name}</small>
             </span>
             <span className="theme-color-actions">
               <button
@@ -248,8 +251,26 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS,
                 오너가 "rgb를 넣을 방법이 없다"고 한 것이 그 오해입니다(파서는 처음부터
                 `87,11,11`·`87 111 122`·`87, 11, 122`·`rgb(255,255,255)`를 전부 받습니다).
                 그래서 칸 옆에 붙박이 표시를 답니다. */}
+            {/* **RGB 칸이 위, HEX 칸이 아래.** 둘 다 같은 `setToken`으로 들어가고, 파서가
+                형식을 알아서 가립니다 — 칸을 나눈 것은 **어디에 무엇을 붙여넣을지**를
+                눈으로 알 수 있게 하려는 것뿐입니다(오너 요청).
+                RGB 칸은 값이 바뀌면 늘 `R, G, B`로 되돌아옵니다. 치는 도중에는 초안이
+                맡으므로(`draft`) 중간 글자가 튕기지 않습니다 — 헥스 칸과 같은 장치입니다. */}
             <label className="theme-color-entry">
-              <small aria-hidden="true">HEX·RGB</small>
+              <small aria-hidden="true">RGB</small>
+              <input
+                className="theme-color-text"
+                value={draft?.name === `${token.name}:rgb` ? draft.text : toRgbText(value)}
+                aria-label={`${token.label} RGB 값`}
+                placeholder="87, 91, 212"
+                title="R, G, B — 87, 91, 212 / 87 91 212 / rgb(87, 91, 212) 다 됩니다"
+                spellCheck={false}
+                onChange={(event) => { setDraft({ name: `${token.name}:rgb`, text: event.target.value }); setToken(token, event.target.value); }}
+                onBlur={() => { setDraft(null); endSession(); }}
+              />
+            </label>
+            <label className="theme-color-entry">
+              <small aria-hidden="true">HEX</small>
               <input
               className="theme-color-text"
               value={draft?.name === token.name ? draft.text : value}
@@ -261,8 +282,8 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS,
                  **기능이 아니라 발견 가능성의 문제였으므로 안내를 쓰는 자리로 옮깁니다.**
                  placeholder는 칸을 비웠을 때만 보이는데, 그 순간이 정확히 형식을 알고
                  싶은 순간입니다. 늘 보이는 쪽은 title이 맡습니다. */
-              placeholder="#575bd4 · 87, 91, 212 · rgb(87,91,212)"
-              title="헥스와 RGB를 다 받습니다 — #575bd4 / 87,91,212 / 87 91 212 / rgb(87, 91, 212)"
+              placeholder="#575bd4"
+              title="헥스 — #575bd4 (이 칸도 RGB를 받습니다)"
               spellCheck={false}
               onChange={(event) => { setDraft({ name: token.name, text: event.target.value }); setToken(token, event.target.value); }}
               onBlur={() => { setDraft(null); endSession(); }}

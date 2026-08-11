@@ -147,7 +147,7 @@
   100% { transform: scale(1); }
 }
 
-.sidebar-nav-count { min-width: 20px; height: 20px; box-sizing: border-box; display: inline-grid; place-items: center; margin-left: 8px; padding: 1px 6px 0; border-radius: 10px; color: #fff; background: #d85d55; font-size: 11px; font-variant-numeric: tabular-nums; line-height: 19px; text-align: center; }
+.sidebar-nav-count { min-width: 20px; height: 20px; box-sizing: border-box; display: inline-grid; place-items: center; margin-left: 8px; padding: 1px 6px 0; border-radius: 10px; color: #fff; background: var(--badge); font-size: 11px; font-variant-numeric: tabular-nums; line-height: 19px; text-align: center; }
 
 /* 그룹 제목. 접히면 글자가 사라지면서 얇은 구분선으로 녹아듭니다. */
 .sidebar-nav-heading {

@@ -11,13 +11,20 @@ export type ThemeTokenGroup = { title: string; tokens: ThemeToken[] };
 
 export const THEME_TOKEN_GROUPS: ThemeTokenGroup[] = [
   {
-    title: "바탕과 글자",
+    title: "바탕",
     tokens: [
       { name: "--bg", label: "페이지 배경", description: "작업 영역 전체의 바탕" },
       { name: "--surface", label: "카드 배경", description: "패널·다이얼로그·카드" },
       { name: "--surface-soft", label: "보조 배경", description: "카드 안의 옅은 영역" },
       { name: "--input", label: "입력칸 배경", description: "입력·드롭다운·날짜 필드" },
       { name: "--line", label: "테두리", description: "카드와 입력칸의 선" },
+    ],
+  },
+  {
+    // 글자를 바탕에서 떼어냅니다 — 배경을 고르는 일과 그 위 글자를 고르는 일은 서로
+    // 다른 판단이고, 대비를 볼 때 글자끼리 나란히 보이는 편이 낫습니다(오너 요청).
+    title: "글자",
+    tokens: [
       { name: "--text", label: "본문 글자", description: "기본 글자색" },
       { name: "--muted", label: "흐린 글자", description: "설명·보조 문구" },
     ],
@@ -40,6 +47,7 @@ export const THEME_TOKEN_GROUPS: ThemeTokenGroup[] = [
       { name: "--orange", label: "주황", description: "주의" },
       { name: "--orange-soft", label: "주황 배경", description: "주의 상태의 옅은 배경" },
       { name: "--gold", label: "금색", description: "보조 강조" },
+      { name: "--badge", label: "뱃지", description: "사이드바 메뉴의 개수 뱃지" },
     ],
   },
 ];

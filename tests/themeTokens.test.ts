@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { THEME_TOKEN_GROUPS } from "../src/themeTokens";
+import { THEME_TOKEN_GROUPS, THEME_TOKENS } from "../src/themeTokens";
 
 const cssModules = import.meta.glob("../css/*.css", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 const allCss = Object.values(cssModules).join("\n");
@@ -101,5 +101,28 @@ describe("같은 위험은 같은 빨강이다", () => {
     const rule = new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{[^}]*\\}`).exec(source)?.[0] ?? "";
 
     expect([rule.includes("var(--red)"), /#[0-9a-fA-F]{3,8}\b/.test(rule)]).toEqual([true, false]);
+  });
+});
+
+/* 그룹 나누기. 오너 요청으로 **글자를 바탕에서 떼어냈습니다** — 배경을 고르는 일과 그
+ * 위 글자를 고르는 일은 다른 판단이고, 대비를 볼 때 글자끼리 나란히 보이는 편이 낫습니다. */
+describe("토큰 묶음", () => {
+  const titleOf = (name: string) => THEME_TOKEN_GROUPS.find((group) => group.tokens.some((token) => token.name === name))?.title;
+
+  it("글자는 자기 묶음에 있다", () => {
+    expect(titleOf("--text")).toBe("글자");
+    expect(titleOf("--muted")).toBe("글자");
+  });
+
+  it("바탕 묶음에 글자가 섞이지 않는다", () => {
+    const 바탕 = THEME_TOKEN_GROUPS.find((group) => group.title === "바탕");
+    expect(바탕).toBeDefined();
+    expect(바탕!.tokens.map((token) => token.name)).not.toContain("--text");
+  });
+
+  /* 뱃지는 편집기에 **없었습니다** — 오너가 화면에서 찾아냈습니다. 토큰만 만들고 목록에
+   * 안 올리면 여전히 못 고칩니다. */
+  it("뱃지가 편집기 목록에 있다", () => {
+    expect(THEME_TOKENS.map((token) => token.name)).toContain("--badge");
   });
 });

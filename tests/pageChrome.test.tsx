@@ -133,6 +133,36 @@ describe("ThemeColorEditor: 앱이 안쪽을 겨눌 수 있다", () => {
   /* **RGB 입력은 처음부터 됐습니다**(normalizeColor). 없던 것은 그걸 아는 방법이었고,
    * 오너가 "rgb도 설정할 수 있어야 되는데"라고 물은 것이 그 증거입니다. 안내가 칸에
    * 붙어 있는지를 못박습니다 — 기능이 있는데 안 보이면 없는 것과 같습니다. */
+  /* 오너 요청: 라벨 옆의 읽기 전용 RGB를 빼고, **HEX 위에 RGB 칸**을 둬서 두 줄로.
+   * 같은 숫자가 한 카드에 두 번 나오면서 그중 하나만 못 고치는 것이 오해의 원인이었습니다. */
+  it("입력이 RGB·HEX 두 줄이다", () => {
+    const { container } = render(<ThemeColorEditor theme="dark" />);
+    const card = container.querySelector(".theme-color-card") as HTMLElement;
+    expect([...card.querySelectorAll(".theme-color-entry > small")].map((s) => s.textContent)).toEqual(["RGB", "HEX"]);
+  });
+
+  it("라벨 줄에는 토큰 이름만 남고 RGB는 없다", () => {
+    const { container } = render(<ThemeColorEditor theme="dark" />);
+    const line = container.querySelector(".theme-color-copy small") as HTMLElement;
+    expect(line.textContent).toBe("--bg");
+    expect(line.textContent).not.toMatch(/\d+,\s*\d+/);
+  });
+
+  it("RGB 칸에 넣으면 HEX 칸과 견본이 따라온다", () => {
+    const { container } = render(<ThemeColorEditor theme="dark" />);
+    const [rgb, hex] = [...container.querySelectorAll(".theme-color-entry input")] as HTMLInputElement[];
+    fireEvent.change(rgb, { target: { value: "20, 200, 120" } });
+    expect(hex.value).toBe("#14c878");
+    expect((container.querySelector(".theme-color-swatch") as HTMLInputElement).value).toBe("#14c878");
+  });
+
+  it("HEX 칸에 넣으면 RGB 칸이 따라온다", () => {
+    const { container } = render(<ThemeColorEditor theme="dark" />);
+    const [rgb, hex] = [...container.querySelectorAll(".theme-color-entry input")] as HTMLInputElement[];
+    fireEvent.change(hex, { target: { value: "#ff8800" } });
+    expect(rgb.value).toBe("255, 136, 0");
+  });
+
   it("색상 값 칸이 RGB도 받는다고 스스로 알린다", () => {
     const { container } = render(<ThemeColorEditor theme="dark" />);
     const field = container.querySelector(".theme-color-text") as HTMLInputElement;
