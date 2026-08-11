@@ -37,6 +37,12 @@
 
 /* 콘텐츠는 작업 영역 전체 폭의 .panel에서 시작합니다.
  * 반응형 그리드는 이 부모 폭을 나눠 쓰고, 더 좁은 컨테이너를 새로 만들지 않습니다. */
+/* 패널 안쪽에서 입력 필드를 여러 열로 놓는 통(`FieldGrid`). `label`이 이미
+ * `display: grid`라(controls.css:14) 라벨과 컨트롤은 그대로 세로로 쌓입니다.
+ * `PanelGrid`와 같은 이유로 `auto-fit`입니다 — 폼의 필드는 앱이 넣은 명시적 목록이라
+ * 남는 폭을 비워 두면 줄 한쪽이 그냥 빕니다. */
+.field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--field-min, 230px), 1fr)); gap: 16px; }
+
 /* 앱이 고른 패널들을 가로로 놓는 통(`PanelGrid`). `--panel-min`보다 좁아지면 한 열이
  * 되므로 좁은 화면 규칙을 따로 둘 필요가 없습니다.
  *

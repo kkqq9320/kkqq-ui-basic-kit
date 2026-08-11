@@ -21,11 +21,13 @@ import { describe, expect, it } from "vitest";
 
 import pageCssSource from "../css/page.css?raw";
 import tokensCssSource from "../css/tokens.css?raw";
+import demoSource from "../demo/main.tsx?raw";
 
 /** 줄 시작의 `.summary-grid { … }` 규칙 본문. 미디어 쿼리 안의 재정의와 섞이지 않게
  *  줄 시작으로 한정합니다(그쪽은 들여쓰기가 있습니다). */
 const gridRule = /^\.summary-grid\s*\{([^}]*)\}/m.exec(pageCssSource)?.[1];
 const panelGridRule = /^\.panel-grid\s*\{([^}]*)\}/m.exec(pageCssSource)?.[1];
+const fieldGridRule = /^\.field-grid\s*\{([^}]*)\}/m.exec(pageCssSource)?.[1];
 
 describe("요약 그리드는 들어가는 만큼 채운다", () => {
   // 전제 — `?raw`가 빈 문자열로 목킹되면 아래가 전부 공허하게 통과합니다.
@@ -103,5 +105,34 @@ describe("패널 그리드는 앱이 묶은 그룹이 줄을 다 쓰게 한다",
   it("두 그리드는 서로 반대다 — 한쪽으로 통일하면 다른 쪽이 깨진다", () => {
     expect(gridRule ?? "").toContain("auto-fill");
     expect(panelGridRule ?? "").toContain("auto-fit");
+  });
+});
+
+/* 패널 **안쪽**의 필드 배치. 이게 킷에 없어서 앱은 패널 안을 한 열로만 쓸 수 있었고,
+ * 데모만 자기 CSS(`.demo-grid`)로 흉내 내고 있었습니다 — **데모에만 있는 레이아웃은
+ * 킷의 기능이 아닙니다.** 오너가 스크린샷으로 지목한 두 자리 중 하나입니다. */
+describe("패널 안 필드 배치", () => {
+  it(".field-grid 규칙을 찾을 수 있다", () => {
+    expect(fieldGridRule).toBeDefined();
+  });
+
+  it("필드 최소 폭 토큰이 :root에 정의돼 있다", () => {
+    expect(tokensCssSource).toMatch(/--field-min:\s*\d+px/);
+  });
+
+  /* `PanelGrid`와 같은 이유입니다 — 폼의 필드는 앱이 넣은 명시적 목록이라 남는 폭을
+   * 비워 두면 줄 한쪽이 그냥 빕니다. 카드(`auto-fill`)와는 여전히 반대입니다. */
+  it("auto-fit이다", () => {
+    expect(fieldGridRule ?? "").toMatch(/repeat\(\s*auto-fit\s*,/);
+  });
+
+  it("트랙 최소 폭을 그 토큰에서 폴백과 함께 가져온다", () => {
+    expect(fieldGridRule ?? "").toMatch(/minmax\(\s*var\(--field-min,\s*\d+px\)/);
+  });
+
+  /* 데모 전용 클래스가 남아 있으면 다음 사람이 그걸 계속 쓰고, 그 레이아웃은 소비 앱에
+   * 영영 안 갑니다. 옮긴 뒤 **쓰이지 않는 것**까지 확인합니다. */
+  it("데모가 더 이상 자기 .demo-grid를 쓰지 않는다", () => {
+    expect(demoSource).not.toContain('className="demo-grid"');
   });
 });

@@ -24,6 +24,7 @@ import {
   MobileQuickBar,
   Panel,
   PanelGrid,
+  FieldGrid,
   PageHeader,
   SectionHeading,
   SectionTabs,
@@ -123,7 +124,8 @@ const LONG_DIALOG_FIELDS: LongDialogField[] = [
  * 패딩과 스크롤바를 빼먹어 그럴듯하게 틀립니다.
  */
 const CARD_MIN_CHOICES = ["200px", "240px", "280px"] as const;
-const PANEL_MIN_CHOICES = ["520px", "640px", "760px"] as const;
+const PANEL_MIN_CHOICES = ["360px", "400px", "480px"] as const;
+const FIELD_MIN_CHOICES = ["200px", "230px", "260px"] as const;
 
 /** 옛 규칙(4열 고정 카드 + 전폭 스택 패널)을 **그 자리에서** 덮어씌우는 스타일.
  *  비교를 산술로 유도하지 않고 **레이아웃을 두 번 재려고** 씁니다. */
@@ -133,17 +135,19 @@ const OLD_RULES = `
   .panel-grid > .panel { margin-bottom: 20px !important; }
 `;
 
-type Reading = { cardCols: number; card: number; panelCols: number; panel: number; memo: number };
+type Reading = { cardCols: number; card: number; fieldCols: number; field: number; panelCols: number; panel: number; memo: number };
 
 function LayoutSwitch() {
   const [cardMin, setCardMin] = useState<(typeof CARD_MIN_CHOICES)[number]>("240px");
-  const [panelMin, setPanelMin] = useState<(typeof PANEL_MIN_CHOICES)[number]>("640px");
+  const [panelMin, setPanelMin] = useState<(typeof PANEL_MIN_CHOICES)[number]>("400px");
+  const [fieldMin, setFieldMin] = useState<(typeof FIELD_MIN_CHOICES)[number]>("230px");
   const [now, setNow] = useState<Reading | null>(null);
   const [before, setBefore] = useState<Reading | null>(null);
   const [viewport, setViewport] = useState(0);
 
   useEffect(() => { document.documentElement.style.setProperty("--summary-card-min", cardMin); }, [cardMin]);
   useEffect(() => { document.documentElement.style.setProperty("--panel-min", panelMin); }, [panelMin]);
+  useEffect(() => { document.documentElement.style.setProperty("--field-min", fieldMin); }, [fieldMin]);
 
   useEffect(() => {
     /* ⚠️ **접힌 트랙을 빼고 셉니다.** `auto-fit`은 빈 트랙을 `0px`로 접어 두는데
@@ -161,6 +165,7 @@ function LayoutSwitch() {
     };
     const read = (): Reading => ({
       cardCols: tracks(".summary-grid"), card: width(".summary-card"),
+      fieldCols: tracks(".field-grid"), field: width(".field-grid > label"),
       panelCols: tracks(".panel-grid"), panel: width(".panel-grid > .panel"),
       // 메모 칸이 이 라운드의 최악값이었습니다 — 2560에서 2056px.
       memo: width(".auto-grow-textarea"),
@@ -199,7 +204,7 @@ function LayoutSwitch() {
     const timer = window.setInterval(measure, 400);
     window.addEventListener("resize", measure);
     return () => { window.clearInterval(timer); window.removeEventListener("resize", measure); };
-  }, [cardMin, panelMin]);
+  }, [cardMin, panelMin, fieldMin]);
 
   const row = <T extends string>(label: string, choices: readonly T[], current: T, set: (value: T) => void) =>
     <div className="layout-switch-row">
@@ -212,7 +217,7 @@ function LayoutSwitch() {
   /* 지금 탭에 있는 것만 비교합니다 — 다른 탭에 있는 요소는 양쪽 다 0이라 "같다"에
      공짜로 기여합니다. 그걸 세면 아무것도 못 재는 탭에서 "옛 규칙과 같다"가 뜹니다. */
   const measured = now && before
-    ? ([["card", now.card, before.card], ["panel", now.panel, before.panel], ["memo", now.memo, before.memo]] as const).filter(([, a]) => a > 0)
+    ? ([["card", now.card, before.card], ["panel", now.panel, before.panel], ["memo", now.memo, before.memo], ["field", now.field, before.field]] as const).filter(([, a]) => a > 0)
     : [];
   const same = measured.length > 0 && measured.every(([, a, b]) => a === b);
   /* 다른 탭에 있어서 못 잰 값은 `—`가 아니라 **어디 있는지**를 말합니다. `—`만 뜨면
@@ -222,10 +227,12 @@ function LayoutSwitch() {
   return <div className="layout-switch">
     {row("--summary-card-min", CARD_MIN_CHOICES, cardMin, setCardMin)}
     {row("--panel-min", PANEL_MIN_CHOICES, panelMin, setPanelMin)}
+    {row("--field-min", FIELD_MIN_CHOICES, fieldMin, setFieldMin)}
     <table className="layout-switch-table">
       <thead><tr><th>화면 {viewport}</th><th>지금</th><th>옛 규칙</th></tr></thead>
       <tbody>
         <tr><td>요약 카드</td><td>{now ? cell(now.cardCols, now.card, "레이아웃 탭") : "…"}</td><td>{before ? cell(before.cardCols, before.card, "") : "…"}</td></tr>
+        <tr><td>패널 안 필드</td><td>{now ? cell(now.fieldCols, now.field, "컨트롤 탭") : "…"}</td><td>{before ? cell(before.fieldCols, before.field, "") : "…"}</td></tr>
         <tr><td>패널</td><td>{now ? cell(now.panelCols, now.panel, "컨트롤 탭") : "…"}</td><td>{before ? cell(before.panelCols, before.panel, "") : "…"}</td></tr>
         <tr><td>메모 칸</td><td>{now ? cell(0, now.memo, "컨트롤 탭") : "…"}</td><td>{before ? cell(0, before.memo, "") : "…"}</td></tr>
       </tbody>
@@ -358,7 +365,7 @@ function Demo() {
             좁아지면 알아서 한 열로 쌓이므로 모바일 분기가 따로 없습니다. */}
         <PanelGrid>
           <Panel title="드롭다운" hint="SELECT">
-            <div className="demo-grid">
+            <FieldGrid>
               <label>왼쪽 정렬 (기본)<Select ariaLabel="통화" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} /></label>
               <label>가운데 정렬<Select ariaLabel="가운데 정렬 통화" align="center" value={centered} options={SHORT_OPTIONS} onChange={setCentered} /></label>
               <label>긴 목록 (위로 열림 확인)<Select ariaLabel="긴 목록" value={long} options={LONG_OPTIONS} onChange={setLong} /></label>
@@ -368,10 +375,10 @@ function Demo() {
                   왼쪽의 "비활성"과 나란히 두어 셋이 같아 보이는지 확인하세요. */}
               <label>옵션이 전부 비활성<Select ariaLabel="전부 비활성 드롭다운" value="krw" options={ALL_DISABLED_OPTIONS} onChange={setCurrency} /></label>
               <label>옵션이 없음<Select ariaLabel="빈 드롭다운" value="" options={[]} onChange={setCurrency} /></label>
-            </div>
+            </FieldGrid>
           </Panel>
           <Panel title="날짜 피커" hint="DATE WHEEL">
-            <div className="demo-grid">
+            <FieldGrid>
               <label>필수 날짜<DateWheelPicker ariaLabel="거래 날짜" value={date} onChange={setDate} /></label>
               <label>선택 날짜 (비우기 가능)<DateWheelPicker ariaLabel="종료일" value={optionalDate} onChange={setOptionalDate} allowClear /></label>
               <label>범위 제한 (2026년만)<DateWheelPicker ariaLabel="제한 날짜" value={date} onChange={setDate} min="2026-01-01" max="2026-12-31" /></label>
@@ -385,7 +392,7 @@ function Demo() {
                   경합("숫자를 반쯤 친 상태에서 disabled가 켜지면 그 숫자가 확정되는가")을
                   만들 수가 없습니다. 이건 활성으로 시작해 아래 버튼이 나중에 켭니다. */}
               <label>늦게 비활성 (§7.1)<DateWheelPicker ariaLabel="늦게 비활성 날짜" value={raceDate} onChange={setRaceDate} disabled={raceDisabled} /></label>
-            </div>
+            </FieldGrid>
             <div className="button-row" style={{ marginTop: 16 }}>
               <button type="button" className="secondary-button" onClick={() => { setRaceDisabled(false); setCountdown(3); logTraceNote("3초 카운트다운 시작"); }} disabled={countdown > 0}>
                 {countdown > 0 ? `${countdown}초 뒤 비활성…` : "3초 뒤 비활성"}

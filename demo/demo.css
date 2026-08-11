@@ -1,5 +1,7 @@
 /* 데모 페이지 전용 스타일. 디자인 시스템의 일부가 아닙니다. */
-.demo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+/* `.demo-grid`는 킷의 `FieldGrid`(css/page.css의 `.field-grid`)로 옮겨갔습니다 —
+ * 데모에만 있는 레이아웃은 소비 앱이 쓸 수 없어서, 패널 안을 여러 열로 놓는 방법이
+ * 킷에 아예 없었습니다. 이 클래스는 더 이상 쓰이지 않습니다. */
 .demo-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .demo-swatches > div { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 9px; }
 .demo-swatches i { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 7px; }
