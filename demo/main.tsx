@@ -125,41 +125,80 @@ const LONG_DIALOG_FIELDS: LongDialogField[] = [
 const CARD_MIN_CHOICES = ["200px", "240px", "280px"] as const;
 const PANEL_MIN_CHOICES = ["520px", "640px", "760px"] as const;
 
+/** 옛 규칙(4열 고정 카드 + 전폭 스택 패널)을 **그 자리에서** 덮어씌우는 스타일.
+ *  비교를 산술로 유도하지 않고 **레이아웃을 두 번 재려고** 씁니다. */
+const OLD_RULES = `
+  .summary-grid { grid-template-columns: repeat(4, minmax(0,1fr)) !important; }
+  .panel-grid { display: block !important; }
+  .panel-grid > .panel { margin-bottom: 20px !important; }
+`;
+
+type Reading = { cardCols: number; card: number; panelCols: number; panel: number; memo: number };
+
 function LayoutSwitch() {
   const [cardMin, setCardMin] = useState<(typeof CARD_MIN_CHOICES)[number]>("240px");
   const [panelMin, setPanelMin] = useState<(typeof PANEL_MIN_CHOICES)[number]>("640px");
-  const [size, setSize] = useState({ card: 0, cardCols: 0, panel: 0, panelCols: 0, memo: 0, viewport: 0 });
+  const [now, setNow] = useState<Reading | null>(null);
+  const [before, setBefore] = useState<Reading | null>(null);
+  const [viewport, setViewport] = useState(0);
 
   useEffect(() => { document.documentElement.style.setProperty("--summary-card-min", cardMin); }, [cardMin]);
   useEffect(() => { document.documentElement.style.setProperty("--panel-min", panelMin); }, [panelMin]);
 
   useEffect(() => {
-    const measure = () => {
-      /* ⚠️ **접힌 트랙을 빼고 셉니다.** `auto-fit`은 빈 트랙을 `0px`로 접어 두는데
-         `gridTemplateColumns`에는 **그대로 남아 있습니다**(실측: `1077px 1077px 0px`).
-         그냥 세면 패널 2장이 나눠 쓰는 줄을 "3칸"이라고 찍습니다 — 조작판이 화면과
-         다른 말을 하는 것이고, 이 저장소가 계측기 때문에 여러 번 치른 값입니다. */
-      const tracks = (selector: string) => {
-        const el = document.querySelector(selector);
-        if (!el) return 0;
-        return getComputedStyle(el).gridTemplateColumns.split(" ").filter((track) => track && parseFloat(track) > 0).length;
-      };
-      const width = (selector: string) => {
-        const el = document.querySelector(selector);
-        return el ? Math.round(el.getBoundingClientRect().width) : 0;
-      };
-      setSize({
-        card: width(".summary-card"), cardCols: tracks(".summary-grid"),
-        panel: width(".panel-grid > .panel"), panelCols: tracks(".panel-grid"),
-        // 메모 칸이 이 라운드의 최악값이었습니다(2560에서 2056px). 패널이 좁아지면
-        // 같이 줄어드는지가 "패널을 나란히 놓으면 안쪽도 낫는다"의 확인입니다.
-        memo: width(".auto-grow-textarea"),
-        viewport: window.innerWidth,
-      });
+    /* ⚠️ **접힌 트랙을 빼고 셉니다.** `auto-fit`은 빈 트랙을 `0px`로 접어 두는데
+       `gridTemplateColumns`에는 **그대로 남아 있습니다**(실측: `1077px 1077px 0px`).
+       그냥 세면 패널 2장이 나눠 쓰는 줄을 "3칸"이라고 찍습니다 — 조작판이 화면과 다른
+       말을 하는 것이고, 이 저장소가 계측기 때문에 여러 번 치른 값입니다. */
+    const tracks = (selector: string) => {
+      const el = document.querySelector(selector);
+      if (!el) return 0;
+      return getComputedStyle(el).gridTemplateColumns.split(" ").filter((track) => track && parseFloat(track) > 0).length;
     };
-    const frame = requestAnimationFrame(measure);
+    const width = (selector: string) => {
+      const el = document.querySelector(selector);
+      return el ? Math.round(el.getBoundingClientRect().width) : 0;
+    };
+    const read = (): Reading => ({
+      cardCols: tracks(".summary-grid"), card: width(".summary-card"),
+      panelCols: tracks(".panel-grid"), panel: width(".panel-grid > .panel"),
+      // 메모 칸이 이 라운드의 최악값이었습니다 — 2560에서 2056px.
+      memo: width(".auto-grow-textarea"),
+    });
+
+    /* **두 규칙을 같은 프레임에서 잽니다.** 옛 규칙을 얹고 읽으면 그 읽기가 레이아웃을
+       강제로 계산시키고, 곧바로 걷어내고 다시 읽습니다. 그 사이에 페인트가 없으므로
+       화면은 깜빡이지 않고, "지금 화면에서 정말 달라지는가"에 **숫자로** 답합니다.
+       산술로 유도하지 않는 이유는 늘 같습니다 — 패딩·스크롤바·gap을 빼먹습니다. */
+    const measure = () => {
+      const style = document.createElement("style");
+      style.textContent = OLD_RULES;
+      document.head.appendChild(style);
+      const old = read();
+      style.remove();
+      const fresh = read();
+      // 값이 같으면 **같은 객체를 유지**합니다 — 안 그러면 400ms마다 새 객체가 들어가
+      // 데모 전체가 계속 리렌더되고, 그 리렌더가 다시 레이아웃을 흔듭니다.
+      const keep = (previous: Reading | null, next: Reading) =>
+        previous && (Object.keys(next) as Array<keyof Reading>).every((key) => previous[key] === next[key]) ? previous : next;
+      setBefore((previous) => keep(previous, old));
+      setNow((previous) => keep(previous, fresh));
+      setViewport(window.innerWidth);
+    };
+    /* ⚠️ **`requestAnimationFrame` 하나에 걸면 안 됩니다.** 브라우저 pane은 rAF를 아예
+       돌리지 않아서(이 저장소가 여러 번 확인한 구조적 한계) 조작판이 값 대신 `—`만
+       띄웁니다 — **비교하려고 만든 도구가 정작 확인이 필요한 환경에서 눈이 멉니다.**
+
+       그리고 **탭을 옮기면 다시 재야 합니다.** 요약 카드는 `레이아웃` 탭에, 패널은
+       `컨트롤` 탭에 있어서 한 번만 재면 다른 탭 값이 영원히 옛것으로 남습니다.
+       MutationObserver로 해 봤는데 **탭 전환에 안 걸려서 표가 한 탭씩 뒤처졌습니다**
+       (실측). 원인을 더 파는 대신 주기로 다시 잽니다 — 이건 데모 진단 도구이고,
+       **영리한 것보다 안 머는 것이 낫습니다.** 400ms면 탭을 누른 뒤 눈에 띄기 전에
+       갱신되고, 값이 그대로면 React가 리렌더를 건너뜁니다. */
+    measure();
+    const timer = window.setInterval(measure, 400);
     window.addEventListener("resize", measure);
-    return () => { cancelAnimationFrame(frame); window.removeEventListener("resize", measure); };
+    return () => { window.clearInterval(timer); window.removeEventListener("resize", measure); };
   }, [cardMin, panelMin]);
 
   const row = <T extends string>(label: string, choices: readonly T[], current: T, set: (value: T) => void) =>
@@ -170,14 +209,33 @@ function LayoutSwitch() {
       </div>
     </div>;
 
+  /* 지금 탭에 있는 것만 비교합니다 — 다른 탭에 있는 요소는 양쪽 다 0이라 "같다"에
+     공짜로 기여합니다. 그걸 세면 아무것도 못 재는 탭에서 "옛 규칙과 같다"가 뜹니다. */
+  const measured = now && before
+    ? ([["card", now.card, before.card], ["panel", now.panel, before.panel], ["memo", now.memo, before.memo]] as const).filter(([, a]) => a > 0)
+    : [];
+  const same = measured.length > 0 && measured.every(([, a, b]) => a === b);
+  /* 다른 탭에 있어서 못 잰 값은 `—`가 아니라 **어디 있는지**를 말합니다. `—`만 뜨면
+     조작판이 고장 난 것처럼 보이는데, 실제로는 그 요소가 이 화면에 없을 뿐입니다. */
+  const cell = (cols: number, px: number, where: string) => px ? `${cols ? cols + "칸 " : ""}${px}px` : where;
+
   return <div className="layout-switch">
     {row("--summary-card-min", CARD_MIN_CHOICES, cardMin, setCardMin)}
     {row("--panel-min", PANEL_MIN_CHOICES, panelMin, setPanelMin)}
+    <table className="layout-switch-table">
+      <thead><tr><th>화면 {viewport}</th><th>지금</th><th>옛 규칙</th></tr></thead>
+      <tbody>
+        <tr><td>요약 카드</td><td>{now ? cell(now.cardCols, now.card, "레이아웃 탭") : "…"}</td><td>{before ? cell(before.cardCols, before.card, "") : "…"}</td></tr>
+        <tr><td>패널</td><td>{now ? cell(now.panelCols, now.panel, "컨트롤 탭") : "…"}</td><td>{before ? cell(before.panelCols, before.panel, "") : "…"}</td></tr>
+        <tr><td>메모 칸</td><td>{now ? cell(0, now.memo, "컨트롤 탭") : "…"}</td><td>{before ? cell(0, before.memo, "") : "…"}</td></tr>
+      </tbody>
+    </table>
     <small>
-      화면 {size.viewport}<br />
-      카드 {size.cardCols || "—"}칸 · {size.card || "—"}px{size.card ? "" : " (레이아웃 탭)"}<br />
-      패널 {size.panelCols || "—"}칸 · {size.panel || "—"}px · 메모 {size.memo || "—"}px<br />
-      <em>--panel-min은 “언제 세로로 쌓이는가”만 정합니다 — 가로로 설 때의 폭은 줄을 나눠 가진 결과입니다(auto-fit).</em>
+      {measured.length === 0
+        ? "재는 중…"
+        : same
+          ? "이 화면 폭에서는 옛 규칙과 같습니다 — 의도한 대로입니다. 카드는 1920부터, 패널은 --panel-min 폭부터 갈립니다."
+          : "이 화면 폭에서 달라집니다."}
     </small>
   </div>;
 }
