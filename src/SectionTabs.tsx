@@ -23,8 +23,8 @@ export const MobilePageTabsContext = createContext<{
   unregister: (id: string) => void;
 } | null>(null);
 
-export function PageTabsIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="12" height="15" rx="2" /><path d="M9 5V4a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2M9 10h6M9 14h6" /></svg>;
+export function PageTabsIcon({ className = "" }: { className?: string } = {}) {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className={className || undefined}><rect x="6" y="5" width="12" height="15" rx="2" /><path d="M9 5V4a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2M9 10h6M9 14h6" /></svg>;
 }
 
 export type SectionTabsProps<T extends string> = {
@@ -96,8 +96,8 @@ export function SectionTabs<T extends string>({ value, tabs, onChange, ariaLabel
 }
 
 /** 탭 아래 섹션 제목. 설명이 3줄 자리를 예약해 탭을 옮겨도 카드 위치가 고정됩니다. */
-export function SectionHeading({ title, description }: { title: ReactNode; description?: ReactNode }) {
-  return <div className="settings-section-heading"><h2>{title}</h2><p>{description}</p></div>;
+export function SectionHeading({ title, description, className = "" }: { title: ReactNode; description?: ReactNode; className?: string }) {
+  return <div className={`settings-section-heading ${className}`.trim()}><h2>{title}</h2><p>{description}</p></div>;
 }
 
 /**
@@ -105,10 +105,10 @@ export function SectionHeading({ title, description }: { title: ReactNode; descr
  * AppShell의 pageTabs 슬롯에 넣고, 트리 전체를 MobilePageTabsProvider로 감싸세요.
  * 등록된 SectionTabs가 없으면 아무것도 렌더하지 않습니다.
  */
-export function MobilePageTabs({ registration, open, onToggle, label = "페이지", floatRef }: { registration: MobilePageTabRegistration | null; open: boolean; onToggle: (open: boolean) => void; label?: string; floatRef?: Ref<HTMLDivElement> }) {
+export function MobilePageTabs({ registration, open, onToggle, label = "페이지", floatRef, className = "" }: { className?: string; registration: MobilePageTabRegistration | null; open: boolean; onToggle: (open: boolean) => void; label?: string; floatRef?: Ref<HTMLDivElement> }) {
   // floatRef는 useMobilePageTabs가 만든 것을 그대로 넘겨야 바깥 클릭 닫기가 동작합니다.
   if (!registration) return null;
-  return <div ref={floatRef} className={`mobile-page-tabs-float${open ? " open" : ""}`}>
+  return <div ref={floatRef} className={`mobile-page-tabs-float${open ? " open" : ""} ${className}`.trim()}>
     <div className="mobile-quick-tab-menu" role="tablist" aria-label={registration.ariaLabel}>
       {registration.tabs.map((tab) => <button type="button" role="tab" aria-selected={tab.value === registration.currentValue} className={tab.value === registration.currentValue ? "active" : ""} key={tab.value} onClick={() => { registration.onSelect(tab.value); onToggle(false); }}>{tab.label}</button>)}
     </div>

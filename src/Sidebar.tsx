@@ -50,6 +50,10 @@ export const DEFAULT_SIDEBAR_LABELS: SidebarLabels = {
 };
 
 export type SidebarProps = {
+  /** 앱이 이 컴포넌트를 겨눌 때의 출구. **내보내는 컴포넌트는 전부 이걸 받습니다** —
+   *  자주 쓰는 것만 prop으로 열고 나머지는 이걸로 겁니다(PageChrome.tsx의 GridJustify 옆 주석). */
+  className?: string;
+
   brand: { icon?: ReactNode; title: ReactNode };
   sections: SidebarNavSection[];
   /** 브랜드 바로 아래 자유 슬롯 — 작업 공간 전환기, 검색 등. */
@@ -73,7 +77,7 @@ function NavEntry({ item, onNavigate }: { item: SidebarNavItem; onNavigate?: () 
   return <button {...shared} type="button" aria-current={item.active ? "page" : undefined} onClick={() => { item.onSelect?.(); onNavigate?.(); }}>{inner}</button>;
 }
 
-export function Sidebar({ brand, sections, slot, footer, collapsed = false, onToggleCollapse, mobileOpen = false, onMobileClose, labels: labelOverrides }: SidebarProps) {
+export function Sidebar({ brand, sections, slot, footer, collapsed = false, onToggleCollapse, mobileOpen = false, onMobileClose, labels: labelOverrides, className = "" }: SidebarProps) {
   const labels = { ...DEFAULT_SIDEBAR_LABELS, ...labelOverrides };
   // 모바일 드로어는 화면을 덮는 오버레이이므로 안드로이드 뒤로가기로 닫혀야 합니다 —
   // Dialog·Select·DateWheelPicker가 전부 갖고 있는 계약인데 여기만 없었습니다.
@@ -89,7 +93,7 @@ export function Sidebar({ brand, sections, slot, footer, collapsed = false, onTo
   // 밀어 넣습니다 — 뒤로가기 한 번이 보이지 않는 서랍을 닫는 데 쓰이지만, 상태는
   // 실제로 닫힌 것이 맞고, 킷이 CSS 미디어 쿼리를 JS에 복제하지 않아도 됩니다.
   useBackToClose(mobileOpen && onMobileClose !== undefined, () => onMobileClose?.());
-  return <aside className={mobileOpen ? "sidebar mobile-open" : "sidebar"}>
+  return <aside className={`sidebar${mobileOpen ? " mobile-open" : ""} ${className}`.trim()}>
     <div className="sidebar-brand">
       {brand.icon && <span>{brand.icon}</span>}
       <strong>{brand.title}</strong>
@@ -123,8 +127,8 @@ export type MobileQuickBarItem = { id: string; label: string; icon: ReactNode; a
  * CSS 그리드가 64px 3칸으로 고정이라 항목 3개를 전제로 합니다.
  * 보통 [메뉴 열기, 주요 액션, 홈] 조합을 씁니다.
  */
-export function MobileQuickBar({ items, ariaLabel = "빠른 메뉴", barRef }: { items: MobileQuickBarItem[]; ariaLabel?: string; barRef?: Ref<HTMLElement> }) {
-  return <nav ref={barRef} className="mobile-quick-bar" aria-label={ariaLabel}>
+export function MobileQuickBar({ items, ariaLabel = "빠른 메뉴", barRef, className = "" }: { items: MobileQuickBarItem[]; ariaLabel?: string; barRef?: Ref<HTMLElement>; className?: string }) {
+  return <nav ref={barRef} className={`mobile-quick-bar ${className}`.trim()} aria-label={ariaLabel}>
     {items.map((item) => <button type="button" className={item.active ? "active" : undefined} onClick={item.onClick} aria-label={item.ariaLabel ?? item.label} key={item.id}>{item.icon}<span>{item.label}</span></button>)}
   </nav>;
 }
