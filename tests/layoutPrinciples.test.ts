@@ -173,3 +173,28 @@ describe("PRINCIPLES.md의 참조가 실재하는 절을 가리킨다", () => {
     expect(dangling).toEqual([]);
   });
 });
+
+describe("PRINCIPLES.md의 요약 줄은 코어 문서의 규칙 줄과 글자가 같다", () => {
+  /* §13·§14만 요약을 남깁니다(소유자 결정). 사본을 없애는 대신 **검사되는 사본**으로
+   * 만듭니다 — 한쪽만 고치면 여기가 빨개집니다.
+   *
+   * 정규화는 둘뿐입니다: `**` 제거, 앞뒤 공백 제거. 어투는 정규화하지 않습니다 —
+   * 두 문서 모두 합니다체라 애초에 같습니다. */
+  const normalize = (line: string) => line.replace(/\*\*/g, "").trim();
+  const quoted = [...principlesText.matchAll(/^> \*\*요약:\*\* (.+)$/gm)].map((match) => normalize(match[1]));
+  const rules = [...layoutText.matchAll(/^\*\*규칙\*\* — (.+)$/gm)].map((match) => normalize(match[1]));
+
+  // 전제 — 요약이 0건이면 아래가 공허합니다. 단언 하나에 `it` 하나입니다.
+  it("요약 줄을 두 개 찾아냈다", () => {
+    expect(quoted.length).toBe(2);
+  });
+
+  it("규칙 줄을 여덟 개 찾아냈다", () => {
+    expect(rules.length).toBe(8);
+  });
+
+  it("요약이 전부 규칙 줄에 그대로 들어 있다", () => {
+    const orphans = quoted.filter((summary) => !rules.some((rule) => rule.includes(summary)));
+    expect(orphans).toEqual([]);
+  });
+});
