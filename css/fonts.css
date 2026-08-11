@@ -12,8 +12,11 @@
  * Copyright (c) 2021 Kil Hyung-jin, with Reserved Font Name Pretendard.
  * https://github.com/orioncactus/pretendard
  *
- * 다른 폰트를 쓰려면 이 파일만 교체하고 tokens.css의 --font-family-base 첫
- * 항목을 바꾸면 됩니다.
+ * 다른 폰트를 쓰려면 이 파일을 **고치거나 지우지 말고, import 하지 않으면** 됩니다
+ * (node_modules 안이라 고쳐도 다음 install에 사라지고, index.css가 이 파일을
+ * @import 하므로 지우면 그 경로가 깨집니다). index.css 대신 개별 파일을 import
+ * 하면서 이 파일만 빼고, 자기 :root에서 --font-family-base를 덮어쓰세요.
+ * README "폰트를 바꾸려면"에 순서와 실측이 있습니다.
  */
 @font-face {
   font-family: "Pretendard Variable";
