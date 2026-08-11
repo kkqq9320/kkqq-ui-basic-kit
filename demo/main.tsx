@@ -1,7 +1,7 @@
 /* 데모 겸 CSS 누락 확인용 페이지. 다른 프로젝트로 복사할 때는 필요 없습니다.
  * 실행: design-system 폴더에서 node_modules/.bin/vite → http://localhost:5273
  */
-import { StrictMode, useEffect, useState } from "react";
+import { StrictMode, useEffect, useState, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 
 import "../css/index.css";
@@ -295,6 +295,26 @@ function LayoutSwitch() {
   </div>;
 }
 
+/** 레이아웃 탭의 패널들. **높이를 일부러 다르게** 뒀습니다 — 나란히 놓으면 짧은 쪽
+ *  아래가 비는 것이 이 방식의 실제 비용이고, 데모가 그걸 감추면 안 됩니다. */
+const LAYOUT_PANELS: Record<string, () => ReactElement> = {
+  messages: () => <Panel key="messages" title="패널" hint="PANEL" actions={<button type="button" className="secondary-button">액션</button>}>
+    <p className="muted-copy">패널은 기본이 작업 영역 전체 폭입니다. 가로로 나란히 놓고 싶으면 <code>PanelGrid</code>로 묶으세요 — 어느 패널이 같이 설지는 앱이 정합니다.</p>
+    <div className="error" style={{ marginTop: 12 }}>오류 메시지 예시입니다.</div>
+    <div className="success">성공 메시지 예시입니다.</div>
+  </Panel>,
+  short: () => <Panel key="short" title="짧은 패널" hint="SHORT">
+    <p className="muted-copy">높이가 다른 패널을 나란히 놓으면 짧은 쪽 아래가 빕니다. CSS masonry는 아직 못 쓰므로, 어떤 조합이 괜찮은지는 내용을 아는 앱이 판단합니다.</p>
+  </Panel>,
+  form: () => <Panel key="form" title="폼이 든 패널" hint="FORM">
+    <FieldGrid>
+      <label>이름<input placeholder="예: 식비" /></label>
+      <label>통화<Select ariaLabel="폼 통화" value="krw" options={SHORT_OPTIONS} onChange={() => undefined} /></label>
+      <label>시작일<DateWheelPicker ariaLabel="폼 시작일" value="2026-07-23" onChange={() => undefined} /></label>
+    </FieldGrid>
+  </Panel>,
+};
+
 function Demo() {
   // 기본은 다크. 저장된 선택이 있으면 그게 우선.
   const [theme, setTheme] = useState<"light" | "dark">(() => {
@@ -319,6 +339,7 @@ function Demo() {
   const [countdown, setCountdown] = useState(0);
   const [memo, setMemo] = useState("");
   const [dialog, setDialog] = useState<"none" | "basic" | "scroll">("none");
+  const [panelOrder, setPanelOrder] = useState(["messages", "short", "form"]);
   const [navHidden] = useScrollDirectionHidden();
   const keyboardOpen = useVirtualKeyboardOpen();
   const pageTabs = useMobilePageTabs();
@@ -504,11 +525,18 @@ function Demo() {
           <SummaryCard label="증가" value="+312,000원" tone="green" />
           <SummaryCard label="주의" value="-98,000원" tone="orange" />
         </SummaryGrid>
-        <Panel title="패널" hint="PANEL" actions={<button type="button" className="secondary-button">액션</button>}>
-          <p className="muted-copy">콘텐츠는 작업 영역 전체 폭의 패널에서 시작합니다. 반응형 그리드는 이 부모 폭을 나눠 쓰고, 더 좁은 컨테이너를 새로 만들지 않습니다.</p>
-          <div className="error" style={{ marginTop: 12 }}>오류 메시지 예시입니다.</div>
-          <div className="success">성공 메시지 예시입니다.</div>
-        </Panel>
+        {/* **패널 순서는 앱이 정합니다 — 킷은 받은 순서대로 놓을 뿐입니다.**
+            여기서는 배열로 렌더해 그것을 눈으로 보이게 했습니다. 실제 앱이라면 이 배열을
+            사용자 설정에서 읽어 오면 됩니다(사이드바 접힘·테마와 같은 방식 — PRINCIPLES §8:
+            상태는 controlled이고 저장은 쓰는 쪽 책임입니다).
+            ⚠️ CSS의 `order`로 옮기지 마세요 — 화면만 바뀌고 **Tab 순서와 읽기 순서는
+            그대로**라 둘이 어긋납니다. 배열을 바꾸는 쪽이 맞습니다. */}
+        <div className="button-row" style={{ marginBottom: 12 }}>
+          <button type="button" className="secondary-button" onClick={() => setPanelOrder((current) => [...current.slice(1), current[0]])}>패널 순서 돌리기</button>
+        </div>
+        <PanelGrid>
+          {panelOrder.map((id) => LAYOUT_PANELS[id]())}
+        </PanelGrid>
       </>}
 
       {tab === "colors" && <>
