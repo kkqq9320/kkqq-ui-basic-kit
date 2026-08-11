@@ -12,7 +12,7 @@
  *   Undo  직전 값으로 한 단계. 이것도 Reset도 서로를 취소할 수 있습니다.
  *   Reset 스타일시트 기본값으로 한 번에.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties} from "react";
 
 import {
   THEME_TOKEN_GROUPS,
@@ -47,6 +47,9 @@ export type ThemeColorEditorProps = {
    * 다릅니다("짙은 면"이 어디 쓰이는지는 그 앱만 압니다). 그래서 컴포넌트는
    * 그대로 쓰고 문구만 갈아 끼울 수 있게 열어 둡니다. */
   groups?: readonly ThemeTokenGroup[];
+  /** 이 편집기 **하나의** 색상 카드 최소 폭. 전역 `--color-card-min`보다 우선합니다.
+   *  `PanelGrid`·`FieldGrid`·`SummaryGrid`의 `min`과 같은 뜻입니다. */
+  cardMin?: string;
   /** 앱이 이 편집기 안을 겨눌 때의 출구. `Panel`의 것과 같은 뜻입니다.
    *
    * **이게 없어서 앱은 색상 카드에 높이조차 줄 수 없었습니다** — 편집기가 자기 패널을
@@ -60,7 +63,7 @@ export type ThemeColorEditorProps = {
   className?: string;
 };
 
-export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS, className = "" }: ThemeColorEditorProps) {
+export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS, className = "", cardMin }: ThemeColorEditorProps) {
   // groups가 다룰 토큰의 전부입니다. 프로젝트가 groups에 새 토큰을 더하면 읽기·기본값·
   // 적용이 전부 이 목록으로 돌아가, 키트를 안 고쳐도 새 색이 편집·저장·적용됩니다.
   const tokens = groups.flatMap((group) => group.tokens);
@@ -180,7 +183,7 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS,
   }
 
   const changedCount = Object.keys(overrides).length;
-  return <section className={`panel theme-color-panel ${className}`.trim()}>
+  return <section className={`panel theme-color-panel ${className}`.trim()} style={cardMin ? ({ "--color-card-min": cardMin } as CSSProperties) : undefined}>
     <div className="panel-heading">
       <div><small>COLORS</small><h2>색상</h2></div>
       <button

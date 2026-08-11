@@ -15,13 +15,34 @@ export function PageHeader({ eyebrow, title, description }: { eyebrow: ReactNode
   return <header className="page-header"><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p>{description}</p></header>;
 }
 
-export function SummaryGrid({ children }: { children: ReactNode }) {
-  return <div className="summary-grid">{children}</div>;
+/**
+ * `min`은 이 그리드 **하나에만** 걸립니다 — 전역 토큰(`--summary-card-min`)보다 우선합니다.
+ * 토큰이 커스텀 프로퍼티라 상속되므로, 조상 어디에 걸어도 그 아래만 바뀝니다.
+ * 이 prop은 그 흔한 경우에 CSS를 안 쓰게 해 주는 지름길입니다.
+ */
+export function SummaryGrid({ children, min }: { children: ReactNode; min?: string }) {
+  return <div className="summary-grid" style={min ? ({ "--summary-card-min": min } as CSSProperties) : undefined}>{children}</div>;
 }
 
-/** tone: "plain" | "teal" | "green" | "orange" */
-export function SummaryCard({ label, value, tone = "plain" }: { label: ReactNode; value: ReactNode; tone?: "plain" | "teal" | "green" | "orange" }) {
-  return <article className={`summary-card ${tone}`}><span>{label}</span><strong>{value}</strong></article>;
+/**
+ * tone: "plain" | "teal" | "green" | "orange"
+ *
+ * **`className`은 카드 하나만 다르게 할 때 씁니다.** 토큰은 그리드의 **트랙**을 정하므로
+ * 카드마다 다른 폭을 줄 수 없습니다 — 트랙은 모두 같은 크기입니다. 한 장만 넓히려면
+ * 그 카드가 트랙을 **두 칸 차지**하게 하세요:
+ *
+ * ```tsx
+ * <SummaryCard className="wide" label="합계" value="…" />
+ * ```
+ * ```css
+ * .wide { grid-column: span 2; }
+ * ```
+ *
+ * ⚠️ 트랙 수보다 큰 span은 좁은 화면에서 넘칩니다. `span 2`를 쓸 거면 한 열이 되는
+ * 폭에서 `grid-column: auto`로 되돌리는 미디어 쿼리를 같이 두세요.
+ */
+export function SummaryCard({ label, value, tone = "plain", className = "" }: { label: ReactNode; value: ReactNode; tone?: "plain" | "teal" | "green" | "orange"; className?: string }) {
+  return <article className={`summary-card ${tone} ${className}`.trim()}><span>{label}</span><strong>{value}</strong></article>;
 }
 
 /**

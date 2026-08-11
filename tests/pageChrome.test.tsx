@@ -9,7 +9,7 @@
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { Panel, PanelGrid, FieldGrid } from "../src/PageChrome";
+import { Panel, PanelGrid, FieldGrid, SummaryGrid, SummaryCard } from "../src/PageChrome";
 import { ThemeColorEditor } from "../src/ThemeColorEditor";
 
 afterEach(cleanup);
@@ -76,7 +76,46 @@ describe("Panel: className", () => {
   });
 });
 
+/* **토큰은 전역이 아니라 상속되는 값입니다.** 조상 어디에 걸어도 그 아래만 바뀌고,
+ * 통마다 `min`으로 덮어쓸 수 있습니다. 네 그리드가 **같은 손잡이**를 갖는지 한자리에서
+ * 봅니다 — 하나만 빠지면 그게 다음 라운드의 질문이 됩니다(실제로 SummaryGrid가 빠져
+ * 있었고 오너가 물었습니다). */
+describe("min은 통마다 걸린다 — 네 그리드가 같은 손잡이를 갖는다", () => {
+  it.each([
+    ["summary-grid", "--summary-card-min", (min: string) => <SummaryGrid min={min}><SummaryCard label="ㄱ" value="1" /></SummaryGrid>],
+    ["panel-grid", "--panel-min", (min: string) => <PanelGrid min={min}><Panel>ㄱ</Panel></PanelGrid>],
+    ["field-grid", "--field-min", (min: string) => <FieldGrid min={min}><label>ㄱ</label></FieldGrid>],
+  ])("%s 는 %s 를 그 통에만 건다", (cls, token, make) => {
+    const { container } = render(make("321px"));
+    const box = container.querySelector(`.${cls}`) as HTMLElement;
+    expect(box.style.getPropertyValue(token)).toBe("321px");
+    expect(document.documentElement.style.getPropertyValue(token)).toBe("");
+  });
+
+  /* 토큰은 **트랙**을 정하므로 카드마다 다른 폭을 줄 수 없습니다 — 트랙은 다 같은
+   * 크기입니다. 한 장만 넓히는 길은 `className` + `grid-column: span 2`뿐이고,
+   * 그래서 `SummaryCard`에 className이 있어야 합니다. */
+  it("SummaryCard는 className으로 한 장만 다르게 할 수 있다", () => {
+    const { container } = render(<SummaryGrid><SummaryCard className="wide" label="합계" value="1" /></SummaryGrid>);
+    const card = container.querySelector("article") as HTMLElement;
+    expect(card.classList.contains("summary-card")).toBe(true);
+    expect(card.classList.contains("wide")).toBe(true);
+  });
+
+  it("className을 안 넘기면 군더더기 공백이 안 남는다", () => {
+    const { container } = render(<SummaryCard label="ㄱ" value="1" />);
+    expect((container.querySelector("article") as HTMLElement).className).toBe("summary-card plain");
+  });
+});
+
 describe("ThemeColorEditor: 앱이 안쪽을 겨눌 수 있다", () => {
+  it("cardMin이 그 편집기에만 걸린다", () => {
+    const { container } = render(<ThemeColorEditor theme="dark" cardMin="180px" />);
+    const panel = container.querySelector("section.theme-color-panel") as HTMLElement;
+    expect(panel.style.getPropertyValue("--color-card-min")).toBe("180px");
+    expect(document.documentElement.style.getPropertyValue("--color-card-min")).toBe("");
+  });
+
   /* 편집기가 **자기 패널을 직접 렌더**하므로 바깥에서 감싸도 안쪽에 못 닿습니다.
    * 그래서 카드에 높이를 주려면 이 prop이 있어야 합니다. */
   it("넘긴 className이 편집기 패널에 붙는다", () => {
