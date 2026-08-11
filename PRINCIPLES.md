@@ -522,6 +522,10 @@ eyebrow → 페이지 제목 → 설명 → (탭) → 섹션 제목 → 섹션 �
     나가고 화면에 아무 자국도 남기지 않을 때.** `AutoGrowTextarea`와 `MobileQuickBar`.
     앞엣것은 실사용에서 `<label>메모<AutoGrowTextarea/></label>` 꼴로 쓰여 암묵적 label이
     이미 이름을 주고, 뒤엣것은 화면당 하나뿐이라 겹칠 대상이 없습니다.
+    ⚠️ **`AutoGrowTextarea`가 `id`를 받게 되면서 이 "선택"에 함정이 하나 생깁니다** —
+    `id` + 바깥 `<label htmlFor>`로 이름을 주면서 `ariaLabel`까지 넘기면, `aria-label`이
+    `<label>`을 **이겨서** 화면에 보이는 글자와 읽히는 이름이 갈립니다. 이름을 주는
+    방법은 감싸는 `<label>` · 바깥 `<label htmlFor>` · `ariaLabel` 셋 중 **하나만**입니다.
   **날짜 피커에서만은 `ariaLabel`이 이름의 전부가 아니라 접두사입니다** — 아래 별도 조항.
 - **보이는 머리말과 접근성 이름은 갈라놓을 수 있습니다.** 날짜 피커의 `heading`이
   그 자리입니다. 292px 팝오버 머리말에는 `"날짜"`가 맞고 이름으로는 `"거래 발생 날짜"`가
