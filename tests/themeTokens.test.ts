@@ -125,4 +125,18 @@ describe("토큰 묶음", () => {
   it("뱃지가 편집기 목록에 있다", () => {
     expect(THEME_TOKENS.map((token) => token.name)).toContain("--badge");
   });
+
+  /* 사이드바는 **자기 글자·표면 색을 리터럴로 들고 있었습니다** — `--sidebar`(배경)만
+   * 토큰이라 배경을 바꿔도 그 위 글자가 안 따라왔습니다. 배경과 같은 묶음에 있어야
+   * 함께 고르게 됩니다. */
+  it.each(["--sidebar", "--sidebar-strong", "--sidebar-text", "--sidebar-muted", "--sidebar-dim", "--sidebar-surface", "--sidebar-deep"])(
+    "%s 는 사이드바 묶음에 있다",
+    (name) => { expect(titleOf(name)).toBe("사이드바"); },
+  );
+
+  /* 메시지 색이 역할 토큰으로 올라오면서, `.error`에 `var(--red)`를 쓸지 말지로 남아
+   * 있던 미결정이 풀렸습니다 — 대비를 깎지 않고 값을 화면 그대로 유지합니다. */
+  it.each(["--danger-text", "--danger-surface", "--ok-text", "--ok-surface"])("%s 가 편집기에 있다", (name) => {
+    expect(THEME_TOKENS.map((token) => token.name)).toContain(name);
+  });
 });

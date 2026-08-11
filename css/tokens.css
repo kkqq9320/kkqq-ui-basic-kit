@@ -133,6 +133,24 @@
   --scrollbar-size: 4px;
   --scrollbar-thumb: color-mix(in srgb, var(--muted) 24%, transparent);
   --scrollbar-thumb-hover: color-mix(in srgb, var(--muted) 40%, transparent);
+  /* 사이드바는 라이트에서도 어두운 면이라(--sidebar가 두 테마 다 짙습니다) 아래 값들은
+   * 두 테마에서 같습니다. **여기 오기 전까지는 sidebar.css가 이 색들을 리터럴로 들고
+   * 있었고, 그래서 --sidebar를 바꿔도 그 위 글자는 안 따라왔습니다**(오너 지적). */
+  --sidebar-strong: #dedeee;
+  --sidebar-text: #cacade;
+  --sidebar-muted: #9c9cb8;
+  --sidebar-dim: #8585a3;
+  --sidebar-surface: #26273e;
+  --sidebar-deep: #18192c;
+  /* 메시지 색. **`--red`/`--green`을 그대로 쓰지 않는 이유**: 옅은 배경 위 13px 글자라
+   * 기준 대비가 4.5인데, `var(--red)`로 바꾸면 라이트가 정확히 4.50, 다크가 7.61 → 5.67로
+   * 떨어집니다. 그래서 "옅은 배경 위 작은 글자용" 역할 토큰을 따로 둡니다 — 이 결정이
+   * 한동안 미결로 남아 있었고, 값은 지금 화면 그대로입니다. */
+  --danger-text: #9f3f2d;
+  --danger-surface: #fff0ed;
+  --ok-text: #17665e;
+  --ok-surface: #e8f6f2;
+  --link: #aaaaf2;
 }
 [data-theme="dark"] {
   color: #ededf5;
@@ -155,6 +173,20 @@
   --green: #67c99a;
   --green-soft: #20382f;
   --gold: #dfb96d;
+  /* 사이드바는 라이트에서도 어두운 면이라(--sidebar가 두 테마 다 짙습니다) 아래 값들은
+   * 두 테마에서 같습니다. **여기 오기 전까지는 sidebar.css가 이 색들을 리터럴로 들고
+   * 있었고, 그래서 --sidebar를 바꿔도 그 위 글자는 안 따라왔습니다**(오너 지적). */
+  --sidebar-strong: #dedeee;
+  --sidebar-text: #cacade;
+  --sidebar-muted: #9c9cb8;
+  --sidebar-dim: #8585a3;
+  --sidebar-surface: #26273e;
+  --sidebar-deep: #18192c;
+  --danger-text: #ffb5a7;
+  --danger-surface: #472a2a;
+  --ok-text: #a8e3d2;
+  --ok-surface: #203b35;
+  --link: #aaaaf2;
 }
 
 /* 전역 리셋 — 스크롤바 굵기를 4px로 통일하고, 오버플로가 생겨도

@@ -72,7 +72,9 @@
  *
  * `label`은 `display: contents`여도 클릭하면 안의 입력이 잡힙니다. */
 .theme-color-entry { display: contents; cursor: text; }
-.theme-color-entry > small { grid-column: 1; justify-self: start; }
+/* 견본과 **가운데를 맞춥니다.** 첫 칸은 34px인데 `RGB`·`HEX` 글자는 그보다 좁아서,
+ * 왼쪽에 붙이면 견본의 중심선과 어긋나 보입니다(오너 지적). 칸의 가운데에 둡니다. */
+.theme-color-entry > small { grid-column: 1; justify-self: center; }
 /* 표시는 견본과 같은 첫 칸(34px)에 들어갑니다 — 폭을 여기서 따로 정하지 않습니다.
  * 그래야 `RGB`와 `HEX`의 글자 폭 차이와 무관하게 두 입력칸의 왼쪽 끝이 같습니다
  * (PRINCIPLES §13은 오른쪽만이 아니라 양쪽입니다). */

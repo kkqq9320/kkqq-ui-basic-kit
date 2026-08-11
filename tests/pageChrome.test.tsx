@@ -146,6 +146,18 @@ describe("ThemeColorEditor: 앱이 안쪽을 겨눌 수 있다", () => {
     expect(strong.firstElementChild?.textContent).toBe("페이지 배경");
   });
 
+  /* 칩은 **되돌리기 버튼 옆**에 있습니다(오너 요청). 이름 옆에 있으면 이름이 쓸 폭을
+   * 뺏고, 뜻으로도 "되돌릴 것이 있다"는 신호라 되돌리기 곁이 맞습니다. */
+  it("변경됨 칩은 되돌리기 버튼과 같은 자리에 있다", () => {
+    const { container } = render(<ThemeColorEditor theme="dark" />);
+    const hex = container.querySelectorAll(".theme-color-text")[1] as HTMLInputElement;
+    fireEvent.change(hex, { target: { value: "#123456" } });
+    const chip = container.querySelector(".theme-color-changed");
+    expect(chip, "값을 바꿨는데 변경됨 칩이 없습니다").not.toBeNull();
+    expect(chip!.closest(".theme-color-actions"), "칩이 액션 묶음 밖에 있습니다").not.toBeNull();
+    expect(chip!.closest(".theme-color-copy"), "칩이 아직 이름 옆에 있습니다").toBeNull();
+  });
+
   it("입력이 RGB·HEX 두 줄이다", () => {
     const { container } = render(<ThemeColorEditor theme="dark" />);
     const card = container.querySelector(".theme-color-card") as HTMLElement;
