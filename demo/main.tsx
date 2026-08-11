@@ -127,6 +127,14 @@ const CARD_MIN_CHOICES = ["200px", "240px", "280px"] as const;
 const PANEL_MIN_CHOICES = ["360px", "400px", "480px"] as const;
 const FIELD_MIN_CHOICES = ["200px", "230px", "260px"] as const;
 
+/** 확인용 폭. 오너가 스크린샷을 보낸 세 자리 + 넓은 화면. */
+const WIDTH_PRESETS = [
+  { label: "860", width: 860, 볼것: "패널 안 필드가 2열" },
+  { label: "1200", width: 1200, 볼것: "날짜 피커 패널이 드롭다운 옆" },
+  { label: "1920", width: 1920, 볼것: "패널 3열" },
+  { label: "해제", width: 0, 볼것: "실제 창 폭" },
+] as const;
+
 /** 옛 규칙(4열 고정 카드 + 전폭 스택 패널)을 **그 자리에서** 덮어씌우는 스타일.
  *  비교를 산술로 유도하지 않고 **레이아웃을 두 번 재려고** 씁니다. */
 const OLD_RULES = `
@@ -145,6 +153,7 @@ function LayoutSwitch() {
   const [cardMin, setCardMin] = useState<(typeof CARD_MIN_CHOICES)[number]>("240px");
   const [panelMin, setPanelMin] = useState<(typeof PANEL_MIN_CHOICES)[number]>("400px");
   const [fieldMin, setFieldMin] = useState<(typeof FIELD_MIN_CHOICES)[number]>("230px");
+  const [fakeWidth, setFakeWidth] = useState(0);
   const [now, setNow] = useState<Reading | null>(null);
   const [before, setBefore] = useState<Reading | null>(null);
   const [viewport, setViewport] = useState(0);
@@ -152,6 +161,28 @@ function LayoutSwitch() {
   useEffect(() => { document.documentElement.style.setProperty("--summary-card-min", cardMin); }, [cardMin]);
   useEffect(() => { document.documentElement.style.setProperty("--panel-min", panelMin); }, [panelMin]);
   useEffect(() => { document.documentElement.style.setProperty("--field-min", fieldMin); }, [fieldMin]);
+
+  /* **폭 흉내입니다. 창을 실제로 줄이는 게 아닙니다.** `.app-shell`을 좁혀 작업 영역이
+     받는 폭만 그 값으로 만듭니다 — 이 그리드들이 보는 것은 창이 아니라 부모 폭이므로
+     레이아웃 판정에는 같습니다.
+     ⚠️ **뷰포트 미디어 쿼리는 안 바뀝니다** — `@media (max-width: 760px)`의 모바일
+     전환은 실제 창 크기로만 일어납니다. 그래서 프리셋을 전부 800 위로 뒀습니다.
+     그 아래를 볼 일이 있으면 **창을 진짜로 줄여야 합니다.** */
+  useEffect(() => {
+    const shell = document.querySelector<HTMLElement>(".app-shell");
+    const workspace = document.querySelector<HTMLElement>(".workspace");
+    if (!shell || !workspace) return;
+    shell.style.maxWidth = fakeWidth ? `${fakeWidth}px` : "";
+    /* ⚠️ **패딩까지 흉내 내야 합니다.** `.workspace`의 좌우 패딩은
+       `clamp(22px, 5vw, 72px)`이고 `vw`는 **부모가 아니라 실제 창**을 봅니다. 셸만 좁히면
+       2560 창에서는 패딩이 72로 남아, 진짜 860 창의 43과 29px씩 어긋납니다.
+       실측으로 잡았습니다 — 흉내 860이 필드 **1칸**을 찍는데 진짜 858은 **2칸**이었습니다.
+       계산이 아니라 실제 창 측정과 대조해 확인했습니다(아래 `mirrorOk`). */
+    const padding = fakeWidth ? Math.min(72, Math.max(22, fakeWidth * 0.05)) : 0;
+    workspace.style.paddingLeft = fakeWidth ? `${padding}px` : "";
+    workspace.style.paddingRight = fakeWidth ? `${padding}px` : "";
+    return () => { shell.style.maxWidth = ""; workspace.style.paddingLeft = ""; workspace.style.paddingRight = ""; };
+  }, [fakeWidth]);
 
   useEffect(() => {
     /* ⚠️ **접힌 트랙을 빼고 셉니다.** `auto-fit`은 빈 트랙을 `0px`로 접어 두는데
@@ -208,7 +239,7 @@ function LayoutSwitch() {
     const timer = window.setInterval(measure, 400);
     window.addEventListener("resize", measure);
     return () => { window.clearInterval(timer); window.removeEventListener("resize", measure); };
-  }, [cardMin, panelMin, fieldMin]);
+  }, [cardMin, panelMin, fieldMin, fakeWidth]);
 
   const row = <T extends string>(label: string, choices: readonly T[], current: T, set: (value: T) => void) =>
     <div className="layout-switch-row">
@@ -232,8 +263,21 @@ function LayoutSwitch() {
     {row("--summary-card-min", CARD_MIN_CHOICES, cardMin, setCardMin)}
     {row("--panel-min", PANEL_MIN_CHOICES, panelMin, setPanelMin)}
     {row("--field-min", FIELD_MIN_CHOICES, fieldMin, setFieldMin)}
+    <div className="layout-switch-row">
+      <strong>폭 흉내 (창은 그대로)</strong>
+      <div className="layout-switch-buttons">
+        {WIDTH_PRESETS.map((preset) => <button
+          key={preset.label}
+          type="button"
+          className={preset.width === fakeWidth ? "primary" : "secondary-button"}
+          aria-pressed={preset.width === fakeWidth}
+          title={preset.볼것}
+          onClick={() => setFakeWidth(preset.width)}
+        >{preset.label}</button>)}
+      </div>
+    </div>
     <table className="layout-switch-table">
-      <thead><tr><th>화면 {viewport}</th><th>지금</th><th>옛 규칙</th></tr></thead>
+      <thead><tr><th>{fakeWidth ? `흉내 ${fakeWidth}` : `화면 ${viewport}`}</th><th>지금</th><th>옛 규칙</th></tr></thead>
       <tbody>
         <tr><td>요약 카드</td><td>{now ? cell(now.cardCols, now.card, "레이아웃 탭") : "…"}</td><td>{before ? cell(before.cardCols, before.card, "") : "…"}</td></tr>
         <tr><td>패널 안 필드</td><td>{now ? cell(now.fieldCols, now.field, "컨트롤 탭") : "…"}</td><td>{before ? cell(before.fieldCols, before.field, "") : "…"}</td></tr>
