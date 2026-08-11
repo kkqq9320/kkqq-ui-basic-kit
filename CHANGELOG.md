@@ -10,6 +10,40 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.4.0
 
 ---
 
+## 미출시
+
+**타입도 런타임도 CSS 값도 바뀐 것이 없습니다. 문서만 바뀝니다.**
+
+### 고친 것
+
+- **`README.md`·`CUSTOMIZING.md`가 더 이상 vendoring(사본으로 복사해 쓰기)을
+  정상 경로로 가르치지 않습니다.** 소유자가 "vendoring은 더 이상 문서화된
+  경로가 아니다"로 정했고, 스킬 저장소(`kkqq-skills`)는 이미 그렇게 바뀌어
+  있었습니다 — 그런데 이 두 문서(둘 다 `package.json`의 `files`에 들어 있어
+  설치본에 함께 실립니다)는 반대를 가르치고 있었습니다. `README.md`의
+  "복사해서 써야 한다면" 절 전체를 지웠습니다(로컬 절대경로가 박힌 `cp -r`
+  복사 명령, `KIT-VERSION` 절차, `diff -r` 동기화, `file:vendor/` 의존성 예시).
+  설치 일반에 대한 검증 기록(Vite 확인, 빌드 단계 없음)은 `## 설치` 절로
+  옮겨 살렸습니다.
+- **README.md에 남아 있던 거짓 진술 두 개를 고쳤습니다.**
+  1. "벤더링한 프로젝트에서는 그 사본의 `vendor/kkqq-ui-basic-kit/PRINCIPLES.md`가
+     읽힌다"던 문장 — 현재 스킬의 탐색 순서는 `node_modules/kkqq-ui-basic-kit/`
+     다음 공개 raw URL 둘뿐이고, `vendor/` 경로는 찾지 않습니다
+     (`kkqq-skills` 저장소의 `kkqq-ui-basic-kit`·`kkqq-layout-principles`
+     SKILL.md로 확인).
+  2. "그 마켓플레이스 저장소는 비공개"라던 문장 — `kkqq9320/claude-skills`는
+     공개 저장소입니다. 이 거짓 문장이 실제로 한 프로젝트가 2.3MB 사본을
+     저장소에 커밋한 채 남게 된 원인이었습니다.
+- Claude 스킬 절에 두 번째 스킬(`kkqq-layout-principles` — 킷을 설치할 수
+  없는 곳에서 `LAYOUT-PRINCIPLES.md`만 필요할 때)을 추가했습니다.
+- "가계부 앱은 이제 `vendor/`로 복사해 쓴다"는 문장을 고쳤습니다 — 실측
+  결과 `budget/frontend`는 git 의존성(`github:...#<SHA>`)이고, `file:vendor/`를
+  쓰는 것은 `homa_gwangju`뿐입니다.
+- 검증 상태의 테스트 개수 스냅샷을 갱신했습니다(510개·2026-08-10 →
+  758개·2026-08-12).
+
+---
+
 ## v0.4.0 — 2026-08-12
 
 **타입도 런타임도 CSS 값도 바뀐 것이 없습니다.** 규칙을 엄격히 읽으면 patch입니다.

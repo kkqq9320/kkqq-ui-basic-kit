@@ -52,11 +52,19 @@ import { Select, DateWheelPicker, Dialog } from "kkqq-ui-basic-kit";
 > `"types": ["vite/client"]`를 넣거나 `declare module "*.css";` 한 줄을 두세요.
 > 키트 쪽 문제가 아니라 소비 프로젝트의 타입 설정입니다.
 
+> **Vite에서 확인했습니다.** 새 Vite+React 앱에 설치본을 넣고 dev·`vite build`·
+> `tsc --noEmit`이 모두 통과하는 것을 확인했습니다 — `node_modules` 안의 `.tsx`가
+> 변환되고, CSS와 폰트가 번들에 실리고, 타입도 `src/`에서 그대로 해석됩니다.
+>
+> 다만 이 키트는 **소스를 그대로 내보내고 빌드 단계가 없습니다**(`exports`의 `.`이
+> `./src/index.ts`를 가리킵니다). `node_modules` 안의 TypeScript를 컴파일하지 않는
+> 번들러 — 기본 설정의 Next.js(`transpilePackages` 필요), CRA 등 — 에서는 그 설정을
+> 열어 주거나 키트에 빌드 단계를 넣어야 합니다. **그쪽은 확인하지 않았습니다.**
+
 ### 키트를 고쳐야 할 때 — 받은 걸 고치지 말고 저장소에서 고칩니다
 
 > ⚠️ **`node_modules/kkqq-ui-basic-kit/`를 직접 고치지 마세요.** 다음 `npm install`
-> 이나 `npm ci` 한 번에 **아무 경고 없이 사라집니다.** vendor 사본을 고치는 것보다
-> 나쁩니다 — 사본은 최소한 소비자 저장소에 커밋이라도 되지만, 이건 흔적도 안 남고
+> 이나 `npm ci` 한 번에 **아무 경고 없이 사라집니다.** 흔적도 안 남고
 > "어제는 됐는데"만 남습니다.
 
 고칠 일이 생기면 순서는 이렇습니다.
@@ -84,68 +92,6 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#<새-커밋-SHA>
 ```bash
 npm i file:../kkqq-ui-basic-kit
 ```
-
-### 복사해서 써야 한다면
-
-외부 네트워크가 막힌 빌드 환경처럼 설치가 불가능할 때만 씁니다. **기본 경로가
-아닙니다** — 사본은 조용히 어긋납니다. 아래 `KIT-VERSION` 절차는 그 어긋남을
-막지는 못하고, 최소한 **눈에 보이게** 만듭니다.
-
-**1. 키트를 `vendor/`로 복사합니다.**
-
-```bash
-KIT=/c/Users/JJ/Claude/kkqq-ui-basic-kit
-DEST=vendor/kkqq-ui-basic-kit
-
-rm -rf "$DEST" && mkdir -p "$DEST"
-cp -r "$KIT"/{src,css,fonts,package.json,PRINCIPLES.md,CUSTOMIZING.md,README.md,LICENSE} "$DEST"/
-git -C "$KIT" rev-parse HEAD > "$DEST/KIT-VERSION"
-```
-
-복사 대상은 `package.json`의 `files`가 정하는 목록 그대로입니다. `demo/`,
-`tests/`, `vite.config.ts` 같은 개발용 파일은 넣지 않습니다.
-
-**2. 의존성으로 걸어 줍니다.** (`package.json`)
-
-```json
-"kkqq-ui-basic-kit": "file:vendor/kkqq-ui-basic-kit"
-```
-
-CSS import와 컴포넌트 사용은 위와 같습니다.
-
-#### 동기화 — 사본이 어긋나지 않게
-
-`KIT-VERSION`에는 복사 시점의 키트 커밋 SHA가 들어 있습니다. 이 파일은 **사본에만
-있고 키트 저장소에는 없습니다.**
-
-뒤처졌는지 확인:
-
-```bash
-diff <(cat vendor/kkqq-ui-basic-kit/KIT-VERSION) <(git -C "$KIT" rev-parse HEAD)
-```
-
-내용이 실제로 갈라졌는지 확인 (`KIT-VERSION`은 사본에만 있으므로 제외):
-
-```bash
-diff -r --exclude=KIT-VERSION "$KIT/src" vendor/kkqq-ui-basic-kit/src
-diff -r "$KIT/css" vendor/kkqq-ui-basic-kit/css
-```
-
-갱신은 위 **1번을 다시 실행**하면 됩니다.
-
-> ⚠️ **사본을 직접 고치지 마세요.** 고칠 일이 생기면 키트 저장소에서 고쳐 push
-> 하고 다시 복사합니다. 사본을 직접 고치면 다음 동기화 때 조용히 날아갑니다.
-> 프로젝트마다 달라야 하는 것은 대부분 프롭·CSS 토큰으로 해결됩니다 —
-> [CUSTOMIZING.md](CUSTOMIZING.md)를 먼저 보세요.
-
-> **Vite에서 확인했습니다.** 새 Vite+React 앱에 설치본을 넣고 dev·`vite build`·
-> `tsc --noEmit`이 모두 통과하는 것을 확인했습니다 — `node_modules` 안의 `.tsx`가
-> 변환되고, CSS와 폰트가 번들에 실리고, 타입도 `src/`에서 그대로 해석됩니다.
->
-> 다만 이 키트는 **소스를 그대로 내보내고 빌드 단계가 없습니다**(`exports`의 `.`이
-> `./src/index.ts`를 가리킵니다). `node_modules` 안의 TypeScript를 컴파일하지 않는
-> 번들러 — 기본 설정의 Next.js(`transpilePackages` 필요), CRA 등 — 에서는 그 설정을
-> 열어 주거나 키트에 빌드 단계를 넣어야 합니다. **그쪽은 확인하지 않았습니다.**
 
 ### ⚠️ 필수 전제: 앱이 `#root`에 마운트돼야 합니다
 
@@ -734,37 +680,48 @@ npm run typecheck   # tsc --noEmit
 
 ## Claude 스킬로 쓰기
 
-Claude가 모든 프로젝트에서 이 원칙을 자동으로 적용하게 하는 **트리거 스킬은
-`kkqq9320/claude-skills` 마켓플레이스**에 있습니다(`kkqq-ui-basic-kit` 스킬).
-스킬은 소스를 담지 않고 `PRINCIPLES.md`를 가리키기만 합니다 — 원칙의 단일
-출처는 이 저장소입니다. 벤더링한 프로젝트에서는 그 사본의
-`vendor/kkqq-ui-basic-kit/PRINCIPLES.md`가 읽히므로, 이 저장소에 접근하지 못하는
-환경에서도 계약은 그대로 전달됩니다.
+Claude가 모든 프로젝트에서 이 원칙을 자동으로 적용하게 하는 트리거 스킬은
+**`kkqq9320/claude-skills` 마켓플레이스**에 있습니다. 스킬은 소스를 담지 않고
+문서를 가리키기만 합니다 — 원칙의 단일 출처는 이 저장소입니다. 둘 다 못 찾으면
+계약을 지어내지 않고 멈춥니다.
 
-> ℹ️ 그 마켓플레이스 저장소는 **비공개**라 아래 명령은 접근 권한이 있어야
-> 동작합니다. 이 키트 자체를 쓰는 데는 필요 없습니다 — 위 "설치"만 따르면 됩니다.
+스킬은 둘입니다:
+
+- **`kkqq-ui-basic-kit`** — React 프로젝트에 이 킷을 설치해서 쓸 때. `PRINCIPLES.md`와
+  `LAYOUT-PRINCIPLES.md` **둘 다** 읽도록 안내합니다. 찾는 순서는
+  `node_modules/kkqq-ui-basic-kit/`(설치된 프로젝트) 다음 공개 raw URL
+  (`raw.githubusercontent.com`)입니다.
+- **`kkqq-layout-principles`** — **킷을 설치할 수 없는 곳**(비-React, 남의
+  프레임워크 위에 얹는 화면 — Home Assistant 커스텀 카드 같은)에서 배치·그리드
+  규칙만 필요할 때. `LAYOUT-PRINCIPLES.md`를 가리키고, 설치할 것은 없습니다.
+  찾는 순서는 **반대**입니다 — 이 스킬을 쓰는 곳은 대개 킷을 설치할 수 없는
+  프로젝트라, 공개 raw URL이 먼저이고 `node_modules`는 그다음입니다.
+
+> ℹ️ 그 마켓플레이스 저장소는 **공개**라 아래 명령에 자격증명이 필요 없습니다.
+> 이 키트 자체를 쓰는 데는 필요 없습니다 — 위 "설치"만 따르면 됩니다.
 
 ```bash
 claude plugin marketplace add kkqq9320/claude-skills
 claude plugin install kkqq-skills@kkqq
 ```
 
-원칙을 고치려면 이 저장소에서 `PRINCIPLES.md`를 고쳐 push 하고, 스킬의 트리거
-문구를 고치려면 claude-skills 저장소에서 고칩니다. 둘 다 GitHub로 관리됩니다.
+원칙을 고치려면 이 저장소에서 `PRINCIPLES.md`·`LAYOUT-PRINCIPLES.md`를 고쳐
+push 하고, 스킬의 트리거 문구를 고치려면 claude-skills 저장소에서 고칩니다.
+둘 다 GitHub로 관리됩니다.
 
 ## 출처
 
 모든 파일 상단에 원본 파일과 줄 번호를 주석으로 남겼습니다. 가계부 앱은 이제
-이 키트를 `vendor/`로 복사해 씁니다 — 색상 편집기와 토큰은 여기 것을 그대로 부르고,
-다이얼로그·드롭다운·날짜 피커는 아직 앱이 자기 클래스 이름(`.account-edit-*`,
-`.app-select-*`)으로 CSS를 쌓아 둔 탓에 앱 쪽 사본이 남아 있습니다.
-클래스 이름을 이쪽으로 모으는 것이 남은 일입니다.
+이 키트를 **git 의존성으로 걸어**(`github:kkqq9320/kkqq-ui-basic-kit#<SHA>`) 씁니다 —
+색상 편집기와 토큰은 여기 것을 그대로 부르고, 다이얼로그·드롭다운·날짜 피커는
+아직 앱이 자기 클래스 이름(`.account-edit-*`, `.app-select-*`)으로 CSS를 쌓아 둔
+탓에 앱 쪽 사본이 남아 있습니다. 클래스 이름을 이쪽으로 모으는 것이 남은 일입니다.
 
 ## 검증 상태
 
-- `vitest run` — 전부 통과 (**2026-08-10 기준 510개**).
-  숫자를 못 박지 않고 날짜를 붙이는 것은 일부러입니다 — 이 줄은 바로 위에서
-  한 번 썩은 자리이고, 정확한 개수는 커밋마다 달라져 **다시 썩습니다.**
+- `vitest run` — 전부 통과 (**2026-08-12 기준 758개**).
+  숫자를 못 박지 않고 날짜를 붙이는 것은 일부러입니다 — 이 줄은 이미 한 번
+  썩었던 자리이고, 정확한 개수는 커밋마다 달라져 **다시 썩습니다.**
   날짜가 붙어 있으면 낡아도 거짓이 아니라 스냅샷으로 읽힙니다.
 - ⚠️ **여기 있던 "원본 테스트를 한 글자도 고치지 않고 옮겼다"는 주장은 더 이상**
   **참이 아니라 지웠습니다.** 그 주장은 킷을 처음 추출할 때의 것이고, 이후
