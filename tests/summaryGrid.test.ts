@@ -22,6 +22,7 @@ import { describe, expect, it } from "vitest";
 import pageCssSource from "../css/page.css?raw";
 import tokensCssSource from "../css/tokens.css?raw";
 import demoSource from "../demo/main.tsx?raw";
+import themeEditorCssSource from "../css/theme-editor.css?raw";
 
 /** 줄 시작의 `.summary-grid { … }` 규칙 본문. 미디어 쿼리 안의 재정의와 섞이지 않게
  *  줄 시작으로 한정합니다(그쪽은 들여쓰기가 있습니다). */
@@ -134,5 +135,41 @@ describe("패널 안 필드 배치", () => {
    * 영영 안 갑니다. 옮긴 뒤 **쓰이지 않는 것**까지 확인합니다. */
   it("데모가 더 이상 자기 .demo-grid를 쓰지 않는다", () => {
     expect(demoSource).not.toContain('className="demo-grid"');
+  });
+});
+
+/* 색상 편집기의 토큰 목록. **`repeat(2, …)` 2열 고정이라 `.summary-grid`와 같은 결함**
+ * 이었습니다 — 카드가 화면을 2등분해서, 2560에서 한 장이 1038px이고 그 안 헥스 칸이
+ * `#101119` 일곱 글자에 그 폭을 다 썼습니다. 오너가 "색상 토큰에 내부 색상 선택자는
+ * 조절 안 되고 있네"로 잡아냈습니다 — **같은 결함이 킷 안에 하나 더 있었고 이번 라운드가
+ * 거기까지 안 갔던 것입니다.** 고침이 같은 모양의 자리를 전부 훑어야 한다는 규칙이
+ * (PR #7/#9) 또 값을 했습니다. */
+describe("색상 편집기 목록도 들어가는 만큼 채운다", () => {
+  const listRule = /^\.theme-color-list\s*\{([^}]*)\}/m.exec(themeEditorCssSource)?.[1];
+
+  it("CSS 소스를 실제로 읽었다", () => {
+    expect(themeEditorCssSource.length).toBeGreaterThan(500);
+  });
+
+  it(".theme-color-list 규칙을 찾을 수 있다", () => {
+    expect(listRule).toBeDefined();
+  });
+
+  it("열 수를 고정하지 않는다 — repeat(2, …) 시절로 돌아가지 않게", () => {
+    expect(listRule ?? "").not.toMatch(/repeat\(\s*\d/);
+  });
+
+  /* 색상 토큰은 앱이 늘릴 수 있는 **집합**이라 카드(요약 카드)와 같은 편입니다 —
+   * `auto-fit`이면 토큰이 적은 그룹에서 카드가 도로 늘어납니다. */
+  it("auto-fill이다", () => {
+    expect(listRule ?? "").toMatch(/repeat\(\s*auto-fill\s*,/);
+  });
+
+  it("트랙 최소 폭을 토큰에서 폴백과 함께 가져온다", () => {
+    expect(listRule ?? "").toMatch(/minmax\(\s*var\(--color-card-min,\s*\d+px\)/);
+  });
+
+  it("카드 최소 폭 토큰이 :root에 정의돼 있다", () => {
+    expect(tokensCssSource).toMatch(/--color-card-min:\s*\d+px/);
   });
 });
