@@ -780,17 +780,43 @@ JS 쪽만 900으로 바꿔 갔습니다.)
 윈도우 click target=span                       →  keydown key="ArrowRight" … tgt=button.date-wheel-trigger.editing   처리됨=Y
 ```
 
-그래서 트리거의 `pointerdown`에서 **명시적으로** 포커스를 옮깁니다
-(`focusTriggerOnPointerDown`). `preventScroll`을 주는 이유는 모바일에서 포커스가
-화면을 끌고 가기 때문이고, `currentTarget`을 쓰는 이유는 실제 클릭이 트리거 **안의
-세그먼트 span**에 떨어지기 때문입니다(위 트레이스의 `target=span`).
+그래서 트리거의 `click`에서 **명시적으로** 포커스를 옮깁니다(`focusTriggerOnClick`).
+
+**`pointerdown`이 아니라 `click`인 것이 핵심입니다.** 첫 고침은 `pointerdown`에서
+잡았는데, 다음 캡처가 그것이 **3ms만 산다**는 것을 보여 줬습니다:
+
+```
++0ms  pointerdown target=span
++4ms  focusin  foc=button.date-wheel-trigger    ← 우리가 준 포커스
++7ms  mousedown target=span
++9ms  focusout foc=body                         ← mousedown 기본 동작이 걷어감
+```
+
+즉 맥은 포커스를 **안 주는** 것이 아니라 `mousedown`의 기본 동작이 **적극적으로
+걷어냅니다.** `click`은 `mousedown`보다 뒤에 옵니다.
+
+**`mousedown`을 `preventDefault`하는 표준 해법은 쓰지 않았습니다.** 터치에서
+`mousedown`은 `touchend` 뒤의 합성 이벤트이고, 막으면 뒤따르는 `click`이 삼켜지는
+브라우저가 있습니다. 이 스펙은 팝오버 표면의 같은 차단에 대해 **"터치 탭으로 버튼이
+계속 눌리는가"를 이미 미검증으로 적어 두었습니다**(§6.3, §9). 같은 미검증 가정을 하나
+더 만드는 것보다 위험이 없는 자리에서 잡는 쪽을 골랐습니다.
+
+`preventScroll`을 주는 이유는 모바일에서 포커스가 화면을 끌고 가기 때문이고,
+`currentTarget`을 쓰는 이유는 실제 클릭이 트리거 **안의 세그먼트 span**에 떨어지기
+때문입니다(위 트레이스의 `target=span`).
 
 **§6.3의 "열의 `onPointerDown`에서 `focus()`를 부르던 한 줄을 없앤다"와 헷갈리지
 마세요.** 그건 **팝오버 안의 열**이 포커스를 가져가던 것이고, 이 절은 **트리거**가
 포커스를 가져오는 것입니다. 방향이 반대입니다.
 
-**같은 결함이 `Select`에도 있었습니다** — 같은 모양의 트리거에 같은 전제였습니다.
-고침이 헬퍼를 공유하는 컴포넌트를 전부 훑어야 한다는 규칙이 또 값을 했습니다.
+**`Select`는 같은 결함이 아니었습니다 — 처음에 그렇게 단정했다가 측정에서 틀렸습니다.**
+`Select`는 열릴 때 포커스를 **메뉴 안 활성 옵션으로 옮깁니다**(roving tabindex). 그건 명시적
+`focus()` 호출이라 맥에서도 먹으므로 **여는 경로는 원래 멀쩡했습니다.** 남아 있던 구멍은
+**트리거를 다시 눌러 닫는 경로** 하나입니다 — `mousedown`이 옵션의 포커스를 걷어가고
+닫는 클릭이 아무 데도 포커스를 두지 않아 `body`에 남습니다. 같은 헬퍼를 씁니다.
+
+> PR #7이 "Select는 무관하다"고 잘못 썼던 것과 **정확히 대칭인** 실수였습니다.
+> **모양이 같다고 결함이 같지 않습니다** — 양쪽 다 재야 합니다.
 
 **아직 확인 전:** iOS Safari와 외장 키보드 iPad. 원인이 같으므로 같이 나을 가능성이
 높지만, 재기 전에는 "동작한다"고 적지 마세요.
