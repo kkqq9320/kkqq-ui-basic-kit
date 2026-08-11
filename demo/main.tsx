@@ -7,6 +7,7 @@ import { createRoot } from "react-dom/client";
 import "../css/index.css";
 import "./demo.css";
 import { EventTracePanel } from "./EventTracePanel";
+import { logTraceNote } from "./eventTrace";
 import { clearProbeLog, historyProbeEnabled, installHistoryProbe, logProbe, readProbeLog } from "./historyProbe";
 
 // React보다 먼저 설치해야 첫 줄이 "페이지 로드"로 남습니다.
@@ -126,6 +127,11 @@ function Demo() {
   const [long, setLong] = useState("item-0");
   const [date, setDate] = useState("2026-07-23");
   const [optionalDate, setOptionalDate] = useState("");
+  const [raceDate, setRaceDate] = useState("2026-07-23");
+  // 설계 스펙 §7.1이 **미해결로** 적어 둔 경합 — "숫자를 반쯤 친 상태에서 소비자가
+  // `disabled`를 켜면 그 숫자가 확정되는가". 아래 카운트다운이 그 순간을 만듭니다.
+  const [raceDisabled, setRaceDisabled] = useState(false);
+  const [countdown, setCountdown] = useState(0);
   const [memo, setMemo] = useState("");
   const [dialog, setDialog] = useState<"none" | "basic" | "scroll">("none");
   const [navHidden] = useScrollDirectionHidden();
@@ -142,6 +148,19 @@ function Demo() {
   }, [theme]);
 
   useEffect(() => { localStorage.setItem("sidebarCollapsed", String(collapsed)); }, [collapsed]);
+
+  // 1초씩 세다 마지막 칸에서 `disabled`를 켭니다. **버튼을 바로 토글하면 안 됩니다** —
+  // `DateWheelPicker.tsx:659-665`가 바깥 `pointerdown`에 팝오버를 닫으므로, 누르는 순간
+  // 팝오버가 먼저 사라져 만들려던 상태 자체가 없어집니다. 그래서 지연을 둡니다:
+  // 누르고 → 팝오버를 열고 → 숫자를 반쯤 치고 → 그동안 타이머가 켭니다.
+  useEffect(() => {
+    if (countdown === 0) return;
+    const id = window.setTimeout(() => {
+      if (countdown === 1) { setRaceDisabled(true); logTraceNote("disabled=true 켜짐 (§7.1 경합)"); }
+      setCountdown(countdown - 1);
+    }, 1000);
+    return () => window.clearTimeout(id);
+  }, [countdown]);
 
   const navItem = (id: string, label: string, icon: keyof typeof ICONS, badge?: number) => ({
     id, label, badge, icon: <Glyph d={ICONS[icon]} />, active: page === id, onSelect: () => setPage(id),
@@ -226,7 +245,39 @@ function Demo() {
             {/* 비활성 예시가 없어서 이 상태를 아무도 본 적이 없었습니다 — 드롭다운의
                 "비활성"과 나란히 놓고 같은 흐리기인지 확인하세요. */}
             <label>비활성<DateWheelPicker ariaLabel="비활성 날짜" value={date} onChange={setDate} disabled /></label>
+            {/* 위의 "비활성"은 **처음부터** 비활성이라, 설계 스펙 §7.1이 미해결로 적어 둔
+                경합("숫자를 반쯤 친 상태에서 disabled가 켜지면 그 숫자가 확정되는가")을
+                만들 수가 없습니다. 이건 활성으로 시작해 아래 버튼이 나중에 켭니다. */}
+            <label>늦게 비활성 (§7.1)<DateWheelPicker ariaLabel="늦게 비활성 날짜" value={raceDate} onChange={setRaceDate} disabled={raceDisabled} /></label>
           </div>
+          <div className="button-row" style={{ marginTop: 16 }}>
+            <button type="button" className="secondary-button" onClick={() => { setRaceDisabled(false); setCountdown(3); logTraceNote("3초 카운트다운 시작"); }} disabled={countdown > 0}>
+              {countdown > 0 ? `${countdown}초 뒤 비활성…` : "3초 뒤 비활성"}
+            </button>
+            <button type="button" className="secondary-button" onClick={() => { setCountdown(0); setRaceDisabled(false); logTraceNote("disabled=false 되돌림"); }}>다시 활성</button>
+          </div>
+          {/* ⚠️ 안내는 **실제로 검증한 재현 절차 그대로** 적습니다. "아무 숫자나 반쯤"이라고
+              적으면 공허한 캡처가 나오고, **트레이스만 봐서는 그걸 가려낼 수 없습니다**:
+              ① 일 세그먼트의 `4`~`9`는 반쯤 친 상태가 아니라 **즉시 확정**됩니다(×10이 31을
+              넘어 둘째 자리를 못 받습니다). ② 확정 결과가 지금 값과 같으면(예: 값이 02인데
+              `2`를 침) 확정이든 폐기든 화면이 같습니다. 둘 다 이 라운드에서 실제로 겪었습니다. */}
+          <p className="muted-copy" style={{ marginTop: 8 }}>
+            <strong>“늦게 비활성” 확인 순서</strong> — 버튼을 먼저 누릅니다. 팝오버가 열린 뒤에 누르면
+            바깥 클릭이라 팝오버가 먼저 닫힙니다.
+          </p>
+          <ol className="muted-copy" style={{ marginTop: 4, paddingLeft: 20 }}>
+            <li><code>3초 뒤 비활성</code>을 누릅니다.</li>
+            <li>바로 위 컨트롤을 눌러 팝오버를 엽니다.</li>
+            <li><kbd>→</kbd> <kbd>→</kbd>로 <strong>일(day)</strong> 칸까지 간 뒤 <kbd>2</kbd>를 <strong>한 번만</strong> 칩니다.</li>
+            <li>트리거가 <code>2‒</code>로 보이는지 확인합니다 — <strong>이게 “반쯤 친 상태”입니다.</strong>
+              바로 두 자리가 되면 확정된 것이니 <code>다시 활성</code>으로 되돌리고 다시 하세요.</li>
+            <li>그대로 두면 3초째에 <code>disabled</code>가 켜집니다.</li>
+          </ol>
+          <p className="muted-copy" style={{ marginTop: 4 }}>
+            <strong>볼 것:</strong> 날짜의 “일”이 <strong>02로 바뀌면 확정된 것</strong>, <strong>원래 값 그대로면 버려진 것</strong>입니다.
+            어느 쪽이든 TRACE를 복사해 주세요. (Chromium/Windows에서는 <strong>버려짐</strong>으로 측정됐습니다 —
+            다른 결과가 나오면 그게 새 정보입니다.)
+          </p>
         </Panel>
         <Panel title="텍스트와 버튼" hint="CONTROLS">
           {/* data-keyboard-keep-visible: 모바일에서 이 필드에 포커스하면 AppShell이
