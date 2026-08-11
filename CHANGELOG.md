@@ -25,15 +25,17 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.4.0
   복사 명령, `KIT-VERSION` 절차, `diff -r` 동기화, `file:vendor/` 의존성 예시).
   설치 일반에 대한 검증 기록(Vite 확인, 빌드 단계 없음)은 `## 설치` 절로
   옮겨 살렸습니다.
-- **README.md에 남아 있던 거짓 진술 두 개를 고쳤습니다.**
-  1. "벤더링한 프로젝트에서는 그 사본의 `vendor/kkqq-ui-basic-kit/PRINCIPLES.md`가
-     읽힌다"던 문장 — 현재 스킬의 탐색 순서는 `node_modules/kkqq-ui-basic-kit/`
-     다음 공개 raw URL 둘뿐이고, `vendor/` 경로는 찾지 않습니다
-     (`kkqq-skills` 저장소의 `kkqq-ui-basic-kit`·`kkqq-layout-principles`
-     SKILL.md로 확인).
-  2. "그 마켓플레이스 저장소는 비공개"라던 문장 — `kkqq9320/claude-skills`는
-     공개 저장소입니다. 이 거짓 문장이 실제로 한 프로젝트가 2.3MB 사본을
-     저장소에 커밋한 채 남게 된 원인이었습니다.
+- **README.md에 남아 있던 거짓 진술 하나를 고쳤습니다.** "벤더링한 프로젝트에서는
+  그 사본의 `vendor/kkqq-ui-basic-kit/PRINCIPLES.md`가 읽힌다"던 문장 — 현재 스킬의
+  탐색 순서는 `node_modules/kkqq-ui-basic-kit/` 다음 공개 raw URL 둘뿐이고,
+  `vendor/` 경로는 찾지 않습니다 (`kkqq-skills` 저장소의 `kkqq-ui-basic-kit`·
+  `kkqq-layout-principles` SKILL.md로 확인).
+
+  > ⚠️ **두 저장소를 섞어 읽지 마세요.** 마켓플레이스 저장소
+  > (`kkqq9320/claude-skills`)에 대한 "비공개" 표시는 **참이라 그대로 둡니다**
+  > — 실측하면 익명 API가 404이고, 대조군인 이 킷 저장소는 200입니다.
+  > 한 프로젝트가 2.3MB 사본을 커밋하게 만든 거짓은 그 문장이 아니라
+  > **"이 킷 저장소가 비공개"라던 스킬 쪽 문장**이었습니다. 이 킷은 공개입니다.
 - Claude 스킬 절에 두 번째 스킬(`kkqq-layout-principles` — 킷을 설치할 수
   없는 곳에서 `LAYOUT-PRINCIPLES.md`만 필요할 때)을 추가했습니다.
 - "가계부 앱은 이제 `vendor/`로 복사해 쓴다"는 문장을 고쳤습니다 — 실측
