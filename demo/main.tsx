@@ -256,11 +256,27 @@ function Demo() {
             </button>
             <button type="button" className="secondary-button" onClick={() => { setCountdown(0); setRaceDisabled(false); logTraceNote("disabled=false 되돌림"); }}>다시 활성</button>
           </div>
+          {/* ⚠️ 안내는 **실제로 검증한 재현 절차 그대로** 적습니다. "아무 숫자나 반쯤"이라고
+              적으면 공허한 캡처가 나오고, **트레이스만 봐서는 그걸 가려낼 수 없습니다**:
+              ① 일 세그먼트의 `4`~`9`는 반쯤 친 상태가 아니라 **즉시 확정**됩니다(×10이 31을
+              넘어 둘째 자리를 못 받습니다). ② 확정 결과가 지금 값과 같으면(예: 값이 02인데
+              `2`를 침) 확정이든 폐기든 화면이 같습니다. 둘 다 이 라운드에서 실제로 겪었습니다. */}
           <p className="muted-copy" style={{ marginTop: 8 }}>
-            <strong>“늦게 비활성”</strong> 확인 순서: <code>3초 뒤 비활성</code>을 누르고 → 바로 위 컨트롤을 눌러 팝오버를 열고 →
-            연도 숫자를 <strong>한두 자리만</strong> 칩니다(예: <code>20</code>). 3초가 되면 <code>disabled</code>가 켜집니다.
-            그때 <strong>치던 숫자가 값으로 확정되는지, 버려지는지</strong>를 보고 TRACE를 복사해 주세요.
-            버튼을 바로 누르면 안 됩니다 — 바깥을 누르는 순간 팝오버가 먼저 닫힙니다.
+            <strong>“늦게 비활성” 확인 순서</strong> — 버튼을 먼저 누릅니다. 팝오버가 열린 뒤에 누르면
+            바깥 클릭이라 팝오버가 먼저 닫힙니다.
+          </p>
+          <ol className="muted-copy" style={{ marginTop: 4, paddingLeft: 20 }}>
+            <li><code>3초 뒤 비활성</code>을 누릅니다.</li>
+            <li>바로 위 컨트롤을 눌러 팝오버를 엽니다.</li>
+            <li><kbd>→</kbd> <kbd>→</kbd>로 <strong>일(day)</strong> 칸까지 간 뒤 <kbd>2</kbd>를 <strong>한 번만</strong> 칩니다.</li>
+            <li>트리거가 <code>2‒</code>로 보이는지 확인합니다 — <strong>이게 “반쯤 친 상태”입니다.</strong>
+              바로 두 자리가 되면 확정된 것이니 <code>다시 활성</code>으로 되돌리고 다시 하세요.</li>
+            <li>그대로 두면 3초째에 <code>disabled</code>가 켜집니다.</li>
+          </ol>
+          <p className="muted-copy" style={{ marginTop: 4 }}>
+            <strong>볼 것:</strong> 날짜의 “일”이 <strong>02로 바뀌면 확정된 것</strong>, <strong>원래 값 그대로면 버려진 것</strong>입니다.
+            어느 쪽이든 TRACE를 복사해 주세요. (Chromium/Windows에서는 <strong>버려짐</strong>으로 측정됐습니다 —
+            다른 결과가 나오면 그게 새 정보입니다.)
           </p>
         </Panel>
         <Panel title="텍스트와 버튼" hint="CONTROLS">
