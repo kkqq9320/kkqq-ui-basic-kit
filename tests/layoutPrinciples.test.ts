@@ -120,10 +120,19 @@ describe("LAYOUT-PRINCIPLES.md는 4줄 형식을 지킨다", () => {
     expect(missing).toEqual([]);
   });
 
-  // 실패 기록은 **한 줄**입니다. 여러 줄로 쓰면 위 describe의 px 면제 판정이 무너집니다
-  // — 둘째 줄부터는 `**실패한 자리**`로 시작하지 않아 처방으로 오인됩니다.
-  it("실패 기록이 한 줄을 넘지 않는다", () => {
-    const tooLong = failureLines.filter((line) => line.length > 200);
-    expect(tooLong).toEqual([]);
+  /* 실패 기록은 **한 줄**입니다. 여러 줄로 쓰면 위 describe의 px 면제 판정이 무너집니다
+   * — 둘째 줄부터는 `**실패한 자리**`로 시작하지 않아 처방으로 오인됩니다.
+   *
+   * ⚠️ **길이로 재면 이 결함을 못 잡습니다.** 캡처 정규식이 `m` 플래그라 `.`가 줄바꿈을
+   * 넘지 않아, 손으로 접은 기록은 첫 줄만 짧게 잡히고 둘째 줄은 캡처조차 안 됩니다.
+   * 그래서 길이가 아니라 **바로 다음 줄이 이어지는 줄인지**를 봅니다. */
+  it("실패 기록 다음 줄이 이어지지 않는다", () => {
+    const lines = layoutText.split("\n");
+    const wrapped = lines
+      .map((line, index) => ({ line, next: lines[index + 1] ?? "" }))
+      .filter(({ line }) => line.startsWith("**실패한 자리**"))
+      .filter(({ next }) => next.trim() !== "" && !next.startsWith("**") && !next.startsWith("#"))
+      .map(({ next }) => next.trim());
+    expect(wrapped).toEqual([]);
   });
 });
