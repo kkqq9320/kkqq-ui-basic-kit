@@ -126,6 +126,8 @@ const LONG_DIALOG_FIELDS: LongDialogField[] = [
 const CARD_MIN_CHOICES = ["200px", "240px", "280px"] as const;
 const PANEL_MIN_CHOICES = ["360px", "400px", "480px"] as const;
 const FIELD_MIN_CHOICES = ["200px", "230px", "260px"] as const;
+const COLOR_CARD_MIN_CHOICES = ["260px", "300px", "360px"] as const;
+const COLOR_FIELD_CHOICES = ["150px", "200px", "260px"] as const;
 
 /** 확인용 폭. 오너가 스크린샷을 보낸 세 자리 + 넓은 화면. */
 const WIDTH_PRESETS = [
@@ -145,14 +147,18 @@ const OLD_RULES = `
      소비 앱의 옛 모습은 "한 열"입니다 — 여기서는 데모의 옛 모습을 재현합니다).
      이 줄이 없으면 필드 행의 두 열이 언제나 같게 나와, 표가 "안 바뀌었다"고 거짓말합니다. */
   .field-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)) !important; }
+  .theme-color-list { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
+  .theme-color-entry { grid-template-columns: auto minmax(0,1fr) !important; }
 `;
 
-type Reading = { cardCols: number; card: number; fieldCols: number; field: number; panelCols: number; panel: number; memo: number };
+type Reading = { colorCols: number; colorCard: number; colorField: number; cardCols: number; card: number; fieldCols: number; field: number; panelCols: number; panel: number; memo: number };
 
 function LayoutSwitch() {
   const [cardMin, setCardMin] = useState<(typeof CARD_MIN_CHOICES)[number]>("240px");
   const [panelMin, setPanelMin] = useState<(typeof PANEL_MIN_CHOICES)[number]>("400px");
   const [fieldMin, setFieldMin] = useState<(typeof FIELD_MIN_CHOICES)[number]>("230px");
+  const [colorCardMin, setColorCardMin] = useState<(typeof COLOR_CARD_MIN_CHOICES)[number]>("260px");
+  const [colorFieldWidth, setColorFieldWidth] = useState<(typeof COLOR_FIELD_CHOICES)[number]>("200px");
   const [fakeWidth, setFakeWidth] = useState(0);
   const [now, setNow] = useState<Reading | null>(null);
   const [before, setBefore] = useState<Reading | null>(null);
@@ -161,6 +167,8 @@ function LayoutSwitch() {
   useEffect(() => { document.documentElement.style.setProperty("--summary-card-min", cardMin); }, [cardMin]);
   useEffect(() => { document.documentElement.style.setProperty("--panel-min", panelMin); }, [panelMin]);
   useEffect(() => { document.documentElement.style.setProperty("--field-min", fieldMin); }, [fieldMin]);
+  useEffect(() => { document.documentElement.style.setProperty("--color-card-min", colorCardMin); }, [colorCardMin]);
+  useEffect(() => { document.documentElement.style.setProperty("--color-field-width", colorFieldWidth); }, [colorFieldWidth]);
 
   /* **폭 흉내입니다. 창을 실제로 줄이는 게 아닙니다.** `.app-shell`을 좁혀 작업 영역이
      받는 폭만 그 값으로 만듭니다 — 이 그리드들이 보는 것은 창이 아니라 부모 폭이므로
@@ -199,6 +207,7 @@ function LayoutSwitch() {
       return el ? Math.round(el.getBoundingClientRect().width) : 0;
     };
     const read = (): Reading => ({
+      colorCols: tracks(".theme-color-list"), colorCard: width(".theme-color-card"), colorField: width(".theme-color-text"),
       cardCols: tracks(".summary-grid"), card: width(".summary-card"),
       fieldCols: tracks(".field-grid"), field: width(".field-grid > label"),
       panelCols: tracks(".panel-grid"), panel: width(".panel-grid > .panel"),
@@ -239,7 +248,7 @@ function LayoutSwitch() {
     const timer = window.setInterval(measure, 400);
     window.addEventListener("resize", measure);
     return () => { window.clearInterval(timer); window.removeEventListener("resize", measure); };
-  }, [cardMin, panelMin, fieldMin, fakeWidth]);
+  }, [cardMin, panelMin, fieldMin, colorCardMin, colorFieldWidth, fakeWidth]);
 
   const row = <T extends string>(label: string, choices: readonly T[], current: T, set: (value: T) => void) =>
     <div className="layout-switch-row">
@@ -252,7 +261,7 @@ function LayoutSwitch() {
   /* 지금 탭에 있는 것만 비교합니다 — 다른 탭에 있는 요소는 양쪽 다 0이라 "같다"에
      공짜로 기여합니다. 그걸 세면 아무것도 못 재는 탭에서 "옛 규칙과 같다"가 뜹니다. */
   const measured = now && before
-    ? ([["card", now.card, before.card], ["panel", now.panel, before.panel], ["memo", now.memo, before.memo], ["field", now.field, before.field]] as const).filter(([, a]) => a > 0)
+    ? ([["card", now.card, before.card], ["panel", now.panel, before.panel], ["memo", now.memo, before.memo], ["field", now.field, before.field], ["colorCard", now.colorCard, before.colorCard]] as const).filter(([, a]) => a > 0)
     : [];
   const same = measured.length > 0 && measured.every(([, a, b]) => a === b);
   /* 다른 탭에 있어서 못 잰 값은 `—`가 아니라 **어디 있는지**를 말합니다. `—`만 뜨면
@@ -263,6 +272,8 @@ function LayoutSwitch() {
     {row("--summary-card-min", CARD_MIN_CHOICES, cardMin, setCardMin)}
     {row("--panel-min", PANEL_MIN_CHOICES, panelMin, setPanelMin)}
     {row("--field-min", FIELD_MIN_CHOICES, fieldMin, setFieldMin)}
+    {row("--color-card-min", COLOR_CARD_MIN_CHOICES, colorCardMin, setColorCardMin)}
+    {row("--color-field-width", COLOR_FIELD_CHOICES, colorFieldWidth, setColorFieldWidth)}
     <div className="layout-switch-row">
       <strong>폭 흉내 (창은 그대로)</strong>
       <div className="layout-switch-buttons">
@@ -279,6 +290,8 @@ function LayoutSwitch() {
     <table className="layout-switch-table">
       <thead><tr><th>{fakeWidth ? `흉내 ${fakeWidth}` : `화면 ${viewport}`}</th><th>지금</th><th>옛 규칙</th></tr></thead>
       <tbody>
+        <tr><td>색상 카드</td><td>{now ? cell(now.colorCols, now.colorCard, "색상 탭") : "…"}</td><td>{before ? cell(before.colorCols, before.colorCard, "") : "…"}</td></tr>
+        <tr><td>색상 값칸</td><td>{now ? cell(0, now.colorField, "색상 탭") : "…"}</td><td>{before ? cell(0, before.colorField, "") : "…"}</td></tr>
         <tr><td>요약 카드</td><td>{now ? cell(now.cardCols, now.card, "레이아웃 탭") : "…"}</td><td>{before ? cell(before.cardCols, before.card, "") : "…"}</td></tr>
         <tr><td>패널 안 필드</td><td>{now ? cell(now.fieldCols, now.field, "컨트롤 탭") : "…"}</td><td>{before ? cell(before.fieldCols, before.field, "") : "…"}</td></tr>
         <tr><td>패널</td><td>{now ? cell(now.panelCols, now.panel, "컨트롤 탭") : "…"}</td><td>{before ? cell(before.panelCols, before.panel, "") : "…"}</td></tr>
