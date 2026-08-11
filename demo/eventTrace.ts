@@ -91,6 +91,15 @@ export function getEventTrace(): TraceEntry[] {
   return entries;
 }
 
+/** 데모가 "지금 이 일이 일어났다"를 트레이스에 직접 끼워 넣습니다.
+ *
+ * 소비자 쪽 상태 변화(예: `disabled`가 켜지는 순간)는 DOM 이벤트가 아니라서 이 패널이
+ * 스스로 볼 방법이 없습니다. 그 순간에 표식이 없으면, 캡처를 읽는 쪽은 앞뒤 줄에서
+ * **추론**해야 하고 그건 이 프로젝트가 이미 여러 번 대가를 치른 방식입니다. */
+export function logTraceNote(note: string) {
+  append(`── ${note}`);
+}
+
 export function clearEventTrace() {
   entries = [];
   burstStart = null;
@@ -665,6 +674,38 @@ function append(text: string) {
   notify();
 }
 
+/* ── 키 이벤트 ───────────────────────────────────────────────────────────────
+ *
+ * 미해결 항목: macOS에서 `Cmd+;`(오늘로 설정)가 안 듣는다. 코드 경로는 읽어서 확인했고
+ * 정상이다 — `DateWheelPicker.tsx`의 `handleShortcut`이 `(ctrlKey || metaKey) && code ===
+ * "Semicolon"`을 보고, 그 호출이 "Ctrl·Meta가 눌린 키는 무시" 가드보다 **앞**에 있다
+ * (그 순서에는 뮤테이션 증거가 붙어 있다: 뒤로 옮기면 4 red). **읽어서는 더 못 간다.**
+ *
+ * 남은 후보를 이 로그가 가른다:
+ *   줄이 아예 없음        → keydown이 페이지에 도달하지 않는다. OS나 브라우저가 먼저 먹었다.
+ *   `code=`가 Semicolon이 아님 → 배열·플랫폼 차이. 킷의 판정 기준을 바꿔야 한다.
+ *   `tgt=`가 트리거가 아님   → 키는 왔는데 다른 데로 갔다. React 핸들러는 트리거 위에만 있다.
+ *   `처리됨=N`             → 위 셋 다 통과했는데 킷이 손대지 않았다. 그때 다시 판다.
+ *
+ * ⚠️ **여기서 킷의 판정을 재현하지 않는다.** 이 파일은 이미 세 군데(GAP·마커·pin)에서
+ * 미러 드리프트를 경고한다. "Ctrl+;인가"를 여기서 다시 계산하면 그 판정이 틀렸을 때
+ * 패널도 같이 틀려서 **틀렸다는 사실 자체가 안 보인다.** 원시 사실만 적는다.
+ *
+ * ⚠️ **필터를 걸지 않는다.** 이 항목이 지금까지 측정 불가였던 이유가 정확히 그것이다 —
+ * `historyProbe.ts`에 keydown 리스너가 **있었는데** `Escape`/`Backspace`/`ArrowLeft`만
+ * 통과시키고 `metaKey`는 보지도 않아, `Cmd+;`는 두 겹으로 안 찍혔다. 목록을 늘리는
+ * 대신 전부 찍는다. 대신 타이핑이 많으면 링버퍼(MAX_ENTRIES=400)를 빨리 밀어내므로,
+ * 키를 볼 캡처에서는 재현 직전에 `지우기`를 한 번 누를 것.
+ *
+ * `keyCode`도 남긴다 — 안드로이드 소프트 키보드는 조합 중에 `key="Unidentified"`,
+ * `keyCode=229`를 보내므로, 그게 보이면 "키가 안 온다"가 아니라 "IME 경로"다. */
+function describeModifiers(event: KeyboardEvent): string {
+  const held = [event.ctrlKey && "Ctrl", event.metaKey && "Meta", event.altKey && "Alt", event.shiftKey && "Shift"].filter(Boolean);
+  return held.length ? held.join("+") : "없음";
+}
+
+const KEY_EVENTS = ["keydown", "keyup"] as const;
+
 const POINTER_LIKE_EVENTS = ["pointerdown", "pointerup", "touchstart", "touchend", "mousedown", "mouseup", "click"] as const;
 
 let installed = false;
@@ -673,6 +714,29 @@ let installed = false;
 export function installEventTrace() {
   if (installed) return;
   installed = true;
+
+  // 키는 **window의 캡처 단계**에서 받는다 — 스크립트가 볼 수 있는 가장 이른 자리다
+  // (캡처는 window → document → … → target 순). document에 걸면 window에서 먹힌 경우를
+  // 못 보고, 그건 지금 가르려는 후보 중 하나다.
+  for (const type of KEY_EVENTS) {
+    window.addEventListener(type, (event) => {
+      append(`${type.padEnd(7)} key=${JSON.stringify(event.key)} code=${event.code === "" ? "(빈값)" : event.code} keyCode=${event.keyCode}`
+        + `  mods=${describeModifiers(event)}  rep=${event.repeat ? "Y" : "N"} ime=${event.isComposing ? "Y" : "N"}`
+        + `  tgt=${describeTarget(event.target)}`);
+    }, { capture: true, passive: true });
+  }
+  // 판정 줄은 **버블 단계의 window**에서 찍는다 — 디스패치의 마지막 자리라, 그 시점의
+  // `defaultPrevented`는 트리거의 React 핸들러까지 전부 돈 뒤의 결과다.
+  //
+  // `queueMicrotask`로 미루면 안 된다: 브라우저가 디스패치하는 이벤트는 리스너 **사이**
+  // 마다 마이크로태스크 체크포인트를 돌므로, 캡처 리스너에서 큐에 넣은 것은 대상 리스너가
+  // 돌기 **전에** 실행된다 — 언제나 `처리됨=N`이 찍히는 거짓 계측기가 된다.
+  //
+  // **이 줄이 없으면 그것도 정보다:** 누군가 stopPropagation을 불렀다는 뜻이다.
+  // 그래서 조용히 넘기지 않고 캡처 줄과 짝이 맞는지를 읽는 쪽이 보게 둔다.
+  window.addEventListener("keydown", (event) => {
+    append(`  ↳ 처리됨=${event.defaultPrevented ? "Y (preventDefault 호출됨)" : "N (아무도 안 잡았다)"}`);
+  });
 
   for (const type of POINTER_LIKE_EVENTS) {
     document.addEventListener(type, (event) => {

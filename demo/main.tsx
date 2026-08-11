@@ -7,6 +7,7 @@ import { createRoot } from "react-dom/client";
 import "../css/index.css";
 import "./demo.css";
 import { EventTracePanel } from "./EventTracePanel";
+import { logTraceNote } from "./eventTrace";
 import { clearProbeLog, historyProbeEnabled, installHistoryProbe, logProbe, readProbeLog } from "./historyProbe";
 
 // React보다 먼저 설치해야 첫 줄이 "페이지 로드"로 남습니다.
@@ -126,6 +127,11 @@ function Demo() {
   const [long, setLong] = useState("item-0");
   const [date, setDate] = useState("2026-07-23");
   const [optionalDate, setOptionalDate] = useState("");
+  const [raceDate, setRaceDate] = useState("2026-07-23");
+  // 설계 스펙 §7.1이 **미해결로** 적어 둔 경합 — "숫자를 반쯤 친 상태에서 소비자가
+  // `disabled`를 켜면 그 숫자가 확정되는가". 아래 카운트다운이 그 순간을 만듭니다.
+  const [raceDisabled, setRaceDisabled] = useState(false);
+  const [countdown, setCountdown] = useState(0);
   const [memo, setMemo] = useState("");
   const [dialog, setDialog] = useState<"none" | "basic" | "scroll">("none");
   const [navHidden] = useScrollDirectionHidden();
@@ -142,6 +148,19 @@ function Demo() {
   }, [theme]);
 
   useEffect(() => { localStorage.setItem("sidebarCollapsed", String(collapsed)); }, [collapsed]);
+
+  // 1초씩 세다 마지막 칸에서 `disabled`를 켭니다. **버튼을 바로 토글하면 안 됩니다** —
+  // `DateWheelPicker.tsx:659-665`가 바깥 `pointerdown`에 팝오버를 닫으므로, 누르는 순간
+  // 팝오버가 먼저 사라져 만들려던 상태 자체가 없어집니다. 그래서 지연을 둡니다:
+  // 누르고 → 팝오버를 열고 → 숫자를 반쯤 치고 → 그동안 타이머가 켭니다.
+  useEffect(() => {
+    if (countdown === 0) return;
+    const id = window.setTimeout(() => {
+      if (countdown === 1) { setRaceDisabled(true); logTraceNote("disabled=true 켜짐 (§7.1 경합)"); }
+      setCountdown(countdown - 1);
+    }, 1000);
+    return () => window.clearTimeout(id);
+  }, [countdown]);
 
   const navItem = (id: string, label: string, icon: keyof typeof ICONS, badge?: number) => ({
     id, label, badge, icon: <Glyph d={ICONS[icon]} />, active: page === id, onSelect: () => setPage(id),
@@ -226,7 +245,23 @@ function Demo() {
             {/* 비활성 예시가 없어서 이 상태를 아무도 본 적이 없었습니다 — 드롭다운의
                 "비활성"과 나란히 놓고 같은 흐리기인지 확인하세요. */}
             <label>비활성<DateWheelPicker ariaLabel="비활성 날짜" value={date} onChange={setDate} disabled /></label>
+            {/* 위의 "비활성"은 **처음부터** 비활성이라, 설계 스펙 §7.1이 미해결로 적어 둔
+                경합("숫자를 반쯤 친 상태에서 disabled가 켜지면 그 숫자가 확정되는가")을
+                만들 수가 없습니다. 이건 활성으로 시작해 아래 버튼이 나중에 켭니다. */}
+            <label>늦게 비활성 (§7.1)<DateWheelPicker ariaLabel="늦게 비활성 날짜" value={raceDate} onChange={setRaceDate} disabled={raceDisabled} /></label>
           </div>
+          <div className="button-row" style={{ marginTop: 16 }}>
+            <button type="button" className="secondary-button" onClick={() => { setRaceDisabled(false); setCountdown(3); logTraceNote("3초 카운트다운 시작"); }} disabled={countdown > 0}>
+              {countdown > 0 ? `${countdown}초 뒤 비활성…` : "3초 뒤 비활성"}
+            </button>
+            <button type="button" className="secondary-button" onClick={() => { setCountdown(0); setRaceDisabled(false); logTraceNote("disabled=false 되돌림"); }}>다시 활성</button>
+          </div>
+          <p className="muted-copy" style={{ marginTop: 8 }}>
+            <strong>“늦게 비활성”</strong> 확인 순서: <code>3초 뒤 비활성</code>을 누르고 → 바로 위 컨트롤을 눌러 팝오버를 열고 →
+            연도 숫자를 <strong>한두 자리만</strong> 칩니다(예: <code>20</code>). 3초가 되면 <code>disabled</code>가 켜집니다.
+            그때 <strong>치던 숫자가 값으로 확정되는지, 버려지는지</strong>를 보고 TRACE를 복사해 주세요.
+            버튼을 바로 누르면 안 됩니다 — 바깥을 누르는 순간 팝오버가 먼저 닫힙니다.
+          </p>
         </Panel>
         <Panel title="텍스트와 버튼" hint="CONTROLS">
           {/* data-keyboard-keep-visible: 모바일에서 이 필드에 포커스하면 AppShell이
