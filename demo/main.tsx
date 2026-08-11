@@ -23,6 +23,7 @@ import {
   MobilePageTabsContext,
   MobileQuickBar,
   Panel,
+  PanelGrid,
   PageHeader,
   SectionHeading,
   SectionTabs,
@@ -122,45 +123,55 @@ const LONG_DIALOG_FIELDS: LongDialogField[] = [
  * 패딩과 스크롤바를 빼먹어 그럴듯하게 틀립니다.
  */
 const CARD_MIN_CHOICES = ["200px", "240px", "280px"] as const;
+const PANEL_MIN_CHOICES = ["520px", "640px", "760px"] as const;
 
-function SummaryCardMinSwitch() {
-  const [min, setMin] = useState<(typeof CARD_MIN_CHOICES)[number]>("240px");
-  const [size, setSize] = useState({ card: 0, columns: 0, viewport: 0 });
+function LayoutSwitch() {
+  const [cardMin, setCardMin] = useState<(typeof CARD_MIN_CHOICES)[number]>("240px");
+  const [panelMin, setPanelMin] = useState<(typeof PANEL_MIN_CHOICES)[number]>("640px");
+  const [size, setSize] = useState({ card: 0, cardCols: 0, panel: 0, panelCols: 0, memo: 0, viewport: 0 });
 
-  useEffect(() => { document.documentElement.style.setProperty("--summary-card-min", min); }, [min]);
+  useEffect(() => { document.documentElement.style.setProperty("--summary-card-min", cardMin); }, [cardMin]);
+  useEffect(() => { document.documentElement.style.setProperty("--panel-min", panelMin); }, [panelMin]);
 
   useEffect(() => {
     const measure = () => {
-      const grid = document.querySelector(".summary-grid");
-      const card = document.querySelector(".summary-card");
+      const tracks = (selector: string) => {
+        const el = document.querySelector(selector);
+        return el ? getComputedStyle(el).gridTemplateColumns.split(" ").filter(Boolean).length : 0;
+      };
+      const width = (selector: string) => {
+        const el = document.querySelector(selector);
+        return el ? Math.round(el.getBoundingClientRect().width) : 0;
+      };
       setSize({
-        card: card ? Math.round(card.getBoundingClientRect().width) : 0,
-        // 한 줄에 몇 칸인지는 카드 수가 아니라 **그리드가 만든 트랙 수**입니다 —
-        // 카드 4장이 8칸 중 왼쪽 4칸만 채우는 것이 이 방식의 요점이라, 카드만 세면
-        // 언제나 4가 나와 아무것도 안 보입니다.
-        columns: grid ? getComputedStyle(grid).gridTemplateColumns.split(" ").filter(Boolean).length : 0,
+        card: width(".summary-card"), cardCols: tracks(".summary-grid"),
+        panel: width(".panel-grid > .panel"), panelCols: tracks(".panel-grid"),
+        // 메모 칸이 이 라운드의 최악값이었습니다(2560에서 2056px). 패널이 좁아지면
+        // 같이 줄어드는지가 "패널을 나란히 놓으면 안쪽도 낫는다"의 확인입니다.
+        memo: width(".auto-grow-textarea"),
         viewport: window.innerWidth,
       });
     };
     const frame = requestAnimationFrame(measure);
     window.addEventListener("resize", measure);
     return () => { cancelAnimationFrame(frame); window.removeEventListener("resize", measure); };
-  }, [min]);
+  }, [cardMin, panelMin]);
 
-  return <div className="grid-switch">
-    <strong>--summary-card-min</strong>
-    <div className="grid-switch-buttons">
-      {CARD_MIN_CHOICES.map((choice) => <button
-        key={choice}
-        type="button"
-        className={choice === min ? "primary" : "secondary-button"}
-        aria-pressed={choice === min}
-        onClick={() => setMin(choice)}
-      >{choice}</button>)}
-    </div>
+  const row = <T extends string>(label: string, choices: readonly T[], current: T, set: (value: T) => void) =>
+    <div className="layout-switch-row">
+      <strong>{label}</strong>
+      <div className="layout-switch-buttons">
+        {choices.map((choice) => <button key={choice} type="button" className={choice === current ? "primary" : "secondary-button"} aria-pressed={choice === current} onClick={() => set(choice)}>{choice}</button>)}
+      </div>
+    </div>;
+
+  return <div className="layout-switch">
+    {row("--summary-card-min", CARD_MIN_CHOICES, cardMin, setCardMin)}
+    {row("--panel-min", PANEL_MIN_CHOICES, panelMin, setPanelMin)}
     <small>
-      화면 {size.viewport} · 한 줄 {size.columns || "—"}칸 · 카드 {size.card || "—"}px
-      {size.card ? "" : " (레이아웃 탭에서 보입니다)"}
+      화면 {size.viewport}<br />
+      카드 {size.cardCols || "—"}칸 · {size.card || "—"}px{size.card ? "" : " (레이아웃 탭)"}<br />
+      패널 {size.panelCols || "—"}칸 · {size.panel || "—"}px · 메모 {size.memo || "—"}px
     </small>
   </div>;
 }
@@ -227,7 +238,7 @@ function Demo() {
     <EventTracePanel />
     {/* `--summary-card-min` 후보 비교용 조작판(데모 전용). 오너가 2560 화면에서 값을
         고르면 그 값이 tokens.css의 기본값이 되고 이 조작판은 사라집니다. */}
-    <SummaryCardMinSwitch />
+    <LayoutSwitch />
     <AppShell
       collapsed={collapsed}
       mobileOpen={mobileOpen}
@@ -279,85 +290,91 @@ function Demo() {
       {tab === "controls" && <>
         {historyProbeEnabled() && <HistoryLogPanel />}
         <SectionHeading title="컨트롤" description="입력·드롭다운·날짜는 41px, 표준 액션은 38px, 조밀한 액션은 32px입니다. 같은 문맥의 버튼은 반드시 같은 높이를 씁니다." />
-        <Panel title="드롭다운" hint="SELECT">
-          <div className="demo-grid">
-            <label>왼쪽 정렬 (기본)<Select ariaLabel="통화" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} /></label>
-            <label>가운데 정렬<Select ariaLabel="가운데 정렬 통화" align="center" value={centered} options={SHORT_OPTIONS} onChange={setCentered} /></label>
-            <label>긴 목록 (위로 열림 확인)<Select ariaLabel="긴 목록" value={long} options={LONG_OPTIONS} onChange={setLong} /></label>
-            <label>비활성<Select ariaLabel="비활성 드롭다운" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} disabled /></label>
-            {/* 아래 둘은 disabled prop을 주지 않았는데도 비활성으로 보여야 합니다 —
-                고를 수 있는 옵션이 하나도 없으면 컨트롤 자체가 비활성입니다(PRINCIPLES §3).
-                왼쪽의 "비활성"과 나란히 두어 셋이 같아 보이는지 확인하세요. */}
-            <label>옵션이 전부 비활성<Select ariaLabel="전부 비활성 드롭다운" value="krw" options={ALL_DISABLED_OPTIONS} onChange={setCurrency} /></label>
-            <label>옵션이 없음<Select ariaLabel="빈 드롭다운" value="" options={[]} onChange={setCurrency} /></label>
-          </div>
-        </Panel>
-        <Panel title="날짜 피커" hint="DATE WHEEL">
-          <div className="demo-grid">
-            <label>필수 날짜<DateWheelPicker ariaLabel="거래 날짜" value={date} onChange={setDate} /></label>
-            <label>선택 날짜 (비우기 가능)<DateWheelPicker ariaLabel="종료일" value={optionalDate} onChange={setOptionalDate} allowClear /></label>
-            <label>범위 제한 (2026년만)<DateWheelPicker ariaLabel="제한 날짜" value={date} onChange={setDate} min="2026-01-01" max="2026-12-31" /></label>
-            <label>연·월만 (fields)<DateWheelPicker ariaLabel="예산 월" value={date} onChange={setDate} fields={["year", "month"]} /></label>
-            <label>연도만 (fields)<DateWheelPicker ariaLabel="회계 연도" value={date} onChange={setDate} fields={["year"]} /></label>
-            <label>영어 라벨<DateWheelPicker ariaLabel="Date" value={date} onChange={setDate} labels={{ placeholder: "Pick a date", hint: "Scroll, swipe, arrow keys, or type digits · Ctrl+; today", today: "Today", clear: "Clear", done: "Done", previous: "previous", next: "next", select: "picker", weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], units: { year: "Year", month: "Month", day: "Day" } }} /></label>
-            {/* 비활성 예시가 없어서 이 상태를 아무도 본 적이 없었습니다 — 드롭다운의
-                "비활성"과 나란히 놓고 같은 흐리기인지 확인하세요. */}
-            <label>비활성<DateWheelPicker ariaLabel="비활성 날짜" value={date} onChange={setDate} disabled /></label>
-            {/* 위의 "비활성"은 **처음부터** 비활성이라, 설계 스펙 §7.1이 미해결로 적어 둔
-                경합("숫자를 반쯤 친 상태에서 disabled가 켜지면 그 숫자가 확정되는가")을
-                만들 수가 없습니다. 이건 활성으로 시작해 아래 버튼이 나중에 켭니다. */}
-            <label>늦게 비활성 (§7.1)<DateWheelPicker ariaLabel="늦게 비활성 날짜" value={raceDate} onChange={setRaceDate} disabled={raceDisabled} /></label>
-          </div>
-          <div className="button-row" style={{ marginTop: 16 }}>
-            <button type="button" className="secondary-button" onClick={() => { setRaceDisabled(false); setCountdown(3); logTraceNote("3초 카운트다운 시작"); }} disabled={countdown > 0}>
-              {countdown > 0 ? `${countdown}초 뒤 비활성…` : "3초 뒤 비활성"}
-            </button>
-            <button type="button" className="secondary-button" onClick={() => { setCountdown(0); setRaceDisabled(false); logTraceNote("disabled=false 되돌림"); }}>다시 활성</button>
-          </div>
-          {/* ⚠️ 안내는 **실제로 검증한 재현 절차 그대로** 적습니다. "아무 숫자나 반쯤"이라고
-              적으면 공허한 캡처가 나오고, **트레이스만 봐서는 그걸 가려낼 수 없습니다**:
-              ① 일 세그먼트의 `4`~`9`는 반쯤 친 상태가 아니라 **즉시 확정**됩니다(×10이 31을
-              넘어 둘째 자리를 못 받습니다). ② 확정 결과가 지금 값과 같으면(예: 값이 02인데
-              `2`를 침) 확정이든 폐기든 화면이 같습니다. 둘 다 이 라운드에서 실제로 겪었습니다. */}
-          <p className="muted-copy" style={{ marginTop: 8 }}>
-            <strong>“늦게 비활성” 확인 순서</strong> — 버튼을 먼저 누릅니다. 팝오버가 열린 뒤에 누르면
-            바깥 클릭이라 팝오버가 먼저 닫힙니다.
-          </p>
-          <ol className="muted-copy" style={{ marginTop: 4, paddingLeft: 20 }}>
-            <li><code>3초 뒤 비활성</code>을 누릅니다.</li>
-            <li>바로 위 컨트롤을 눌러 팝오버를 엽니다.</li>
-            <li><kbd>→</kbd> <kbd>→</kbd>로 <strong>일(day)</strong> 칸까지 간 뒤 <kbd>2</kbd>를 <strong>한 번만</strong> 칩니다.</li>
-            <li>트리거가 <code>2‒</code>로 보이는지 확인합니다 — <strong>이게 “반쯤 친 상태”입니다.</strong>
-              바로 두 자리가 되면 확정된 것이니 <code>다시 활성</code>으로 되돌리고 다시 하세요.</li>
-            <li>그대로 두면 3초째에 <code>disabled</code>가 켜집니다.</li>
-          </ol>
-          <p className="muted-copy" style={{ marginTop: 4 }}>
-            <strong>볼 것:</strong> 날짜의 “일”이 <strong>02로 바뀌면 확정된 것</strong>, <strong>원래 값 그대로면 버려진 것</strong>입니다.
-            어느 쪽이든 TRACE를 복사해 주세요. (Chromium/Windows에서는 <strong>버려짐</strong>으로 측정됐습니다 —
-            다른 결과가 나오면 그게 새 정보입니다.)
-          </p>
-        </Panel>
-        <Panel title="텍스트와 버튼" hint="CONTROLS">
-          {/* data-keyboard-keep-visible: 모바일에서 이 필드에 포커스하면 AppShell이
-              이 블록 전체(메모 + 아래 버튼 줄)의 아래쪽을 키보드 위로 들어올린다 —
-              필드 자신의 아래쪽만 기준으로 삼으면 취소/삭제/저장 버튼이 계속 키보드
-              뒤에 남는다. README.md의 "data-keyboard-keep-visible" 항목 참고. */}
-          <div data-keyboard-keep-visible>
-            <label>메모 (3줄에서 시작해 자동 확장)<AutoGrowTextarea value={memo} onChange={setMemo} placeholder="여러 줄을 입력해 보세요" maxLength={500} ariaLabel="메모" /></label>
-            <div className="button-row" style={{ marginTop: 16 }}>
-              <button type="button" className="secondary-button">취소</button>
-              <button type="button" className="danger-button">삭제</button>
-              <button type="button" className="primary">저장</button>
+        {/* 앱이 "이 둘은 같이 선다"를 정합니다 — 킷은 통(PanelGrid)만 줍니다.
+            좁아지면 알아서 한 열로 쌓이므로 모바일 분기가 따로 없습니다. */}
+        <PanelGrid>
+          <Panel title="드롭다운" hint="SELECT">
+            <div className="demo-grid">
+              <label>왼쪽 정렬 (기본)<Select ariaLabel="통화" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} /></label>
+              <label>가운데 정렬<Select ariaLabel="가운데 정렬 통화" align="center" value={centered} options={SHORT_OPTIONS} onChange={setCentered} /></label>
+              <label>긴 목록 (위로 열림 확인)<Select ariaLabel="긴 목록" value={long} options={LONG_OPTIONS} onChange={setLong} /></label>
+              <label>비활성<Select ariaLabel="비활성 드롭다운" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} disabled /></label>
+              {/* 아래 둘은 disabled prop을 주지 않았는데도 비활성으로 보여야 합니다 —
+                  고를 수 있는 옵션이 하나도 없으면 컨트롤 자체가 비활성입니다(PRINCIPLES §3).
+                  왼쪽의 "비활성"과 나란히 두어 셋이 같아 보이는지 확인하세요. */}
+              <label>옵션이 전부 비활성<Select ariaLabel="전부 비활성 드롭다운" value="krw" options={ALL_DISABLED_OPTIONS} onChange={setCurrency} /></label>
+              <label>옵션이 없음<Select ariaLabel="빈 드롭다운" value="" options={[]} onChange={setCurrency} /></label>
             </div>
-          </div>
-        </Panel>
-        <Panel title="다이얼로그" hint="DIALOG">
-          <p className="muted-copy">백드롭 클릭·Escape로 닫히고, 포커스가 안에 갇히며, 닫히면 열었던 버튼으로 포커스가 돌아옵니다.</p>
-          <div className="button-row" style={{ marginTop: 16 }}>
-            <button type="button" className="secondary-button" onClick={() => setDialog("scroll")}>긴 다이얼로그</button>
-            <button type="button" className="primary" onClick={() => setDialog("basic")}>다이얼로그 열기</button>
-          </div>
-        </Panel>
+          </Panel>
+          <Panel title="날짜 피커" hint="DATE WHEEL">
+            <div className="demo-grid">
+              <label>필수 날짜<DateWheelPicker ariaLabel="거래 날짜" value={date} onChange={setDate} /></label>
+              <label>선택 날짜 (비우기 가능)<DateWheelPicker ariaLabel="종료일" value={optionalDate} onChange={setOptionalDate} allowClear /></label>
+              <label>범위 제한 (2026년만)<DateWheelPicker ariaLabel="제한 날짜" value={date} onChange={setDate} min="2026-01-01" max="2026-12-31" /></label>
+              <label>연·월만 (fields)<DateWheelPicker ariaLabel="예산 월" value={date} onChange={setDate} fields={["year", "month"]} /></label>
+              <label>연도만 (fields)<DateWheelPicker ariaLabel="회계 연도" value={date} onChange={setDate} fields={["year"]} /></label>
+              <label>영어 라벨<DateWheelPicker ariaLabel="Date" value={date} onChange={setDate} labels={{ placeholder: "Pick a date", hint: "Scroll, swipe, arrow keys, or type digits · Ctrl+; today", today: "Today", clear: "Clear", done: "Done", previous: "previous", next: "next", select: "picker", weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], units: { year: "Year", month: "Month", day: "Day" } }} /></label>
+              {/* 비활성 예시가 없어서 이 상태를 아무도 본 적이 없었습니다 — 드롭다운의
+                  "비활성"과 나란히 놓고 같은 흐리기인지 확인하세요. */}
+              <label>비활성<DateWheelPicker ariaLabel="비활성 날짜" value={date} onChange={setDate} disabled /></label>
+              {/* 위의 "비활성"은 **처음부터** 비활성이라, 설계 스펙 §7.1이 미해결로 적어 둔
+                  경합("숫자를 반쯤 친 상태에서 disabled가 켜지면 그 숫자가 확정되는가")을
+                  만들 수가 없습니다. 이건 활성으로 시작해 아래 버튼이 나중에 켭니다. */}
+              <label>늦게 비활성 (§7.1)<DateWheelPicker ariaLabel="늦게 비활성 날짜" value={raceDate} onChange={setRaceDate} disabled={raceDisabled} /></label>
+            </div>
+            <div className="button-row" style={{ marginTop: 16 }}>
+              <button type="button" className="secondary-button" onClick={() => { setRaceDisabled(false); setCountdown(3); logTraceNote("3초 카운트다운 시작"); }} disabled={countdown > 0}>
+                {countdown > 0 ? `${countdown}초 뒤 비활성…` : "3초 뒤 비활성"}
+              </button>
+              <button type="button" className="secondary-button" onClick={() => { setCountdown(0); setRaceDisabled(false); logTraceNote("disabled=false 되돌림"); }}>다시 활성</button>
+            </div>
+            {/* ⚠️ 안내는 **실제로 검증한 재현 절차 그대로** 적습니다. "아무 숫자나 반쯤"이라고
+                적으면 공허한 캡처가 나오고, **트레이스만 봐서는 그걸 가려낼 수 없습니다**:
+                ① 일 세그먼트의 `4`~`9`는 반쯤 친 상태가 아니라 **즉시 확정**됩니다(×10이 31을
+                넘어 둘째 자리를 못 받습니다). ② 확정 결과가 지금 값과 같으면(예: 값이 02인데
+                `2`를 침) 확정이든 폐기든 화면이 같습니다. 둘 다 이 라운드에서 실제로 겪었습니다. */}
+            <p className="muted-copy" style={{ marginTop: 8 }}>
+              <strong>“늦게 비활성” 확인 순서</strong> — 버튼을 먼저 누릅니다. 팝오버가 열린 뒤에 누르면
+              바깥 클릭이라 팝오버가 먼저 닫힙니다.
+            </p>
+            <ol className="muted-copy" style={{ marginTop: 4, paddingLeft: 20 }}>
+              <li><code>3초 뒤 비활성</code>을 누릅니다.</li>
+              <li>바로 위 컨트롤을 눌러 팝오버를 엽니다.</li>
+              <li><kbd>→</kbd> <kbd>→</kbd>로 <strong>일(day)</strong> 칸까지 간 뒤 <kbd>2</kbd>를 <strong>한 번만</strong> 칩니다.</li>
+              <li>트리거가 <code>2‒</code>로 보이는지 확인합니다 — <strong>이게 “반쯤 친 상태”입니다.</strong>
+                바로 두 자리가 되면 확정된 것이니 <code>다시 활성</code>으로 되돌리고 다시 하세요.</li>
+              <li>그대로 두면 3초째에 <code>disabled</code>가 켜집니다.</li>
+            </ol>
+            <p className="muted-copy" style={{ marginTop: 4 }}>
+              <strong>볼 것:</strong> 날짜의 “일”이 <strong>02로 바뀌면 확정된 것</strong>, <strong>원래 값 그대로면 버려진 것</strong>입니다.
+              어느 쪽이든 TRACE를 복사해 주세요. (Chromium/Windows에서는 <strong>버려짐</strong>으로 측정됐습니다 —
+              다른 결과가 나오면 그게 새 정보입니다.)
+            </p>
+          </Panel>
+        </PanelGrid>
+        <PanelGrid>
+          <Panel title="텍스트와 버튼" hint="CONTROLS">
+            {/* data-keyboard-keep-visible: 모바일에서 이 필드에 포커스하면 AppShell이
+                이 블록 전체(메모 + 아래 버튼 줄)의 아래쪽을 키보드 위로 들어올린다 —
+                필드 자신의 아래쪽만 기준으로 삼으면 취소/삭제/저장 버튼이 계속 키보드
+                뒤에 남는다. README.md의 "data-keyboard-keep-visible" 항목 참고. */}
+            <div data-keyboard-keep-visible>
+              <label>메모 (3줄에서 시작해 자동 확장)<AutoGrowTextarea value={memo} onChange={setMemo} placeholder="여러 줄을 입력해 보세요" maxLength={500} ariaLabel="메모" /></label>
+              <div className="button-row" style={{ marginTop: 16 }}>
+                <button type="button" className="secondary-button">취소</button>
+                <button type="button" className="danger-button">삭제</button>
+                <button type="button" className="primary">저장</button>
+              </div>
+            </div>
+          </Panel>
+          <Panel title="다이얼로그" hint="DIALOG">
+            <p className="muted-copy">백드롭 클릭·Escape로 닫히고, 포커스가 안에 갇히며, 닫히면 열었던 버튼으로 포커스가 돌아옵니다.</p>
+            <div className="button-row" style={{ marginTop: 16 }}>
+              <button type="button" className="secondary-button" onClick={() => setDialog("scroll")}>긴 다이얼로그</button>
+              <button type="button" className="primary" onClick={() => setDialog("basic")}>다이얼로그 열기</button>
+            </div>
+          </Panel>
+        </PanelGrid>
       </>}
 
       {tab === "layout" && <>

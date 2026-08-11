@@ -24,7 +24,40 @@ export function SummaryCard({ label, value, tone = "plain" }: { label: ReactNode
   return <article className={`summary-card ${tone}`}><span>{label}</span><strong>{value}</strong></article>;
 }
 
-/** 콘텐츠는 작업 영역 전체 폭의 Panel에서 시작합니다. 더 좁은 컨테이너를 만들지 마세요. */
+/**
+ * 패널 여럿을 **가로로 나란히** 놓습니다. 넓은 화면에서만 갈라지고, 좁아지면 알아서
+ * 세로로 쌓입니다(`--panel-min`보다 좁으면 한 열).
+ *
+ * **어느 패널이 같이 서는지는 앱이 정합니다 — 킷은 통만 줍니다.** 높이가 다른 패널을
+ * 나란히 놓으면 짧은 쪽 아래가 비는데, 그게 괜찮은 조합인지는 내용을 아는 쪽만 알 수
+ * 있습니다. CSS masonry는 아직 쓸 수 없습니다.
+ *
+ * ⚠️ **여기는 `auto-fit`입니다. `.summary-grid`의 `auto-fill`과 일부러 다릅니다.**
+ * 요약 카드는 **개수가 늘어나는 집합**이라 카드가 제 폭을 지키고 빈 트랙을 남기는 쪽이
+ * 맞습니다. 패널은 앱이 "이 둘은 같이 선다"고 **명시한 그룹**이라, 남는 폭을 비워 두면
+ * 화면 한쪽이 통째로 빕니다 — 오너가 정확히 그 모습을 기각했습니다(캡 안). 그래서
+ * 빈 트랙을 접어 그룹이 줄을 다 쓰게 합니다.
+ *
+ * ```tsx
+ * <PanelGrid>
+ *   <Panel title="드롭다운">…</Panel>
+ *   <Panel title="날짜 피커">…</Panel>
+ * </PanelGrid>
+ * ```
+ */
+export function PanelGrid({ children }: { children: ReactNode }) {
+  return <div className="panel-grid">{children}</div>;
+}
+
+/**
+ * 기본은 작업 영역 전체 폭입니다.
+ *
+ * ⚠️ 여기 한동안 "**더 좁은 컨테이너를 만들지 마세요**"라고 적혀 있었습니다. 그 문장은
+ * "본문 안에 임의의 좁은 상자를 끼워 넣지 마라"는 뜻이었는데, 2560 화면에서 패널이
+ * 2102px 전폭으로만 쌓이는 결과를 낳았습니다(메모 칸 하나가 2056px). 나란히 놓고 싶으면
+ * 위 `PanelGrid`로 묶으세요 — **금지는 "임의로 좁히지 마라"이지 "가로로 놓지 마라"가
+ * 아닙니다.**
+ */
 export function Panel({ title, hint, actions, children }: { title?: ReactNode; hint?: ReactNode; actions?: ReactNode; children: ReactNode }) {
   return <section className="panel">
     {(title || hint || actions) && <div className="panel-heading"><div>{hint && <small>{hint}</small>}{title && <h2>{title}</h2>}</div>{actions}</div>}
