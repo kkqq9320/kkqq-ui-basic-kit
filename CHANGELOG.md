@@ -30,8 +30,11 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.2.0
 - **비활성 입력·메모 칸의 모습이 바뀝니다.** `css/controls.css`의 `:disabled` 규칙이
   버튼 셋만 덮고 있어서, 잠긴 `<input>`·`<textarea>`는 **킷의 모습이 아예 없이**
   브라우저 기본값(플랫폼마다 다른 회색)으로 그려지고 있었습니다. 이제 킷의 다른 비활성
-  표면과 같은 `opacity: .55` + `cursor: not-allowed`를 씁니다. 소비 앱에 잠긴 입력이
-  있으면 그 자리를 한 번 보세요.
+  표면과 같은 `opacity: .55` + `cursor: not-allowed`를 씁니다.
+  **지금 이걸 받는 소비자는 없습니다**(실측 2026-08-11): `budget/frontend`는
+  `#baf5b22b5f…` SHA 핀이고, `homa_gwangju`는 `file:vendor/…`로 저장소에 커밋된
+  사본을 씁니다. 다음에 핀을 올릴 때 잠긴 입력이 있는 화면을 한 번 보세요 —
+  **없던 흐리기가 새로 생깁니다**(원래는 브라우저 기본값이었습니다).
 
 ---
 
