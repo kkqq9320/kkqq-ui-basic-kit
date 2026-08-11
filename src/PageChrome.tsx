@@ -16,12 +16,25 @@ export function PageHeader({ eyebrow, title, description }: { eyebrow: ReactNode
 }
 
 /**
+ * 통 하나에만 걸리는 트랙 크기. `min`은 "언제 열이 줄어드는가", `max`는 "얼마나 커질 수
+ * 있는가"입니다.
+ *
+ * ⚠️ **`min`만으로는 칸을 줄일 수 없습니다.** 위쪽이 `1fr`이면 트랙이 남는 폭을 나눠
+ * 가지므로, 항목이 적을수록 오히려 커집니다 — 2560에서 패널 둘이 `min`을 200으로 내려도
+ * 1077px씩 먹었습니다. 줄이려면 `max`를 주세요. 안 주면 지금까지와 같습니다.
+ */
+function trackStyle(token: string, min?: string, max?: string): CSSProperties | undefined {
+  if (!min && !max) return undefined;
+  return { ...(min ? { [`${token}-min`]: min } : {}), ...(max ? { [`${token}-max`]: max } : {}) } as CSSProperties;
+}
+
+/**
  * `min`은 이 그리드 **하나에만** 걸립니다 — 전역 토큰(`--summary-card-min`)보다 우선합니다.
  * 토큰이 커스텀 프로퍼티라 상속되므로, 조상 어디에 걸어도 그 아래만 바뀝니다.
  * 이 prop은 그 흔한 경우에 CSS를 안 쓰게 해 주는 지름길입니다.
  */
-export function SummaryGrid({ children, min }: { children: ReactNode; min?: string }) {
-  return <div className="summary-grid" style={min ? ({ "--summary-card-min": min } as CSSProperties) : undefined}>{children}</div>;
+export function SummaryGrid({ children, min, max }: { children: ReactNode; min?: string; max?: string }) {
+  return <div className="summary-grid" style={trackStyle("--summary-card", min, max)}>{children}</div>;
 }
 
 /**
@@ -69,8 +82,8 @@ export function SummaryCard({ label, value, tone = "plain", className = "" }: { 
  * </Panel>
  * ```
  */
-export function FieldGrid({ children, min }: { children: ReactNode; min?: string }) {
-  return <div className="field-grid" style={min ? ({ "--field-min": min } as CSSProperties) : undefined}>{children}</div>;
+export function FieldGrid({ children, min, max }: { children: ReactNode; min?: string; max?: string }) {
+  return <div className="field-grid" style={trackStyle("--field", min, max)}>{children}</div>;
 }
 
 /**
@@ -104,8 +117,8 @@ export function FieldGrid({ children, min }: { children: ReactNode; min?: string
  * </PanelGrid>
  * ```
  */
-export function PanelGrid({ children, min, stretch = false }: { children: ReactNode; min?: string; stretch?: boolean }) {
-  return <div className={stretch ? "panel-grid stretch" : "panel-grid"} style={min ? ({ "--panel-min": min } as CSSProperties) : undefined}>{children}</div>;
+export function PanelGrid({ children, min, max, stretch = false }: { children: ReactNode; min?: string; max?: string; stretch?: boolean }) {
+  return <div className={stretch ? "panel-grid stretch" : "panel-grid"} style={trackStyle("--panel", min, max)}>{children}</div>;
 }
 
 /**

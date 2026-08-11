@@ -218,3 +218,48 @@ describe("가장자리 정렬 원칙이 문서에 있다", () => {
     expect(principlesSource).toMatch(/^## 13\. /m);
   });
 });
+
+/* **`min`만으로는 칸을 줄일 수 없습니다.** `minmax()`의 위쪽이 `1fr`이면 트랙이 남는 폭을
+ * 나눠 가지므로, 항목이 적을수록 오히려 커집니다 — 2560에서 패널 둘이 `--panel-min`을
+ * 200으로 내려도 1077px씩 먹었고, 오너가 "줄이려면 max-width가 있어야 하는 것 아니냐"고
+ * 짚었습니다. 네 그리드가 모두 `--*-min` / `--*-max` 짝을 갖는지 한자리에서 봅니다 —
+ * **하나만 빠지면 그게 다음 라운드의 질문이 됩니다**(SummaryGrid의 `min`이 그랬습니다).
+ *
+ * ⚠️ `max`가 `min`보다 작으면 **`min`이 이깁니다**(CSS `minmax()` 규칙). 실측:
+ * `--panel-min: 400px`에 `--panel-max: 380px`를 주면 패널은 400px입니다. 줄이려면
+ * `min`도 같이 내려야 합니다. */
+describe("네 그리드가 위쪽 한계도 연다", () => {
+  const cases: Array<[string, string, string]> = [
+    [".summary-grid", "--summary-card", pageCssSource],
+    [".panel-grid", "--panel", pageCssSource],
+    [".field-grid", "--field", pageCssSource],
+    [".theme-color-list", "--color-card", themeEditorCssSource],
+  ];
+
+  /* 정규식을 **문자열로 조립하지 않습니다.** 이 세션에서 조립하다 이스케이프가 한 겹 더
+     붙어 "리터럴 백슬래시를 찾는" 정규식이 세 번 나왔고, 그중 하나는 한동안 초록으로
+     통과하고 있었습니다. 인덱스로 자르는 편이 짧고, 틀릴 자리가 없습니다. */
+  const ruleOf = (source: string, selector: string) => {
+    const at = source.indexOf(selector + " {");
+    if (at === -1) return undefined;
+    return source.slice(at, source.indexOf("}", at) + 1);
+  };
+  const declOf = (token: string) => {
+    const at = tokensCssSource.indexOf(token + "-max:");
+    if (at === -1) return undefined;
+    return tokensCssSource.slice(at, tokensCssSource.indexOf(";", at) + 1).split(" ").join("");
+  };
+
+  it.each(cases)("%s 는 %s-max 를 minmax의 위쪽으로 쓴다", (selector, token, source) => {
+    const rule = ruleOf(source, selector);
+    expect(rule, selector + " 규칙을 못 찾았습니다").toBeDefined();
+    expect(rule).toContain("var(" + token + "-max, 1fr)");
+  });
+
+  /* 기본값이 `1fr`이어야 **지금까지와 같습니다**. 길이로 박아 두면 이 짝을 넣은 것만으로
+     모든 소비자의 화면이 바뀝니다. */
+  it.each(cases.map(([, token]) => token))("%s-max 기본값이 :root에 있고 제한 없음이다", (token) => {
+    expect(declOf(token), token + "-max 정의를 못 찾았습니다").toBeDefined();
+    expect(declOf(token)).toBe(token + "-max:1fr;");
+  });
+});

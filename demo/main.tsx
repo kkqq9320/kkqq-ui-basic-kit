@@ -127,10 +127,19 @@ const LONG_DIALOG_FIELDS: LongDialogField[] = [
  *  "더 작아지는 게 안 된다"고 했는데 둘 다 **제가 고른 세 값이 아래로 안 내려간 것**이
  *  원인이었습니다. 고를 값을 미리 찍는 것 자체가 왕복을 만듭니다 — 범위를 열어 둡니다. */
 const AXES = [
-  { token: "--summary-card-min", label: "요약 카드", min: 120, max: 420, initial: 240 },
-  { token: "--panel-min", label: "패널", min: 200, max: 900, initial: 400 },
-  { token: "--field-min", label: "패널 안 필드", min: 140, max: 440, initial: 230 },
-  { token: "--color-card-min", label: "색상 카드", min: 160, max: 520, initial: 240 },
+  { token: "--summary-card-min", label: "요약 카드 min", min: 120, max: 420, initial: 240 },
+  { token: "--panel-min", label: "패널 min", min: 200, max: 900, initial: 400 },
+  { token: "--field-min", label: "필드 min", min: 140, max: 440, initial: 230 },
+  { token: "--color-card-min", label: "색상 카드 min", min: 160, max: 520, initial: 240 },
+] as const;
+
+/** 위쪽 한계. **0은 "제한 없음"(`1fr`)** 입니다 — `min`만으로는 칸을 줄일 수 없어서
+ *  이 축이 필요합니다(오너 지적). 슬라이더를 왼쪽 끝까지 내리면 지금까지와 같습니다. */
+const MAX_AXES = [
+  { token: "--summary-card-max", label: "요약 카드 max", min: 0, max: 600, initial: 0 },
+  { token: "--panel-max", label: "패널 max", min: 0, max: 1400, initial: 0 },
+  { token: "--field-max", label: "필드 max", min: 0, max: 700, initial: 0 },
+  { token: "--color-card-max", label: "색상 카드 max", min: 0, max: 700, initial: 0 },
 ] as const;
 
 /** 확인용 폭. 오너가 스크린샷을 보낸 세 자리 + 넓은 화면. */
@@ -157,7 +166,7 @@ const OLD_RULES = `
 type Reading = { colorCols: number; colorCard: number; colorField: number; cardCols: number; card: number; fieldCols: number; field: number; panelCols: number; panel: number; memo: number };
 
 function LayoutSwitch() {
-  const [axis, setAxis] = useState<Record<string, number>>(() => Object.fromEntries(AXES.map((a) => [a.token, a.initial])));
+  const [axis, setAxis] = useState<Record<string, number>>(() => Object.fromEntries([...AXES, ...MAX_AXES].map((a) => [a.token, a.initial])));
   const [now, setNow] = useState<Reading | null>(null);
   const [before, setBefore] = useState<Reading | null>(null);
   const [viewport, setViewport] = useState(0);
@@ -165,6 +174,8 @@ function LayoutSwitch() {
 
   useEffect(() => {
     for (const a of AXES) document.documentElement.style.setProperty(a.token, `${axis[a.token]}px`);
+    // 0은 "제한 없음" — 길이가 아니라 `1fr`을 넣어야 트랙이 남는 폭을 나눠 가집니다.
+    for (const a of MAX_AXES) document.documentElement.style.setProperty(a.token, axis[a.token] ? `${axis[a.token]}px` : "1fr");
   }, [axis]);
 
   /* **폭 흉내입니다. 창을 실제로 줄이는 게 아닙니다.** `.app-shell`을 좁혀 작업 영역이
@@ -247,7 +258,7 @@ function LayoutSwitch() {
     return () => { window.clearInterval(timer); window.removeEventListener("resize", measure); };
   }, [axis, fakeWidth]);
 
-  const slider = (a: (typeof AXES)[number]) =>
+  const slider = (a: (typeof AXES)[number] | (typeof MAX_AXES)[number]) =>
     <div className="layout-switch-row" key={a.token}>
       <strong>{a.label} <code>{a.token}</code></strong>
       <div className="layout-switch-slider">
@@ -260,7 +271,7 @@ function LayoutSwitch() {
           aria-label={`${a.label} 최소 폭`}
           onChange={(event) => setAxis((current) => ({ ...current, [a.token]: Number(event.target.value) }))}
         />
-        <output>{axis[a.token]}px</output>
+        <output>{axis[a.token] ? `${axis[a.token]}px` : "없음"}</output>
       </div>
     </div>;
 
@@ -276,6 +287,7 @@ function LayoutSwitch() {
 
   return <div className="layout-switch">
     {AXES.map(slider)}
+    {MAX_AXES.map(slider)}
     <div className="layout-switch-row">
       <strong>폭 흉내 <small>(창은 그대로)</small></strong>
       <div className="layout-switch-buttons">

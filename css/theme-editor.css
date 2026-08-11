@@ -12,7 +12,7 @@
  * **앱이 늘릴 수 있는 집합**이라(readThemeDefaults의 확장 목록) 카드가 제 폭을 지키고
  * 빈 트랙을 남기는 쪽이 맞습니다. 아래 :46의 좁은 화면 규칙은 그대로 두어도 무해하지만
  * (min보다 좁으면 어차피 1열) 명시를 남깁니다. */
-.theme-color-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--color-card-min, 360px), 1fr)); gap: 8px; align-items: start; }
+.theme-color-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--color-card-min, 360px), var(--color-card-max, 1fr))); gap: 8px; align-items: start; }
 
 /* 카드에는 클릭 핸들러가 없습니다 — 목록을 훑다가 스치듯 눌러 색이 바뀌지 않도록,
  * 조작 지점은 견본과 입력칸으로 한정합니다. */
