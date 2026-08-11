@@ -4,7 +4,10 @@
  *
  * 필요한 것만 쓰려면 이 파일 대신 개별 파일을 import 하되,
  * tokens.css는 항상 먼저 와야 하고 select/date-picker는 surfaces.css가 필요합니다.
- * 자체 폰트를 쓴다면 fonts.css 줄만 빼고 tokens.css의 --font-family-base를 바꾸세요.
+ * 자체 폰트를 쓴다면 **이 파일을 고치지 마세요** — node_modules 안이라 다음 install에
+ * 사라집니다. 이 파일 대신 개별 파일을 import 하면서 fonts.css만 빼고, 자기 :root에서
+ * --font-family-base를 덮어쓰세요. README "폰트를 바꾸려면"에 순서와 실측이 있습니다
+ * (그렇게 하면 2.0MB woff2가 번들에서 빠집니다).
  */
 @import "./fonts.css";
 @import "./tokens.css";

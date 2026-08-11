@@ -119,8 +119,37 @@ Next.js App Router처럼 마운트 지점을 직접 정할 수 없는 환경이�
 
 ### 폰트를 바꾸려면
 
-`css/fonts.css`를 통째로 지우고 `tokens.css`의 `--font-family-base` 첫 항목만
-바꾸면 됩니다. 나머지는 전부 이 변수를 참조합니다.
+**아무것도 지우지 마세요.** 킷은 `node_modules`에서 오고 거기서 지운 것은 다음
+`npm install`에 사라집니다. 그리고 `css/index.css`가 `fonts.css`를 `@import` 하므로
+파일이 없어지면 그 경로 자체가 깨집니다.
+
+대신 **`index.css` 대신 개별 파일을 import 하고 `fonts.css`만 뺍니다.** 그다음 자기
+`:root`에서 `--font-family-base`를 덮어씁니다 — 나머지는 전부 이 변수를 참조합니다.
+
+```js
+import "kkqq-ui-basic-kit/css/tokens.css";    // 항상 먼저
+import "kkqq-ui-basic-kit/css/surfaces.css";  // select·date-picker가 이걸 필요로 합니다
+import "kkqq-ui-basic-kit/css/controls.css";
+import "kkqq-ui-basic-kit/css/dialog.css";
+import "kkqq-ui-basic-kit/css/select.css";
+import "kkqq-ui-basic-kit/css/date-picker.css";
+import "kkqq-ui-basic-kit/css/tabs.css";
+import "kkqq-ui-basic-kit/css/sidebar.css";
+import "kkqq-ui-basic-kit/css/page.css";
+import "kkqq-ui-basic-kit/css/theme-editor.css";
+import "./my-fonts.css";                      // :root { --font-family-base: ... }
+```
+
+**왜 굳이 그러느냐 — 실측**(v0.4.0을 빈 프로젝트에 설치해 `vite build`):
+
+| import 방식 | 번들에 나온 woff2 | CSS |
+|---|---|---|
+| `css/index.css` 하나 | **2,057,688 B** | 48,391 B |
+| 위처럼 개별 import, `fonts.css` 제외 | **없음** | 48,283 B |
+
+`--font-family-base`만 덮어쓰고 `index.css`를 계속 써도 **화면은 맞습니다** —
+`@font-face`가 아무도 쓰지 않는 패밀리를 선언할 뿐입니다. 다만 **2.0MB는 그대로
+나갑니다.** 번들러는 그 패밀리가 실제로 쓰이는지 보지 않고 `url()`을 따라갑니다.
 
 번들되는 건 **Pretendard Variable** 한 벌(`fonts/PretendardVariable.woff2`,
 2.0MB)입니다. 가변 폰트라 45~920 굵기가 전부 진짜 글리프로 나옵니다 —
@@ -129,7 +158,9 @@ Next.js App Router처럼 마운트 지점을 직접 정할 수 없는 환경이�
 
 > 라이선스는 SIL Open Font License 1.1(`fonts/OFL.txt`)입니다. 재배포·웹임베딩
 > 모두 허용되고, 조건은 그 라이선스 파일을 폰트와 함께 두는 것뿐입니다.
-> 폰트 파일을 빼실 거면 `OFL.txt`도 같이 빼세요.
+> 위처럼 **import만 안 하는 경우는 해당 없습니다** — 폰트가 번들에 안 실리니
+> 재배포하는 것이 없습니다. 킷을 자기 패키지로 **다시 묶어 배포**하면서 폰트를
+> 빼실 거면 그때 `OFL.txt`도 같이 빼세요.
 
 ---
 

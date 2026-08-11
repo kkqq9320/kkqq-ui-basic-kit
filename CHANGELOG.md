@@ -16,6 +16,16 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.4.0
 
 ### 고친 것
 
+- **폰트 바꾸는 방법이 틀려 있었습니다.** `README.md`가 "`css/fonts.css`를 통째로
+  지우라"고 안내했는데, (1) 킷은 `node_modules`에서 오므로 거기서 지운 것은 다음
+  `npm install`에 사라지고 (2) `css/index.css`가 그 파일을 `@import` 하므로 지우면
+  그 경로가 깨집니다. 세 파일이 서로 다른 말을 하고 있던 것도 맞췄습니다
+  (`README.md`는 "지워라", `index.css`는 "줄만 빼라", `fonts.css`는 "교체하라").
+  **맞는 방법은 지우는 것이 아니라 import 하지 않는 것입니다** — `index.css` 대신
+  개별 파일을 import 하면서 `fonts.css`만 빼고, 자기 `:root`에서
+  `--font-family-base`를 덮어씁니다. 실측(v0.4.0을 빈 프로젝트에 설치해
+  `vite build`): `index.css` 하나를 쓰면 안 쓰는 폰트라도 **2,057,688바이트**
+  woff2가 번들에 실리고, 개별 import로 빼면 **나오지 않습니다.**
 - **`README.md`·`CUSTOMIZING.md`가 더 이상 vendoring(사본으로 복사해 쓰기)을
   정상 경로로 가르치지 않습니다.** 소유자가 "vendoring은 더 이상 문서화된
   경로가 아니다"로 정했고, 스킬 저장소(`kkqq-skills`)는 이미 그렇게 바뀌어
