@@ -42,10 +42,19 @@ const exported = exportedNames(indexSource);
 
 describe("LAYOUT-PRINCIPLES.md는 킷 없이 읽힌다", () => {
   // 전제 — 파싱이 0건이면 아래 단언들이 **공허하게** 통과합니다.
-  it("문서와 내보내는 이름을 실제로 읽어냈다", () => {
+  it("문서를 실제로 읽어냈다", () => {
     expect(prose.length).toBeGreaterThan(500);
+  });
+
+  it("내보내는 이름을 실제로 뽑아냈다", () => {
     expect(exported.length).toBeGreaterThan(30);
+  });
+
+  it("컴포넌트 이름이 목록에 있다", () => {
     expect(exported).toContain("PanelGrid");
+  });
+
+  it("훅 이름도 목록에 있다", () => {
     expect(exported).toContain("useEscapeToClose");
   });
 
