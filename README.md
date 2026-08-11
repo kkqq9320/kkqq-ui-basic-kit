@@ -151,6 +151,13 @@ import "./my-fonts.css";                      // :root { --font-family-base: ...
 `@font-face`가 아무도 쓰지 않는 패밀리를 선언할 뿐입니다. 다만 **2.0MB는 그대로
 나갑니다.** 번들러는 그 패밀리가 실제로 쓰이는지 보지 않고 `url()`을 따라갑니다.
 
+> **폰트 파일 자체는 어느 쪽이든 설치됩니다.** `package.json`의 `files`에 `fonts`가
+> 있어서 패키지에 들어갑니다(`npm pack` 실측: 36파일 · unpacked 2.58MB, 그중
+> `fonts/PretendardVariable.woff2`가 2,009KB). **골라서 안 받을 방법은 없습니다.**
+> 안 쓰면 `node_modules`에 놓여 있기만 하고 — **브라우저는 요청하지 않고**
+> (`@font-face`가 없으니) **빌드 산출물에도 안 들어갑니다.** 디스크만 쓰고
+> 사용자에게 전송되는 바이트는 0입니다.
+
 번들되는 건 **Pretendard Variable** 한 벌(`fonts/PretendardVariable.woff2`,
 2.0MB)입니다. 가변 폰트라 45~920 굵기가 전부 진짜 글리프로 나옵니다.
 
