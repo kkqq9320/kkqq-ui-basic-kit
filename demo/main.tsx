@@ -135,9 +135,14 @@ function LayoutSwitch() {
 
   useEffect(() => {
     const measure = () => {
+      /* ⚠️ **접힌 트랙을 빼고 셉니다.** `auto-fit`은 빈 트랙을 `0px`로 접어 두는데
+         `gridTemplateColumns`에는 **그대로 남아 있습니다**(실측: `1077px 1077px 0px`).
+         그냥 세면 패널 2장이 나눠 쓰는 줄을 "3칸"이라고 찍습니다 — 조작판이 화면과
+         다른 말을 하는 것이고, 이 저장소가 계측기 때문에 여러 번 치른 값입니다. */
       const tracks = (selector: string) => {
         const el = document.querySelector(selector);
-        return el ? getComputedStyle(el).gridTemplateColumns.split(" ").filter(Boolean).length : 0;
+        if (!el) return 0;
+        return getComputedStyle(el).gridTemplateColumns.split(" ").filter((track) => track && parseFloat(track) > 0).length;
       };
       const width = (selector: string) => {
         const el = document.querySelector(selector);
@@ -171,7 +176,8 @@ function LayoutSwitch() {
     <small>
       화면 {size.viewport}<br />
       카드 {size.cardCols || "—"}칸 · {size.card || "—"}px{size.card ? "" : " (레이아웃 탭)"}<br />
-      패널 {size.panelCols || "—"}칸 · {size.panel || "—"}px · 메모 {size.memo || "—"}px
+      패널 {size.panelCols || "—"}칸 · {size.panel || "—"}px · 메모 {size.memo || "—"}px<br />
+      <em>--panel-min은 “언제 세로로 쌓이는가”만 정합니다 — 가로로 설 때의 폭은 줄을 나눠 가진 결과입니다(auto-fit).</em>
     </small>
   </div>;
 }
