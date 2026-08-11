@@ -15,7 +15,7 @@ import { createPortal } from "react-dom";
 
 import { flushBuffer, lastDayOf, typeDigit, withUnitValue } from "./dateWheelTyping";
 import { useBackToClose, useEscapeToClose } from "./hooks";
-import { dropdownViewportSpace, isPrimaryButton, onViewportChange } from "./positioning";
+import { dropdownViewportSpace, focusTriggerOnClick, isPrimaryButton, onViewportChange } from "./positioning";
 
 export type DateWheelUnit = "year" | "month" | "day";
 
@@ -1487,6 +1487,9 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         갑니다). 그래서 이 핸들러와 그 규칙이 충돌하지 않습니다. tests의 "버퍼를 든 채
         언마운트되면 확정하지 않고 버린다"가 그 전제까지 함께 지킵니다. */}
     <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className={editing ? "date-wheel-trigger editing" : "date-wheel-trigger"} aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onBlur={() => { setEditing(false); flushTyping(); }} onClick={(event) => {
+      // 맨 앞이어야 합니다 — 아래 어느 갈래로 빠지든 포커스는 트리거에 와야 합니다.
+      // 근거는 positioning.ts의 헬퍼 주석(맥은 mousedown에서 포커스를 걷어갑니다).
+      focusTriggerOnClick(event.currentTarget);
       // **세그먼트를 직접 누르면 그 세그먼트가 활성이 됩니다**(설계 스펙 §6.4(3)) —
       // 네이티브 날짜 필드가 그렇게 합니다. 세그먼트는 <span>이라 클릭이 여기로 그대로
       // 올라오고, 그 전에 `event.target`의 `data-unit`을 읽습니다. 구두점·아이콘·여백에는
@@ -1569,10 +1572,19 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
           : <span className={`date-wheel-segment${resolvedActiveUnit === part.unit ? " active" : ""}`} data-unit={part.unit} key={part.unit}>{part.text}</span>)
         : labels.placeholder}</span><i className="date-wheel-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm2-2v4m10-4v4M3 9h18" /></svg></i></button></div>
     {/* onMouseDown의 기본 동작을 막는 것이 §6.2의 불변식("키보드를 받는 동안
-        activeElement는 언제나 트리거")을 실제로 지키는 장치입니다 — 설계 스펙 §6.3.
-        포커스 이동과 텍스트 선택이 mousedown의 기본 동작이고, `tabIndex={-1}`인 버튼도
-        **클릭하면 포커스를 받습니다.** `click`은 그대로 발생하므로 안의 모든 버튼(±·행·
-        오늘·비우기·완료)이 계속 동작합니다. 표준 콤보박스 구현이 쓰는 방법입니다.
+        activeElement는 언제나 트리거")을 **팝오버 쪽에서** 지키는 장치입니다 — 설계 스펙 §6.3.
+        포커스 이동과 텍스트 선택이 mousedown의 기본 동작입니다. `click`은 그대로
+        발생하므로 안의 모든 버튼(±·행·오늘·비우기·완료)이 계속 동작합니다.
+        표준 콤보박스 구현이 쓰는 방법입니다.
+
+        ⚠️ **여기 한동안 "`tabIndex={-1}`인 버튼도 클릭하면 포커스를 받습니다"라고 적혀
+        있었고, 그것이 §6.2 불변식의 나머지 절반이었습니다. 그 문장은 Windows에서만
+        참입니다.** macOS 브라우저는 버튼을 클릭해도 포커스를 주지 않아서, 맥에서는
+        팝오버를 열어도 `activeElement`가 `body`에 남고 **키가 하나도 안 닿았습니다**
+        (오너 캡처 2026-08-11: `click target=button.date-wheel-trigger` → `keydown …
+        tgt=body` `처리됨=N`). 이 절반은 이제 트리거의 `onPointerDown`이 명시적으로
+        지킵니다 — `positioning.ts`의 `focusTriggerOnPointerDown`. **막는 것만으로는
+        불변식이 성립하지 않습니다. 옮기는 쪽도 있어야 합니다.**
 
         ⚠️ **`pointerdown`이 아니라 `mousedown`이어야 합니다.** 스와이프가
         `pointerdown` → `setPointerCapture` → `pointermove` 사슬이고 열은
