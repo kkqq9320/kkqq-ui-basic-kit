@@ -226,7 +226,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // fields 안으로 클램프한 값을 씁니다 — 그렇지 않으면 키가 사라진 열에 가서 아무 일도
   // 일어나지 않고, 트리거와 팝오버 어느 쪽에도 활성 표시가 남지 않습니다.
   const resolvedActiveUnit = fields.includes(activeUnit) ? activeUnit : (fields[0] ?? "year");
-  // 지금 치고 있는 열과 그 자릿수. 자릿수가 차면 typeDigit이 곧바로 확정하고 비웁니다.
+  // 지금 치고 있는 열과 그 자릿수. 자릿수가 차면 model.typeDigit이 곧바로 확정하고 비웁니다.
   //
   // **덜 찬 채로 버퍼가 어떻게 되는지는 "무엇을 가리킨 조작인가"로 갈립니다**(설계 스펙
   // §4.2). 이 자리에 한동안 "포인터면 버린다"로 적혀 있었는데, **스펙이 그 범주를 명시적으로
@@ -508,7 +508,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 곳이 같은 순간에 서로 다른 것을 말하지 않게 하는 것입니다.
   //
   // 값이 유효하지 않은데(빈 값·깨진 값) 버퍼도 없으면 예전 formatDateTrigger와 똑같이
-  // placeholder입니다 — 판정도 그때와 같은 validDateValue입니다.
+  // placeholder입니다 — 판정도 그때와 같은 validDateValue(model.isValid)입니다.
   const hasDateValue = model.isValid(value);
   const triggerParts = hasDateValue || resolvedTyping ? model.triggerParts(hasDateValue ? value : baseValue, fields, resolvedTyping) : null;
 
@@ -736,9 +736,9 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   function shiftedFrom(sourceValue: string, unit: DateWheelUnit, amount: number) {
     const next = model.normalize(model.shift(sourceValue, unit, amount), fields);
     // 연도가 10000 이상(또는 음수)이 되면 Date#toISOString()이 확장 표기
-    // (+010000-07-12)로 바뀌고, 그 뒤 slice(0, 10)·normalizeToFields를 거치며
-    // "+010000-07-undefined" 같은 깨진 문자열이 된다. validDateValue는 이미
-    // 컴포넌트 전체가 "쓸 수 없는 값"의 신호로 쓰는 판정이므로, 여기서도 그대로
+    // (+010000-07-12)로 바뀌고, 그 뒤 slice(0, 10)·normalizeToFields(model.normalize)를
+    // 거치며 "+010000-07-undefined" 같은 깨진 문자열이 된다. validDateValue(model.isValid)는
+    // 이미 컴포넌트 전체가 "쓸 수 없는 값"의 신호로 쓰는 판정이므로, 여기서도 그대로
     // null을 돌려줍니다 — outOfRange 판정으로는 min/max가 없는 필드에서 이 값을
     // 걸러내지 못합니다.
     if (!model.isValid(next)) return null;
@@ -1024,7 +1024,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 있습니다) 그 순서로 깨질 것이 남아 있지 않습니다. 성립할 수 없는 계약을 남겨 두면
    * 다음 사람이 반증하고 나머지 셋까지 못 믿게 되므로 지웁니다.
    *
-   * **`typeDigit`의 자동 이동이 활성 세그먼트를 옮기면 그 다음 키는 옮겨간 세그먼트에
+   * **`typeDigit`(model.typeDigit)의 자동 이동이 활성 세그먼트를 옮기면 그 다음 키는 옮겨간 세그먼트에
    * 갑니다.** 연도 네 자리를 다 치면 활성이 월로 가고, 그 뒤의 `↓`는 월을 움직입니다 —
    * 설계 스펙 §4.1이 정한 계약입니다. 열도 키를 받던 시절에는 키가 여전히 연도 열로 와서
    * 둘이 갈렸고, 그 부산물을 tests가 붙잡고 있었습니다. 지금은 tests의 "네 자리를 친 뒤
@@ -1347,6 +1347,10 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     releaseColumnClickSuppression();
   }
 
+  // data-fields와 열 렌더가 같은 목록을 봐야 합니다 — 3단계에서 오전/오후 버튼이
+  // 붙어 model.columns(fields)가 fields와 갈라지면, 지역 변수 하나로 묶어 두지 않으면
+  // CSS 열 폭을 정하는 data-fields만 옛 값을 씁니다.
+  const columns = model.columns(fields);
   return <div className={`date-wheel-picker${open ? " open" : ""} ${className}`.trim()} ref={rootRef}>
     {/* onFocus는 세션 기준값을 찍는 두 지점 중 나머지 하나입니다(다른 하나는 위의 닫힘
         이펙트) — 설계 스펙 §6.4. React의 onFocus는 native focusin에 대응합니다.
@@ -1455,7 +1459,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
 
         `.placeholder`(css/date-picker.css의 `.date-wheel-trigger .placeholder`, 흐린 색)는
         **날짜도 버퍼도 없을 때만** 붙습니다 — 버퍼가 있으면 placeholder를 버리고 baseValue
-        세그먼트를 그리기 때문입니다(§4.5). 판정은 문구와 같은 validDateValue입니다. */}
+        세그먼트를 그리기 때문입니다(§4.5). 판정은 문구와 같은 validDateValue(model.isValid)입니다. */}
       <span className={[triggerParts ? "" : "placeholder", commitPulse ? "dropdown-value-commit" : ""].filter(Boolean).join(" ")} key={commitPulse}>{triggerParts
         ? triggerParts.map((part, index) => part.unit === null
           ? <span className="date-wheel-punctuation" aria-hidden="true" key={`gap${index}`}>{part.text}</span>
@@ -1495,7 +1499,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       {/* 보이는 머리말만 `heading`으로 갈립니다 — 위 `aria-label`과 `triggerName`은 계속
           `ariaLabel`을 씁니다(§11). 안 넘기면 둘이 같은 값이라 지금까지와 동일합니다. */}
       <div className="date-wheel-heading"><strong>{heading ?? ariaLabel}</strong><span>{labels.hint}</span></div>
-      <div className="date-wheel-columns" data-fields={fields.length}>
+      <div className="date-wheel-columns" data-fields={columns.length}>
         {/* 열은 **포커스를 받지 않고 키도 받지 않습니다**(설계 스펙 §5·§6.2) — `tabIndex`가
             없고 `onKeyDown`도 없습니다. 활성 표시는 `resolvedActiveUnit`이 붙이는 `.active`
             클래스 하나로만 그려집니다. css/date-picker.css의 `.date-wheel-column:focus-visible`
@@ -1504,7 +1508,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
 
             `onPointerDown`의 `setActiveUnit(unit)`이 **포인터 경로가 활성 세그먼트를 따라가는
             유일한 길**입니다(열의 `onFocus`가 하던 일). 지우지 마세요. */}
-        {model.columns(fields).map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${model.label(baseValue, unit, labels.weekdays)}`} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {columns.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${model.label(baseValue, unit, labels.weekdays)}`} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이

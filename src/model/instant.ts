@@ -222,7 +222,9 @@ export function dateTriggerParts(source: string, fields: DateWheelUnit[], typing
  *  같은 모양을 구현합니다 — 설계 스펙 §3.3·§12. */
 export type WheelModel = {
   units: DateWheelUnit[];                                   // 사다리 순서
-  columns(fields: DateWheelUnit[]): DateWheelUnit[];         // 그릴 열
+  // 그릴 열. 이 타입은 3단계에서 넓어집니다 — 오전/오후는 단위가 아니라서
+  // DateWheelUnit[]에 담을 수 없습니다(설계 스펙 §7).
+  columns(fields: DateWheelUnit[]): DateWheelUnit[];
   isValid(value: string): boolean;
   normalize(value: string, fields: DateWheelUnit[]): string;
   keyLength(fields: DateWheelUnit[]): number;
