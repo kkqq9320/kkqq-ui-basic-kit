@@ -93,6 +93,38 @@ describe("앱이 소유할 때", () => {
   });
 });
 
+/* **목록에서 빠진 토큰의 저장값은 어떻게 되는가.** PR #43이 `--deep`·`--gold`를 킷 기본
+ * 목록에서 뺐고, CHANGELOG는 "저장된 값은 지워지지 않고 그대로 남습니다"라고 적었습니다.
+ * **절반만 참이었습니다(실측):**
+ *
+ *   업그레이드만 하면      → 남는다 (읽기가 모르는 키를 버릴 뿐, 저장소는 안 건드린다)
+ *   다른 색을 하나 고치면  → **같이 사라진다** — 저장이 맵을 **통째로 교체**하기 때문
+ *                            (실측: `{'--accent':'#ff8a3d'}`만 남음)
+ *
+ * 동작 자체는 의도된 것입니다. 리셋이 "값을 넣는 것"이 아니라 "키를 지우는 것"이라,
+ * 병합식 저장은 리셋을 영원히 안 먹게 만듭니다(CUSTOMIZING의 표). 그래서 고칠 것은 코드가
+ * 아니라 **안내**였고, 그 안내가 다시 틀려지지 않게 두 사실을 여기서 못박습니다. */
+describe("목록에서 빠진 토큰의 저장값", () => {
+  const seed = () => localStorage.setItem("themeColors:light", JSON.stringify({ "--deep": "#123456", "--accent": "#654321" }));
+
+  it("업그레이드만으로는 지워지지 않는다", () => {
+    seed();
+
+    render(<ThemeColorEditor theme="light" />);
+
+    expect(JSON.parse(localStorage.getItem("themeColors:light") ?? "null")).toEqual({ "--deep": "#123456", "--accent": "#654321" });
+  });
+
+  it("다른 색을 하나 고치면 함께 사라진다", () => {
+    seed();
+    render(<ThemeColorEditor theme="light" />);
+
+    fireEvent.change(screen.getByLabelText("강조색 색상 값"), { target: { value: "#ff8a3d" } });
+
+    expect(JSON.parse(localStorage.getItem("themeColors:light") ?? "null")).toEqual({ "--accent": "#ff8a3d" });
+  });
+});
+
 /* 스펙 §7이 지키기로 한 문장은 "저장소가 막혀 있어도 **편집기가** 안 터진다"인데,
  * 지금까지의 검사는 `writeTokenOverrides`를 직접 부르는 함수 수준뿐이었다. 함수가
  * `false`를 돌려주는 것과 **화면이 계속 도는 것**은 다른 질문이다 — 편집기는 그 반환값을
