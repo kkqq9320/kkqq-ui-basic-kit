@@ -8,9 +8,14 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.6.0
 
 `0.x`에서는 **minor 자리가 breaking 자리**입니다(semver의 0.x 규칙).
 
+각 버전 제목 아래의 **전체 diff** 링크는 그 릴리스에 들어간 변경을 커밋 단위가 아니라
+**한 덩어리로** 보여 줍니다 — 커밋 스무 개를 훑는 대신 그것부터 보세요.
+
 ---
 
 ## v0.6.0 — 2026-08-12
+
+[전체 diff: v0.5.0...v0.6.0](https://github.com/kkqq9320/kkqq-ui-basic-kit/compare/v0.5.0...v0.6.0)
 
 **타입은 깨지지 않습니다** — 새 함수·새 prop은 전부 추가이고, 안 쓰면 오늘과 같습니다.
 그런데도 minor인 이유는 **동작이 하나 바뀌기 때문**입니다: `writeTokenOverrides`가
@@ -46,6 +51,8 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.6.0
 ---
 
 ## v0.5.0 — 2026-08-12
+
+[전체 diff: v0.4.1...v0.5.0](https://github.com/kkqq9320/kkqq-ui-basic-kit/compare/v0.4.1...v0.5.0)
 
 **타입은 깨지지 않습니다** — 새 prop은 선택이고 기본값이 있습니다. 규칙을 엄격히 읽으면
 patch입니다. 그런데도 minor인 이유는 **핀을 올린 소비자가 다른 화면을 보기 때문**입니다:
@@ -98,6 +105,8 @@ patch입니다. 그런데도 minor인 이유는 **핀을 올린 소비자가 다
 ---
 
 ## v0.4.1 — 2026-08-12
+
+[전체 diff: v0.4.0...v0.4.1](https://github.com/kkqq9320/kkqq-ui-basic-kit/compare/v0.4.0...v0.4.1)
 
 **타입도 런타임도 CSS 값도 바뀐 것이 없습니다. 문서만 바뀝니다.** 그래서 patch입니다.
 
@@ -166,6 +175,8 @@ v0.4.0을 minor로 단 것은 `PRINCIPLES.md`의 규칙 **내용이 다른 파�
 
 ## v0.4.0 — 2026-08-12
 
+[전체 diff: v0.3.0...v0.4.0](https://github.com/kkqq9320/kkqq-ui-basic-kit/compare/v0.3.0...v0.4.0)
+
 **타입도 런타임도 CSS 값도 바뀐 것이 없습니다.** 규칙을 엄격히 읽으면 patch입니다.
 그런데도 minor인 이유는 **문서 계약이 바뀌기 때문**입니다 — `PRINCIPLES.md`의 다섯 절이
 내용을 잃고 다른 파일을 가리키게 됐고, 예전 방식으로 복사해 둔 프로젝트는 그 링크가
@@ -191,6 +202,8 @@ v0.4.0을 minor로 단 것은 `PRINCIPLES.md`의 규칙 **내용이 다른 파�
 ---
 
 ## v0.3.0 — 2026-08-11
+
+[전체 diff: v0.2.0...v0.3.0](https://github.com/kkqq9320/kkqq-ui-basic-kit/compare/v0.2.0...v0.3.0)
 
 **타입이 깨지는 것은 없습니다** — 새로 생긴 prop은 전부 선택입니다. 그런데도 patch가
 아니라 minor인 이유는 **핀을 올리면 넓은 화면의 배치가 실제로 바뀌기 때문**입니다.
@@ -258,6 +271,8 @@ v0.4.0을 minor로 단 것은 `PRINCIPLES.md`의 규칙 **내용이 다른 파�
 ---
 
 ## v0.2.0 — 2026-08-11
+
+[이 릴리스의 트리](https://github.com/kkqq9320/kkqq-ui-basic-kit/tree/v0.2.0) — 첫 태그라 비교 대상이 없습니다
 
 첫 태그입니다. 그전까지는 커밋 SHA로만 걸 수 있었고, 소비 프로젝트 둘 다
 `baf5b22b`(2026-07-30)에 묶여 있었습니다. **이 릴리스는 그 지점에서 206커밋**이고,
