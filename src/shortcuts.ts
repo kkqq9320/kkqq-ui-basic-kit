@@ -52,3 +52,56 @@ export function comboFromEvent(event: KeyboardEvent): Combo {
 export function hasModifier(combo: Combo): boolean {
   return combo.ctrl || combo.alt || combo.shift || combo.meta;
 }
+
+/** 앱이 "이 안에서는 맨 키를 body처럼 친다"고 표시하는 속성. 값은 안 봅니다. */
+export const BARE_KEY_SCOPE_ATTR = "data-kkqq-shortcut-scope";
+
+/** 텍스트를 넣는 자리가 **아닌** input type. 나머지는 전부 타이핑 대상으로 봅니다 —
+ * 목록을 뒤집어 두면 새 type이 생겨도 안전한 쪽(양보)으로 떨어집니다. */
+const NON_TEXT_INPUT_TYPES = new Set(["button", "checkbox", "color", "file", "hidden", "image", "radio", "range", "reset", "submit"]);
+
+/** 브라우저가 네이티브로 처리하면서 **`preventDefault`를 부르지 않는** 편집 조합.
+ * 그래서 규칙 1이 이것들을 못 막습니다 — 스펙 §2.3. 이 스펙에서 목록을 쓰는
+ * 유일한 자리이고, 빠뜨리면 조합이 두 번 동작해 **눈에 보입니다.** */
+const NATIVE_EDIT_CODES = new Set(["KeyA", "KeyC", "KeyV", "KeyX", "KeyZ", "KeyY"]);
+
+function isTypingTarget(element: Element | null): boolean {
+  if (!element) return false;
+  if (element instanceof HTMLElement && element.isContentEditable) return true;
+  if (element instanceof HTMLTextAreaElement) return true;
+  if (element instanceof HTMLInputElement) return !NON_TEXT_INPUT_TYPES.has(element.type);
+  return false;
+}
+
+/* **녹음 중에는 디스패치가 멈춥니다**(스펙 §6.1). 모듈 수준 플래그입니다.
+ *
+ * ⚠️ **리스너 순서로 하려다 틀렸습니다.** 녹음기를 document **캡처**에, 디스패처를
+ * document **버블**에 걸고 `stopPropagation()`으로 막으려 했는데, 이벤트가 `document`를
+ * 타깃으로 오면 **AT_TARGET에서 둘 다 등록 순서로 돕니다** — `stopPropagation`은 같은
+ * 노드의 다른 리스너를 못 막습니다. 그러면 녹음 중에 액션이 같이 돕니다.
+ *
+ * 이 저장소에 **"근거 없는 순서 계약을 주석에 심는 실수가 세 번"**이라고 적혀 있습니다.
+ * 그래서 순서가 아니라 플래그입니다 — 어느 리스너가 먼저 도는지와 무관하게 참입니다.
+ * 중첩될 일은 없지만 깊이로 세어 두면 해제가 한쪽으로 새지 않습니다. */
+let recordingDepth = 0;
+
+export function beginRecording(): void { recordingDepth += 1; }
+export function endRecording(): void { recordingDepth = Math.max(0, recordingDepth - 1); }
+export function isRecording(): boolean { return recordingDepth > 0; }
+
+export function shouldTrigger(event: KeyboardEvent): boolean {
+  if (isRecording()) return false;                      // 스펙 §6.1
+  if (event.repeat) return false;                       // 눌러 둔 키가 액션을 반복하지 않게
+  if (event.defaultPrevented) return false;             // 규칙 1
+  const combo = comboFromEvent(event);
+  const active = document.activeElement;
+  const typing = isTypingTarget(active);
+  if (hasModifier(combo)) {
+    // 규칙 5 — 타이핑 중에만, 그리고 Ctrl/Meta 조합에만 적용됩니다.
+    if (typing && (combo.ctrl || combo.meta) && NATIVE_EDIT_CODES.has(combo.code)) return false;
+    return true;                                        // 규칙 2
+  }
+  if (typing) return false;                             // 규칙 4
+  if (!active || active === document.body) return true; // 규칙 3
+  return active.closest(`[${BARE_KEY_SCOPE_ATTR}]`) !== null;
+}
