@@ -198,3 +198,46 @@ describe("백업 형식", () => {
     });
   });
 });
+
+describe("복원", () => {
+  it("두 테마를 모두 저장한다", () => {
+    const palette = createThemePalette([APP_GROUP]);
+
+    palette.applyBackup({ version: 1, colors: { light: { "--brand-2": "#ff8a3d" }, dark: { "--brand-2": "#ffa866" } } });
+
+    expect([
+      JSON.parse(localStorage.getItem("themeColors:light") ?? "null"),
+      JSON.parse(localStorage.getItem("themeColors:dark") ?? "null"),
+    ]).toEqual([{ "--brand-2": "#ff8a3d" }, { "--brand-2": "#ffa866" }]);
+  });
+
+  /* ⚠️ 리셋이 이 경로로 살아난다. 백업에 없는 토큰은 **기본값으로 돌아가야** 한다 —
+   * 병합하면 지운 색이 되살아나고, 그게 "리셋이 안 먹는" 증상이다. */
+  it("백업에 없는 토큰은 저장에서 사라진다", () => {
+    localStorage.setItem("themeColors:light", JSON.stringify({ "--brand-2": "#000000" }));
+    const palette = createThemePalette([APP_GROUP]);
+
+    palette.applyBackup({ version: 1, colors: { light: {}, dark: {} } });
+
+    expect(localStorage.getItem("themeColors:light")).toBe(null);
+  });
+
+  it("빈 백업을 복원하면 인라인 값도 걷힌다", () => {
+    const palette = createThemePalette([APP_GROUP]);
+    palette.apply("light", { "--brand-2": "#ff8a3d" });
+    // ⚠️ Task 2에서 같은 모양이 공허하게 통과했다 — 지우기 전에 **실제로 있었는지**부터 본다.
+    expect(document.documentElement.style.getPropertyValue("--brand-2")).toBe("#ff8a3d");
+
+    palette.applyBackup({ version: 1, colors: { light: {}, dark: {} } });
+
+    expect(document.documentElement.style.getPropertyValue("--brand-2")).toBe("");
+  });
+});
+
+describe("내보내기", () => {
+  it("킷의 진입점에서 팔레트를 집을 수 있다", async () => {
+    const entry = await import("../src/index");
+
+    expect(typeof (entry as { createThemePalette?: unknown }).createThemePalette).toBe("function");
+  });
+});

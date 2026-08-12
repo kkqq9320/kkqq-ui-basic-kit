@@ -20,6 +20,8 @@ import {
   type ThemeTokenGroup,
 } from "./themeTokens";
 
+const THEMES = ["light", "dark"] as const;
+
 /** 서버·파일로 실어 보낼 봉투. `version`은 형식의 버전이지 킷 버전이 아닙니다. */
 export type ThemeColorBackup = {
   version: 1;
@@ -38,6 +40,7 @@ export type ThemePalette = {
   apply(theme: ThemeName, overrides?: Record<string, string>): void;
   serialize(colors?: { light?: Record<string, string>; dark?: Record<string, string> }): ThemeColorBackup;
   parse(input: unknown): ParsedThemeColors | null;
+  applyBackup(backup: ThemeColorBackup): void;
 };
 
 /** 봉투의 한 테마 값이 "객체이거나 아예 없거나" 둘 중 하나여야 합니다. 문자열·배열·숫자가
@@ -85,6 +88,13 @@ export function createThemePalette(groups: readonly ThemeTokenGroup[]): ThemePal
         dark: cleanTheme(source.dark, known, dropped),
       };
       return { backup: { version: 1, colors }, dropped };
+    },
+    applyBackup: (backup) => {
+      for (const theme of THEMES) {
+        const values = backup.colors[theme];
+        writeTokenOverrides(theme, values);
+        applyTokenOverrides(theme, values, tokens);
+      }
     },
   };
 }
