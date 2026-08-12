@@ -86,6 +86,26 @@ describe("녹음", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  /* 스펙 §6.2 — "포커스가 나가면 녹음 종료"입니다. preventDefault를 부르면 Tab의
+   * 기본 동작(포커스 이동) 자체가 막혀서 포커스가 안 나갑니다 — 녹음만 끝나고
+   * 그 자리에 그대로 남는 결함. UNRECORDABLE(Escape·Tab)은 preventDefault를
+   * 부르지 않아야 합니다. */
+  it("Tab을 누르면 preventDefault를 부르지 않는다 — 포커스가 그대로 나가야 한다 (§6.2)", () => {
+    setup();
+    record("사이드바 접기");
+    const event = new KeyboardEvent("keydown", { code: "Tab", bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("대조군 — 등록되는 조합은 여전히 preventDefault를 부른다", () => {
+    setup();
+    record("사이드바 접기");
+    const event = new KeyboardEvent("keydown", { code: "KeyJ", ctrlKey: true, bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
   it("수식어만 누르는 동안에는 등록되지 않는다", () => {
     const onChange = setup();
     record("사이드바 접기");
@@ -117,6 +137,20 @@ describe("충돌", () => {
     fireEvent.keyDown(document, { code: "Semicolon", ctrlKey: true });
     expect(onChange).not.toHaveBeenCalled();
     expect(screen.getByRole("alert").textContent).toContain("날짜");
+  });
+
+  /* 녹음 버튼은 새로 녹음을 시작할 때 setMessage(null)로 안내를 지우는데, 지우기
+   * 버튼의 onClick은 onChange(item.id, null)만 부르고 있었습니다 — 직전 충돌
+   * 안내가 화면에 그대로 남는 결함. */
+  it("지우기를 누르면 직전 충돌 안내가 사라진다", () => {
+    setup();
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "KeyB", ctrlKey: true }); // 충돌 → 안내 뜸
+    expect(screen.getByRole("alert")).toBeTruthy();
+
+    const clearButtons = screen.getAllByRole("button", { name: "지우기" });
+    fireEvent.click(clearButtons[0]);
+    expect(screen.queryByRole("alert")).toBe(null);
   });
 });
 
@@ -179,9 +213,13 @@ describe("CSS는 자기 뿌리 밖으로 안 나간다 (스펙 §8)", () => {
     expect(SHORTCUT_CSS.length).toBeGreaterThan(200);
   });
 
-  it("모든 규칙이 .kkqq-shortcuts 아래에 있다", () => {
+  /* `selector.startsWith(".kkqq-shortcuts")`만으로는 콤마로 묶인 선택자 목록
+   * (`.kkqq-shortcuts__row, button { }`)에서 뒤쪽 항목(`button`)이 안 걸립니다 —
+   * 문자열 전체가 아니라 콤마로 나눈 각 항목을 따로 검사해야 합니다. */
+  it("모든 규칙이 .kkqq-shortcuts 아래에 있다 — 콤마로 묶인 선택자도 각각 검사한다", () => {
     const withoutComments = SHORTCUT_CSS.replace(/\/\*[\s\S]*?\*\//g, "");
-    const selectors = [...withoutComments.matchAll(/([^{}]+)\{/g)].map((match) => match[1].trim()).filter(Boolean);
+    const selectorGroups = [...withoutComments.matchAll(/([^{}]+)\{/g)].map((match) => match[1].trim()).filter(Boolean);
+    const selectors = selectorGroups.flatMap((group) => group.split(",").map((part) => part.trim()));
     expect(selectors.filter((selector) => !selector.startsWith(".kkqq-shortcuts"))).toEqual([]);
   });
 

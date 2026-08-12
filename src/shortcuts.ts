@@ -75,14 +75,24 @@ function isTypingTarget(element: Element | null): boolean {
 
 /* **녹음 중에는 디스패치가 멈춥니다**(스펙 §6.1). 모듈 수준 플래그입니다.
  *
- * ⚠️ **리스너 순서로 하려다 틀렸습니다.** 녹음기를 document **캡처**에, 디스패처를
- * document **버블**에 걸고 `stopPropagation()`으로 막으려 했는데, 이벤트가 `document`를
- * 타깃으로 오면 **AT_TARGET에서 둘 다 등록 순서로 돕니다** — `stopPropagation`은 같은
- * 노드의 다른 리스너를 못 막습니다. 그러면 녹음 중에 액션이 같이 돕니다.
+ * ⚠️ **리스너 순서(캡처/버블) + `stopPropagation()`으로 하려다 기각했습니다 — 안 막혀서가
+ * 아니라 너무 많이 막혀서입니다.** 녹음기를 document **캡처**에, 디스패처를 document
+ * **버블**에 걸고 캡처 쪽에서 `stopPropagation()`을 부르는 설계였습니다. 이건 실제로
+ * 디스패처를 막습니다 — `document`가 이벤트의 타깃이라도, 같은 노드의 캡처 패스와
+ * 버블 패스는 서로 다른 두 번의 `invoke` 호출이고(캡처가 항상 먼저 끝난 뒤 버블이
+ * 시작합니다), `stopPropagation()`은 뒤이은 패스의 `invoke` 진입 자체를 건너뛰게 합니다
+ * (jsdom으로 확인 — 캡처 리스너가 `stopPropagation()`을 부르면 같은 document의 버블
+ * 리스너는 안 돌고, 안 부르면 둘 다 돕니다). 문제는 디스패처만 막는 게 아니라
+ * `document`의 버블 리스너 **전부**를 막는다는 것입니다 — `useEscapeToClose`
+ * (`src/hooks.ts`)·`Dialog`·`SectionTabs`·`PageChrome`도 같이 죽어서, 녹음 중 `Escape`로
+ * 뒤에 있는 다이얼로그를 못 닫게 됩니다. 게다가 이게 실제로 막는지는 디스패처가
+ * `ShortcutProvider.tsx`에서 어느 페이즈에 걸리는가라는, 다른 파일의 선택에 조용히
+ * 묶입니다 — 그 파일이 나중에 캡처로 바뀌면 이 설계는 소리 없이 깨집니다.
  *
  * 이 저장소에 **"근거 없는 순서 계약을 주석에 심는 실수가 세 번"**이라고 적혀 있습니다.
- * 그래서 순서가 아니라 플래그입니다 — 어느 리스너가 먼저 도는지와 무관하게 참입니다.
- * 중첩될 일은 없지만 깊이로 세어 두면 해제가 한쪽으로 새지 않습니다. */
+ * 그래서 순서/전파가 아니라 플래그입니다 — 어느 리스너가 몇 개 걸려 있든 무관하게
+ * 참이어야 하기 때문입니다. 중첩될 일은 없지만 깊이로 세어 두면 해제가 한쪽으로
+ * 새지 않습니다. */
 let recordingDepth = 0;
 
 export function beginRecording(): void { recordingDepth += 1; }

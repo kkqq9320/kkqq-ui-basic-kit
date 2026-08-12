@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { useShortcutRegistry } from "./ShortcutProvider";
-import { beginRecording, comboFromEvent, endRecording, findConflict, formatCombo, hasModifier } from "./shortcuts";
+import { beginRecording, comboFromEvent, endRecording, findConflict, formatCombo } from "./shortcuts";
 
 export type ShortcutSettingsProps = {
   onChange(id: string, combo: string | null): void;
@@ -41,10 +41,13 @@ export function ShortcutSettings({ onChange, className }: ShortcutSettingsProps)
     // `shouldTrigger` 위 주석에 왜인지 적혀 있습니다(스펙 §6.1).
     beginRecording();
     function handleKeyDown(event: KeyboardEvent) {
+      // Escape·Tab은 preventDefault를 부르지 않습니다 — 스펙 §6.2. Tab은 포커스가
+      // 그대로 나가야 "포커스가 나가면 녹음 종료"가 성립하고, Escape는 document의
+      // 다른 리스너(다이얼로그 닫기 등)로 그대로 전파돼야 합니다.
+      if (UNRECORDABLE.has(event.code)) { setRecording(null); return; }
       // 규칙 6만 살려 둡니다 — 안 그러면 Ctrl+S를 등록하려다 브라우저 저장
       // 대화상자가 뜹니다(스펙 §6.1).
       event.preventDefault();
-      if (UNRECORDABLE.has(event.code)) { setRecording(null); return; }
       if (MODIFIER_CODES.test(event.code)) return;              // 수식어만 눌린 상태
       // 맨 키도 등록할 수 있습니다(규칙 3이 뜨는 자리를 좁히지, 등록을 막지 않습니다).
       // 충돌 검사는 수식어 조합과 똑같이 겁니다.
@@ -93,7 +96,7 @@ export function ShortcutSettings({ onChange, className }: ShortcutSettingsProps)
               >
                 {recording === item.id ? `${item.label} — 조합을 누르세요` : `${item.label} ${bound ? displayCombo(bound) : "없음"}`}
               </button>
-              <button className="kkqq-shortcuts__clear" type="button" onClick={() => onChange(item.id, null)}>지우기</button>
+              <button className="kkqq-shortcuts__clear" type="button" onClick={() => { setMessage(null); onChange(item.id, null); }}>지우기</button>
             </li>
           );
         })}
