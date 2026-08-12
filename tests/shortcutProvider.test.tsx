@@ -63,6 +63,55 @@ describe("디스패치", () => {
   });
 });
 
+/* id는 저장의 키입니다(스펙 §3.1) — 중복은 프로그래밍 오류지만, 그 상태에서도
+ * 동작은 결정적이어야 합니다: 먼저 나온 항목이 이깁니다. */
+describe("id 중복 — 먼저 나온 항목이 결정적으로 이긴다", () => {
+  it("첫 항목의 조합이 이기고, 그 조합으로 첫 항목의 onFire가 불린다", () => {
+    const onFireFirst = vi.fn();
+    const onFireSecond = vi.fn();
+    render(
+      <ShortcutProvider
+        actions={[
+          action({ id: "dup", defaultCombo: "Ctrl+KeyB", onFire: onFireFirst }),
+          action({ id: "dup", defaultCombo: "Ctrl+KeyJ", onFire: onFireSecond }),
+        ]}
+      />,
+    );
+
+    press({ code: "KeyB", ctrlKey: true }); // 첫 항목의 조합
+    expect(onFireFirst).toHaveBeenCalledTimes(1);
+    expect(onFireSecond).not.toHaveBeenCalled();
+
+    press({ code: "KeyJ", ctrlKey: true }); // 둘째 항목의 조합 — 가려져서 안 돈다
+    expect(onFireFirst).toHaveBeenCalledTimes(1);
+    expect(onFireSecond).not.toHaveBeenCalled();
+  });
+});
+
+/* registryRef로 최신값을 본다는 주석이 있지만, 렌더 1회·키 입력 1회짜리 테스트로는
+ * 그 안전장치를 증명하지 못합니다 — 핸들러가 registryRef.current 대신 최초 렌더의
+ * registry를 그냥 캡처해도 통과하기 때문입니다. 그래서 여기서는 같은 컴포넌트
+ * 인스턴스를 rerender로 다시 렌더해 최신 overrides가 실제로 반영되는지 봅니다. */
+describe("스테일 클로저 방지 — rerender 후에도 최신 overrides를 본다", () => {
+  it("리렌더 후에는 새 조합만 동작하고 옛 조합은 동작하지 않는다", () => {
+    const onFire = vi.fn();
+    const { rerender } = render(
+      <ShortcutProvider actions={[action({ onFire })]} overrides={{ toggle: "Ctrl+KeyJ" }} />,
+    );
+
+    press({ code: "KeyJ", ctrlKey: true }); // 첫 렌더의 조합
+    expect(onFire).toHaveBeenCalledTimes(1);
+
+    rerender(<ShortcutProvider actions={[action({ onFire })]} overrides={{ toggle: "Ctrl+KeyK" }} />);
+
+    press({ code: "KeyJ", ctrlKey: true }); // 옛 조합 — 더 이상 안 돈다
+    expect(onFire).toHaveBeenCalledTimes(1);
+
+    press({ code: "KeyK", ctrlKey: true }); // 새 조합만 돈다
+    expect(onFire).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("규칙 6 — 트리거되면 기본 동작을 막는다", () => {
   it("트리거된 이벤트는 defaultPrevented가 참이다", () => {
     render(<ShortcutProvider actions={[action()]} />);

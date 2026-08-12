@@ -28,16 +28,26 @@ export function useShortcutRegistry(): Registry {
 }
 
 export function ShortcutProvider({ actions, overrides, children }: ShortcutProviderProps) {
-  const registry = useMemo<Registry>(() => ({
-    actions,
-    bindingOf(id) {
-      const action = actions.find((candidate) => candidate.id === id);
+  const registry = useMemo<Registry>(() => {
+    // id는 저장의 키입니다(스펙 §3.1) — 유일해야 합니다. id 중복은 프로그래밍 오류지만,
+    // 그 상태에서도 동작은 결정적이어야 하므로 "먼저 나온 항목이 이긴다"로 못박습니다.
+    // 여기서 id → 액션 맵을 딱 한 번만 계산해 두고 bindingOf는 이 맵만 읽습니다.
+    // (전에는 bindingOf가 호출될 때마다 actions.find로 다시 훑었는데, 그러면 "같은 id를
+    // 다시 조회한다"는 동작이 여러 자리에 흩어져 답이 갈릴 여지가 생깁니다 — 맵으로
+    // 한 번에 고정하면 그 구조 자체가 없어집니다.)
+    const byId = new Map<string, ShortcutAction>();
+    for (const candidate of actions) {
+      if (!byId.has(candidate.id)) byId.set(candidate.id, candidate);
+    }
+    function bindingOf(id: string): string | null {
+      const action = byId.get(id);
       if (!action) return null;
       const override = overrides && Object.prototype.hasOwnProperty.call(overrides, id) ? overrides[id] : undefined;
       const raw = override === undefined ? action.defaultCombo : override;
       return raw === null ? null : normalizeCombo(raw);
-    },
-  }), [actions, overrides]);
+    }
+    return { actions, bindingOf };
+  }, [actions, overrides]);
 
   // 리스너를 다시 걸지 않으려고 ref로 최신값을 봅니다 — 액션 배열이 매 렌더 새 참조여도
   // document 리스너는 한 번만 붙습니다.
