@@ -17,6 +17,7 @@ import {
   DATE_WHEEL_FILL,
   instantModel,
   type DateWheelUnit,
+  type WheelUnit,
 } from "./model/instant";
 import { useBackToClose, useEscapeToClose } from "./hooks";
 import { dropdownViewportSpace, focusTriggerOnClick, isPrimaryButton, onViewportChange } from "./positioning";
@@ -26,8 +27,10 @@ import { dropdownViewportSpace, focusTriggerOnClick, isPrimaryButton, onViewport
  * 공개 표면을 하나도 바꾸지 않습니다. */
 export { todayIn, type DateWheelUnit } from "./model/instant";
 
-/** 기본은 연·월·일 3열. 상수로 둬서 기본값일 때 매 렌더 새 배열이 생기지 않게 합니다. */
-const DEFAULT_DATE_WHEEL_FIELDS: DateWheelUnit[] = ["year", "month", "day"];
+/** 기본은 연·월·일 3열. 상수로 둬서 기본값일 때 매 렌더 새 배열이 생기지 않게 합니다.
+ *  타입은 `WheelUnit`(여섯 단위)까지 넓지만 기본값 자체는 그대로 3열입니다 — 시·분·초를
+ *  실제로 그리는 것은 아직 이 컴포넌트가 못 합니다(2b-1은 타입만, 2b-3이 붙입니다). */
+const DEFAULT_DATE_WHEEL_FIELDS: WheelUnit[] = ["year", "month", "day"];
 
 export type DateWheelLabels = {
   /** 값이 비었을 때 트리거 문구 */
@@ -43,7 +46,11 @@ export type DateWheelLabels = {
   select: string;
   /** 일요일부터 7개 */
   weekdays: string[];
-  units: { year: string; month: string; day: string };
+  /** 열의 aria-label 접두사. `year`·`month`·`day`는 늘 그려지므로 필수, `hour`·`minute`·
+   *  `second`는 선택입니다 — 2b-1 시점에는 이 컴포넌트가 그 열들을 실제로 그리지 않으므로
+   *  (2b-3에서 붙습니다) 필수로 만들면 아직 관련 없는 소비자(예: `labels` override에서
+   *  `units`를 연·월·일만 주는 기존 소비자)가 깨집니다. */
+  units: { year: string; month: string; day: string; hour?: string; minute?: string; second?: string };
 };
 
 export const DEFAULT_DATE_WHEEL_LABELS: DateWheelLabels = {
@@ -56,6 +63,10 @@ export const DEFAULT_DATE_WHEEL_LABELS: DateWheelLabels = {
   next: "다음",
   select: "선택",
   weekdays: ["일", "월", "화", "수", "목", "금", "토"],
+  // hour·minute·second는 units 타입에서 선택입니다(2b-1, 타입만). 값은 여기서 채우지
+  // 않습니다 — 열 라벨은 Task 3의 몫이고, 이 상수는 src/index.ts가 그대로 재-export하는
+  // 공개 값이라 값 자체를 바꾸면 "동작 변화 0"과 어긋납니다. 지금은 기본 fields가
+  // 연·월·일이라 이 세 키에 도달할 코드 경로가 없으므로 비워 둬도 화면엔 영향이 없습니다.
   units: { year: "연도", month: "월", day: "일" },
 };
 
@@ -129,8 +140,12 @@ export type DateWheelPickerProps = {
   max?: string;
   /** 표시할 열. 기본은 연·월·일 3열. `["year", "month"]`로 주면 연·월 픽커가 됩니다.
    *  빠진 열은 값에서 01로 정규화되고(월 없으면 월=01, 일 없으면 일=01),
-   *  min/max 비교도 남은 최소 단위(연·월·일)로만 이뤄집니다. 값 형식은 늘 YYYY-MM-DD. */
-  fields?: DateWheelUnit[];
+   *  min/max 비교도 남은 최소 단위(연·월·일)로만 이뤄집니다. 값 형식은 늘 YYYY-MM-DD.
+   *
+   *  ⚠️ **타입은 `WheelUnit`(연·월·일·시·분·초)까지 받지만, 지금(2b-1) 이 컴포넌트가 실제로
+   *  그리는 것은 여전히 연·월·일뿐입니다.** `"hour"` 등을 넘기면 컴파일은 통과해도 동작은
+   *  정의돼 있지 않습니다 — 시·분·초를 실제로 받는 것은 2b-3의 몫입니다. */
+  fields?: WheelUnit[];
   allowClear?: boolean;
   /** **필수입니다**(PRINCIPLES §11). 스크린리더 때문만이 아니라 **팝오버 머리말로 그대로
    *  그려지기 때문입니다** — 기본값을 두면 한 폼의 날짜 필드가 전부 같은 머리말을 답니다.
@@ -197,10 +212,15 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 둘 다 넣으면 상자 높이가 그 둘로 고정되어 `maxHeight`가 무력해집니다. 왜 위쪽이
   // `bottom`이어야 하는지는 `placePicker`의 주석에 있습니다.
   const [position, setPosition] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
-  const [columnMotion, setColumnMotion] = useState<Record<DateWheelUnit, DateWheelMotion>>({
+  // 시·분·초 세 키는 아직 아무 열도 만들지 않지만(2b-3에서 붙습니다), Record<WheelUnit, …>가
+  // 여섯 키를 다 요구하므로 초기값에 채워 둡니다 — 안 채우면 tsc가 거절합니다(2b-1).
+  const [columnMotion, setColumnMotion] = useState<Record<WheelUnit, DateWheelMotion>>({
     year: { sequence: 0, direction: "next", playing: false },
     month: { sequence: 0, direction: "next", playing: false },
     day: { sequence: 0, direction: "next", playing: false },
+    hour: { sequence: 0, direction: "next", playing: false },
+    minute: { sequence: 0, direction: "next", playing: false },
+    second: { sequence: 0, direction: "next", playing: false },
   });
   /**
    * 팝오버가 막 열렸는가. 열 셋이 함께 굴러 들어오는 진입 애니메이션의 **게이트**입니다
@@ -437,8 +457,14 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     //
     // `sequence`는 건드리지 않습니다 — 그것은 값 컨테이너의 key이고, 여기서 0으로
     // 되돌리면 R1에서 고친 리마운트 결함이 그대로 돌아옵니다.
+    // 여섯 키 다 꺼야 Record<WheelUnit, …>를 채웁니다 — hour·minute·second는 아직 아무
+    // 열도 안 켜므로(playing이 될 일이 없음) 사실상 no-op이지만, 타입은 완전한 객체를
+    // 요구합니다(2b-1).
     setColumnMotion((current) => (Object.values(current).some((motion) => motion.playing)
-      ? { year: { ...current.year, playing: false }, month: { ...current.month, playing: false }, day: { ...current.day, playing: false } }
+      ? {
+          year: { ...current.year, playing: false }, month: { ...current.month, playing: false }, day: { ...current.day, playing: false },
+          hour: { ...current.hour, playing: false }, minute: { ...current.minute, playing: false }, second: { ...current.second, playing: false },
+        }
       : current));
   }, [open]);
 
@@ -839,7 +865,14 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   function commitToday() {
     const next = clampToRange(model.now(timeZone));
     const numbersOf = (value: string) => value.split("-").map(Number);
-    const index: Record<DateWheelUnit, number> = { year: 0, month: 1, day: 2 };
+    // hour·minute·second는 UNIT_LADDER 상의 자리(3·4·5)만 채웁니다 — Record<WheelUnit, …>가
+    // 여섯 키를 요구해서입니다(2b-1). `fields`에 그 단위가 있으면(타입은 이제 허용합니다)
+    // 이 함수 자체는 불립니다 — `numbersOf`가 여전히 날짜 문자열(YYYY-MM-DD)만 쪼개
+    // `to[3]`/`from[3]`이 `undefined`이므로 `Math.sign(undefined - undefined)`가 `NaN`이
+    // 되고, `markColumnMotion`의 `if (amount)` 가드가 `NaN`을 거짓으로 걸러 조용히
+    // no-op이 됩니다(크래시도, 잘못된 방향 애니메이션도 아닙니다). 시각 열을 실제로
+    // 커밋하는 것은 2b-3의 몫입니다.
+    const index: Record<WheelUnit, number> = { year: 0, month: 1, day: 2, hour: 3, minute: 4, second: 5 };
     const [from, to] = [numbersOf(baseValue), numbersOf(next)];
     for (const unit of fields) markColumnMotion(unit, Math.sign(to[index[unit]] - from[index[unit]]));
     onChange(next);

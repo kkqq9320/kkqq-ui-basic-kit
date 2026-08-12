@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DateWheelPicker, type DateWheelUnit } from "../src/DateWheelPicker";
+import type { WheelUnit } from "../src/model/instant";
 import { Dialog } from "../src/Dialog";
 import datePickerCssSource from "../css/date-picker.css?raw";
 import tokensCssSource from "../css/tokens.css?raw";
@@ -4470,3 +4471,37 @@ describe("DateWheelPicker heading — 보이는 머리말과 접근성 이름을
     expect(headingText()).toBe("거래 발생 날짜");
   });
 });
+
+// 2b-1 — 타입을 컴포넌트까지 넓힌다(동작 변화 0). 이 블록은 vitest가 아니라
+// `npx tsc --noEmit`이 판정합니다.
+//
+// ⚠️ 브리프 Step 1이 제안한 `const fields = ["hour","minute"] as const; expect(fields.length)
+// .toBe(2)` 형태는 여기 안 넣었습니다 — 실제 `DateWheelPickerProps.fields`(WheelUnit[])와
+// 연결되지 않은 독립 배열이라 넓히기 전에도 컴파일되고 vitest도 항상 초록입니다.
+//
+// ⚠️ 렌더 기반 검사(`it(...)`로 `<DateWheelPicker fields={["hour","minute"]}>`를 실제로
+// 마운트하는 버전)도 뺐습니다 — 팝오버를 안 열면 이번에 넓힌 코드 경로(`columns.map`·
+// `labels.units[unit]`·`columnMotion[unit]`)를 하나도 안 밟아서, vitest 기준으로는
+// 넓히기 전에도 초록이었을 검사였습니다(코디네이터 F-2). 이 태스크의 산출물은 **타입**이고
+// 시각 열의 **렌더**는 2b-3의 몫이라 런타임으로는 증명할 방법이 없습니다.
+//
+// 그래서 아래는 `it()`/`describe()` 없이 모듈 스코프에 그대로 둡니다 — vitest는 이걸
+// "테스트"로 세지 않고(그래서 `npx vitest run` 총 개수는 917 그대로입니다) 타입이
+// 좁아지거나 넓어지면 `tsc`만 빨개집니다. 두 방향 다 실측으로 확인했습니다(RED 두 번,
+// 보고서 참고): (1) `WheelUnit`을 3단위로 좁혔더니 첫 줄에서 `Type '"hour"' is not
+// assignable`, (2) `WheelUnit`을 `string`으로 넓혔더니 `@ts-expect-error` 줄에서
+// `Unused '@ts-expect-error' directive`.
+const _2b1TimeFields: WheelUnit[] = ["hour", "minute"];        // 3단위로 되돌아가면 tsc가 잡습니다
+void _2b1TimeFields;
+// @ts-expect-error — 사다리에 없는 단위는 여전히 거절돼야 합니다
+const _2b1Bogus: WheelUnit[] = ["fortnight"];
+void _2b1Bogus;
+
+// JSX 문맥 타이핑도 같은 이유로 여기서 타입만 확인합니다(렌더하지 않습니다) — WheelUnit을
+// import하지 않고 리터럴만 JSX에 그대로 넘겨도 통과합니다. 함수는 정의만 되고 절대
+// 호출되지 않으므로 런타임 비용도, 팝오버를 열지 않고 넘어가는 데서 오는 위 F-2의 함정도
+// 없습니다.
+function _2b1JsxContextTypingOnly() {
+  return <DateWheelPicker ariaLabel="문맥 타이핑 확인" value="2026-07-12" onChange={() => undefined} fields={["hour", "minute"]} />;
+}
+void _2b1JsxContextTypingOnly;

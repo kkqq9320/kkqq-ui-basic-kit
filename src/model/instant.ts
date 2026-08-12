@@ -7,12 +7,12 @@
  * (lastDayOf, 윤년). 월의 상한은 12로 상수, 연은 상한이 없습니다. 설계 스펙 §3.1.
  */
 export type WheelUnit = "year" | "month" | "day" | "hour" | "minute" | "second";
-/** 기존 이름. `WheelUnit`의 부분집합입니다 — **별칭이 아닙니다.** 컴포넌트와 기존 테스트가
- *  이 좁은 세 단위 그대로 `Record<DateWheelUnit, …>`를 3키로 채워 쓰므로, 별칭으로 넓히면
- *  그 자리들이 전부 깨집니다(타이핑·확정 함수의 **인자**만 `WheelUnit`으로 넓히고, 반환
- *  타입과 `Record`는 좁게 남겨 두는 것이 이 파일과 컴포넌트가 동시에 컴파일되는 유일한
- *  조합입니다). 좁은 타입을 넓은 인자에 넘기는 건 항상 되므로 기존 호출부는 그대로 통과합니다. */
-export type DateWheelUnit = "year" | "month" | "day";
+/** 기존 이름. **2b-1부터 `WheelUnit`의 별칭입니다.** 2a에서는 별칭으로 넓히면 컴포넌트의
+ *  3키짜리 `Record<DateWheelUnit, …>`(컬럼 모션 상태 등)가 깨져서 "부분집합, 별칭 아님"으로
+ *  남겨야 했습니다 — 그때는 컴포넌트를 못 건드리는 제약이 있었습니다. 2b는 컴포넌트를 고칠 수
+ *  있으므로 그 자리들을 여섯 단위로 채우고 여기서 별칭으로 통일합니다. `export`는 그대로
+ *  유지합니다 — tests/DateWheelPicker.test.tsx와 컴포넌트가 이 이름으로 가져옵니다. */
+export type DateWheelUnit = WheelUnit;
 
 /** 여섯 단위의 순서. 큰 단위부터 작은 단위로. */
 export const UNIT_LADDER = ["year", "month", "day", "hour", "minute", "second"] as const satisfies readonly WheelUnit[];
@@ -489,9 +489,6 @@ export function dateWheelLabel(value: string, unit: DateWheelUnit, weekdays: str
   return `${String(date.getUTCDate()).padStart(2, "0")} ${weekdays[date.getUTCDay()]}`;
 }
 
-/** 세그먼트가 지키는 자릿수. 버퍼가 덜 찼을 때 이 길이까지 아래 문자로 채웁니다. */
-export const DATE_WHEEL_SEGMENT_WIDTH: Record<DateWheelUnit, number> = { year: 4, month: 2, day: 2 };
-
 /**
  * 빈 자리를 채우는 문자 — **U+2012 FIGURE DASH**. 밑줄(`_`)이 아닙니다(설계 스펙 §4.5).
  *
@@ -544,7 +541,11 @@ export type DateTriggerPart = { unit: DateWheelUnit | null; text: string };
 export function dateTriggerParts(source: string, fields: DateWheelUnit[], typing: { unit: DateWheelUnit; digits: string } | null): DateTriggerPart[] {
   const [year, month, day] = source.split("-");
   function segment(unit: DateWheelUnit, text: string): DateTriggerPart {
-    return { unit, text: typing?.unit === unit && typing.digits ? typing.digits.padEnd(DATE_WHEEL_SEGMENT_WIDTH[unit], DATE_WHEEL_FILL) : text };
+    // 자릿수는 unitDigits(unit)에서 읽습니다 — 예전에는 여기 전용 3키 Record
+    // (DATE_WHEEL_SEGMENT_WIDTH)가 있었는데, DateWheelUnit이 2b-1에서 WheelUnit의
+    // 별칭이 되면서 3키로는 여섯 단위 키를 다 못 받아 깨졌습니다. unitDigits가 같은 값
+    // (연도 4·나머지 2)을 이미 내주므로 대체합니다.
+    return { unit, text: typing?.unit === unit && typing.digits ? typing.digits.padEnd(unitDigits(unit), DATE_WHEEL_FILL) : text };
   }
   const parts: DateTriggerPart[] = [segment("year", year)];
   if (!fields.includes("month")) return [...parts, { unit: null, text: "." }];
@@ -557,9 +558,10 @@ export function dateTriggerParts(source: string, fields: DateWheelUnit[], typing
  *  같은 모양을 구현합니다 — 설계 스펙 §3.3·§12. */
 export type WheelModel = {
   units: DateWheelUnit[];                                   // 사다리 순서
-  // 그릴 열. 이 타입은 3단계에서 넓어집니다 — 오전/오후는 단위가 아니라서
-  // DateWheelUnit[]에 담을 수 없습니다(설계 스펙 §7).
-  columns(fields: DateWheelUnit[]): DateWheelUnit[];
+  // 그릴 열. 2b-1에서 `WheelUnit`(여섯 단위)까지 넓혔습니다 — 컴포넌트가 이 반환값을
+  // 그대로 받습니다(§2b-1). 이 타입은 나중 단계에서 다시 넓어집니다 — 오전/오후는
+  // 단위가 아니라서 WheelUnit[]에 담을 수 없습니다(설계 스펙 §7).
+  columns(fields: WheelUnit[]): WheelUnit[];
   isValid(value: string): boolean;
   normalize(value: string, fields: DateWheelUnit[]): string;
   keyLength(fields: DateWheelUnit[]): number;
