@@ -14,6 +14,8 @@
 import { describe, expect, it } from "vitest";
 
 import customizing from "../CUSTOMIZING.md?raw";
+import pageCssSource from "../css/page.css?raw";
+import themeEditorCssSource from "../css/theme-editor.css?raw";
 import tokensCssSource from "../css/tokens.css?raw";
 
 const GRIDS = ["summary-card", "panel", "field", "color-card"] as const;
@@ -61,5 +63,49 @@ describe("그리드 토큰 문서", () => {
    * 값이 갈라져도, 토큰이 새로 생겨 문서에 안 적혀도 빨개집니다. */
   it("문서에 적힌 기본값이 소스의 선언과 정확히 같다", () => {
     expect(documented()).toEqual(declared());
+  });
+});
+
+/* **같은 수치가 세 번째 자리에도 있습니다: `var(--토큰, 폴백)`의 폴백.**
+ *
+ * 폴백은 `tokens.css`를 안 싣는 소비자에게만 보입니다(README가 폰트를 빼려고 개별 import를
+ * 안내하므로 실제로 있는 경로입니다). **그래서 갈라져도 이 저장소에서는 아무도 안 봅니다** —
+ * 위 문서 대조도 폴백은 안 봅니다. 실제로 둘이 갈라져 있었습니다:
+ * `--panel-min` 토큰 400 / 폴백 640, `--color-card-min` 토큰 240 / 폴백 360.
+ *
+ * ⚠️ **`justify`는 뺍니다.** 넷 다 `normal`이라 갈라져도 드러나지 않고, 값이 같은 것끼리
+ * 비교하는 검사는 순서·짝을 못 가립니다(이 저장소의 "두 값이 같으면 구분 못 한다" 함정). */
+const componentCss = { "../css/page.css": pageCssSource, "../css/theme-editor.css": themeEditorCssSource };
+const SIZE_AXES = ["min", "max"] as const;
+
+/** CSS에서 쓰인 `var(--그리드-축, 폴백)`의 폴백. 넷 × 둘 = 여덟 개가 나와야 합니다. */
+const fallbacks = () => {
+  const all = Object.values(componentCss).join("\n");
+  const found: Array<[string, string]> = [];
+  for (const grid of GRIDS) {
+    for (const axis of SIZE_AXES) {
+      const name = `--${grid}-${axis}`;
+      const use = new RegExp(`var\\(${name},\\s*([^)]+)\\)`).exec(all);
+      if (use) found.push([name, use[1].trim()]);
+    }
+  }
+  return found;
+};
+
+/** 위 `declared()`에서 크기 축만. 폴백과 짝을 맞추기 위해 같은 순서로 뽑습니다. */
+const declaredSizes = () => declared().filter(([name]) => SIZE_AXES.some((axis) => name.endsWith(`-${axis}`)));
+
+describe("var()의 폴백이 토큰 기본값과 같다", () => {
+  // 앵커 확인 — 정규식이 하나도 못 잡으면 아래 비교가 빈 배열끼리라 공허합니다.
+  it("CSS에서 폴백 여덟 개를 전부 뽑아냈다", () => {
+    expect(fallbacks()).toHaveLength(8);
+  });
+
+  it("선언에서도 크기 축 여덟 개를 뽑아냈다", () => {
+    expect(declaredSizes()).toHaveLength(8);
+  });
+
+  it("폴백이 선언과 정확히 같다", () => {
+    expect(fallbacks()).toEqual(declaredSizes());
   });
 });
