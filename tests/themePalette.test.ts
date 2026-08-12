@@ -97,3 +97,82 @@ describe("팔레트", () => {
     expect(palette.write("light", { "--brand-2": "#ff8a3d" })).toBe(true);
   });
 });
+
+describe("백업 형식", () => {
+  it("저장된 값을 봉투에 담는다", () => {
+    localStorage.setItem("themeColors:light", JSON.stringify({ "--brand-2": "#ff8a3d" }));
+    localStorage.setItem("themeColors:dark", JSON.stringify({ "--brand-2": "#ffa866" }));
+    const palette = createThemePalette([APP_GROUP]);
+
+    expect(palette.serialize()).toEqual({
+      version: 1,
+      colors: { light: { "--brand-2": "#ff8a3d" }, dark: { "--brand-2": "#ffa866" } },
+    });
+  });
+
+  /* ⚠️ 인자가 없으면 controlled 앱에서 **빈 백업**이 나온다 — 값이 저장소가 아니라
+   * 앱 상태에 있기 때문이다. 백업 기능이 정작 백업이 필요한 앱에서 안 도는 모양이다. */
+  it("넘긴 값이 있으면 저장소를 읽지 않는다", () => {
+    localStorage.setItem("themeColors:light", JSON.stringify({ "--brand-2": "#000000" }));
+    const palette = createThemePalette([APP_GROUP]);
+
+    expect(palette.serialize({ light: { "--brand-2": "#ff8a3d" }, dark: {} })).toEqual({
+      version: 1,
+      colors: { light: { "--brand-2": "#ff8a3d" }, dark: {} },
+    });
+  });
+
+  it("왕복하면 같은 값이 나온다", () => {
+    const palette = createThemePalette([APP_GROUP]);
+    const made = palette.serialize({ light: { "--brand-2": "#ff8a3d" }, dark: {} });
+
+    expect(palette.parse(JSON.parse(JSON.stringify(made)))?.backup).toEqual(made);
+  });
+
+  it("모르는 토큰은 버리고 이름을 남긴다", () => {
+    const palette = createThemePalette([APP_GROUP]);
+
+    const parsed = palette.parse({ version: 1, colors: { light: { "--brand-2": "#ff8a3d", "--nope": "#123456" }, dark: {} } });
+
+    expect(parsed?.backup.colors.light).toEqual({ "--brand-2": "#ff8a3d" });
+  });
+
+  it("버린 이름이 dropped에 담긴다", () => {
+    const palette = createThemePalette([APP_GROUP]);
+
+    const parsed = palette.parse({ version: 1, colors: { light: { "--nope": "#123456" }, dark: {} } });
+
+    expect(parsed?.dropped).toEqual(["--nope"]);
+  });
+
+  it("색 형식이 아닌 값도 버리고 이름을 남긴다", () => {
+    const palette = createThemePalette([APP_GROUP]);
+
+    const parsed = palette.parse({ version: 1, colors: { light: { "--brand-2": "빨강" }, dark: {} } });
+
+    expect(parsed).toEqual({ backup: { version: 1, colors: { light: {}, dark: {} } }, dropped: ["--brand-2"] });
+  });
+
+  it("version이 1이 아니면 null이다", () => {
+    const palette = createThemePalette([APP_GROUP]);
+
+    expect(palette.parse({ version: 2, colors: { light: {}, dark: {} } })).toBe(null);
+  });
+
+  it("봉투 모양이 아니면 null이다", () => {
+    const palette = createThemePalette([APP_GROUP]);
+
+    expect([palette.parse("어쩌구"), palette.parse([]), palette.parse({ version: 1 }), palette.parse(null)]).toEqual([null, null, null, null]);
+  });
+
+  /* 빈 백업은 "덮어쓴 색이 하나도 없는 정상 백업"이고 복원하면 전부 기본값이 된다.
+   * null(= 백업이 아님)과 반드시 구분돼야 한다 — 안 그러면 "모두 초기화"를 복원할 수 없다. */
+  it("빈 백업은 null이 아니다", () => {
+    const palette = createThemePalette([APP_GROUP]);
+
+    expect(palette.parse({ version: 1, colors: { light: {}, dark: {} } })).toEqual({
+      backup: { version: 1, colors: { light: {}, dark: {} } },
+      dropped: [],
+    });
+  });
+});

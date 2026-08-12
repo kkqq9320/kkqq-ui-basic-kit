@@ -12,6 +12,7 @@
  */
 import {
   applyTokenOverrides,
+  normalizeColor,
   readTokenOverrides,
   writeTokenOverrides,
   type ThemeName,
@@ -19,13 +20,36 @@ import {
   type ThemeTokenGroup,
 } from "./themeTokens";
 
+/** 서버·파일로 실어 보낼 봉투. `version`은 형식의 버전이지 킷 버전이 아닙니다. */
+export type ThemeColorBackup = {
+  version: 1;
+  colors: { light: Record<string, string>; dark: Record<string, string> };
+};
+
+/** `dropped`에는 **버린 토큰 이름**이 담깁니다. 모르는 이름이거나 색 형식이 아니면
+ *  버립니다. 조용히 버리면 사용자는 색이 왜 안 돌아왔는지 알 방법이 없습니다. */
+export type ParsedThemeColors = { backup: ThemeColorBackup; dropped: string[] };
+
 export type ThemePalette = {
   groups: readonly ThemeTokenGroup[];
   tokens: ThemeToken[];
   read(theme: ThemeName): Record<string, string>;
   write(theme: ThemeName, overrides: Record<string, string>): boolean;
   apply(theme: ThemeName, overrides?: Record<string, string>): void;
+  serialize(colors?: { light?: Record<string, string>; dark?: Record<string, string> }): ThemeColorBackup;
+  parse(input: unknown): ParsedThemeColors | null;
 };
+
+function cleanTheme(raw: unknown, known: Set<string>, dropped: string[]): Record<string, string> {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
+    const hex = typeof value === "string" ? normalizeColor(value) : null;
+    if (known.has(name) && hex) out[name] = hex;
+    else dropped.push(name);
+  }
+  return out;
+}
 
 export function createThemePalette(groups: readonly ThemeTokenGroup[]): ThemePalette {
   const tokens = groups.flatMap((group) => group.tokens);
@@ -35,5 +59,26 @@ export function createThemePalette(groups: readonly ThemeTokenGroup[]): ThemePal
     read: (theme) => readTokenOverrides(theme, tokens),
     write: (theme, overrides) => writeTokenOverrides(theme, overrides),
     apply: (theme, overrides) => applyTokenOverrides(theme, overrides, tokens),
+    serialize: (colors) => ({
+      version: 1,
+      colors: {
+        light: colors?.light ?? readTokenOverrides("light", tokens),
+        dark: colors?.dark ?? readTokenOverrides("dark", tokens),
+      },
+    }),
+    parse: (input) => {
+      if (typeof input !== "object" || input === null || Array.isArray(input)) return null;
+      const envelope = input as { version?: unknown; colors?: unknown };
+      if (envelope.version !== 1) return null;
+      if (typeof envelope.colors !== "object" || envelope.colors === null || Array.isArray(envelope.colors)) return null;
+      const known = new Set(tokens.map((token) => token.name));
+      const source = envelope.colors as Record<string, unknown>;
+      const dropped: string[] = [];
+      const colors = {
+        light: cleanTheme(source.light, known, dropped),
+        dark: cleanTheme(source.dark, known, dropped),
+      };
+      return { backup: { version: 1, colors }, dropped };
+    },
   };
 }
