@@ -100,12 +100,25 @@ export type Conflict = { combo: string; withActionId?: string; withKit?: boolean
  * 그래서 **예약 조합을 비교할 때만** `Meta`를 `Ctrl`과 같은 것으로 봅니다.
  * 이게 없으면 `Cmd+;`가 충돌로 안 잡히고, 사용자는 등록에 성공한 뒤 날짜 선택기가
  * 그 키를 먹는 것을 봅니다 — **맥에서만 나는 결함**입니다.
- * ⚠️ 액션끼리의 비교(§5.1)에는 쓰지 마세요. 거기서는 `Ctrl+K`와 `Cmd+K`가
- * **다른 조합**이고, 앱이 둘을 따로 걸 수 있어야 합니다. */
+ *
+ * **`Shift`·`Alt`도 같은 이유로 접습니다.** `DateWheelPicker.tsx:1095`의 실제 가드는
+ * `(event.ctrlKey || event.metaKey) && event.code === "Semicolon"`이고 `shiftKey`·
+ * `altKey`는 아예 보지 않습니다 — 그 컴포넌트는 `Ctrl+;`뿐 아니라 `Ctrl+Shift+;`·
+ * `Ctrl+Alt+;`·`Cmd+Shift+;`도 전부 먹습니다. 접지 않으면 이 조합들의 문자열이
+ * `"Ctrl+Semicolon"`과 달라 충돌 검사를 통과하고, 등록에 성공한 뒤 날짜 필드에
+ * 포커스가 있을 때 그 키를 누르면 피커가 먼저 `preventDefault()`를 불러 규칙 1에
+ * 걸려 앱 액션이 안 불립니다 — **모든 플랫폼에서 재현됩니다.**
+ *
+ * 즉 **예약 비교는 컴포넌트의 실제 판정보다 넓어야** 안전한 쪽으로 틀립니다.
+ * `Ctrl+Shift+;`를 앱이 못 쓰게 되는 것은 의도된 대가입니다 — 실제로 그 컴포넌트가
+ * 그 키를 먹으니까요.
+ *
+ * ⚠️ 액션끼리의 비교(§5.1)에는 쓰지 마세요. 거기서는 `Ctrl+K`와 `Cmd+K`가,
+ * `Ctrl+K`와 `Ctrl+Shift+K`가 **다른 조합**이고, 앱이 둘을 따로 걸 수 있어야 합니다. */
 function reservedKey(text: string): string | null {
   const combo = parseCombo(text);
   if (!combo) return null;
-  return formatCombo({ ...combo, ctrl: combo.ctrl || combo.meta, meta: false });
+  return formatCombo({ ...combo, ctrl: combo.ctrl || combo.meta, meta: false, shift: false, alt: false });
 }
 
 export function findConflict(

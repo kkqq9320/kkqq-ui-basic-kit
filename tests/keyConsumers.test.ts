@@ -17,10 +17,13 @@ import { describe, expect, it } from "vitest";
 
 const sources = import.meta.glob("../src/*.{ts,tsx}", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 
-/** 파일별 keydown 리스너 수. **이 숫자가 늘면 §2.1의 표를 다시 재야 합니다.** */
+/** 파일별 "keydown이 결합된 자리" 수 — `addEventListener("keydown", …)`과
+ * `onKeyDown={…}`을 합쳐 실제로 센 개수입니다. 두 종류를 같은 뜻(자리 수)으로
+ * 세므로, 같은 핸들러를 `onKeyDown`에 두 번 걸면(`Select.tsx`처럼 트리거 버튼과
+ * 메뉴에 각각) 그대로 2입니다. **이 숫자가 늘면 §2.1의 표를 다시 재야 합니다.** */
 const KNOWN_CONSUMERS: Record<string, number> = {
   "../src/DateWheelPicker.tsx": 1,
-  "../src/Select.tsx": 1,
+  "../src/Select.tsx": 2,
   "../src/Dialog.tsx": 1,
   "../src/hooks.ts": 1,
   "../src/SectionTabs.tsx": 2,
@@ -32,7 +35,7 @@ function keydownSites(source: string): number {
   const withoutComments = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
   const listeners = withoutComments.match(/addEventListener\(\s*"keydown"/g)?.length ?? 0;
   const props = withoutComments.match(/onKeyDown=\{/g)?.length ?? 0;
-  return listeners + (props > 0 ? 1 : 0);   // 같은 핸들러를 두 자리에 걸어도 소비자는 하나
+  return listeners + props;   // 둘 다 실제 개수 — 자리가 하나 늘면 이 합도 하나 는다
 }
 
 describe("킷의 키 소비자 전수 (스펙 §2.1)", () => {

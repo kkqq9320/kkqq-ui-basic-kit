@@ -13,7 +13,10 @@ import { describe, expect, it } from "vitest";
 
 import { KIT_RESERVED, findConflict } from "../src/shortcuts";
 
-const sources = import.meta.glob("../src/*.tsx", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+// `.tsx`만 보면 `src/`의 `.ts` 파일(`shortcuts.ts`·`hooks.ts`·`positioning.ts` 등)이
+// 이 검사의 시야 밖으로 빠집니다 — §5.2가 막으려는 "조용히 틀린 예약 목록"이 확장자
+// 하나 차이로 새는 자리였습니다. `keyConsumers.test.ts`처럼 둘 다 봅니다.
+const sources = import.meta.glob("../src/*.{ts,tsx}", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 
 describe("액션끼리의 충돌", () => {
   it("같은 조합을 쓰는 다른 액션을 잡는다", () => {
@@ -53,9 +56,35 @@ describe("킷 예약 조합", () => {
     expect(findConflict("Meta+KeyK", "toggle", {})).toBe(null);
   });
 
+  /* ⚠️ **Shift·Alt도 같이 잡아야 합니다.** `DateWheelPicker.tsx:1095`의 가드는
+   * `(event.ctrlKey || event.metaKey) && event.code === "Semicolon"`이라
+   * `shiftKey`·`altKey`를 안 봅니다 — 즉 `Ctrl+Shift+;`·`Ctrl+Alt+;`·`Cmd+Shift+;`도
+   * 전부 그 컴포넌트가 먹습니다. 문자열만 비교하면 이 조합들이 `"Ctrl+Semicolon"`과
+   * 달라서 충돌이 안 잡히고, 등록에 성공한 뒤 날짜 필드에 포커스가 있을 때 그 키를
+   * 누르면 피커가 먼저 `preventDefault()`를 불러 앱 액션이 안 뜹니다 — 모든
+   * 플랫폼에서 재현됩니다. */
+  it("Ctrl+Shift+Semicolon도 같은 예약으로 잡는다", () => {
+    expect(findConflict("Ctrl+Shift+Semicolon", "toggle", {})?.withKit).toBe(true);
+  });
+
+  it("Ctrl+Alt+Semicolon도 같은 예약으로 잡는다", () => {
+    expect(findConflict("Ctrl+Alt+Semicolon", "toggle", {})?.withKit).toBe(true);
+  });
+
+  it("Cmd+Shift+Semicolon도 같은 예약으로 잡는다", () => {
+    expect(findConflict("Meta+Shift+Semicolon", "toggle", {})?.withKit).toBe(true);
+  });
+
+  // 대조군 — 예약과 무관한 키라면 수식어가 여럿 붙어도 여전히 통과해야 합니다.
+  it("예약과 무관한 Ctrl+Shift 조합은 잡지 않는다", () => {
+    expect(findConflict("Ctrl+Shift+KeyK", "toggle", {})).toBe(null);
+  });
+
   // 전제 — glob이 비면 아래가 공허하게 통과합니다.
+  // 하한 10 = `.tsx`만 셌을 때의 실제 파일 수. `.ts`가 다시 빠지면(글롭 되돌림)
+  // 이 값이 10 아래로 안 떨어지지만 딱 10이 되어 아래 부등식이 깨집니다.
   it("src의 소스를 실제로 읽었다", () => {
-    expect(Object.keys(sources).length).toBeGreaterThan(5);
+    expect(Object.keys(sources).length).toBeGreaterThan(10);
     expect(Object.values(sources).every((source) => source.length > 200)).toBe(true);
   });
 
