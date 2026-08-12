@@ -149,9 +149,19 @@ export function readTokenOverrides(theme: ThemeName, tokens: ThemeToken[] = THEM
   }
 }
 
-export function writeTokenOverrides(theme: ThemeName, overrides: Record<string, string>) {
-  if (Object.keys(overrides).length === 0) localStorage.removeItem(storageKey(theme));
-  else localStorage.setItem(storageKey(theme), JSON.stringify(overrides));
+/** 저장에 성공하면 `true`. 저장소가 막혀 있으면 `false`이고 **예외를 던지지 않습니다.**
+ *
+ * 읽기(`readTokenOverrides`)가 이미 `try/catch`인데 쓰기만 안 감싸져 있었습니다.
+ * 쿠키·사이트 데이터를 전면 차단한 브라우저에서는 `localStorage`에 **접근만 해도**
+ * 예외가 나므로, 그 상태에서 색을 하나 바꾸면 편집기가 죽었습니다. */
+export function writeTokenOverrides(theme: ThemeName, overrides: Record<string, string>): boolean {
+  try {
+    if (Object.keys(overrides).length === 0) localStorage.removeItem(storageKey(theme));
+    else localStorage.setItem(storageKey(theme), JSON.stringify(overrides));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

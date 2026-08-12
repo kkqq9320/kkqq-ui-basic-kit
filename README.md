@@ -668,8 +668,11 @@ Escape로 닫아도 다이얼로그는 남습니다. 직접 만든 팝업을 이
 ### ThemeColorEditor — 색상 토큰 편집기
 
 사용자가 팔레트를 직접 바꾸는 화면입니다. 지금 보고 있는 테마(라이트/다크)의 값을
-`localStorage`(`themeColors:light` / `themeColors:dark`)에 따로 저장하고 `:root`에
-인라인으로 적용합니다. **저장은 브라우저에만 — 코드도 GitHub도 안 건드립니다.**
+기본적으로 `localStorage`(`themeColors:light` / `themeColors:dark`)에 따로 저장하고
+`:root`에 인라인으로 적용합니다. **기본값은 저장이 브라우저에만 — 코드도 GitHub도
+안 건드립니다.** `overrides` 프롭을 넘기면 이 저장을 앱이 가져갈 수 있습니다 —
+서버에 붙여 로그인 동기화·백업/복원을 하려면 `palette`·`overrides`·`onCommit`을
+쓰세요(자세한 내용은 [CUSTOMIZING.md](CUSTOMIZING.md#색-설정을-앱이-소유하기-서버-저장백업복원)).
 
 ```tsx
 <ThemeColorEditor theme={theme} />           // 기본 토큰 표
