@@ -64,12 +64,45 @@ describe("작업 영역 끝 여백", () => {
     ]);
   });
 
-  /* 80px 패딩은 **유지하기로 한 것**입니다(오너 결정). 이 검사는 "중복만 걷었다"가
-   * 조용히 "여백을 다 걷었다"로 번지는 것을 막습니다. */
-  it("`.workspace`의 아래 패딩 80px은 그대로다", () => {
+  /* 끝 여백은 이제 **패딩이 아니라 스페이서**입니다. 패딩은 진짜 공간이라 그 자신이
+   * 넘침을 만들고, 그래서 "볼 것이 없는 스크롤바"가 섰습니다. 아래 넷이 그 설계를
+   * 못박습니다. */
+  it("`.workspace`의 아래 패딩은 0이다 — 끝 여백을 패딩으로 만들지 않는다", () => {
     const workspace = /^\.workspace\s*\{([^}]*)\}/m.exec(pageCssSource)?.[1] ?? "";
     const padding = /padding:\s*([^;]+)/.exec(workspace)?.[1]?.trim();
 
-    expect(padding).toBe("42px clamp(22px, 5vw, 72px) 80px");
+    expect(padding).toBe("42px clamp(22px, 5vw, 72px) 0");
+  });
+
+  /* `flex-basis: 0`이 요점입니다. 이게 아니면 스페이서가 문서 높이에 그대로 더해져
+   * 패딩과 똑같아집니다 — 바꾼 의미가 통째로 사라지는 자리입니다. */
+  it("스페이서는 문서 높이를 셀 때 0으로 잡힌다", () => {
+    const spacer = /^\.workspace::after\s*\{([^}]*)\}/m.exec(pageCssSource)?.[1] ?? "";
+
+    expect(spacer.replace(/\s+/g, " ")).toContain("flex: 1 1 0");
+  });
+
+  it("스페이서의 최대 크기가 토큰으로 열려 있고 기본값이 80px이다", () => {
+    const spacer = /^\.workspace::after\s*\{([^}]*)\}/m.exec(pageCssSource)?.[1] ?? "";
+
+    expect(spacer.replace(/\s+/g, " ")).toContain("max-height: var(--workspace-space-bottom, 80px)");
+  });
+
+  /* 내용이 이미 넘치는 페이지에서는 여백이 **있어야** 합니다(오너가 3번 이미지로
+   * 지목한 요구). 그 경우에만 최소 높이가 박힙니다. */
+  it("내용이 이미 넘치면 끝 여백을 그대로 박는다", () => {
+    const fixed = /^\.workspace\[data-trailing-space="fixed"\]::after\s*\{([^}]*)\}/m.exec(pageCssSource)?.[1] ?? "";
+
+    expect(fixed.replace(/\s+/g, " ")).toContain("min-height: var(--workspace-space-bottom, 80px)");
+  });
+
+  /* ⚠️ 모바일 하단 패딩은 "숨 쉴 공간"이 아니라 **고정 바 자리 + 키보드 보정이 읽는
+   * 값**입니다. 스페이서가 거기까지 번지면 `useKeyboardScrollCompensation`의 전제가
+   * 흔들립니다. 그래서 모바일에서는 통째로 꺼야 합니다. */
+  it("모바일에서는 스페이서를 끈다", () => {
+    const mobileAt = pageCssSource.indexOf("@media (max-width: 760px)");
+    expect(mobileAt).toBeGreaterThan(-1);
+
+    expect(pageCssSource.slice(mobileAt)).toMatch(/\.workspace::after\s*\{[^}]*content:\s*none/);
   });
 });

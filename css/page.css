@@ -4,19 +4,41 @@
  *   eyebrow → 페이지 제목 → 설명 → (탭) → 섹션 제목·설명 → 콘텐츠 카드
  * 각 줄이 최소 높이를 예약하므로 페이지를 옮겨 다녀도 제목이 흔들리지 않습니다.
  */
-.workspace { position: relative; min-width: 0; padding: 42px clamp(22px, 5vw, 72px) 80px; }
+.workspace { position: relative; min-width: 0; display: flex; flex-direction: column; padding: 42px clamp(22px, 5vw, 72px) 0; }
 
-/* ⚠️ **마지막 블록이 자기 아래 여백을 또 더하면 안 됩니다.** 위 `padding-bottom: 80px`이
- * 이미 페이지 끝 여백인데, 거기에 마지막 자식의 `margin-bottom`(요약 그리드 22, 패널
- * 그리드·패널 20)이 **더해집니다.** 실측(실제 크롬, 창 높이 1214, 세 탭 전부): 마지막
- * 요소 아래 빈 공간이 **100px**. 레이아웃 페이지는 넘침 143px 중 **100px이 내용이
- * 아니었고**, 카드가 화면에 다 들어오는 창에서는 그 여백만으로 스크롤바가 섰습니다
+/* ⚠️ **마지막 블록이 자기 아래 여백을 또 더하면 안 됩니다.** 아래 스페이서가 이미 페이지
+ * 끝 여백인데, 거기에 마지막 자식의 `margin-bottom`(요약 그리드 22, 패널 그리드·패널 20)이
+ * **더해집니다.** 실측(실제 크롬, 창 높이 1214, 세 탭 전부): 마지막 요소 아래 빈 공간이
+ * **100px**. 레이아웃 페이지는 넘침 143px 중 **100px이 내용이 아니었고**, 카드가 화면에
+ * 다 들어오는 창에서는 그 여백만으로 스크롤바가 섰습니다
  * (오너 리포트 2026-08-12: "넘칠 게 없는데 스크롤바가 선다").
  *
- * **80px 패딩은 그대로 둡니다** — 없애자는 게 아니라 두 번 세지 말자는 것입니다.
  * 특이도가 (0,2,0)이라 취소 대상 (0,1,0)들보다 **순서와 무관하게** 이깁니다.
  * `tests/workspaceTrailingSpace.test.ts`가 못박습니다. */
 .workspace > :last-child { margin-bottom: 0; }
+
+/* **페이지 끝 여백이 스스로 스크롤을 만들지 않습니다.**
+ *
+ * 예전에는 위 `.workspace`에 `padding-bottom: 80px`이 있었습니다. 그런데 패딩은
+ * **진짜 공간**이라, 내용이 화면을 거의 채우면 그 여백만으로 문서가 창을 넘습니다 —
+ * 오너 창에서 내용이 1256.8px로 끝나고 창이 1270px인데 문서가 1336.8px이 되어
+ * **볼 것이 없는 스크롤바가 67px** 섰습니다.
+ *
+ * 그래서 여백을 **남는 자리를 쓰는 스페이서**로 바꿉니다. `flex-basis: 0`이라 문서
+ * 높이를 셀 때 0으로 잡히고, 자리가 남으면 최대 `--workspace-space-bottom`까지 자랍니다.
+ *
+ * ⚠️ **그것만으로는 절반입니다.** 내용이 진짜로 넘치는 페이지에서는 남는 자리가 0이라
+ * 끝까지 내렸을 때 마지막 카드가 창 바닥에 딱 붙습니다. 오너가 원한 것은 그때 여백이
+ * **있는** 것이었습니다. "항상 80"과 "절대 스크롤을 안 만듦"은 **CSS 안에서 배타적**
+ * 입니다 — 여백 자체가 넘침을 만드는 순환이라 어떤 고정값으로도 못 풉니다.
+ * 그래서 `AppShell`이 **내용만의 높이**를 재서, 이미 넘치는 경우에만 아래 규칙으로
+ * 최소 높이를 박아 줍니다. **내용 높이로만 판정하므로 진동하지 않습니다**
+ * (넘침 → 80 고정 → 여전히 넘침 → 그대로 / 안 넘침 → 남는 자리만 → 안 넘침 → 그대로).
+ *
+ * 모바일은 이 장치를 통째로 끕니다(아래 미디어 쿼리) — 그쪽 하단 패딩은 고정 바와
+ * 키보드 보정이 쓰는 값이라 성격이 완전히 다릅니다. */
+.workspace::after { content: ""; flex: 1 1 0; min-height: 0; max-height: var(--workspace-space-bottom, 80px); }
+.workspace[data-trailing-space="fixed"]::after { min-height: var(--workspace-space-bottom, 80px); }
 
 /* 작업 영역 오른쪽 위 아이콘 줄 — 화면 모드 전환, 설정처럼 페이지와 무관하게
  * 항상 닿아야 하는 액션. 모바일에서는 탭 카드가 이 줄 바로 아래로 내려갑니다. */
@@ -90,7 +112,12 @@
    * --keyboard-inset(AppShell.tsx)은 가상 키보드가 열렸을 때만 0이 아니고, 그만큼
    * 스크롤 가능한 여유를 더 만들어 줍니다 — 이 패딩 자체는 아무것도 움직이지
    * 않고, AppShell의 useKeyboardScrollCompensation이 실제로 스크롤을 옮깁니다. */
-  .workspace { padding: 74px 16px calc(102px + env(safe-area-inset-bottom) + var(--keyboard-inset, 0px)); }
+  /* ⚠️ **모바일은 끝 여백 스페이서를 씁니다.** 여기 하단 패딩은 "숨 쉴 공간"이 아니라
+   * 고정 바 자리 + 키보드 보정(`--keyboard-inset`)이 기대는 값입니다. 스페이서로 바꾸면
+   * `useKeyboardScrollCompensation`이 읽는 전제가 통째로 흔들립니다. `display`도
+   * 되돌립니다 — 데스크톱에서만 flex 컬럼입니다. */
+  .workspace { display: block; padding: 74px 16px calc(102px + env(safe-area-inset-bottom) + var(--keyboard-inset, 0px)); }
+  .workspace::after { content: none; }
   /* 키보드가 닫힐 때만 이 패딩을 부드럽게 줄인다(§4 배치 전환: damping 1.0, 오버슈트
    * 없음). 열릴 때는 절대 걸면 안 된다 — AppShell.tsx의 useKeyboardScrollCompensation이
    * 같은 프레임(useLayoutEffect) 안에서 곧장 scrollTop을 미는데, 패딩이 트랜지션

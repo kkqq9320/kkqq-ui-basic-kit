@@ -937,6 +937,53 @@ export type AppShellProps = {
   overlayLabel?: string;
 };
 
+/** 페이지 끝 여백이 **스스로 스크롤을 만들지 않게** 하되, 내용이 이미 넘치는
+ * 페이지에서는 그 여백을 그대로 두는 판정. 규칙과 근거는 `css/page.css`의
+ * `.workspace::after` 주석에 있습니다.
+ *
+ * **왜 CSS만으로는 안 되는가.** 여백은 진짜 공간이라 그 자신이 넘침을 만듭니다.
+ * "항상 80"과 "절대 스크롤을 안 만듦"은 그 순환 때문에 배타적이고, 어떤 고정값도
+ * 두 요구를 동시에 만족시키지 못합니다.
+ *
+ * **왜 진동하지 않는가.** 판정 기준이 문서 높이가 아니라 **내용만의 높이**입니다.
+ * 스페이서가 얼마를 먹든 `내용 = 문서 − 스페이서`는 같은 값이라, 한 번 나온 답이
+ * 자기 결과 때문에 뒤집히지 않습니다:
+ *
+ *   넘침    → 여백 80 고정 → 내용은 여전히 넘침    → 고정 유지
+ *   안 넘침 → 남는 자리만  → 내용은 여전히 안 넘침 → 그대로
+ *
+ * ⚠️ **모바일에서는 아무것도 고르지 않습니다.** `css/page.css`가 그쪽 스페이서를
+ * `content: none`으로 꺼서 이 표식이 매치할 규칙이 없습니다. 모바일 하단 패딩은
+ * 고정 바 자리와 키보드 보정이 기대는 값이라 성격이 완전히 다릅니다.
+ */
+function useContentDrivenTrailingSpace(workspaceRef: { current: HTMLElement | null }) {
+  useLayoutEffect(() => {
+    const workspace = workspaceRef.current;
+    const view = workspace?.ownerDocument.defaultView;
+    if (!workspace || !view) return;
+
+    const measure = () => {
+      const root = workspace.ownerDocument.documentElement;
+      // `content: none`(모바일)이면 height가 "auto"로 와서 NaN이 됩니다.
+      const spacer = Number.parseFloat(view.getComputedStyle(workspace, "::after").height);
+      const contentHeight = root.scrollHeight - (Number.isFinite(spacer) ? spacer : 0);
+      const next = contentHeight > root.clientHeight ? "fixed" : "free";
+      if (workspace.dataset.trailingSpace !== next) workspace.dataset.trailingSpace = next;
+    };
+
+    measure();
+
+    // 내용 높이는 창 크기 말고도 바뀝니다 — 탭 전환, 폼이 늘어남, 폰트 로드.
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
+    observer?.observe(workspace);
+    view.addEventListener("resize", measure);
+    return () => {
+      observer?.disconnect();
+      view.removeEventListener("resize", measure);
+    };
+  }, [workspaceRef]);
+}
+
 export function AppShell({ sidebar, children, collapsed = false, mobileOpen = false, onMobileClose, navHidden = false, keyboardOpen = false, quickBar, pageTabs, overlayLabel = "사이드바 닫기", className = "" }: AppShellProps) {
   // 소비 앱은 보통 useVirtualKeyboardOpen()(불리언만)으로 keyboardOpen prop을 주므로,
   // 스크롤 보정에 필요한 inset은 여기서 직접 한 번 더 구독합니다 — Dialog.tsx가
@@ -977,6 +1024,10 @@ export function AppShell({ sidebar, children, collapsed = false, mobileOpen = fa
   // 직접 읽는 대안(레이아웃을 강제하고 102px+safe-area를 다시 빼야 함)보다 이쪽을
   // 골랐습니다 — keyboard-inset-open과 같은 idiom이라 새 개념이 없고, 매 스크롤
   // 틱마다 강제 리플로우를 만들지 않습니다.
+  // 페이지 끝 여백이 스스로 스크롤을 만들지 않게 하는 판정(위 훅 문서 참고).
+  const workspaceRef = useRef<HTMLElement | null>(null);
+  useContentDrivenTrailingSpace(workspaceRef);
+
   const releaseInProgress = !keyboard.open && keyboardInset > 0;
   const shellClassName = ["app-shell", className, collapsed && "sidebar-collapsed", navHidden && "mobile-nav-hidden", keyboardOpen && "mobile-keyboard-open", keyboard.open && "keyboard-inset-open", releaseInProgress && "keyboard-inset-holding"].filter(Boolean).join(" ");
   // .workspace(page.css)가 이 변수를 기존 하단 패딩에 더합니다. 키보드가 닫히면
@@ -985,7 +1036,7 @@ export function AppShell({ sidebar, children, collapsed = false, mobileOpen = fa
   return <div className={shellClassName} style={style}>
     {mobileOpen && onMobileClose && <button type="button" className="mobile-sidebar-overlay" aria-label={overlayLabel} onClick={onMobileClose} />}
     {sidebar}
-    <main className="workspace">{children}</main>
+    <main className="workspace" ref={workspaceRef}>{children}</main>
     {quickBar}
     {pageTabs}
   </div>;
