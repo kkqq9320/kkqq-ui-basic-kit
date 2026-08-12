@@ -203,7 +203,7 @@ describe("복원", () => {
   it("두 테마를 모두 저장한다", () => {
     const palette = createThemePalette([APP_GROUP]);
 
-    palette.applyBackup({ version: 1, colors: { light: { "--brand-2": "#ff8a3d" }, dark: { "--brand-2": "#ffa866" } } });
+    palette.applyBackup({ version: 1, colors: { light: { "--brand-2": "#ff8a3d" }, dark: { "--brand-2": "#ffa866" } } }, "light");
 
     expect([
       JSON.parse(localStorage.getItem("themeColors:light") ?? "null"),
@@ -217,7 +217,7 @@ describe("복원", () => {
     localStorage.setItem("themeColors:light", JSON.stringify({ "--brand-2": "#000000" }));
     const palette = createThemePalette([APP_GROUP]);
 
-    palette.applyBackup({ version: 1, colors: { light: {}, dark: {} } });
+    palette.applyBackup({ version: 1, colors: { light: {}, dark: {} } }, "light");
 
     expect(localStorage.getItem("themeColors:light")).toBe(null);
   });
@@ -228,9 +228,28 @@ describe("복원", () => {
     // ⚠️ Task 2에서 같은 모양이 공허하게 통과했다 — 지우기 전에 **실제로 있었는지**부터 본다.
     expect(document.documentElement.style.getPropertyValue("--brand-2")).toBe("#ff8a3d");
 
-    palette.applyBackup({ version: 1, colors: { light: {}, dark: {} } });
+    palette.applyBackup({ version: 1, colors: { light: {}, dark: {} } }, "light");
 
     expect(document.documentElement.style.getPropertyValue("--brand-2")).toBe("");
+  });
+
+  /* ⚠️ 두 테마가 둘 다 비어 있으면 어느 쪽이 이기든 결과가 같아 순서를 검사하지 못합니다.
+   * `:root`는 하나뿐이라, 두 테마를 다 적용하면 뒤엣것이 앞엣것을 덮습니다 —
+   * 실측으로 라이트 모드에서 다크 색이 보였습니다. 값을 다르게 줘야 그게 드러납니다. */
+  it("넘긴 테마만 화면에 적용한다 — 다른 테마가 덮지 않는다", () => {
+    const palette = createThemePalette([APP_GROUP]);
+
+    palette.applyBackup({ version: 1, colors: { light: { "--brand-2": "#ff0000" }, dark: { "--brand-2": "#0000ff" } } }, "light");
+
+    expect(document.documentElement.style.getPropertyValue("--brand-2")).toBe("#ff0000");
+  });
+
+  it("적용하지 않은 테마도 저장은 된다", () => {
+    const palette = createThemePalette([APP_GROUP]);
+
+    palette.applyBackup({ version: 1, colors: { light: { "--brand-2": "#ff0000" }, dark: { "--brand-2": "#0000ff" } } }, "light");
+
+    expect(JSON.parse(localStorage.getItem("themeColors:dark") ?? "null")).toEqual({ "--brand-2": "#0000ff" });
   });
 });
 

@@ -72,7 +72,7 @@ const palette = createThemePalette([...THEME_TOKEN_GROUPS, myGroup]);   // 앱�
 | `write(theme, overrides)` | 저장. **성공 여부를 `boolean`으로 돌려줍니다** |
 | `serialize(colors?)` | 두 테마를 묶은 백업 값. 안 넘기면 `read`로 읽어서 |
 | `parse(input)` | 검증. 부작용 없음 |
-| `applyBackup(backup)` | 두 테마에 `apply` + `write` |
+| `applyBackup(backup, theme)` | 두 테마에 `write`, 넘긴 `theme`에만 `apply` |
 
 **킷 기본 그룹을 자동으로 합치지 않습니다.** 앱이 `[...THEME_TOKEN_GROUPS, ...]`로
 명시합니다 — `CUSTOMIZING.md`가 이미 그렇게 가르치고 있고, 암묵적 병합은 "내 목록에
@@ -184,7 +184,14 @@ type ThemeColorBackup = {
 
 - `palette.parse(input: unknown)` — `{ backup, dropped: string[] } | null`.
   **부작용이 없습니다.**
-- `palette.applyBackup(backup)` — 두 테마에 `apply` + `write`.
+- `palette.applyBackup(backup, theme)` — 두 테마 다 `write`하지만, `apply`는 넘긴
+  `theme`에만 합니다.
+
+  ⚠️ **원래 문구("두 테마에 apply + write")는 구현이 안 됐습니다.** `:root`는 문서에
+  하나뿐이라, 두 테마를 순서대로 `apply`하면 나중 것이 이겨 앞엣것을 덮습니다 — 실측:
+  라이트 모드에서 라이트 백업을 복원해도 다크 패스가 마지막에 돌아 화면이 다크 색으로
+  남았습니다. 그래서 `theme` 인자를 필수로 받아, 저장은 두 테마 다 하되 화면 적용은
+  하나만 하도록 시그니처를 바꿨습니다.
 
   ⚠️ **`write`가 딸려 있으므로 uncontrolled(킷이 저장하는) 앱을 위한 편의입니다.**
   controlled 앱은 이걸 쓰지 말고 `parse` → 자기 상태에 넣기 → `apply` 순으로 갑니다.

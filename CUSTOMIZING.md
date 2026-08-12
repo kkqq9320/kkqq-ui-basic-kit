@@ -258,7 +258,7 @@ const palette = createThemePalette([...THEME_TOKEN_GROUPS, MY_GROUP]);   // 앱�
 | `read(theme)` / `write(theme, overrides)` | 로컬 저장소. `write`는 성공 여부를 돌려줍니다 |
 | `serialize(colors?)` | 두 테마를 봉투 하나로. 안 넘기면 `read`로 읽습니다 |
 | `parse(input)` | 검증. `{ backup, dropped } \| null` |
-| `applyBackup(backup)` | 두 테마에 적용 + 저장 |
+| `applyBackup(backup, theme)` | 두 테마 다 저장하지만 **넘긴 테마만** 화면에 적용 |
 
 **로그인해서 서버 값으로 그리기:**
 
@@ -280,12 +280,14 @@ const file = palette.serialize({ light: myLight, dark: myDark });   // 앱이 �
 const parsed = palette.parse(JSON.parse(text));
 if (!parsed) return alert("이 파일은 색 백업이 아닙니다");
 if (parsed.dropped.length) alert(`이 버전이 모르는 색 ${parsed.dropped.length}개는 뺐습니다`);
-palette.applyBackup(parsed.backup);   // 로컬에 저장하는 앱이라면
+palette.applyBackup(parsed.backup, theme);   // 로컬에 저장하는 앱이라면 — theme은 필수
 ```
 
-> ⚠️ **`applyBackup`은 저장까지 합니다.** `overrides`로 앱이 소유하는 경우에는 쓰지 말고
-> `parse` → 내 상태에 넣기 → `palette.apply(theme, ...)` 순으로 가세요. 안 그러면 앱이
-> 소유하기로 한 저장소 **밖에 사본이 하나 더** 생깁니다.
+> ⚠️ **`applyBackup`은 두 테마를 다 저장하지만, 화면에는 넘긴 `theme`만 적용합니다.**
+> `:root`는 하나뿐이라 두 테마를 순서대로 적용하면 나중 것이 이겨 앞엣것을 덮기
+> 때문입니다 — 그래서 `theme` 인자가 필수입니다. `overrides`로 앱이 소유하는 경우에는
+> 이 함수를 쓰지 말고 `parse` → 내 상태에 넣기 → `palette.apply(theme, ...)` 순으로
+> 가세요. 안 그러면 앱이 소유하기로 한 저장소 **밖에 사본이 하나 더** 생깁니다.
 
 #### ⚠️ 이 맵은 전체 집합입니다 — 패치가 아닙니다
 

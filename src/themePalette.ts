@@ -40,7 +40,12 @@ export type ThemePalette = {
   apply(theme: ThemeName, overrides?: Record<string, string>): void;
   serialize(colors?: { light?: Record<string, string>; dark?: Record<string, string> }): ThemeColorBackup;
   parse(input: unknown): ParsedThemeColors | null;
-  applyBackup(backup: ThemeColorBackup): void;
+  /** 두 테마 값을 저장소엔 둘 다 쓰지만, 화면(`:root`)에는 **넘긴 테마만** 적용합니다.
+   *  `:root`는 문서에 하나뿐이라 두 테마를 차례로 적용하면 나중 것이 이겨 앞엣것을
+   *  덮습니다 — 실측: 라이트 모드에서 라이트 `{--brand-2:#ff8a3d}` / 다크 `{}`를
+   *  복원해도 다크 패스가 마지막에 돌아 `:root`가 `''`로 남았습니다. 그래서 `theme`은
+   *  선택 인자가 아니라 필수입니다 — 선택으로 두면 이 버그가 조용히 되살아납니다. */
+  applyBackup(backup: ThemeColorBackup, theme: ThemeName): void;
 };
 
 /** 봉투의 한 테마 값이 "객체이거나 아예 없거나" 둘 중 하나여야 합니다. 문자열·배열·숫자가
@@ -89,11 +94,11 @@ export function createThemePalette(groups: readonly ThemeTokenGroup[]): ThemePal
       };
       return { backup: { version: 1, colors }, dropped };
     },
-    applyBackup: (backup) => {
-      for (const theme of THEMES) {
-        const values = backup.colors[theme];
-        writeTokenOverrides(theme, values);
-        applyTokenOverrides(theme, values, tokens);
+    applyBackup: (backup, theme) => {
+      for (const t of THEMES) {
+        const values = backup.colors[t];
+        writeTokenOverrides(t, values);
+        if (t === theme) applyTokenOverrides(t, values, tokens);
       }
     },
   };
