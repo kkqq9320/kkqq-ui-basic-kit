@@ -94,7 +94,7 @@
  * 안쪽에 큰 빈 자리가 생깁니다. 빈 자리를 패널 **아래**로 내보내는 편이 낫습니다.
  * `> .panel`의 `margin-bottom: 0`도 한 벌입니다 — 안 끄면 아래 :40의 20px이 gap에
  * 더해져 가로 간격과 세로 간격이 어긋납니다. */
-.panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--panel-min, 640px), var(--panel-max, 1fr))); align-items: start; gap: 20px; margin-bottom: 20px;  justify-content: var(--panel-justify, normal);}
+.panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--panel-min, 400px), var(--panel-max, 1fr))); align-items: start; gap: 20px; margin-bottom: 20px;  justify-content: var(--panel-justify, normal);}
 .panel-grid > .panel { margin-bottom: 0; }
 /* `stretch`: 한 줄의 패널이 같은 높이가 됩니다(그리드 기본 정렬로 되돌리는 것).
  * 빈 자리가 짧은 패널 **아래**가 아니라 **안쪽**으로 옮겨갈 뿐이고, 어느 쪽이 나은지는
