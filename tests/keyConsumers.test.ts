@@ -8,10 +8,6 @@
  *
  * **새 소비자가 생기면 여기가 빨개집니다.** 그때 할 일은 목록에 더하는 것이 아니라,
  * 그 소비자가 `preventDefault`를 부르는지 먼저 보는 것입니다.
- *
- * ⚠️ **`ShortcutSettings.tsx`는 아직 없습니다** — Task 5가 만듭니다. 그 파일이 생기면
- * 여기 `KNOWN_CONSUMERS`에 한 줄을 더해야 합니다(그 파일도 키 녹음기라 keydown을
- * 먹을 것이 거의 확실합니다 — §6). 지금은 실측대로 뺐습니다.
  */
 import { describe, expect, it } from "vitest";
 
@@ -29,6 +25,7 @@ const KNOWN_CONSUMERS: Record<string, number> = {
   "../src/SectionTabs.tsx": 2,
   "../src/PageChrome.tsx": 1,
   "../src/ShortcutProvider.tsx": 1,
+  "../src/ShortcutSettings.tsx": 1,
 };
 
 function keydownSites(source: string): number {

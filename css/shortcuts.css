@@ -1,0 +1,18 @@
+/* **전부 `.kkqq-shortcuts` 아래에 둡니다**(설계 스펙 §8).
+ * 이 파일은 `css/index.css` 통번들에 들어가므로 단축키를 안 쓰는 앱에도 실립니다.
+ * 뿌리 밖으로 나가는 선택자가 하나라도 생기면 그 앱들의 화면이 움직입니다.
+ * `tests/shortcutSettings.test.tsx`가 이 파일을 훑어 그것을 막습니다.
+ *
+ * 토큰 치환 메모(Task 5) — 브리프 원안은 `--text-muted`·`--control-height`를 썼는데
+ * 둘 다 `tokens.css`에 없어 조용히 무효 값이 됩니다(폴백도 없음). 실제로 있는 이름으로
+ * 바꿨습니다: `--text-muted` → `--muted`(controls.css:84 `.muted-copy`가 같은 뜻으로 씀),
+ * `--control-height` → `--compact-action-height`(theme-editor.css:82가 목록 행 안
+ * 컨트롤에 같은 토큰을 씀 — 이 목록도 행 하나에 여러 컨트롤이 나란한 같은 문맥). */
+
+.kkqq-shortcuts__list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.kkqq-shortcuts__row { display: flex; align-items: center; gap: 12px; }
+.kkqq-shortcuts__label { flex: 1 1 auto; color: var(--text); }
+.kkqq-shortcuts__record { min-height: var(--compact-action-height); }
+.kkqq-shortcuts__clear { min-height: var(--compact-action-height); }
+.kkqq-shortcuts__alert { color: var(--danger-text); margin: 0 0 8px; }
+.kkqq-shortcuts__hint { color: var(--muted); margin: 0 0 8px; }
