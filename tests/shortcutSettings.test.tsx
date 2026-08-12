@@ -13,12 +13,22 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ShortcutProvider, type ShortcutAction } from "../src/ShortcutProvider";
 import { ShortcutSettings, displayCombo } from "../src/ShortcutSettings";
+import { isRecording } from "../src/shortcuts";
 
 const cssModules = import.meta.glob("../css/*.css", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 const SHORTCUT_CSS = cssModules["../css/shortcuts.css"];
 const INDEX_CSS = cssModules["../css/index.css"];
 
-afterEach(cleanup);
+/* cleanup()이 먼저입니다 — 언마운트가 녹음 중이던 effect의 정리(endRecording())를
+ * 돌려야 recordingDepth가 이 테스트 몫만큼 정확히 풀립니다. 그다음에야
+ * isRecording()이 0으로 돌아왔는지 잴 수 있습니다. 이 가드가 없으면 한 테스트가
+ * 녹음을 안 끝낸 채로 남겨도(예: 수식어만 누르고 끝나는 테스트) 다음 테스트로
+ * recordingDepth가 새어 나가고, 그 증상은 엉뚱한 assertion에서 늦게 터집니다 —
+ * 이 파일의 뮤테이션 4 기록이 그 모양 그대로입니다(task-5-report.md). */
+afterEach(() => {
+  cleanup();
+  expect(isRecording()).toBe(false);
+});
 
 const ACTIONS: ShortcutAction[] = [
   { id: "toggle", label: "사이드바 접기", defaultCombo: null, onFire: () => {} },
@@ -142,6 +152,25 @@ describe("녹음 중에는 디스패처가 조용하다 (스펙 §6.1)", () => {
     // 녹음이 끝나면 다시 돕니다 — 플래그가 새지 않는지까지 봅니다.
     fireEvent.keyDown(document, { code: "KeyJ", ctrlKey: true });
     expect(onFire).toHaveBeenCalledTimes(2);
+  });
+});
+
+/* 위 "디스패처가 조용하다" 테스트는 `beginRecording()`을 지워도 빨개지지 않습니다 —
+ * 실측했습니다(task-5-report.md의 뮤테이션 기록). 이유: 녹음기는 document **캡처**에,
+ * 디스패처는 document **버블**에 걸려 있고, 이벤트가 document를 타깃으로 올 때도
+ * 캡처 패스가 버블 패스보다 **항상 먼저** 돕니다(등록 순서와 무관 — 실측:
+ * scratchpad/order-probe.mjs). 그래서 녹음기의 `preventDefault()`가 디스패처의
+ * 규칙 1(`defaultPrevented`) 검사보다 먼저 event에 반영되어, `isRecording()`이
+ * 거짓이어도 규칙 1이 우연히 같은 결과를 냅니다 — 플래그를 안 재고 규칙 1만 잰
+ * 셈입니다. 그래서 `isRecording()`을 **직접** 재서 이 우연한 보호와 분리합니다. */
+describe("녹음 플래그 자체를 직접 잰다 — 우연한 보호와 분리 (스펙 §6.1)", () => {
+  it("녹음을 시작하면 isRecording()이 참이고, 조합이 등록되면 다시 거짓이다", () => {
+    setup();
+    expect(isRecording()).toBe(false);
+    record("사이드바 접기");
+    expect(isRecording()).toBe(true);
+    fireEvent.keyDown(document, { code: "KeyJ", ctrlKey: true });
+    expect(isRecording()).toBe(false);
   });
 });
 
