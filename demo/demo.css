@@ -6,6 +6,18 @@
 .demo-swatches > div { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 9px; }
 .demo-swatches i { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 7px; }
 .demo-swatches code { min-width: 0; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; }
+
+/* 데모가 신설한 **앱 전용** 색. 라이트·다크를 **둘 다** 정의합니다 — 리셋은 값을 넣는 게
+ * 아니라 인라인 스타일을 걷어내는 동작이라, CSS에 돌아갈 기본값이 없으면 검정으로 갑니다
+ * (CUSTOMIZING.md의 경고 그대로입니다). 그리고 **쓰는 자리를 함께 둡니다** — 아래 칩이 이
+ * 색으로 칠해지므로 편집기에서 고치면 바뀌는 게 눈에 보입니다. 안 쓰는 토큰을 편집기에
+ * 얹는 것은 킷에서 방금 걷어낸 결함입니다(`--deep`·`--gold`). */
+:root { --demo-brand: #7b4bd8; }
+[data-theme="dark"] { --demo-brand: #b79bff; }
+.demo-brand-chip { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 999px; background: var(--demo-brand); color: #fff; font-size: 13px; font-weight: 600; }
+.demo-owner-note { margin: 0 0 10px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.demo-backup-box { width: 100%; min-height: 92px; margin-top: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--input); color: var(--text); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; line-height: 1.6; resize: vertical; }
+
 /* ?debug=1 진단 기록판 */
 .demo-log { max-height: 260px; margin: 12px 0 0; padding: 12px; overflow: auto; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); color: var(--text); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; user-select: text; }
 

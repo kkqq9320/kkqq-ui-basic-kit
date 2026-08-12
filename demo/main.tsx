@@ -37,8 +37,22 @@ import {
   useMobilePageTabs,
   useScrollDirectionHidden,
   useVirtualKeyboardOpen,
-  applyTokenOverrides,
+  THEME_TOKEN_GROUPS,
+  createThemePalette,
 } from "../src";
+
+/** 데모가 **자기 앱 색으로** 신설한 토큰. `demo.css`가 라이트·다크를 둘 다 정의하고
+ *  `.demo-brand-chip`이 실제로 씁니다 — 안 쓰는 토큰은 편집기에 얹지 않습니다. */
+const DEMO_GROUP = {
+  title: "데모 앱 색",
+  tokens: [{ name: "--demo-brand", label: "데모 브랜드", description: "데모가 신설한 앱 전용 색 — 아래 칩에 쓰입니다" }],
+};
+
+/* ⚠️ **이 한 줄이 팔레트의 존재 이유입니다.** 예전 데모는 테마를 바꿀 때
+ * `applyTokenOverrides(theme)`를 목록 없이 불렀습니다. 킷 기본 목록만 도는 호출이라
+ * `--demo-brand`는 **저장소에 남은 채 화면에서만** 사라집니다. 팔레트를 지나면 목록을
+ * 넘길 자리가 아예 없어 그 일이 일어날 수 없습니다. */
+const demoPalette = createThemePalette([...THEME_TOKEN_GROUPS, DEMO_GROUP]);
 
 /** ?debug=1 일 때만 보이는 history 기록판. 콘솔을 열 필요가 없게 하려는 것입니다. */
 function HistoryLogPanel() {
@@ -416,6 +430,18 @@ function Demo() {
     const saved = localStorage.getItem("theme");
     return saved === "light" || saved === "dark" ? saved : "dark";
   });
+  /* 색 설정의 **주인**을 데모에서 바꿔 볼 수 있게 합니다.
+   *   꺼짐 — 킷이 `localStorage`에 읽고 씁니다(지금까지의 동작).
+   *   켜짐 — 앱(=이 데모)이 소유합니다. `overrides`를 넘기므로 킷은 **저장하지 않고**
+   *          적용과 알림만 하며, 값은 아래 `serverColors`에 삽니다(진짜 앱이라면 서버).
+   * 켜고 색을 고친 뒤 새로 고치면 사라지는 것이 정상입니다 — 이 데모에는 서버가 없습니다. */
+  const [appOwnsColors, setAppOwnsColors] = useState(false);
+  const [serverColors, setServerColors] = useState<Record<"light" | "dark", Record<string, string>>>({ light: {}, dark: {} });
+  /** `onCommit`이 언제 불렸는지 눈으로 보는 자리. 피커를 끄는 동안은 안 불립니다. */
+  const [lastCommit, setLastCommit] = useState("아직 없음");
+  const [backupText, setBackupText] = useState("");
+  const [restoreNote, setRestoreNote] = useState("");
+
   // 접힘 상태를 브라우저에 기억해 다음 방문에 그대로 재현합니다. Sidebar는 controlled라
   // 저장은 쓰는 쪽 책임입니다(PRINCIPLES §8).
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("sidebarCollapsed") === "true");
@@ -446,8 +472,15 @@ function Demo() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("theme", theme);
-    applyTokenOverrides(theme);   // 테마마다 저장된 색이 다르므로 전환할 때마다 다시 적용
-  }, [theme]);
+    // 테마마다 저장된 색이 다르므로 전환할 때마다 다시 적용합니다.
+    // ⚠️ 팔레트를 지납니다 — `applyTokenOverrides(theme)`는 킷 기본 목록만 돌아
+    // `--demo-brand`를 화면에서 조용히 떨어뜨립니다(저장소에는 남습니다).
+    if (appOwnsColors) demoPalette.apply(theme, serverColors[theme]);
+    else demoPalette.apply(theme);
+    // ⚠️ 본문에서 읽는 것을 의존성에 다 적습니다. 이 데모는 **정확히 이 자리에서**
+    // 한 번 당했습니다 — `justify`를 읽으면서 `axis`만 적어 두어 조작판의 축 하나가
+    // 통째로 죽어 있었고, 오너가 그 동작을 한 번도 못 봤습니다(tests/demoControls.test.ts).
+  }, [theme, appOwnsColors, serverColors]);
 
   useEffect(() => { localStorage.setItem("sidebarCollapsed", String(collapsed)); }, [collapsed]);
 
@@ -643,7 +676,64 @@ function Demo() {
 
       {tab === "colors" && <>
         <SectionHeading title="색상 토큰" description="모든 컴포넌트 CSS는 이 토큰만 참조합니다. 여기서 바꾸면 화면 전체가 즉시 따라 바뀌고, 라이트·다크는 따로 저장됩니다." />
-        <ThemeColorEditor theme={theme} />
+
+        <Panel title="색을 누가 저장하나" hint="아래 편집기가 이 설정으로 돕니다">
+          <p className="demo-owner-note">
+            이 편집기는 <code>createThemePalette([...THEME_TOKEN_GROUPS, DEMO_GROUP])</code>로 돕니다 —
+            그래서 킷이 모르는 <code>--demo-brand</code> 카드가 <b>데모 앱 색</b> 무리에 함께 나옵니다.
+            고쳐 보세요, 이 칩이 따라 바뀝니다: <span className="demo-brand-chip">데모 브랜드</span>
+          </p>
+          <div className="button-row" style={{ marginBottom: 10 }}>
+            <button
+              type="button"
+              className={appOwnsColors ? "primary" : "secondary-button"}
+              aria-pressed={appOwnsColors}
+              onClick={() => setAppOwnsColors((owned) => !owned)}
+            >
+              {appOwnsColors ? "앱이 저장(켜짐)" : "킷이 저장(꺼짐)"}
+            </button>
+            <button type="button" className="secondary-button" onClick={() => {
+              /* 앱이 소유하면 저장소가 아니라 **앱이 가진 값**으로 봉투를 만듭니다 —
+                 인자를 빼면 `read`로 저장소를 보므로 controlled 앱에서는 빈 백업이 나옵니다. */
+              const backup = appOwnsColors ? demoPalette.serialize(serverColors) : demoPalette.serialize();
+              setBackupText(JSON.stringify(backup, null, 2));
+              setRestoreNote(`백업을 만들었습니다 — 라이트 ${Object.keys(backup.colors.light).length}개, 다크 ${Object.keys(backup.colors.dark).length}개`);
+            }}>백업 만들기</button>
+            <button type="button" className="secondary-button" onClick={() => {
+              let raw: unknown;
+              try { raw = JSON.parse(backupText); } catch { setRestoreNote("JSON이 아닙니다"); return; }
+              const parsed = demoPalette.parse(raw);
+              if (!parsed) { setRestoreNote("이 파일은 색 백업이 아닙니다(봉투 모양이 아니거나 version이 다름)"); return; }
+              /* ⚠️ 소유자에 따라 복원 경로가 갈립니다. `applyBackup`은 **저장까지** 하므로,
+                 앱이 소유하는 동안 쓰면 앱 저장소 밖에 사본이 하나 더 생깁니다. */
+              if (appOwnsColors) {
+                setServerColors(parsed.backup.colors);
+                demoPalette.apply(theme, parsed.backup.colors[theme]);
+              } else {
+                demoPalette.applyBackup(parsed.backup, theme);   // theme은 필수 — :root는 하나뿐입니다
+              }
+              setRestoreNote(parsed.dropped.length ? `복원했습니다. 모르는 색 ${parsed.dropped.length}개는 뺐습니다: ${parsed.dropped.join(", ")}` : "복원했습니다");
+            }}>복원</button>
+          </div>
+          <p className="demo-owner-note">
+            마지막 <code>onCommit</code>: {lastCommit} · {restoreNote || "피커를 끄는 동안은 안 불리고, 손을 떼거나 500ms 쉬면 한 번 불립니다"}
+          </p>
+          <textarea
+            className="demo-backup-box"
+            aria-label="색 백업 JSON"
+            value={backupText}
+            onChange={(event) => setBackupText(event.target.value)}
+            placeholder="백업 만들기를 누르면 여기에 봉투가 나옵니다. 값을 고쳐 복원해 보면 모르는 색이 어떻게 걸러지는지 보입니다."
+          />
+        </Panel>
+
+        <ThemeColorEditor
+          theme={theme}
+          palette={demoPalette}
+          overrides={appOwnsColors ? serverColors[theme] : undefined}
+          onChange={appOwnsColors ? ((next) => setServerColors((current) => ({ ...current, [theme]: next }))) : undefined}
+          onCommit={(next) => setLastCommit(`${Object.keys(next).length}개 색`)}
+        />
       </>}
     </AppShell>
 
