@@ -9,6 +9,7 @@ import "./demo.css";
 import { EventTracePanel } from "./EventTracePanel";
 import { logTraceNote } from "./eventTrace";
 import { clearProbeLog, historyProbeEnabled, installHistoryProbe, logProbe, readProbeLog } from "./historyProbe";
+import { preservingScroll } from "./preservingScroll";
 
 // React보다 먼저 설치해야 첫 줄이 "페이지 로드"로 남습니다.
 installHistoryProbe();
@@ -233,14 +234,22 @@ function LayoutSwitch() {
     /* **두 규칙을 같은 프레임에서 잽니다.** 옛 규칙을 얹고 읽으면 그 읽기가 레이아웃을
        강제로 계산시키고, 곧바로 걷어내고 다시 읽습니다. 그 사이에 페인트가 없으므로
        화면은 깜빡이지 않고, "지금 화면에서 정말 달라지는가"에 **숫자로** 답합니다.
-       산술로 유도하지 않는 이유는 늘 같습니다 — 패딩·스크롤바·gap을 빼먹습니다. */
+       산술로 유도하지 않는 이유는 늘 같습니다 — 패딩·스크롤바·gap을 빼먹습니다.
+
+       ⚠️ **"페인트가 없으니 아무 일도 안 일어난다"는 틀렸습니다.** 페인트와 무관하게
+       옛 규칙이 문서를 짧게 만드는 동안 **브라우저가 스크롤 위치를 깎고**, 규칙을
+       걷어내도 되돌려 주지 않습니다 — 레이아웃 페이지에서 스크롤한 지 0.4초 안에
+       화면이 맨 위로 튀었습니다(오너 리포트 2026-08-12). 그래서 `preservingScroll`로
+       감쌉니다. 실측과 근거는 `demo/preservingScroll.ts` 머리말에 있습니다. */
     const measure = () => {
-      const style = document.createElement("style");
-      style.textContent = OLD_RULES;
-      document.head.appendChild(style);
-      const old = read();
-      style.remove();
-      const fresh = read();
+      const { old, fresh } = preservingScroll(() => {
+        const style = document.createElement("style");
+        style.textContent = OLD_RULES;
+        document.head.appendChild(style);
+        const withOldRules = read();
+        style.remove();
+        return { old: withOldRules, fresh: read() };
+      });
       // 값이 같으면 **같은 객체를 유지**합니다 — 안 그러면 400ms마다 새 객체가 들어가
       // 데모 전체가 계속 리렌더되고, 그 리렌더가 다시 레이아웃을 흔듭니다.
       const keep = (previous: Reading | null, next: Reading) =>
