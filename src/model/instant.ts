@@ -6,21 +6,64 @@
  * 이 모듈이 아는 유일한 단위 간 의존은 **일의 상한이 연·월에 달려 있다**는 것뿐입니다
  * (lastDayOf, 윤년). 월의 상한은 12로 상수, 연은 상한이 없습니다. 설계 스펙 §3.1.
  */
+export type WheelUnit = "year" | "month" | "day" | "hour" | "minute" | "second";
+/** 기존 이름. `WheelUnit`의 부분집합입니다 — **별칭이 아닙니다.** 컴포넌트와 기존 테스트가
+ *  이 좁은 세 단위 그대로 `Record<DateWheelUnit, …>`를 3키로 채워 쓰므로, 별칭으로 넓히면
+ *  그 자리들이 전부 깨집니다(타이핑·확정 함수의 **인자**만 `WheelUnit`으로 넓히고, 반환
+ *  타입과 `Record`는 좁게 남겨 두는 것이 이 파일과 컴포넌트가 동시에 컴파일되는 유일한
+ *  조합입니다). 좁은 타입을 넓은 인자에 넘기는 건 항상 되므로 기존 호출부는 그대로 통과합니다. */
 export type DateWheelUnit = "year" | "month" | "day";
 
-/** 그 열이 받는 최대 자릿수. */
-function maxDigits(unit: DateWheelUnit) {
+/** 여섯 단위의 순서. 큰 단위부터 작은 단위로. */
+export const UNIT_LADDER = ["year", "month", "day", "hour", "minute", "second"] as const satisfies readonly WheelUnit[];
+
+/** 그 단위가 시작하는 최소값. 월·일만 1이고 나머지(연·시·분·초)는 0입니다. */
+export function unitFloor(unit: WheelUnit) {
+  return unit === "month" || unit === "day" ? 1 : 0;
+}
+
+/** 그 열이 받는 최대 자릿수. 연도만 4자리이고 나머지는 2자리입니다. */
+export function unitDigits(unit: WheelUnit) {
   return unit === "year" ? 4 : 2;
 }
 
-/** 한 자리만으로 확정되는 최소값 — 두 자리가 시작될 수 없는 첫 숫자. */
-function soloFloor(unit: DateWheelUnit) {
-  return unit === "month" ? 2 : 4;   // 월: 2~9, 일: 4~9
+/**
+ * 그 단위에 존재하는 가장 큰 수. 연도는 상한이 없어 `null`입니다.
+ *
+ * **문맥을 보는 단위는 `day` 하나뿐입니다** — 이 모델 전체에서 유일한 단위 간
+ * 의존이고(스펙 §3.1), 그래서 나머지는 `context`를 무시합니다. 둘째 의존이
+ * 생기면 모델을 뗄 수 있었던 근거가 사라집니다.
+ */
+export function unitCeiling(unit: WheelUnit, context: { year: number; month: number }): number | null {
+  if (unit === "year") return null;
+  if (unit === "month") return 12;
+  if (unit === "day") return lastDayOf(context.year, context.month - 1);
+  if (unit === "hour") return 23;
+  return 59;   // minute, second
 }
 
-/** 그 열에 존재하는 수의 상한. 일의 말일 판정은 withUnitValue가 따로 합니다. */
-function unitCeiling(unit: DateWheelUnit) {
-  return unit === "month" ? 12 : 31;
+/** 그 열이 받는 최대 자릿수 — 타이핑 쪽 로컬 이름. `unitDigits`에 위임합니다.
+ *  인자는 `WheelUnit`(여섯 단위) — `typeDigit`이 시·분·초로도 부릅니다. */
+function maxDigits(unit: WheelUnit) {
+  return unitDigits(unit);
+}
+
+/** 한 자리만으로 확정되는 최소값 — 두 자리가 시작될 수 없는 첫 숫자.
+ *  월 2(13~19가 없음) · 일 4(40~49가 없음) · 시 3(24~29가 없음) · 분·초 6(60~69가 없음). */
+function soloFloor(unit: WheelUnit) {
+  if (unit === "month") return 2;
+  if (unit === "day") return 4;
+  if (unit === "hour") return 3;
+  return 6;   // minute, second
+}
+
+/** 자릿수 판정용 상한. 문맥이 없으므로 일은 31로 넉넉히 잡고,
+ *  말일 자르기는 값 설정 쪽(`withUnitValue`)이 따로 합니다 — 지금과 같은 분담입니다. */
+function typingCeiling(unit: WheelUnit) {
+  if (unit === "month") return 12;
+  if (unit === "day") return 31;
+  if (unit === "hour") return 23;
+  return 59;   // minute, second
 }
 
 export type TypingStep = {
@@ -35,8 +78,10 @@ export type TypingStep = {
 const WAIT = (digits: string): TypingStep => ({ digits, commit: null, advance: false });
 const DONE = (commit: number): TypingStep => ({ digits: "", commit, advance: true });
 
-/** 버퍼에 숫자 하나를 더한 결과. `digit`은 "0"~"9" 한 글자여야 합니다. */
-export function typeDigit(unit: DateWheelUnit, buffer: string, digit: string): TypingStep {
+/** 버퍼에 숫자 하나를 더한 결과. `digit`은 "0"~"9" 한 글자여야 합니다.
+ *  인자가 `DateWheelUnit`이 아니라 `WheelUnit`인 것은 의도입니다 — 이 함수는 시·분·초로도
+ *  불립니다. `DateWheelUnit`(3단위)은 `WheelUnit`의 부분집합이라 기존 호출부는 그대로 통과합니다. */
+export function typeDigit(unit: WheelUnit, buffer: string, digit: string): TypingStep {
   if (unit === "year") {
     const next = buffer + digit;
     return next.length >= maxDigits(unit) ? DONE(Number(next)) : WAIT(next);
@@ -48,7 +93,8 @@ export function typeDigit(unit: DateWheelUnit, buffer: string, digit: string): T
   }
 
   const combined = Number(buffer + digit);
-  if (combined >= 1 && combined <= unitCeiling(unit)) return DONE(combined);
+  // 하한은 unitFloor입니다 — 월·일은 1(0월·0일이 없음)이지만 시·분·초는 0(0시가 있음).
+  if (combined >= unitFloor(unit) && combined <= typingCeiling(unit)) return DONE(combined);
   // 두 자리 조합이 애초에 존재하지 않는 수입니다(월 13, 일 39). 첫 자리를 버리고
   // 이 숫자를 새 입력의 첫 자리로 다시 읽습니다 — 네이티브가 이렇게 합니다.
   return typeDigit(unit, "", digit);
@@ -60,12 +106,15 @@ export function typeDigit(unit: DateWheelUnit, buffer: string, digit: string): T
  * 연도의 1~2자리를 2000년대로 읽는 것이 이 함수의 존재 이유입니다 — `26`은
  * 2026년입니다. 과거 연도는 네 자리로 치면 언제나 들어가므로 못 넣는 값은
  * 없습니다.
+ *
+ * 인자가 `WheelUnit`인 이유는 `typeDigit`과 같습니다 — 시·분·초로도 불립니다.
  */
-export function flushBuffer(unit: DateWheelUnit, buffer: string): number | null {
+export function flushBuffer(unit: WheelUnit, buffer: string): number | null {
   if (!buffer) return null;
   const typed = Number(buffer);
   if (unit === "year") return buffer.length <= 2 ? 2000 + typed : typed;
-  return typed >= 1 ? typed : null;   // 0월·0일은 없습니다
+  // 0월·0일은 없지만 0시·0분·0초는 있습니다.
+  return typed >= unitFloor(unit) ? typed : null;
 }
 
 /** 연도를 다루면서 0~99를 1900년대로 옮기지 않는 안전한 말일 계산.

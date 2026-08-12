@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel } from "../src/model/instant";
+import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits } from "../src/model/instant";
 
 const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -182,6 +182,68 @@ describe("모델로 옮겨 온 나머지 함수", () => {
   it("dateTriggerParts는 버퍼를 자리 지켜 그린다", () => {
     const parts = dateTriggerParts("2026-07-12", ["year", "month", "day"], { unit: "year", digits: "20" });
     expect(parts[0].text).toBe("20\u2012\u2012");
+  });
+});
+
+describe("단위 사다리", () => {
+  it("여섯 단위가 순서대로 있다", () => {
+    expect(UNIT_LADDER).toEqual(["year", "month", "day", "hour", "minute", "second"]);
+  });
+
+  it("바닥값 — 월·일만 1에서 시작한다", () => {
+    expect(UNIT_LADDER.map(unitFloor)).toEqual([0, 1, 1, 0, 0, 0]);
+  });
+
+  it("자릿수 — 연도만 넷이다", () => {
+    expect(UNIT_LADDER.map(unitDigits)).toEqual([4, 2, 2, 2, 2, 2]);
+  });
+
+  it("상한 — 연도만 없고, 일만 문맥을 본다", () => {
+    const ctx = { year: 2026, month: 2 };
+    expect(unitCeiling("year", ctx)).toBe(null);
+    expect(unitCeiling("month", ctx)).toBe(12);
+    expect(unitCeiling("day", ctx)).toBe(28);
+    expect(unitCeiling("day", { year: 2024, month: 2 })).toBe(29);
+    expect(unitCeiling("hour", ctx)).toBe(23);
+    expect(unitCeiling("minute", ctx)).toBe(59);
+    expect(unitCeiling("second", ctx)).toBe(59);
+  });
+
+  /* 이 모델을 뗄 수 있었던 근거가 "단위 간 의존이 하나뿐"이라는 것입니다(스펙 §3.1).
+   * 문맥을 무시해도 답이 같은 단위는 그 의존이 없다는 뜻이고, 이 검사가 그것을 고정합니다. */
+  it("일 말고는 문맥이 답을 바꾸지 않는다", () => {
+    for (const unit of UNIT_LADDER) {
+      if (unit === "day") continue;
+      expect(unitCeiling(unit, { year: 2024, month: 2 })).toBe(unitCeiling(unit, { year: 1999, month: 11 }));
+    }
+  });
+});
+
+describe("시각 단위 타이핑", () => {
+  /* soloFloor — 두 자리가 시작될 수 없는 첫 숫자. 시는 3(24 이상이 없으니 3~9),
+   * 분·초는 6(60 이상이 없으니 6~9). 월이 2인 것과 같은 계산입니다. */
+  it("시는 3부터 한 자리로 확정된다", () => {
+    expect(typeDigit("hour", "", "2")).toEqual({ digits: "2", commit: null, advance: false });
+    expect(typeDigit("hour", "", "3")).toEqual({ digits: "", commit: 3, advance: true });
+  });
+
+  it("분은 6부터 한 자리로 확정된다", () => {
+    expect(typeDigit("minute", "", "5")).toEqual({ digits: "5", commit: null, advance: false });
+    expect(typeDigit("minute", "", "6")).toEqual({ digits: "", commit: 6, advance: true });
+  });
+
+  it("시 24는 존재하지 않아 첫 자리를 버리고 다시 읽는다", () => {
+    // 브리프 원문은 { digits: "4", commit: 4, advance: true }였으나, TypingStep의
+    // 계약("확정했으면 digits는 빈 문자열")과 바로 위 일(day)의 동일한 재해석 경로
+    // 테스트(day: "3"+"9" -> { digits: "", commit: 9, advance: true })에 어긋나
+    // 오타로 보고 이 값으로 고정합니다.
+    expect(typeDigit("hour", "2", "4")).toEqual({ digits: "", commit: 4, advance: true });
+  });
+
+  it("0시·0분은 있다 — 월·일과 다른 자리", () => {
+    expect(typeDigit("hour", "0", "0")).toEqual({ digits: "", commit: 0, advance: true });
+    expect(flushBuffer("hour", "0")).toBe(0);
+    expect(flushBuffer("month", "0")).toBe(null);
   });
 });
 
