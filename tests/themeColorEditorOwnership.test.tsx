@@ -147,4 +147,39 @@ describe("저장 경계", () => {
 
     expect(onCommit).not.toHaveBeenCalled();
   });
+
+  /* ⚠️ 아래 셋은 **세션을 연 채로** 버튼을 누릅니다. 그게 없으면 sessionRef가 이미 비어 있어
+   * `notify` 인자가 죽은 입력이 되고, `endSession(false)`를 `endSession()`으로 되돌려도
+   * 검사가 전부 초록입니다 — 이 Task가 겨냥한 이중 발화 함정이 통째로 검사 밖에 남습니다.
+   * 버튼은 자기 변경을 커밋하기 **전에** 이전 세션을 닫으므로, 거기서 알리면 낡은 값으로
+   * 한 번 더 불립니다. */
+  it("편집 중에 모두 초기화를 눌러도 한 번만 알린다", () => {
+    const onCommit = vi.fn();
+    render(<ThemeColorEditor theme="light" palette={palette()} onCommit={onCommit} />);
+    fireEvent.change(screen.getByLabelText("브랜드2 색상 선택"), { target: { value: "#111111" } });
+
+    fireEvent.click(screen.getByLabelText("색상 1개 모두 기본값으로"));
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it("편집 중에 되돌리기를 눌러도 한 번만 알린다", () => {
+    const onCommit = vi.fn();
+    render(<ThemeColorEditor theme="light" palette={palette()} onCommit={onCommit} />);
+    fireEvent.change(screen.getByLabelText("브랜드2 색상 선택"), { target: { value: "#111111" } });
+
+    fireEvent.click(screen.getByLabelText("브랜드2 직전 값으로"));
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it("편집 중에 기본값으로를 눌러도 한 번만 알린다", () => {
+    const onCommit = vi.fn();
+    render(<ThemeColorEditor theme="light" palette={palette()} onCommit={onCommit} />);
+    fireEvent.change(screen.getByLabelText("브랜드2 색상 선택"), { target: { value: "#111111" } });
+
+    fireEvent.click(screen.getByLabelText("브랜드2 기본값으로"));
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+  });
 });
