@@ -82,6 +82,9 @@ describe("팔레트", () => {
   it("맵에 없는 토큰은 인라인 값을 지운다", () => {
     const palette = createThemePalette([...THEME_TOKEN_GROUPS, APP_GROUP]);
     palette.apply("light", { "--brand-2": "#ff8a3d" });
+    // ⚠️ 이 줄이 없으면 **공허하다.** 목록을 잊은 apply는 --brand-2를 아예 안 건드리므로
+    // 값이 처음부터 ""이고, "지웠다"와 "손댄 적 없다"가 구분되지 않는다.
+    expect(document.documentElement.style.getPropertyValue("--brand-2")).toBe("#ff8a3d");
 
     palette.apply("light", {});
 
