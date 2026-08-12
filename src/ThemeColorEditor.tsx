@@ -78,9 +78,13 @@ export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKE
   const activeGroups = palette ? palette.groups : groups;
   const tokens = activeGroups.flatMap((group) => group.tokens);
 
-  /** 읽기·쓰기·적용 세 곳. palette가 있으면 그쪽으로, 없으면 지금까지의 함수로
-   *  보냅니다 — 이 셋을 우회해 readTokenOverrides 등을 직접 부르는 자리가 남으면
-   *  그 경로만 팔레트를 건너뛰어 목록이 갈라집니다. */
+  /* 읽기·쓰기·적용은 전부 이 셋을 지납니다. 팔레트가 오면 팔레트의 것을, 없으면 킷의 것을
+   * 씁니다.
+   *
+   * ⚠️ 우회해서 킷 함수를 직접 부르는 자리를 만들지 마세요. 지금 팔레트는 킷 함수로 그대로
+   * 넘기는 통과 함수라 **당장은 동작이 같아 보이지만**, 앱이 자기 read/write/apply를 가진
+   * 팔레트를 넘기는 순간 그 경로만 앱을 건너뜁니다. `tests/ThemeColorEditor.test.tsx`의
+   * "편집기는 팔레트의 메서드를 지난다"가 이것을 못박습니다. */
   const readOverrides = (forTheme: ThemeName) => (palette ? palette.read(forTheme) : readTokenOverrides(forTheme, tokens));
   const writeOverrides = (forTheme: ThemeName, next: Record<string, string>) => (palette ? palette.write(forTheme, next) : writeTokenOverrides(forTheme, next));
   const applyOverrides = (forTheme: ThemeName, next: Record<string, string>) => (palette ? palette.apply(forTheme, next) : applyTokenOverrides(forTheme, next, tokens));

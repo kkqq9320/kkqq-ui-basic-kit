@@ -438,4 +438,33 @@ describe("팔레트", () => {
 
     expect(document.documentElement.style.getPropertyValue("--brand-2")).toBe("#ff8a3d");
   });
+
+  /* ⚠️ 지금 팔레트는 킷 함수로 그대로 넘기는 통과 함수라, "팔레트를 지난다"와 "직접 부른다"가
+   * 동작상 같습니다 — 그래서 우회가 생겨도 다른 테스트는 전부 초록입니다. 팔레트의 메서드를
+   * 킷 함수와 **구분 가능하게** 만들어야 그 회귀가 잡힙니다. */
+  it("편집기는 팔레트의 메서드를 지난다 — 킷 함수를 직접 부르지 않는다", () => {
+    const base = createThemePalette([{ title: "브랜드", tokens: [{ name: "--brand-2", label: "브랜드2", description: "앱 색" }] }]);
+    const seen: string[] = [];
+    const spied = {
+      ...base,
+      read: (theme: "light" | "dark") => { seen.push("read"); return base.read(theme); },
+      write: (theme: "light" | "dark", next: Record<string, string>) => { seen.push("write"); return base.write(theme, next); },
+      apply: (theme: "light" | "dark", next?: Record<string, string>) => { seen.push("apply"); base.apply(theme, next); },
+    };
+
+    render(<ThemeColorEditor theme="light" palette={spied} />);
+    fireEvent.change(screen.getByLabelText("브랜드2 색상 값"), { target: { value: "#ff8a3d" } });
+
+    expect(seen).toEqual(["read", "write", "apply"]);
+  });
+
+  /* 둘 다 오면 palette가 이깁니다. 구현만 있고 검사가 없으면 조용히 뒤집혀도 아무도 모릅니다. */
+  it("groups와 palette가 둘 다 오면 palette가 이긴다", () => {
+    const palette = createThemePalette([{ title: "브랜드", tokens: [{ name: "--brand-2", label: "브랜드2", description: "앱 색" }] }]);
+    const groups = [{ title: "다른 것", tokens: [{ name: "--accent", label: "다른라벨", description: "이게 나오면 안 됩니다" }] }];
+
+    render(<ThemeColorEditor theme="light" palette={palette} groups={groups} />);
+
+    expect([screen.queryByLabelText("브랜드2 색상 선택") !== null, screen.queryByLabelText("다른라벨 색상 선택") !== null]).toEqual([true, false]);
+  });
 });
