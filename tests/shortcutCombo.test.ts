@@ -28,10 +28,19 @@ describe("조합 표기", () => {
     expect(hasModifier(parseCombo("Ctrl+KeyG")!)).toBe(true);
   });
 
-  it("망가진 표기는 null이다 — 조용히 빈 조합이 되지 않는다", () => {
+  it("빈 문자열은 null이다 — 조용히 빈 조합이 되지 않는다", () => {
     expect(parseCombo("")).toBe(null);
+  });
+
+  it("수식어 뒤에 키 자리가 비어 있으면 null이다", () => {
     expect(parseCombo("Ctrl+")).toBe(null);
+  });
+
+  it("수식어만 있고 키가 없으면 null이다", () => {
     expect(parseCombo("Ctrl+Shift")).toBe(null);
+  });
+
+  it("모르는 수식어 이름이면 null이다", () => {
     expect(parseCombo("Nope+KeyK")).toBe(null);
   });
 

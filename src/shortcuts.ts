@@ -24,12 +24,18 @@ export function parseCombo(text: string): Combo | null {
   return combo;
 }
 
+const MODIFIER_FLAG: Record<(typeof MODIFIER_ORDER)[number], keyof Omit<Combo, "code">> = {
+  Ctrl: "ctrl",
+  Alt: "alt",
+  Shift: "shift",
+  Meta: "meta",
+};
+
 export function formatCombo(combo: Combo): string {
   const parts: string[] = [];
-  if (combo.ctrl) parts.push("Ctrl");
-  if (combo.alt) parts.push("Alt");
-  if (combo.shift) parts.push("Shift");
-  if (combo.meta) parts.push("Meta");
+  for (const name of MODIFIER_ORDER) {
+    if (combo[MODIFIER_FLAG[name]]) parts.push(name);
+  }
   parts.push(combo.code);
   return parts.join("+");
 }
