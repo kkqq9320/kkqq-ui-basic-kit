@@ -703,6 +703,58 @@ theme, undefined, tokens)`에 그 tokens를 넘기세요. 앱은 자기 `THEME_T
 > 참고: 색 토큰은 **누군가 `var(--x)`로 써야** 화면에 나타납니다. 어디에 쓸지는
 > 코드가 정하므로, 편집기 UI만으로 "쓰이는 새 색"을 만들 수는 없습니다.
 
+### 단축키 — ShortcutProvider · ShortcutSettings
+
+**옵트인입니다.** `ShortcutProvider`를 렌더하지 않는 앱은 `document`에 걸리는
+keydown 리스너가 **0개**입니다 — 리스너는 이 컴포넌트의 effect 안에만 삽니다.
+`css/index.css`를 그대로 쓰는 앱은 CSS 바이트만 더 받고(`.kkqq-shortcuts` 뿌리
+아래), 렌더하지 않으면 그마저 화면에 영향이 없습니다.
+
+```tsx
+<ShortcutProvider
+  actions={[sidebarToggleAction(() => setCollapsed((value) => !value))]}
+  overrides={{ "kkqq:sidebar-toggle": "Ctrl+Backslash" }}
+>
+  <AppShell>…</AppShell>
+</ShortcutProvider>
+```
+
+**액션은 앱이 넘깁니다.** 킷이 기본 제공하는 액션은 `sidebarToggleAction(onFire, label?)`
+하나뿐이고, 그것도 킷이 쥐는 것은 안정적인 `id`(`SIDEBAR_TOGGLE_ID`)와 이름표뿐입니다
+— `Sidebar`는 controlled라 접힘 상태도 토글 함수도 앱 것입니다(`Sidebar`, 접힘 상태는
+`localStorage`처럼 쓰는 쪽이 저장). 그 밖의 단축키는 `{ id, label, defaultCombo, onFire }`
+모양의 액션을 직접 만들어 `actions` 배열에 넣으세요. `id`는 저장의 키이므로 **바뀌면
+그 액션의 덮어쓰기가 고아가 됩니다.**
+
+**`defaultCombo`는 킷이 주는 액션이든 앱이 만든 액션이든 항상 `null`로 시작해도
+됩니다 — 킷은 어떤 조합도 대신 정해 주지 않습니다.** 실제로 `sidebarToggleAction`은
+`defaultCombo: null`을 반환합니다. 그래서 **조합은 앱이 정해야** 하고, 그 자리가
+`overrides`입니다(사용자가 바꾼 것만 담는 자리가 아니라, 앱이 처음부터 어떤 조합을
+쓸지 정하는 자리이기도 합니다). `overrides`도 안 주면 그 액션은 아무 키에도 안
+걸립니다 — 안내 없이 켜면 "켰는데 안 되는데요"가 됩니다. 데모(`demo/main.tsx`)의
+`Ctrl + \`가 그 예시입니다.
+
+사용자가 조합을 직접 바꾸게 하려면 `ShortcutSettings`를 띄우세요 — 녹음기이자
+충돌 검사기입니다(같은 조합을 다른 액션에, 또는 킷 컴포넌트가 이미 쓰는 조합에
+걸려고 하면 등록을 막고 이유를 보여 줍니다):
+
+```tsx
+<ShortcutSettings
+  onChange={(id, combo) => setOverrides((current) => ({ ...current, [id]: combo }))}
+/>
+```
+
+**맨 키(수식어 없는 키) 단축키를 쓰려면 `data-kkqq-shortcut-scope`가 필요합니다.**
+수식어(Ctrl·Alt·Meta) 조합은 어디서나 트리거되지만, 맨 키는 기본적으로
+`document.activeElement`가 `<body>`일 때만 트리거됩니다. 이 기본값은 **플랫폼마다
+다르게 동작합니다** — 버튼을 클릭한 뒤, macOS 브라우저는 포커스를 주지 않는데
+Windows는 줍니다. 그래서 그 차이가 한쪽 OS에서만 개발하면 보이지 않습니다.
+
+허용 표식은 이 차이를 없애 주지 않습니다 — 없애는 일을 앱으로 옮길 뿐입니다.
+그래서 **버튼 하나하나가 아니라 컨테이너에** 붙이세요(예: 작업 영역 전체를 감싼
+`<div>` 하나). 표식이 붙은 요소 안에 포커스가 있으면 그 구역도 `<body>`처럼 쳐서
+맨 키가 트리거됩니다. 붙일 자리가 적을수록 잊을 자리가 적습니다.
+
 ## 클래스 이름 대응
 
 CSS 클래스는 이전 이름을 대체로 유지했습니다. 헷갈릴 만한 것만:

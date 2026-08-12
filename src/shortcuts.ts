@@ -147,6 +147,16 @@ export function findConflict(
   return null;
 }
 
+/** 킷이 이름을 쥐고 있는 유일한 액션. **핸들러는 앱 것입니다** — `Sidebar`가
+ * controlled라 접힘 상태를 킷이 안 들고 있습니다(`Sidebar.tsx:9`). 킷이 주는 것은
+ * **안정적인 `id`**뿐이고, 그게 있어야 앱마다 id가 달라져 저장된 덮어쓰기가
+ * 갈라지는 일이 없습니다. `defaultCombo`는 `null`입니다(스펙 §3.2). */
+export const SIDEBAR_TOGGLE_ID = "kkqq:sidebar-toggle";
+
+export function sidebarToggleAction(onFire: () => void, label = "사이드바 접기/펴기") {
+  return { id: SIDEBAR_TOGGLE_ID, label, defaultCombo: null as string | null, onFire };
+}
+
 export function shouldTrigger(event: KeyboardEvent): boolean {
   if (isRecording()) return false;                      // 스펙 §6.1
   if (event.repeat) return false;                       // 눌러 둔 키가 액션을 반복하지 않게

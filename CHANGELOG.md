@@ -10,6 +10,51 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.5.0
 
 ---
 
+## 미출시
+
+**단축키 모듈** — 오너의 실사용 개선 5개 중 마지막 항목(설계 스펙:
+`docs/design/2026-08-12-shortcuts-design.md`). **순수 추가이고 옵트인**이라
+`ShortcutProvider`를 렌더하지 않는 소비 프로젝트는 화면도 리스너도 그대로입니다.
+
+### 더해진 것
+
+- **`ShortcutProvider` · `useShortcutRegistry`** — 단축키 등록·트리거·충돌 검사를
+  맡는 컨텍스트. 리스너는 `document`에 **하나**, 버블 단계, effect 안에만 삽니다
+  (안 쓰면 0개).
+- **`ShortcutSettings`** — 사용자가 조합을 다시 녹음하거나 지우는 설정 UI. 등록
+  중인 조합이 킷 컴포넌트나 다른 액션과 겹치면 등록을 막고 이유를 보여 줍니다.
+- **`sidebarToggleAction(onFire, label?)` · `SIDEBAR_TOGGLE_ID`** — 킷이 기본
+  제공하는 유일한 액션. **핸들러는 앱 것입니다** — `Sidebar`가 controlled라 킷이
+  쥐는 것은 안정적인 `id`와 이름표뿐입니다. `defaultCombo`는 항상 `null`이라
+  조합은 앱이 정해야 합니다.
+- **`parseCombo` · `formatCombo` · `normalizeCombo` · `findConflict` ·
+  `shouldTrigger` · `BARE_KEY_SCOPE_ATTR` · `KIT_RESERVED` · `displayCombo`** —
+  조합 표기·매칭·충돌 검사의 나머지 공개 API.
+- **`css/shortcuts.css`** — `.kkqq-shortcuts` 뿌리 아래로만 선택자가 있어, 안 쓰는
+  프로젝트에는 바이트 말고는 영향이 없습니다.
+- **데모에 조합 예시**(`demo/main.tsx`) — 사이드바 접기/펴기가 `Ctrl + \`에 걸려
+  있고 `overrides`로 그 값을 준 코드가 그대로 보입니다. `ShortcutSettings`도 실제로
+  띄워 눌러 볼 수 있고, `.workspace`에 `data-kkqq-shortcut-scope`를 붙여 맨 키 허용
+  구역의 예시도 하나 보여 줍니다.
+
+### 고친 것
+
+- `ShortcutSettings`의 녹음·지우기 버튼이 브라우저 기본 모양으로 뜨던 것 —
+  킷의 `.secondary-button` 클래스를 씁니다.
+
+### 눈으로 볼 것
+
+- **안 쓰면 아무 화면도 안 바뀝니다.** `ShortcutProvider`를 렌더하지 않는 기존
+  프로젝트는 이번 릴리스로 달라지는 것이 없습니다.
+- **`defaultCombo`가 없는 액션은 `overrides`를 안 주면 조용히 아무 키에도 안
+  걸립니다.** 데모처럼 조합을 앱이 정해야 하고, 안 정하면 "켰는데 안 되는데요"가
+  됩니다 — 문서가 아니라 설계가 그렇게 되어 있습니다.
+- **맨 키 단축키는 `data-kkqq-shortcut-scope`가 붙은 컨테이너 안에서만** 포커스가
+  `<body>`가 아니어도 트리거됩니다. 수식어(Ctrl·Alt·Meta) 조합은 이 표식과
+  무관하게 어디서나 트리거됩니다.
+
+---
+
 ## v0.5.0 — 2026-08-12
 
 **타입은 깨지지 않습니다** — 새 prop은 선택이고 기본값이 있습니다. 규칙을 엄격히 읽으면

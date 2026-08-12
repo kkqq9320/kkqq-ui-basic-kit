@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { comboFromEvent, formatCombo, hasModifier, normalizeCombo, parseCombo } from "../src/shortcuts";
+import { comboFromEvent, formatCombo, hasModifier, normalizeCombo, parseCombo, sidebarToggleAction } from "../src/shortcuts";
 
 describe("조합 표기", () => {
   it("수식어 순서가 Ctrl → Alt → Shift → Meta로 정규화된다", () => {
@@ -54,5 +54,19 @@ describe("조합 표기", () => {
   it("이벤트에서 key가 아니라 code를 읽는다", () => {
     const event = { code: "Semicolon", key: "ㅁ", ctrlKey: true, altKey: false, shiftKey: false, metaKey: false } as KeyboardEvent;
     expect(formatCombo(comboFromEvent(event))).toBe("Ctrl+Semicolon");
+  });
+});
+
+describe("킷이 주는 사이드바 토글", () => {
+  it("id가 고정이고 기본 조합이 없다", () => {
+    const action = sidebarToggleAction(() => {});
+    expect(action.id).toBe("kkqq:sidebar-toggle");
+    expect(action.defaultCombo).toBe(null);
+  });
+
+  it("핸들러는 앱 것이다 — 넘긴 함수를 그대로 부른다", () => {
+    let called = 0;
+    sidebarToggleAction(() => { called += 1; }).onFire();
+    expect(called).toBe(1);
   });
 });
