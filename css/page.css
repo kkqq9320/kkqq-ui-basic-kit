@@ -6,6 +6,18 @@
  */
 .workspace { position: relative; min-width: 0; padding: 42px clamp(22px, 5vw, 72px) 80px; }
 
+/* ⚠️ **마지막 블록이 자기 아래 여백을 또 더하면 안 됩니다.** 위 `padding-bottom: 80px`이
+ * 이미 페이지 끝 여백인데, 거기에 마지막 자식의 `margin-bottom`(요약 그리드 22, 패널
+ * 그리드·패널 20)이 **더해집니다.** 실측(실제 크롬, 창 높이 1214, 세 탭 전부): 마지막
+ * 요소 아래 빈 공간이 **100px**. 레이아웃 페이지는 넘침 143px 중 **100px이 내용이
+ * 아니었고**, 카드가 화면에 다 들어오는 창에서는 그 여백만으로 스크롤바가 섰습니다
+ * (오너 리포트 2026-08-12: "넘칠 게 없는데 스크롤바가 선다").
+ *
+ * **80px 패딩은 그대로 둡니다** — 없애자는 게 아니라 두 번 세지 말자는 것입니다.
+ * 특이도가 (0,2,0)이라 취소 대상 (0,1,0)들보다 **순서와 무관하게** 이깁니다.
+ * `tests/workspaceTrailingSpace.test.ts`가 못박습니다. */
+.workspace > :last-child { margin-bottom: 0; }
+
 /* 작업 영역 오른쪽 위 아이콘 줄 — 화면 모드 전환, 설정처럼 페이지와 무관하게
  * 항상 닿아야 하는 액션. 모바일에서는 탭 카드가 이 줄 바로 아래로 내려갑니다. */
 .page-actions { position: absolute; top: 34px; right: clamp(22px, 5vw, 72px); z-index: 54; display: flex; gap: 6px; }
