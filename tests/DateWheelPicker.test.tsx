@@ -9,12 +9,17 @@ import { useEffect, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DateWheelPicker, type DateWheelUnit } from "../src/DateWheelPicker";
-import type { WheelUnit } from "../src/model/instant";
+import { instantModel, type WheelUnit } from "../src/model/instant";
 import { Dialog } from "../src/Dialog";
 import datePickerCssSource from "../css/date-picker.css?raw";
 import tokensCssSource from "../css/tokens.css?raw";
 
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+// vi.restoreAllMocks()가 필요합니다 — "지금 버튼이 시각을 가진 값에서도 열 모션을
+// 만든다" 검사가 instantModel(모듈 싱글턴)에 vi.spyOn을 건다. 그 안의
+// nowSpy.mockRestore()/shiftSpy.mockRestore()는 it 본문 맨 끝 줄이라, 그 위 어느
+// expect()든 던지면 건너뛰어져 스파이가 그대로 살아남는다 — instantModel은 파일
+// 전체가 공유하는 하나의 객체라 그 뒤 테스트로 샌다(전체 브랜치 리뷰 F-2 지적).
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 /**
  * 트리거가 빈 자리를 채우는 문자 — **U+2012 FIGURE DASH**. 밑줄이 아니다(설계 스펙 §4.5).
@@ -162,6 +167,54 @@ describe("DateWheelPicker", () => {
 
     expect(columns.map((column) => /moving-\w+/.exec(column.className)?.[0] ?? null)).toEqual(["moving-next", null, "moving-next"]);
   });
+  // ── commitToday의 값 분해를 모델로 옮긴다 (2b-2) ────────────────────────────
+  //
+  // `commitToday`는 `numbersOf = value => value.split("-").map(Number)`와 고정
+  // 인덱스 표(`{year:0,month:1,day:2,hour:3,minute:4,second:5}`)로 값을 해독한다.
+  // `model.now()`가 시각까지 담은 값을 내주면(2b가 그 쪽으로 가는 길목이다) —
+  // 예를 들어 "2026-08-12T03:00" — "-"로 쪼갠 마지막 조각이 "12T03:00"이 되고
+  // `Number("12T03:00")`은 NaN이다. `markColumnMotion`의 `if (amount)` 가드가
+  // NaN을 거짓으로 걸러 **조용히** 그 열을 움직이지 않는다 — 던지지 않으므로
+  // 이 검사가 없으면 아무도 모른다.
+  //
+  // ⚠️ **fields가 date-only(연·월·일)인 한 이 버그는 재현되지 않는다** —
+  // `numbersOf`가 만드는 배열과 고정 인덱스 표가 연·월·일 세 자리에서는 실제로
+  // 늘 일치한다(둘 다 "YYYY-MM-DD"를 그 순서로 본다). 버그를 드러내려면 값에
+  // 실제로 시각이 섞여야 하고, 그러려면 fields가 시각 단위를 하나 포함해야
+  // 한다(계열이 "datetime"이 되어야 값 형식에 `T`가 붙는다).
+  //
+  // ⚠️ **`model.shift`를 항등함수로 모킹하는 이유.** 이 시점(2b-2)의
+  // `shiftDateValue`/`dateWheelLabel`은 여전히 `value + "T00:00:00Z"`를 무조건
+  // 이어붙인다(2b-3이 고칠 몫). `baseValue`에 이미 `T`가 있으면 그 이어붙이기가
+  // "…T03:00T00:00:00Z"라는 깨진 문자열을 만들고, `setUTCFullYear(NaN, NaN,
+  // NaN)` 뒤의 `toISOString()`이 **RangeError로 던진다**(Invalid Date를 문자열로
+  // 만들 수 없다는 스펙 규칙 — 직접 재현해 확인했다). 그래서 `model.shift`를
+  // 입력을 그대로 돌려주는 항등함수로 바꿔 `shiftDateValue`가 아예 불리지 않게
+  // 한다 — `shiftedFrom`이 그 뒤 `model.isValid`에서 걸러 널을 돌려주므로 행은
+  // 전부 "—"로 그려진다(크래시는 아니다). 이 검사가 보는 것은 행 내용이 아니라
+  // **오늘 버튼을 눌렀을 때 열에 모션이 실제로 걸리는지**다.
+  it("지금 버튼이 시각을 가진 값에서도 열 모션을 만든다", () => {
+    let mockedNow = "2024-07-05T03:00";
+    const nowSpy = vi.spyOn(instantModel, "now").mockImplementation(() => mockedNow);
+    const shiftSpy = vi.spyOn(instantModel, "shift").mockImplementation((v: string) => v);
+
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="" fields={["year", "month", "day", "hour"]} onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    const columns = [...document.querySelectorAll(".date-wheel-column")];
+
+    mockedNow = "2026-07-12T04:00";
+    fireEvent.click(screen.getByRole("button", { name: "오늘" }));
+
+    // 연 2024->2026(앞으로), 월 07->07(그대로), 일 05->12(앞으로). 시각 열(hour)은
+    // 이 단계에서 실제로 그려지지 않으므로(2b-3의 몫) 단언 대상에서 뺀다 —
+    // 그 열이 있어도(4번째 .date-wheel-column) 값은 undefined 라벨로 그려질 뿐
+    // 크래시하지 않는다.
+    expect(columns.slice(0, 3).map((column) => /moving-\w+/.exec(column.className)?.[0] ?? null)).toEqual(["moving-next", null, "moving-next"]);
+
+    nowSpy.mockRestore();
+    shiftSpy.mockRestore();
+  });
+
   it("moves the year, month, and day by one with the step buttons", () => {
     const onChange = vi.fn();
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={onChange} />);
@@ -353,6 +406,49 @@ describe("DateWheelPicker year-month mode (fields)", () => {
     fireEvent.click(fieldOf("예산 월"));
     expect(screen.getByRole("group", { name: "월 08" })).toBeTruthy();                        // 8월 그대로
     expect(screen.getByRole("button", { name: "월 이전" }).hasAttribute("disabled")).toBe(true);   // 7월 막힘
+  });
+
+  // ── 2b-2 위임이 §6/§6.1을 실제로 지키는지 (전체 브랜치 리뷰 F-1) ─────────────
+  //
+  // 2b-2 브리프는 "outOfRange/clampToRange를 모델에 위임하라"와 "동작 변화 0"을
+  // 같이 요구했는데, 그 둘은 애초에 같이 성립하지 않았다 — §6/§6.1이 오너 승인으로
+  // 정한 규칙이 옛 지역 코드(`v`와 `min`/`max`를 전부 픽커 자신의 `keyLen`으로만
+  // 슬라이스해 비교)와 실제로 다르기 때문이다. 옛 코드가 틀렸고 §6/§6.1이 그것을
+  // 고친 것이지, 위임이 새 동작을 만든 게 아니다. 아래 두 검사(F-1.1·F-1.3)는 그
+  // 갈래를 컴포넌트 수준에서 고정한다 — 세째 갈래(F-1.2, 계열 불일치)는 시각 열이
+  // 아직 안 그려져서(2b-3의 몫) tests/instantModel.test.ts에 모델 수준으로 있다.
+  it("F-1.1 — 거친 max(연도만 준 값)는 그 해 전체를 연다", () => {
+    // max="2026"(4자)을 일 픽커(비교 정밀도 10)에 주면, 옛 지역 코드는 v와 max를
+    // 똑같이 keyLen(10)으로 슬라이스했다 — max는 10보다 짧아 안 늘어나므로 그대로
+    // "2026"(4자)과 v(10자)를 비교했고, JS 문자열 비교에서 짧은 프리픽스는 항상
+    // 작다고 보므로 "2026-07-12" > "2026"이 참이 되어 **2026년 안의 모든 날짜가
+    // 범위 밖으로 잘못 판정됐다**(그 클램프 결과 `model.normalize("2026", fields)`가
+    // "2026-undefined-undefined"를 만들어 렌더가 크래시하는 것까지 직접 재현해
+    // 확인했다). 모델의 outOfRange/clampToRange(§6, 2a-3 오너 승인)는
+    // `len = min(precision, bound.length)`로 **경계 자신의 길이**까지만 비교해
+    // 이 경우를 바로잡는다 — 일이 그대로 12로 보여야 하고, 이웃 날짜로 이동하는
+    // 버튼도 막히면 안 된다.
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" max="2026" onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    expect(screen.getByRole("group", { name: /^일 12\b/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "일 다음" }).hasAttribute("disabled")).toBe(false);
+    expect(screen.getByRole("button", { name: "일 이전" }).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("F-1.3 — 형식이 깨진 min(월에 0을 안 붙인 오타)은 무시된다", () => {
+    // min="2026-8-12"(9자, 오타)를 일 픽커에 주면, 옛 지역 코드는 형식을 전혀
+    // 검증하지 않고 그대로 슬라이스해 비교했다 — "2026-12-25"(12월, min보다
+    // 한참 뒤)를 min과 비교할 때 "-" 다음 첫 글자가 "1"(12월) vs "8"이라 '1' < '8'로
+    // 읽혀 **12월 25일이 min보다 이르다고 잘못 판정됐다**(2027년이 되어서야
+    // 풀린다 — 오타 하나가 2026년 전체를 막았다). §6.1(오너 결정, `usableBound`)은
+    // 형식이 `BOUND_FORMATS`의 어느 것과도 안 맞는 경계를 **없는 것으로** 본다 —
+    // 그래서 새 코드에서는 이 min이 통째로 무시되고 12월 25일이 그대로 선택
+    // 가능해야 한다.
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-12-25" min="2026-8-12" onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    expect(screen.getByRole("group", { name: /^월 12\b/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "월 이전" }).hasAttribute("disabled")).toBe(false);
+    expect(screen.getByRole("button", { name: "연도 이전" }).hasAttribute("disabled")).toBe(false);
   });
 
   it("팝오버의 오늘 버튼이 연·월 모드에서 일=01로 정규화한다", () => {

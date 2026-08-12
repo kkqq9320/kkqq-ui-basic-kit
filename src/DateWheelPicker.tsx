@@ -514,17 +514,14 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    */
   useLayoutEffect(() => { if (disabled) setOpen(false); }, [disabled]);
 
-  // 남은 최소 단위로만 비교합니다(연·월 픽커면 "월" 단위). 함수 선언이라 baseValue보다
-  // 아래에 있어도 호출 시점엔 keyLen이 이미 초기화돼 있습니다.
-  const keyLen = model.keyLength(fields);
-  function rangeKey(v: string) { return v.slice(0, keyLen); }
-  function outOfRange(v: string) { return (!!min && rangeKey(v) < rangeKey(min)) || (!!max && rangeKey(v) > rangeKey(max)); }
-  function clampToRange(v: string) {
-    const normalized = model.normalize(v, fields);
-    if (min && rangeKey(normalized) < rangeKey(min)) return model.normalize(min, fields);
-    if (max && rangeKey(normalized) > rangeKey(max)) return model.normalize(max, fields);
-    return normalized;
-  }
+  // 경계 비교·클램프는 모델이 합니다(설계 스펙 §6·§12) — 계열별 비교 정밀도와
+  // 경계 형식 판정이 값 지식이라 기계에 남으면 안 됩니다(§1단계 측정). 예전에는
+  // 여기 `keyLen`/`rangeKey` 지역 함수가 그 비교를 3단위 접두사 슬라이스로
+  // 직접 했었는데, 그 자리가 2a에서 모델로 옮겨졌고(`outOfRange`/`clampToRange`,
+  // 시·분·초까지) 이 두 래퍼는 인자만 이어 함수로 씁니다 — `min`/`max`/`fields`를
+  // 매 호출 다시 안 적어도 되게 하는 것이 유일한 목적입니다.
+  function outOfRange(v: string) { return model.outOfRange(v, { min, max }, fields); }
+  function clampToRange(v: string) { return model.clampToRange(v, { min, max }, fields); }
   const baseValue = clampToRange(model.isValid(value) ? value : model.now(timeZone));
 
   // 트리거가 그릴 조각들. null이면 placeholder를 그린다는 뜻입니다.
@@ -864,17 +861,22 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    */
   function commitToday() {
     const next = clampToRange(model.now(timeZone));
-    const numbersOf = (value: string) => value.split("-").map(Number);
-    // hour·minute·second는 UNIT_LADDER 상의 자리(3·4·5)만 채웁니다 — Record<WheelUnit, …>가
-    // 여섯 키를 요구해서입니다(2b-1). `fields`에 그 단위가 있으면(타입은 이제 허용합니다)
-    // 이 함수 자체는 불립니다 — `numbersOf`가 여전히 날짜 문자열(YYYY-MM-DD)만 쪼개
-    // `to[3]`/`from[3]`이 `undefined`이므로 `Math.sign(undefined - undefined)`가 `NaN`이
-    // 되고, `markColumnMotion`의 `if (amount)` 가드가 `NaN`을 거짓으로 걸러 조용히
-    // no-op이 됩니다(크래시도, 잘못된 방향 애니메이션도 아닙니다). 시각 열을 실제로
-    // 커밋하는 것은 2b-3의 몫입니다.
-    const index: Record<WheelUnit, number> = { year: 0, month: 1, day: 2, hour: 3, minute: 4, second: 5 };
-    const [from, to] = [numbersOf(baseValue), numbersOf(next)];
-    for (const unit of fields) markColumnMotion(unit, Math.sign(to[index[unit]] - from[index[unit]]));
+    // 값 분해는 모델이 합니다(설계 스펙 §12, 2b-2) — 예전에는 `value.split("-")`와
+    // 고정 인덱스 표(`{year:0,month:1,day:2,hour:3,minute:4,second:5}`)로 **위치만**
+    // 보고 셌는데, 그 표는 값이 늘 "YYYY-MM-DD" 세 자리일 때만 맞습니다. 값에 시각이
+    // 섞이면(계열이 datetime이 되어 `T`가 붙으면) `-`로 쪼갠 조각이 더는 숫자가
+    // 아니게 되어 `Number(...)`가 `NaN`이 되고, `markColumnMotion`의 `if (amount)`
+    // 가드가 그 `NaN`을 거짓으로 걸러 **조용히** 그 열의 모션이 사라졌습니다(테스트
+    // "지금 버튼이 시각을 가진 값에서도 열 모션을 만든다"가 이 회귀를 고정합니다).
+    // `model.parts`(=parseValue)는 **이름**으로 꺼내므로 사다리 여섯 단위 전부에
+    // 그대로 맞고, 위치 가정이 아예 없습니다.
+    //
+    // 형식이 안 맞는 값(계열 불일치 등)이 들어오면 `parts`는 `null`을 돌려줍니다 —
+    // 그때는 모션을 걸지 않고 값만 확정합니다. `shiftedFrom`이 `model.isValid`로
+    // 이미 같은 결의 방어를 합니다.
+    const from = model.parts(baseValue, fields);
+    const to = model.parts(next, fields);
+    if (from && to) for (const unit of fields) markColumnMotion(unit, Math.sign(to[unit] - from[unit]));
     onChange(next);
   }
 

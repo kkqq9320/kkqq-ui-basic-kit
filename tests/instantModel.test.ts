@@ -483,6 +483,35 @@ describe("usableBound은 시각 경계를 datetime에서 거절한다 (F-2.5)", 
   });
 });
 
+/* 전체 브랜치 리뷰 F-1.2 — 계열이 다른 경계는 outOfRange/clampToRange 끝까지
+ * 무시로 이어져야 한다 (§6.1, 2026-08-13).
+ *
+ * 2b-2 리뷰가 확인한 divergence 갈래 셋 중 하나. 컴포넌트 수준(tests/
+ * DateWheelPicker.test.tsx)이 아니라 여기 두는 이유 — 시각 전용 픽커(fields가
+ * hour/minute만)를 재현하려면 시각 열이 실제로 그려져야 하는데, 이 시점(2b-2)의
+ * DateWheelPicker는 연·월·일 열만 그린다(시·분·초 열은 2b-3의 몫). `shiftDateValue`가
+ * 여전히 `value + "T00:00:00Z"`를 무조건 이어붙이는 상태라, 시각 전용 fields로
+ * 팝오버를 실제로 열면 값 형식이 안 맞아 렌더가 깨진다(2b-2 태스크 자체 검사의
+ * 주석에 그 RangeError를 기록해 두었다) — 억지로 렌더하는 대신 모델 함수를 직접
+ * 부른다.
+ *
+ * usableBound(F-2.5)는 이미 "계열이 다르면 null"을 단위로 검사하지만, 그 null이
+ * outOfRange/clampToRange 끝까지 "제한이 없는 것처럼" 이어지는지는 검사된 적이
+ * 없었다 — usableBound 안의 null 반환 자체를 지우고 원래 bound 문자열을 그대로
+ * 돌려주도록 바꿔도(뮤테이션으로 직접 넣어 확인) 그 결과가 outOfRange/clampToRange
+ * 밖으로 새는지 보는 검사가 없어 초록이었을 자리다. */
+describe("계열이 다른 경계는 무시된다 — outOfRange/clampToRange까지 (F-1.2)", () => {
+  it("시각 픽커에 날짜 min을 주면 어느 시각도 범위 밖이 아니다", () => {
+    const fields: WheelUnit[] = ["hour", "minute"];
+    for (const v of ["00:00", "03:00", "12:30", "23:59"])
+      expect(outOfRange(v, { min: "2026-08-12" }, fields)).toBe(false);
+  });
+
+  it("시각 픽커에 날짜 min을 주면 클램프가 값을 그대로 통과시킨다", () => {
+    expect(clampToRange("03:00", { min: "2026-08-12" }, ["hour", "minute"])).toBe("03:00");
+  });
+});
+
 /* 전체 브랜치 리뷰 F-3 — 빈 fields가 연도까지 지우던 퇴행. deepestIndex([])가
  * -Infinity를 돌려주면 모든 단위가 "구간 아래"로 읽혀 연도도 바닥값(0)으로
  * 눌렸습니다. 옛 normalizeToFields(v, [])는 연도를 지켰으므로 이건 퇴행이었습니다.

@@ -572,6 +572,13 @@ export type WheelModel = {
   typeDigit(unit: DateWheelUnit, buffer: string, digit: string): TypingStep;
   flushBuffer(unit: DateWheelUnit, buffer: string): number | null;
   now(timeZone: string): string;
+  // 값 지식 둘이 기계(DateWheelPicker.tsx)에 남아 있었습니다(설계 스펙 §1단계 측정·
+  // §12) — min/max 접두 비교(rangeKey/outOfRange/clampToRange)와 commitToday의 값
+  // 분해. 여기 셋이 그 둘을 마저 모델로 옮깁니다 — outOfRange/clampToRange는 위
+  // 순수 함수 그대로, parts는 parseValue 그대로입니다(설계 스펙 §12, 2b-2).
+  outOfRange(value: string, bounds: { min?: string; max?: string }, fields: WheelUnit[]): boolean;
+  clampToRange(value: string, bounds: { min?: string; max?: string }, fields: WheelUnit[]): string;
+  parts(value: string, fields: WheelUnit[]): UnitParts | null;
 };
 
 /* 기계가 이 객체 하나만 보고 돌게 하는 것이 목적입니다. 기간(duration) 모델이
@@ -592,4 +599,7 @@ export const instantModel: WheelModel = {
   typeDigit,
   flushBuffer,
   now: todayIn,
+  outOfRange,
+  clampToRange,
+  parts: parseValue,
 };
