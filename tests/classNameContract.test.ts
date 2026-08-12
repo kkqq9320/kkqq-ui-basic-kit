@@ -45,6 +45,19 @@ const components = Object.entries(sources).flatMap(([path, source]) =>
   exportedComponents(source).map((component) => ({ ...component, path: path.replace("../src/", "") })),
 );
 
+/* 이 규칙의 근거(위 파일 머리말)는 "CSS 속성을 prop으로 하나씩 따라가는 방식은
+ * 수렴하지 않는다" — 즉 **자기 DOM을 렌더하는** 컴포넌트가 대상입니다. 여기 올릴 이름은
+ * 자기 DOM 노드가 하나도 없는 컴포넌트뿐입니다(className을 받아도 붙일 자리가 없음).
+ * `tests/pageChrome.test.tsx`가 "실제로 붙음"을 렌더로 짝지어 검사하는데, 그 파일은
+ * DOM을 렌더하는 컴포넌트만 손으로 골라 import합니다 — 여기 이름을 추가하려면 그 전제
+ * (DOM이 없다)가 참인지 먼저 확인하세요.
+ *
+ * - `ShortcutProvider`(src/ShortcutProvider.tsx): `<Context.Provider>{children}</Context.Provider>`
+ *   만 렌더합니다. 감싸는 `<div>`를 추가해 className을 붙일 수는 있지만, 그러면 이 킷을
+ *   쓰는 모든 앱에 새 DOM 노드가 하나씩 생깁니다 — 스펙 §8("안 쓰면 영향 0")과 Task 3의
+ *   구현을 어기는 변경이라 하지 않습니다. */
+const NO_OWN_DOM = new Set(["ShortcutProvider"]);
+
 describe("내보내는 컴포넌트는 전부 className을 받는다", () => {
   // 전제 — 파싱이 0건이면 아래 단언이 **공허하게** 통과합니다.
   it("컴포넌트를 실제로 찾아냈다", () => {
@@ -55,7 +68,7 @@ describe("내보내는 컴포넌트는 전부 className을 받는다", () => {
   /* **exhaustive 형태입니다** — 빠진 것을 전부 나열해 비교합니다. `every(...)`로 쓰면
    * 실패가 "false"라고만 말하고 어느 컴포넌트인지는 안 알려줍니다. */
   it("빠진 컴포넌트가 없다", () => {
-    const missing = components.filter((component) => !component.signature.includes("className"));
+    const missing = components.filter((component) => !component.signature.includes("className") && !NO_OWN_DOM.has(component.name));
     expect(missing.map((component) => `${component.name} (${component.path})`)).toEqual([]);
   });
 });
