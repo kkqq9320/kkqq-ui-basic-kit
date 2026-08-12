@@ -89,6 +89,41 @@ export function beginRecording(): void { recordingDepth += 1; }
 export function endRecording(): void { recordingDepth = Math.max(0, recordingDepth - 1); }
 export function isRecording(): boolean { return recordingDepth > 0; }
 
+/** 킷 컴포넌트가 **이미 쓰는** 조합. `tests/shortcutConflicts.test.ts`가 이 목록을
+ * `src/`의 실제 코드와 대조하므로, 컴포넌트가 새 조합을 쓰기 시작하면 빨개집니다.
+ * `Ctrl`로 적지만 macOS의 `Cmd`도 같은 자리입니다 — 킷이 둘을 같이 봅니다. */
+export const KIT_RESERVED: readonly string[] = ["Ctrl+Semicolon"];
+
+export type Conflict = { combo: string; withActionId?: string; withKit?: boolean };
+
+/** 킷 컴포넌트는 `ctrlKey || metaKey`로 판정합니다(`DateWheelPicker.tsx:1095`).
+ * 그래서 **예약 조합을 비교할 때만** `Meta`를 `Ctrl`과 같은 것으로 봅니다.
+ * 이게 없으면 `Cmd+;`가 충돌로 안 잡히고, 사용자는 등록에 성공한 뒤 날짜 선택기가
+ * 그 키를 먹는 것을 봅니다 — **맥에서만 나는 결함**입니다.
+ * ⚠️ 액션끼리의 비교(§5.1)에는 쓰지 마세요. 거기서는 `Ctrl+K`와 `Cmd+K`가
+ * **다른 조합**이고, 앱이 둘을 따로 걸 수 있어야 합니다. */
+function reservedKey(text: string): string | null {
+  const combo = parseCombo(text);
+  if (!combo) return null;
+  return formatCombo({ ...combo, ctrl: combo.ctrl || combo.meta, meta: false });
+}
+
+export function findConflict(
+  combo: string,
+  actionId: string,
+  bindings: Record<string, string | null>,
+): Conflict | null {
+  const wanted = normalizeCombo(combo);
+  if (!wanted) return null;
+  const wantedReserved = reservedKey(wanted);
+  if (KIT_RESERVED.some((reserved) => reservedKey(reserved) === wantedReserved)) return { combo: wanted, withKit: true };
+  for (const [id, bound] of Object.entries(bindings)) {
+    if (id === actionId || bound === null) continue;
+    if (normalizeCombo(bound) === wanted) return { combo: wanted, withActionId: id };
+  }
+  return null;
+}
+
 export function shouldTrigger(event: KeyboardEvent): boolean {
   if (isRecording()) return false;                      // 스펙 §6.1
   if (event.repeat) return false;                       // 눌러 둔 키가 액션을 반복하지 않게
