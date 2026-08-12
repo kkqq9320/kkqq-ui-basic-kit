@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { flushBuffer, typeDigit, withUnitValue } from "../src/dateWheelTyping";
+import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel } from "../src/model/instant";
+
+const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
 
 describe("typeDigit — 모호하지 않으면 즉시 확정한다", () => {
   it("월: 2~9는 한 자리로 확정하고 다음 열로", () => {
@@ -126,5 +128,78 @@ describe("withUnitValue — 절대값으로 설정한다", () => {
     // 윤년인 2028년의 2/29가 평년인 2026년으로 옮겨갈 때 말일로 잘리지 않고
     // 3/1로 자리올림된다 — "다른 열로 넘기지 않는다" 규칙을 정면으로 어긴다.
     expect(withUnitValue("2028-02-29", "year", 2026)).toBe("2026-02-28");
+  });
+});
+
+describe("모델로 옮겨 온 나머지 함수", () => {
+  it("shiftDateValue는 열 안에서만 돌고 자리올림하지 않는다", () => {
+    expect(shiftDateValue("2026-01-31", "month", 1)).toBe("2026-02-28");
+    expect(shiftDateValue("2026-12-15", "month", 1)).toBe("2026-01-15");
+    expect(shiftDateValue("2026-01-01", "day", -1)).toBe("2026-01-31");
+  });
+
+  it("normalizeToFields는 구간 아래 단위를 01로 누른다", () => {
+    expect(normalizeToFields("2026-07-12", ["year", "month"])).toBe("2026-07-01");
+    expect(normalizeToFields("2026-07-12", ["year"])).toBe("2026-01-01");
+    expect(normalizeToFields("2026-07-12", ["year", "month", "day"])).toBe("2026-07-12");
+  });
+
+  it("rangeKeyLength는 남은 최소 단위를 따른다", () => {
+    expect(rangeKeyLength(["year", "month", "day"])).toBe(10);
+    expect(rangeKeyLength(["year", "month"])).toBe(7);
+    expect(rangeKeyLength(["year"])).toBe(4);
+  });
+
+  it("validDateValue는 YYYY-MM-DD만 받는다", () => {
+    expect(validDateValue("2026-07-12")).toBe(true);
+    expect(validDateValue("")).toBe(false);
+    expect(validDateValue("+010000-07-12")).toBe(false);
+  });
+
+  it("lastDayOf는 0~99년을 1900년대로 옮기지 않는다", () => {
+    expect(lastDayOf(2024, 1)).toBe(29);
+    expect(lastDayOf(2026, 1)).toBe(28);
+    expect(lastDayOf(0, 1)).toBe(29);
+  });
+
+  // 월·일이 한 자리일 때 zero-pad가 실제로 적용되는지 — 월은 이 스위트의 fixture가
+  // 대부분 "07"·"08"처럼 이미 한 자리라 padStart 유무가 눈에 띄지만, 일은 fixture가
+  // 거의 항상 "12"(이미 두 자리)라 padStart를 지워도 결과가 우연히 같다. 그래서
+  // 일 쪽은 한 자리 값(5일)으로 따로 고정해야 padStart 유무가 실제로 갈린다.
+  it("dateWheelLabel은 한 자리 월을 두 자리로 채운다", () => {
+    expect(dateWheelLabel("2026-07-05", "month", WEEKDAYS_KO)).toBe("07");
+  });
+
+  it("dateWheelLabel은 한 자리 일을 두 자리로 채운다", () => {
+    expect(dateWheelLabel("2026-07-05", "day", WEEKDAYS_KO)).toBe("05 일");
+  });
+
+  it("dateTriggerParts의 조각을 이으면 옛 문자열과 같다", () => {
+    const parts = dateTriggerParts("2026-07-12", ["year", "month", "day"], null);
+    expect(parts.map((part) => part.text).join("")).toBe("2026. 07. 12.");
+  });
+
+  it("dateTriggerParts는 버퍼를 자리 지켜 그린다", () => {
+    const parts = dateTriggerParts("2026-07-12", ["year", "month", "day"], { unit: "year", digits: "20" });
+    expect(parts[0].text).toBe("20\u2012\u2012");
+  });
+});
+
+describe("instantModel", () => {
+  it("사다리 순서를 갖는다", () => {
+    expect(instantModel.units).toEqual(["year", "month", "day"]);
+  });
+
+  it("지금은 fields를 그대로 열로 쓴다", () => {
+    expect(instantModel.columns(["year", "month"])).toEqual(["year", "month"]);
+  });
+
+  /* 위임이 실제로 같은 함수를 부르는지 — 이름만 바꿔 놓고 다른 걸 부르면
+   * 컴포넌트 테스트가 잡아 주지만, 여기서 잡으면 어느 칸인지 바로 압니다. */
+  it("위임한 것들이 같은 답을 낸다", () => {
+    expect(instantModel.shift("2026-01-31", "month", 1)).toBe(shiftDateValue("2026-01-31", "month", 1));
+    expect(instantModel.normalize("2026-07-12", ["year"])).toBe(normalizeToFields("2026-07-12", ["year"]));
+    expect(instantModel.keyLength(["year", "month"])).toBe(rangeKeyLength(["year", "month"]));
+    expect(instantModel.isValid("2026-07-12")).toBe(validDateValue("2026-07-12"));
   });
 });
