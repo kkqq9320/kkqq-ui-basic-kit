@@ -183,7 +183,12 @@ function LayoutSwitch() {
     for (const token of ["--summary-card-justify", "--panel-justify", "--field-justify", "--color-card-justify"]) {
       document.documentElement.style.setProperty(token, justify);
     }
-  }, [axis]);
+    /* ⚠️ **`justify`가 여기 없어서 버튼 넷이 죽어 있었습니다.** 본문은 `justify`를
+       읽는데 의존성에 `axis`만 있어, 버튼이 상태만 바꾸고 토큰은 첫 값(`normal`)에
+       머물렀습니다 — 어느 것을 눌러도 카드가 1px도 안 움직였습니다(실측).
+       **조작판이 있는데 축이 죽어 있으면 "그 축은 효과가 없다"는 오답을 만듭니다.**
+       `tests/demoControls.test.ts`가 못박습니다. */
+  }, [axis, justify]);
 
   /* **폭 흉내입니다. 창을 실제로 줄이는 게 아닙니다.** `.app-shell`을 좁혀 작업 영역이
      받는 폭만 그 값으로 만듭니다 — 이 그리드들이 보는 것은 창이 아니라 부모 폭이므로
