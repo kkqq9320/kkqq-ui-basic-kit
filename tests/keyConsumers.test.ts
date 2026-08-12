@@ -1,22 +1,33 @@
 /// <reference types="vite/client" />
 
-/* **스펙 §2.1의 표가 낡지 않게 지킵니다.**
+/* **스펙 §2.1 표의 '부착 자리' 열이 낡지 않게 지킵니다.**
  *
  * 규칙 1(`defaultPrevented`면 트리거 안 함)이 성립하는 근거는 "킷의 키 소비자 중
- * `preventDefault`를 안 부르는 자리는 document 리스너 넷뿐이고, 그 넷이 먹는 키는
- * `Escape`·`Tab`뿐"이라는 실측입니다. 그 둘은 조합 공간에서 빠져 있습니다(§6.2).
+ * `preventDefault`를 안 부르는 자리는 document 리스너 다섯뿐이고, 그 다섯이 먹는
+ * 키는 `Escape`·`Tab`뿐"이라는 실측입니다. 그 둘은 조합 공간에서 빠져 있습니다(§6.2).
  *
- * **새 소비자가 생기면 여기가 빨개집니다.** 그때 할 일은 목록에 더하는 것이 아니라,
- * 그 소비자가 `preventDefault`를 부르는지 먼저 보는 것입니다.
+ * **새 파일이 키를 먹기 시작하거나 자리 수가 바뀌면 여기가 빨개집니다.** 그때 할
+ * 일은 `KNOWN_CONSUMERS`에 숫자만 맞춰 더하는 것이 아니라, 그 소비자가
+ * `preventDefault`를 부르는지 먼저 보고 §2.1 표를 사람이 다시 재는 것입니다.
+ *
+ * ⚠️ **이 검사가 실제로 재는 것은 개수(파일별 attachment 자리 수)뿐입니다.**
+ * `keydownSites()`는 `addEventListener("keydown", …)`·`onKeyDown={…}`가 나온 자리
+ * 수만 셉니다 — 그 핸들러가 `preventDefault`를 부르는지, 어떤 키(`event.code`)를
+ * 먹는지는 전혀 안 봅니다. 그래서 **기존 파일 안에 분기가 하나 늘어 조용히 새 키를
+ * 먹기 시작해도, 자리 수가 그대로면 이 검사는 계속 초록입니다.** §2.1 표의
+ * "Ctrl/Meta 조합"·"preventDefault" 두 열이 실제와 같은지는 사람이 소스를 다시
+ * 읽어야 확인됩니다 — 이 검사는 "자리 수가 달라졌다"까지만 보장합니다. (전체 리뷰
+ * Important 3-가 — §10-1 문구를 이 검사가 실제로 재는 범위로 좁혔습니다.)
  */
 import { describe, expect, it } from "vitest";
 
 const sources = import.meta.glob("../src/*.{ts,tsx}", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 
-/** 파일별 "keydown이 결합된 자리" 수 — `addEventListener("keydown", …)`과
- * `onKeyDown={…}`을 합쳐 실제로 센 개수입니다. 두 종류를 같은 뜻(자리 수)으로
- * 세므로, 같은 핸들러를 `onKeyDown`에 두 번 걸면(`Select.tsx`처럼 트리거 버튼과
- * 메뉴에 각각) 그대로 2입니다. **이 숫자가 늘면 §2.1의 표를 다시 재야 합니다.** */
+/** 파일별 "부착 자리" 수 — `addEventListener("keydown", …)`과 `onKeyDown={…}`을
+ * 합쳐 실제로 센 개수입니다(§2.1 표의 '부착 자리' 열과 같은 단위). 두 종류를 같은
+ * 뜻(자리 수)으로 세므로, 같은 핸들러를 `onKeyDown`에 두 번 걸면(`Select.tsx`처럼
+ * 트리거 버튼과 메뉴에 각각) 그대로 2입니다. **이 숫자가 늘면 §2.1의 표를 다시
+ * 재야 합니다.** */
 const KNOWN_CONSUMERS: Record<string, number> = {
   "../src/DateWheelPicker.tsx": 1,
   "../src/Select.tsx": 2,

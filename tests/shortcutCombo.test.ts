@@ -69,4 +69,30 @@ describe("킷이 주는 사이드바 토글", () => {
     sidebarToggleAction(() => { called += 1; }).onFire();
     expect(called).toBe(1);
   });
+
+  /* **전체 리뷰 Important 1.** 전에는 `sidebarToggleAction(onFire, label?)`에
+   * 기본 조합을 넘길 자리가 없어서, 앱이 기본 조합을 정하려면 `overrides`를 쓰는
+   * 수밖에 없었습니다 — 그러면 "사용자가 바꾼 것만"이라는 스펙 §7.1의 뜻이 앱의
+   * 기본값과 섞여 구분이 안 됐습니다. 두 번째 인자를 옵션 객체로 바꿔 이 자리를
+   * 열었습니다. §3.2가 막는 것은 "킷이 정하는 것"이지 "앱이 정하는 것"이 아닙니다. */
+  describe("options.defaultCombo (전체 리뷰 Important 1)", () => {
+    it("options를 안 넘기면 기본 조합이 여전히 null이다", () => {
+      expect(sidebarToggleAction(() => {}).defaultCombo).toBe(null);
+    });
+
+    it("options에 defaultCombo가 없으면(label만 넘겨도) null이다", () => {
+      const action = sidebarToggleAction(() => {}, { label: "사이드바" });
+      expect(action.defaultCombo).toBe(null);
+    });
+
+    it("options.defaultCombo를 넘기면 그 값을 그대로 쓴다", () => {
+      const action = sidebarToggleAction(() => {}, { defaultCombo: "Ctrl+Backslash" });
+      expect(action.defaultCombo).toBe("Ctrl+Backslash");
+    });
+
+    it("options.label을 넘기면 그 이름표를 쓴다 — 기본 이름표로 안 돌아간다", () => {
+      const action = sidebarToggleAction(() => {}, { label: "사이드바", defaultCombo: "Ctrl+Backslash" });
+      expect(action.label).toBe("사이드바");
+    });
+  });
 });

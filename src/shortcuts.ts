@@ -24,6 +24,8 @@ export function parseCombo(text: string): Combo | null {
   return combo;
 }
 
+// MODIFIER_ORDER는 표기용 이름(대문자로 시작)이고 Combo의 필드는 소문자입니다 —
+// 이 매핑이 없으면 이름을 그대로 Combo의 키로 못 씁니다.
 const MODIFIER_FLAG: Record<(typeof MODIFIER_ORDER)[number], keyof Omit<Combo, "code">> = {
   Ctrl: "ctrl",
   Alt: "alt",
@@ -55,6 +57,18 @@ export function hasModifier(combo: Combo): boolean {
 
 /** 앱이 "이 안에서는 맨 키를 body처럼 친다"고 표시하는 속성. 값은 안 봅니다. */
 export const BARE_KEY_SCOPE_ATTR = "data-kkqq-shortcut-scope";
+
+/** `Escape`·`Tab`은 조합으로 등록할 수 없습니다(스펙 §6.2, §2.1) — `Shift+Tab`처럼
+ * 수식어가 붙어도 `code`가 이 안에 있으면 마찬가지입니다. 킷의 document 리스너 여럿이
+ * 이 둘을 `preventDefault` 없이 먹고 있어서, 등록을 허용하면 그 리스너들과 조용히
+ * 충돌합니다(예: `Dialog`의 포커스 트랩은 감싸지 않는 평범한 `Tab`에서 `preventDefault`를
+ * 안 부르므로, `Shift+Tab`을 액션에 바인딩하면 포커스가 아예 안 나가는 결함이 됩니다).
+ *
+ * `bindingOf`(`ShortcutProvider.tsx`)와 녹음기(`ShortcutSettings.tsx`) **둘 다** 이
+ * 관문을 봐야 합니다 — 전에는 녹음기 안에만 있어서 `defaultCombo`·`overrides`로 들어오는
+ * 조합이 그 관문을 그냥 우회했습니다(전체 리뷰 Important 2). 그래서 한 곳(`shortcuts.ts`)에
+ * 두고 둘이 같이 가져다 씁니다 — §9의 파일 경계(로직은 `shortcuts.ts`)를 그대로 따릅니다. */
+export const UNBINDABLE_CODES: ReadonlySet<string> = new Set(["Escape", "Tab"]);
 
 /** 텍스트를 넣는 자리가 **아닌** input type. 나머지는 전부 타이핑 대상으로 봅니다 —
  * 목록을 뒤집어 두면 새 type이 생겨도 안전한 쪽(양보)으로 떨어집니다. */
@@ -150,11 +164,23 @@ export function findConflict(
 /** 킷이 이름을 쥐고 있는 유일한 액션. **핸들러는 앱 것입니다** — `Sidebar`가
  * controlled라 접힘 상태를 킷이 안 들고 있습니다(`Sidebar.tsx:9`). 킷이 주는 것은
  * **안정적인 `id`**뿐이고, 그게 있어야 앱마다 id가 달라져 저장된 덮어쓰기가
- * 갈라지는 일이 없습니다. `defaultCombo`는 `null`입니다(스펙 §3.2). */
+ * 갈라지는 일이 없습니다. */
 export const SIDEBAR_TOGGLE_ID = "kkqq:sidebar-toggle";
 
-export function sidebarToggleAction(onFire: () => void, label = "사이드바 접기/펴기") {
-  return { id: SIDEBAR_TOGGLE_ID, label, defaultCombo: null as string | null, onFire };
+export type SidebarToggleActionOptions = {
+  label?: string;
+  /** 이 액션의 기본 조합. **기본값은 `null`**입니다 — 킷은 어떤 조합도 대신 정하지
+   * 않습니다(스펙 §3.2). §3.2가 막는 것은 "킷이 정하는 것"이지 "앱이 정하는 것"이
+   * 아닙니다 — 앱이 이 자리로 기본 조합을 넘기는 것은 §3.2와 어긋나지 않습니다.
+   * (전체 리뷰 Important 1 — 전에는 이 자리가 없어서 앱이 기본 조합을 넣을 곳이
+   * `overrides`뿐이었고, 그러면 "사용자가 바꾼 것만"이라는 §7.1의 뜻이 앱의 기본값과
+   * 섞여 구분이 안 됐습니다.) */
+  defaultCombo?: string | null;
+};
+
+export function sidebarToggleAction(onFire: () => void, options: SidebarToggleActionOptions = {}) {
+  const { label = "사이드바 접기/펴기", defaultCombo = null } = options;
+  return { id: SIDEBAR_TOGGLE_ID, label, defaultCombo, onFire };
 }
 
 export function shouldTrigger(event: KeyboardEvent): boolean {
@@ -165,10 +191,11 @@ export function shouldTrigger(event: KeyboardEvent): boolean {
   const active = document.activeElement;
   const typing = isTypingTarget(active);
   // 규칙 2의 수식어는 Ctrl·Alt·Meta뿐입니다(스펙 §2 규칙 2 — 괄호 안에 Shift가 없습니다).
-  // hasModifier()는 그대로 둡니다 — 다른 Task가 "이 조합에 수식어가 있나"용으로 씁니다.
-  // 여기서만 따로 세는 이유: Shift까지 이 분기로 보내면 Shift 단독 조합이 규칙 4(타이핑
-  // 중 차단)를 건너뛰어 버립니다. 두벌식 쌍자음(ㄲㄸㅃㅆㅉ)·ㅒㅖ와 `?`(Shift+Slash)가
-  // 전부 Shift 조합이라, 그러면 어떤 <textarea>에서도 그 글자를 못 칩니다.
+  // hasModifier()는 그대로 둡니다 — 공개 API이고 tests/shortcutCombo.test.ts가 씁니다
+  // (지금 src/ 안에는 이 함수를 쓰는 다른 자리가 없습니다). 여기서만 따로 세는 이유:
+  // Shift까지 이 분기로 보내면 Shift 단독 조합이 규칙 4(타이핑 중 차단)를 건너뛰어
+  // 버립니다. 두벌식 쌍자음(ㄲㄸㅃㅆㅉ)·ㅒㅖ와 `?`(Shift+Slash)가 전부 Shift 조합이라,
+  // 그러면 어떤 <textarea>에서도 그 글자를 못 칩니다.
   if (combo.ctrl || combo.alt || combo.meta) {
     // 규칙 5 — 타이핑 중에만, 그리고 Ctrl/Meta 조합에만 적용됩니다.
     if (typing && (combo.ctrl || combo.meta) && NATIVE_EDIT_CODES.has(combo.code)) return false;

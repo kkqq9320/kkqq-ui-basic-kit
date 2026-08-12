@@ -125,6 +125,46 @@ describe("규칙 6 — 트리거되면 기본 동작을 막는다", () => {
   });
 });
 
+/* **전체 리뷰 Important 2.** `Escape`·`Tab`은 스펙 §6.2에 따라 조합으로 등록할 수
+ * 없는데, 그 관문이 전에는 `ShortcutSettings`의 녹음기 안에만 있어서 `defaultCombo`·
+ * `overrides`로 들어오는 조합은 그냥 우회했습니다. 구체적 실패: 앱이 `Shift+Tab`을
+ * 바인딩하면 `Dialog`의 포커스 트랩(감싸지 않는 평범한 `Tab`에서는 `preventDefault`를
+ * 안 부름, 스펙 §2.1)이 규칙 1을 막지 못해 액션이 돌고, 규칙 6의 `preventDefault`가
+ * 걸려 포커스가 아예 안 나갑니다. `bindingOf`가 이제 이 둘을 드롭합니다.
+ *
+ * `Tab`·`Shift+Tab`은 규칙 2의 수식어(Ctrl·Alt·Meta)가 아니라 맨 키/Shift 조합
+ * 경로로 판정되므로(`shouldTrigger`), 트리거되려면 포커스가 `document.body`(또는
+ * 허용 구역)여야 합니다 — 그래서 각 테스트가 포커스를 먼저 못박습니다. 이걸 안
+ * 하면 "표식 없는 요소에 포커스가 있어 규칙 3에 걸려 트리거 안 됨"과 "bindingOf가
+ * 드롭해서 트리거 안 됨"을 구분 못 하고, 뮤테이션(드롭 로직 제거)에도 초록으로
+ * 남는 공허한 테스트가 됩니다. */
+describe("§6.2 — Escape·Tab은 defaultCombo·overrides로도 등록되지 않는다 (전체 리뷰 Important 2)", () => {
+  it("defaultCombo가 'Tab'이면 body 포커스에서도 트리거되지 않는다", () => {
+    const onFire = vi.fn();
+    render(<ShortcutProvider actions={[action({ onFire, defaultCombo: "Tab" })]} />);
+    expect(document.activeElement).toBe(document.body);
+    press({ code: "Tab" });
+    expect(onFire).not.toHaveBeenCalled();
+  });
+
+  it("overrides로 들어온 'Shift+Tab'도 트리거되지 않는다", () => {
+    const onFire = vi.fn();
+    render(<ShortcutProvider actions={[action({ onFire })]} overrides={{ toggle: "Shift+Tab" }} />);
+    expect(document.activeElement).toBe(document.body);
+    press({ code: "Tab", shiftKey: true });
+    expect(onFire).not.toHaveBeenCalled();
+  });
+
+  // 대조군 — 이게 없으면 "bindingOf가 뭘 넣어도 항상 null" 같은 구현으로도 위 둘이
+  // 통과합니다. 평범한 조합은 여전히 정상 동작해야 합니다.
+  it("대조군 — Escape·Tab이 아닌 평범한 조합은 여전히 동작한다", () => {
+    const onFire = vi.fn();
+    render(<ShortcutProvider actions={[action({ onFire, defaultCombo: "Ctrl+KeyQ" })]} />);
+    press({ code: "KeyQ", ctrlKey: true });
+    expect(onFire).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("옵트인 (스펙 §8)", () => {
   it("Provider 없이 킷을 쓰면 document에 keydown 리스너가 안 붙는다", () => {
     const spy = vi.spyOn(document, "addEventListener");

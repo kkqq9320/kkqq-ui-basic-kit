@@ -39,6 +39,7 @@ import {
   SummaryCard,
   SummaryGrid,
   displayCombo,
+  normalizeCombo,
   sidebarToggleAction,
   useMobilePageTabs,
   useScrollDirectionHidden,
@@ -416,6 +417,11 @@ const LAYOUT_PANELS: Record<string, () => ReactElement> = {
   </Panel>,
 };
 
+/** 사이드바 토글의 **앱** 기본 조합. 킷의 기본은 여전히 `null`입니다(스펙 §3.2) — 이
+ * 데모(앱)가 `sidebarToggleAction`의 `defaultCombo` 옵션으로 정합니다. `overrides`는
+ * 이제 사용자가 실제로 바꾼 것만 담습니다(스펙 §7.1, 전체 리뷰 Important 1). */
+const SIDEBAR_DEFAULT_COMBO = "Ctrl+Backslash";
+
 function Demo() {
   // 기본은 다크. 저장된 선택이 있으면 그게 우선.
   const [theme, setTheme] = useState<"light" | "dark">(() => {
@@ -425,15 +431,21 @@ function Demo() {
   // 접힘 상태를 브라우저에 기억해 다음 방문에 그대로 재현합니다. Sidebar는 controlled라
   // 저장은 쓰는 쪽 책임입니다(PRINCIPLES §8).
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("sidebarCollapsed") === "true");
-  // 단축키 덮어쓰기. 킷의 기본은 이 액션도 `defaultCombo: null`이라(스펙 §3.2) 여기서
-  // 시작값으로 조합을 정해 줍니다 — 그게 `overrides`가 있는 이유입니다. 저장은 없습니다
-  // (localStorage 등) — 새로고침하면 초기화됩니다. 저장은 Task 7 소관입니다.
-  const [shortcutOverrides, setShortcutOverrides] = useState<Record<string, string | null>>({
-    [SIDEBAR_TOGGLE_ID]: "Ctrl+Backslash",
-  });
+  // 단축키 덮어쓰기. **사용자가 실제로 바꾼 것만** 담습니다(스펙 §7.1) — 앱의 기본
+  // 조합은 더 이상 여기 안 넣습니다(`SIDEBAR_DEFAULT_COMBO` 참고, 전체 리뷰 Important 1).
+  // 저장은 없습니다(localStorage 등) — 새로고침하면 초기화됩니다. 저장은 Task 7 소관입니다.
+  const [shortcutOverrides, setShortcutOverrides] = useState<Record<string, string | null>>({});
   // 화면에 적힌 조합 문자열은 전부 이 값에서 파생시킵니다 — 리터럴로 박아 두면
-  // 아래 "단축키" 패널에서 재녹음/삭제해도 이 문구들만 낡은 채로 남습니다.
-  const sidebarCombo = shortcutOverrides[SIDEBAR_TOGGLE_ID] ?? null;
+  // 아래 "단축키" 패널에서 재녹음/삭제해도 이 문구들만 낡은 채로 남습니다. `bindingOf`
+  // (`ShortcutProvider.tsx`)와 같은 우선순위를 그대로 따라야 실제 바인딩과 이 표시가
+  // 갈리지 않습니다 — `??`는 못 씁니다: override 키가 있는데 값이 `null`(사용자가
+  // 지운 상태)이면 `??`가 그걸 기본값으로 덮어써 버려 §7.1의 "지운 것"과 "기본값을
+  // 쓰는 것"의 구분이 없어집니다. `normalizeCombo`로 감싸는 것은 `bindingOf`가 하는
+  // 정규화와 맞추기 위해서입니다(지금 두 값 다 이미 정규형이라 무해하지만, 이 파생이
+  // 암묵적 가정에 기대지 않게 합니다).
+  const hasSidebarOverride = Object.prototype.hasOwnProperty.call(shortcutOverrides, SIDEBAR_TOGGLE_ID);
+  const rawSidebarCombo = hasSidebarOverride ? shortcutOverrides[SIDEBAR_TOGGLE_ID] : SIDEBAR_DEFAULT_COMBO;
+  const sidebarCombo = rawSidebarCombo === null ? null : normalizeCombo(rawSidebarCombo);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [page, setPage] = useState("dashboard");
   const [tab, setTab] = useState<(typeof TABS)[number]["value"]>("controls");
@@ -505,12 +517,14 @@ function Demo() {
     {/* `--summary-card-min` 후보 비교용 조작판(데모 전용). 오너가 2560 화면에서 값을
         고르면 그 값이 tokens.css의 기본값이 되고 이 조작판은 사라집니다. */}
     <LayoutSwitch />
-    {/* **`overrides`가 요점입니다** — 킷의 기본 조합은 `null`이고(스펙 §3.2), 조합을
-        정한 것은 이 데모(=앱)입니다. `sidebarToggleAction`이 주는 것은 안정적인
+    {/* **`defaultCombo` 옵션이 요점입니다** — 킷의 기본은 여전히 `null`이고(스펙 §3.2),
+        조합을 정한 것은 이 데모(=앱)이며, 그 자리는 `sidebarToggleAction`의 두 번째
+        인자(`options.defaultCombo`)입니다. `sidebarToggleAction`이 주는 것은 안정적인
         `id`(`SIDEBAR_TOGGLE_ID`)와 이름표뿐이고, 접힘 상태를 뒤집는 핸들러는 앱이
-        넘깁니다 — `Sidebar`가 controlled라서입니다(`Sidebar.tsx:9`). */}
+        넘깁니다 — `Sidebar`가 controlled라서입니다(`Sidebar.tsx:9`). `overrides`는
+        아래에서 사용자가 실제로 바꾼 것만 담습니다(스펙 §7.1). */}
     <ShortcutProvider
-      actions={[sidebarToggleAction(() => setCollapsed((value) => !value))]}
+      actions={[sidebarToggleAction(() => setCollapsed((value) => !value), { defaultCombo: SIDEBAR_DEFAULT_COMBO })]}
       overrides={shortcutOverrides}
     >
       <AppShell
@@ -661,11 +675,14 @@ function Demo() {
               {sidebarCombo
                 ? <>사이드바 접기/펴기가 <strong>{displayCombo(sidebarCombo)}</strong>에 걸려 있습니다.</>
                 : <>사이드바 접기/펴기에 지금 걸린 조합이 <strong>없음</strong>입니다 — 아래에서 새로 녹음해 보세요.</>}{" "}
-              킷의 기본값은 <code>defaultCombo: null</code>이고(설계 스펙 §3.2),
+              킷의 기본값은 여전히 <code>defaultCombo: null</code>이고(설계 스펙 §3.2),
               처음 걸려 있던 조합은 킷이 아니라 <strong>이 데모(앱)</strong>가
-              <code>overrides</code>로 정했습니다 — 아래에서 다시 녹음하거나 지울 수
-              있습니다(저장은 없습니다. 새로고침하면 초기화됩니다 — 저장은 다음
-              작업 몫입니다).
+              <code>sidebarToggleAction</code>의 <code>defaultCombo</code> 옵션으로
+              정했습니다. 아래에서 다시 녹음하거나 지우면 <code>overrides</code>에
+              들어가는데, <code>overrides</code>는 <strong>사용자가 실제로 바꾼
+              것만</strong> 담습니다(설계 스펙 §7.1) — 그래서 지우면 기본값으로
+              되돌아가지 않고 "조합 없음"이 됩니다(저장은 없습니다. 새로고침하면
+              초기화됩니다 — 저장은 다음 작업 몫입니다).
             </p>
             <p className="muted-copy">
               <strong>맨 키(수식어 없는 키) 허용 구역을 보려면:</strong> 아래에서 이 조합을
@@ -677,7 +694,8 @@ function Demo() {
               동작하지 않습니다 — 사이드바는 <code>.workspace</code> 밖의 형제라 표식이 안
               걸립니다. ③ 위 "텍스트와 버튼" 패널의 메모 칸에 포커스가 있을 때 누르면
               그냥 <kbd>\</kbd>가 입력됩니다 — 타이핑 중에는 맨 키가 규칙 4로 막힙니다.
-              <strong>Ctrl+\</strong>는 수식어 조합이라 규칙 2로 어디서나 걸리므로, 이
+              예: <strong>Ctrl+\</strong>처럼 수식어가 붙은 조합은 규칙 2로 어디서나
+              걸립니다(지금 실제로 걸린 바인딩을 가리키는 문장이 아닙니다) — 그래서 이
               차이는 맨 키로 바꿔야만 보입니다. (포커스를 아예 <code>body</code>로
               보내도 동작하지만 그건 규칙 3 때문이라 이 표식과 무관합니다 — 위 ①이
               표식이 실제로 하는 일을 보여 주는 자리입니다.)

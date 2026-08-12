@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
 
-import { formatCombo, comboFromEvent, normalizeCombo, shouldTrigger } from "./shortcuts";
+import { formatCombo, comboFromEvent, parseCombo, shouldTrigger, UNBINDABLE_CODES } from "./shortcuts";
 
 export type ShortcutAction = {
   /** 안정적인 식별자. **바뀌면 그 액션의 덮어쓰기가 고아가 됩니다**(스펙 §3.1). */
@@ -19,16 +19,16 @@ export type ShortcutProviderProps = {
   children?: ReactNode;
 };
 
-type Registry = { actions: ShortcutAction[]; bindingOf(id: string): string | null };
+export type ShortcutRegistry = { actions: ShortcutAction[]; bindingOf(id: string): string | null };
 
-const ShortcutContext = createContext<Registry>({ actions: [], bindingOf: () => null });
+const ShortcutContext = createContext<ShortcutRegistry>({ actions: [], bindingOf: () => null });
 
-export function useShortcutRegistry(): Registry {
+export function useShortcutRegistry(): ShortcutRegistry {
   return useContext(ShortcutContext);
 }
 
 export function ShortcutProvider({ actions, overrides, children }: ShortcutProviderProps) {
-  const registry = useMemo<Registry>(() => {
+  const registry = useMemo<ShortcutRegistry>(() => {
     // id는 저장의 키입니다(스펙 §3.1) — 유일해야 합니다. id 중복은 프로그래밍 오류지만,
     // 그 상태에서도 동작은 결정적이어야 하므로 "먼저 나온 항목이 이긴다"로 못박습니다.
     // 여기서 id → 액션 맵을 딱 한 번만 계산해 두고 bindingOf는 이 맵만 읽습니다.
@@ -44,7 +44,16 @@ export function ShortcutProvider({ actions, overrides, children }: ShortcutProvi
       if (!action) return null;
       const override = overrides && Object.prototype.hasOwnProperty.call(overrides, id) ? overrides[id] : undefined;
       const raw = override === undefined ? action.defaultCombo : override;
-      return raw === null ? null : normalizeCombo(raw);
+      if (raw === null) return null;
+      const combo = parseCombo(raw);
+      if (!combo) return null;
+      // §6.2 — Escape·Tab(Shift+Tab 포함)은 defaultCombo·overrides로 들어와도 바인딩되지
+      // 않습니다. 전에는 이 관문이 ShortcutSettings의 녹음기 안에만 있어서 여길 우회할 수
+      // 있었고, 그 결과 예를 들어 Shift+Tab을 바인딩하면 Dialog의 포커스 트랩(감싸지 않는
+      // 평범한 Tab에서는 preventDefault를 안 부름)과 부딪혀 포커스가 아예 안 나갔습니다
+      // (전체 리뷰 Important 2).
+      if (UNBINDABLE_CODES.has(combo.code)) return null;
+      return formatCombo(combo);
     }
     return { actions, bindingOf };
   }, [actions, overrides]);

@@ -64,6 +64,28 @@ describe("목록", () => {
   });
 });
 
+/* `classNameContract.test.ts`는 시그니처에 `className`이 있는지만 봅니다(소스 파싱).
+ * **실제로 루트 DOM에 붙는지**는 여기서 렌더로 재야 짝이 맞습니다 — 그 파일의 머리말이
+ * "실제 부착은 pageChrome.test.tsx가 렌더로 확인한다"고 적어 둔 것과 같은 이유인데,
+ * `ShortcutSettings`는 그 목록에 없었습니다(전체 리뷰 Minor 6). */
+describe("className이 실제로 루트에 붙는다", () => {
+  it("넘긴 className이 .kkqq-shortcuts 옆에 붙는다", () => {
+    const { container } = render(
+      <ShortcutProvider actions={ACTIONS}>
+        <ShortcutSettings onChange={() => {}} className="app-shortcuts" />
+      </ShortcutProvider>,
+    );
+    const root = container.querySelector(".kkqq-shortcuts") as HTMLElement;
+    expect(root.className).toBe("kkqq-shortcuts app-shortcuts");
+  });
+
+  it("className을 안 넘기면 군더더기 공백이 안 남는다", () => {
+    setup();
+    const root = document.querySelector(".kkqq-shortcuts") as HTMLElement;
+    expect(root.className).toBe("kkqq-shortcuts");
+  });
+});
+
 describe("녹음", () => {
   it("누른 조합이 등록된다", () => {
     const onChange = setup();

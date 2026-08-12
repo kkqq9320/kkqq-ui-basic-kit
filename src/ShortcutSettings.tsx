@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { useShortcutRegistry } from "./ShortcutProvider";
-import { beginRecording, comboFromEvent, endRecording, findConflict, formatCombo } from "./shortcuts";
+import { beginRecording, comboFromEvent, endRecording, findConflict, formatCombo, UNBINDABLE_CODES } from "./shortcuts";
 
 export type ShortcutSettingsProps = {
   onChange(id: string, combo: string | null): void;
@@ -25,9 +25,6 @@ export function displayCombo(combo: string): string {
   return [...parts, labelForCode(code)].join(" + ");
 }
 
-/** 조합으로 등록할 수 없는 키. 이유는 스펙 §6.2 — 둘 다 킷의 document 리스너가
- * `preventDefault` 없이 먹고 있어서, 녹음기가 "아무도 안 먹었다"로 읽습니다. */
-const UNRECORDABLE = new Set(["Escape", "Tab"]);
 const MODIFIER_CODES = /^(Control|Alt|Shift|Meta|OS)/;
 
 export function ShortcutSettings({ onChange, className }: ShortcutSettingsProps) {
@@ -43,8 +40,10 @@ export function ShortcutSettings({ onChange, className }: ShortcutSettingsProps)
     function handleKeyDown(event: KeyboardEvent) {
       // Escape·Tab은 preventDefault를 부르지 않습니다 — 스펙 §6.2. Tab은 포커스가
       // 그대로 나가야 "포커스가 나가면 녹음 종료"가 성립하고, Escape는 document의
-      // 다른 리스너(다이얼로그 닫기 등)로 그대로 전파돼야 합니다.
-      if (UNRECORDABLE.has(event.code)) { setRecording(null); return; }
+      // 다른 리스너(다이얼로그 닫기 등)로 그대로 전파돼야 합니다. 이 목록(UNBINDABLE_CODES)은
+      // shortcuts.ts에 있습니다 — bindingOf(ShortcutProvider.tsx)도 같은 목록을 봐야
+      // defaultCombo·overrides로 들어오는 조합도 똑같이 막힙니다(전체 리뷰 Important 2).
+      if (UNBINDABLE_CODES.has(event.code)) { setRecording(null); return; }
       // 규칙 6만 살려 둡니다 — 안 그러면 Ctrl+S를 등록하려다 브라우저 저장
       // 대화상자가 뜹니다(스펙 §6.1).
       event.preventDefault();

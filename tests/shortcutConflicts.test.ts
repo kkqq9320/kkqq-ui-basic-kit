@@ -88,6 +88,14 @@ describe("킷 예약 조합", () => {
     expect(Object.values(sources).every((source) => source.length > 200)).toBe(true);
   });
 
+  /* ⚠️ **이 정규식의 한계(전체 리뷰 Minor 7).** `(ctrlKey|metaKey)[\s\S]{0,80}?event\.code
+   * === "X"` 꼴은 리터럴 `event.code === "X"` 패턴만 잡고, 그것도 `(ctrlKey|metaKey)`가
+   * **먼저** 나오는 순서로만 잡습니다. 그래서 다음은 안 걸립니다:
+   * - `event.code === "X" && (event.ctrlKey || event.metaKey)`(순서가 반대)
+   * - `code === Semicolon`처럼 변수를 거치거나 switch문으로 분기하는 코드
+   * - 80자보다 멀리 떨어진 `ctrlKey`/`event.code`
+   * 새 소비자가 이런 모양으로 조합을 점유하면 이 검사는 조용히 그것을 놓치고,
+   * `KIT_RESERVED`는 실제보다 좁은 채로 남습니다. */
   it("예약 목록이 소스에 실제로 쓰인 조합과 일치한다", () => {
     const found = new Set<string>();
     for (const source of Object.values(sources)) {
