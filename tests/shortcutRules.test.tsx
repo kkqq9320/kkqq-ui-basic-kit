@@ -22,7 +22,9 @@ afterEach(cleanup);
 // 실패하면(단언이 먼저 터지면) 이 파일의 이후 테스트가 전부 조용히 false를 반환하게
 // 됩니다. 매 테스트 뒤 드레인해서 그 새는 자리를 막습니다.
 afterEach(() => {
-  while (isRecording()) endRecording();
+  // 가드 없으면 endRecording이 깨졌을 때 스위트가 빨개지는 대신 동기 스핀으로 멈춘다.
+  let guard = 8;
+  while (isRecording() && guard-- > 0) endRecording();
 });
 
 /** 실제 KeyboardEvent를 만듭니다 — `defaultPrevented`가 진짜여야 규칙 1이 공허하지 않습니다. */
@@ -92,6 +94,14 @@ describe("규칙 3 — 맨 키는 body이거나 허용 구역일 때만", () => 
     const { container } = render(<button type="button">누름</button>);
     container.querySelector("button")!.focus();
     expect(shouldTrigger(keydown({ code: "KeyG" }))).toBe(false);
+  });
+
+  it("표식 없는 버튼에 포커스가 있으면 Shift 단독 조합도 트리거되지 않는다", () => {
+    const { container } = render(<button type="button">누름</button>);
+    const button = container.querySelector("button")!;
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    expect(shouldTrigger(keydown({ code: "KeyR", shiftKey: true }))).toBe(false);
   });
 
   it("허용 구역 안의 버튼이면 된다", () => {
