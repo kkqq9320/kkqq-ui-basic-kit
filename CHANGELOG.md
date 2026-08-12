@@ -3,14 +3,21 @@
 버전은 태그로 답니다. 소비 프로젝트는 SHA 대신 태그로 걸 수 있습니다:
 
 ```bash
-npm i github:kkqq9320/kkqq-ui-basic-kit#v0.5.0
+npm i github:kkqq9320/kkqq-ui-basic-kit#v0.6.0
 ```
 
 `0.x`에서는 **minor 자리가 breaking 자리**입니다(semver의 0.x 규칙).
 
 ---
 
-## 미출시
+## v0.6.0 — 2026-08-12
+
+**타입은 깨지지 않습니다** — 새 함수·새 prop은 전부 추가이고, 안 쓰면 오늘과 같습니다.
+그런데도 minor인 이유는 **동작이 하나 바뀌기 때문**입니다: `writeTokenOverrides`가
+저장소가 막혔을 때 **던지던 것을 이제 `false`로 돌려줍니다**(`void` → `boolean`).
+호출부는 안 깨지지만(실측), 그 예외를 `try/catch`로 받아 "저장 실패"를 알리던 앱은
+**그 catch가 이제 안 돕니다** — 반환값을 보도록 고쳐야 합니다. v0.3.0~v0.5.0과 같은
+판단입니다: 규칙이 타입만 말할 때는 **소비자가 무엇을 보게 되는가**로 판단합니다.
 
 ### 더해진 것
 
@@ -19,6 +26,8 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.5.0
   다시 넘겨야 했고 하나만 빠뜨리면 앱이 신설한 색이 말없이 사라졌습니다.
 - **백업 형식** — `serialize`/`parse`/`applyBackup`. `parse`는 부작용이 없고 **버린
   토큰 이름을 돌려줍니다.** 봉투가 아니면 `null`이라 "빈 백업"과 구분됩니다.
+  `applyBackup(backup, theme)`은 **저장은 두 테마 다, 화면 적용은 넘긴 테마만** 합니다 —
+  `:root`가 하나뿐이라 둘 다 적용하면 다크가 라이트를 덮습니다(실측).
 - **`ThemeColorEditor`의 `palette`·`overrides`·`onCommit`** — `overrides`를 넘기면
   편집기가 **저장하지 않고** 적용과 알림만 합니다(앱이 서버에 둘 때). `onCommit`은
   손을 둔 뒤 한 번 불립니다.
