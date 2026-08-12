@@ -183,36 +183,35 @@ describe("DateWheelPicker", () => {
   // 실제로 시각이 섞여야 하고, 그러려면 fields가 시각 단위를 하나 포함해야
   // 한다(계열이 "datetime"이 되어야 값 형식에 `T`가 붙는다).
   //
-  // ⚠️ **`model.shift`를 항등함수로 모킹하는 이유.** 이 시점(2b-2)의
-  // `shiftDateValue`/`dateWheelLabel`은 여전히 `value + "T00:00:00Z"`를 무조건
-  // 이어붙인다(2b-3이 고칠 몫). `baseValue`에 이미 `T`가 있으면 그 이어붙이기가
-  // "…T03:00T00:00:00Z"라는 깨진 문자열을 만들고, `setUTCFullYear(NaN, NaN,
-  // NaN)` 뒤의 `toISOString()`이 **RangeError로 던진다**(Invalid Date를 문자열로
-  // 만들 수 없다는 스펙 규칙 — 직접 재현해 확인했다). 그래서 `model.shift`를
-  // 입력을 그대로 돌려주는 항등함수로 바꿔 `shiftDateValue`가 아예 불리지 않게
-  // 한다 — `shiftedFrom`이 그 뒤 `model.isValid`에서 걸러 널을 돌려주므로 행은
-  // 전부 "—"로 그려진다(크래시는 아니다). 이 검사가 보는 것은 행 내용이 아니라
-  // **오늘 버튼을 눌렀을 때 열에 모션이 실제로 걸리는지**다.
+  // ⚠️ **Task 3(2b-3) 리뷰 F-2 — `model.shift`를 항등함수로 모킹하던 자리를
+  // 걷었다.** 2b-2 시점에는 `shiftDateValue`/`dateWheelLabel`이 여전히
+  // `value + "T00:00:00Z"`를 무조건 이어붙여서, `baseValue`에 이미 `T`가 있으면
+  // "…T03:00T00:00:00Z"라는 깨진 문자열이 되고 `toISOString()`이 RangeError로
+  // 던졌다(직접 재현해 확인했었다) — 그래서 `model.shift`를 항등함수로 바꿔 그
+  // 경로를 아예 안 타게 막아야 했다. **그 문제의 원인(Date 기반 파싱)이 바로
+  // 이 태스크(2b-3)에서 사라졌다** — `shiftDateValue`가 이제 `parseValue`/
+  // `serializeValue`로 값을 드나들어 datetime 값에서도 안전하다. 스파이를 남겨
+  // 두면 이 검사가 **진짜 `shiftDateValue`를 한 번도 안 밟는** 채로 남는다.
   it("지금 버튼이 시각을 가진 값에서도 열 모션을 만든다", () => {
     let mockedNow = "2024-07-05T03:00";
     const nowSpy = vi.spyOn(instantModel, "now").mockImplementation(() => mockedNow);
-    const shiftSpy = vi.spyOn(instantModel, "shift").mockImplementation((v: string) => v);
 
     render(<DateWheelPicker ariaLabel="거래 날짜" value="" fields={["year", "month", "day", "hour"]} onChange={() => undefined} />);
     fireEvent.click(fieldOf("거래 날짜"));
     const columns = [...document.querySelectorAll(".date-wheel-column")];
 
     mockedNow = "2026-07-12T04:00";
-    fireEvent.click(screen.getByRole("button", { name: "오늘" }));
+    // Task 3(2b-3)에서 "오늘" → "지금"으로 바뀌었다 — fields에 시간 열(hour)이
+    // 있으면 버튼 라벨이 지금이 된다(설계 스펙 §9, Task 3 항목 4). 이 테스트 제목이
+    // 이미 "지금 버튼"이라 적혀 있었던 것이 그 예고였다 — 쿼리만 뒤늦게 따라온다.
+    fireEvent.click(screen.getByRole("button", { name: "지금" }));
 
     // 연 2024->2026(앞으로), 월 07->07(그대로), 일 05->12(앞으로). 시각 열(hour)은
-    // 이 단계에서 실제로 그려지지 않으므로(2b-3의 몫) 단언 대상에서 뺀다 —
-    // 그 열이 있어도(4번째 .date-wheel-column) 값은 undefined 라벨로 그려질 뿐
-    // 크래시하지 않는다.
+    // Task 3부터 실제로 그려지지만(4번째 .date-wheel-column), 이 검사가 보는 것은
+    // 여전히 처음 세 열의 모션뿐이다 — 그 열의 실제 라벨은 아래 "열 라벨" 블록이 고정한다.
     expect(columns.slice(0, 3).map((column) => /moving-\w+/.exec(column.className)?.[0] ?? null)).toEqual(["moving-next", null, "moving-next"]);
 
     nowSpy.mockRestore();
-    shiftSpy.mockRestore();
   });
 
   it("moves the year, month, and day by one with the step buttons", () => {
@@ -4565,6 +4564,197 @@ describe("DateWheelPicker heading — 보이는 머리말과 접근성 이름을
     await screen.findByRole("dialog", { name: "거래 발생 날짜 선택" });
 
     expect(headingText()).toBe("거래 발생 날짜");
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// Task 3 (2b-3) — 시각 단위를 실제로 받는다. 모델(parseValue/serializeValue/
+// familyOf/isContiguous/unitCeiling/comparisonPrecision/outOfRange/
+// clampToRange)은 2a·2b-2가 이미 준비해 두었다 — 여기서는 컴포넌트가 그것을
+// 실제로 쓰게 만든다. 다섯 항목을 브리프 순서대로 고정한다.
+// ════════════════════════════════════════════════════════════════════════
+
+// ── 항목 5 — fields가 연속 구간이 아니면 개발 모드에서 경고한다(설계 스펙 §4) ──
+//
+// 완전히 독립적이라 가장 먼저 고정한다 — isContiguous 자체는 2a-1부터 이미
+// 모델에 있고(tests/instantModel.test.ts), 여기서 처음으로 컴포넌트가 그것을
+// 실제로 부른다.
+describe("DateWheelPicker fields 연속성 — 개발 모드 경고 (Task 3 항목 5)", () => {
+  it("연속 구간이 아닌 fields를 주면 console.warn이 불린다", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    // year > month > day > hour > minute > second 사다리에서 year와 hour
+    // 사이를 건너뛴 조합 — isContiguous(["year","hour"])는 false다.
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" fields={["year", "hour"] as WheelUnit[]} onChange={() => undefined} />);
+
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
+  // 전체 브랜치 리뷰 F-4 — 가드가 없으면 이 컴포넌트의 렌더 성격상(조작 하나마다
+  // onChange로 리렌더, StrictMode 이중 렌더) 같은 경고가 매번 반복된다. 같은
+  // fields로 여러 번 리렌더해도 한 번만 나가는지, 그리고 fields가 "다른" 깨진
+  // 값으로 바뀌면 그때는 다시 나가는지(전부 조용해지는 결함을 막기 위해) 둘 다 본다.
+  it("같은 fields로 여러 번 리렌더해도 경고는 한 번만, 다른 깨진 fields로 바뀌면 다시 나간다", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { rerender } = render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" fields={["year", "hour"] as WheelUnit[]} onChange={() => undefined} />);
+    rerender(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" fields={["year", "hour"] as WheelUnit[]} onChange={() => undefined} />);
+    rerender(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-13" fields={["year", "hour"] as WheelUnit[]} onChange={() => undefined} />);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+
+    // fields 시그니처 자체가 바뀌면(다른 종류의 깨진 조합) 새로 경고한다 — "한 번
+    // 경고했으면 이 인스턴스는 영원히 조용하다"가 아니라 "같은 시그니처는 한 번"이다.
+    rerender(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-13" fields={["month", "second"] as WheelUnit[]} onChange={() => undefined} />);
+
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+  });
+
+  // 대조군 — 기본 fields(연·월·일)는 사다리에서 잘라낸 연속 구간이므로 경고가 없다.
+  // 이게 없으면 위 검사가 "매 렌더 무조건 경고한다"는 결함을 못 잡는다.
+  it("기본 fields(연·월·일)는 연속 구간이므로 경고하지 않는다 — 대조군", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} />);
+
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ── 항목 1·2 — 값 형식은 fields(계열)를 따르고, 트리거 조각이 시각 구분자를
+//    안다(설계 스펙 §5·§10) ──────────────────────────────────────────────
+//
+// 이 블록은 **팝오버를 열지 않는다** — 트리거는 `value`가 이미 유효하면
+// `model.isValid`/`model.triggerParts`만으로 그려지고 `model.shift`·
+// `model.label`·`model.now`는 건드리지 않는다(baseValue 계산의 삼항이 유효한
+// value 쪽에서 단락한다). 그래서 항목 3(열 라벨)·4(now)보다 먼저, 독립적으로
+// 고정할 수 있다.
+describe("DateWheelPicker 값 형식은 fields를 따른다 — 트리거 조각 (Task 3 항목 1·2)", () => {
+  it("기본 fields(연·월·일)에서는 YYYY-MM-DD 그대로다 — 대조군", () => {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} />);
+    expect(fieldOf("거래 날짜").textContent).toBe("2026. 08. 12.");
+  });
+
+  it("시각 전용 값은 ':'로만 잇고 날짜 부분이 없다", () => {
+    render(<DateWheelPicker ariaLabel="출근 시각" value="03:00:05" fields={["hour", "minute", "second"] as WheelUnit[]} onChange={() => undefined} />);
+    expect(fieldOf("출근 시각").textContent).toBe("03:00:05");
+  });
+
+  it("날짜+시각 값은 날짜엔 '. ', 시각엔 ':', 사이는 공백 하나로 잇는다", () => {
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T03:00:05" fields={["year", "month", "day", "hour", "minute", "second"] as WheelUnit[]} onChange={() => undefined} />);
+    expect(fieldOf("거래 시각").textContent).toBe("2026. 08. 12. 03:00:05");
+  });
+
+  it("초 없는 fields면 값도 분까지다 — HH:MM", () => {
+    render(<DateWheelPicker ariaLabel="출근 시각" value="03:00" fields={["hour", "minute"] as WheelUnit[]} onChange={() => undefined} />);
+    expect(fieldOf("출근 시각").textContent).toBe("03:00");
+  });
+
+  // 자리 지키기(U+2012)는 시각 세그먼트에도 그대로 적용된다 — 시 소로플로어가
+  // 3이므로("2"는 아직 확정되지 않는다) 버퍼가 살아 있는 채로 렌더된다.
+  it("자리 지키기(U+2012)는 시각 세그먼트에도 그대로다", () => {
+    render(<DateWheelPicker ariaLabel="출근 시각" value="03:00" fields={["hour", "minute"] as WheelUnit[]} onChange={() => undefined} />);
+    const field = fieldOf("출근 시각");
+    field.focus();
+    fireEvent.keyDown(field, { key: "2" });   // hour soloFloor=3이라 "2"는 확정되지 않고 버퍼로 남는다
+    expect(field.textContent).toBe(`2${FILL}:00`);
+  });
+
+  // 전체 브랜치 리뷰 F-1 — model.setUnit(=withUnitValue)의 시·분·초 분기가
+  // 스위트 전체에서 한 번도 실행되지 않았다. U+2012 검사는 시 소로플로어가
+  // 3이라 버퍼에서 안 나가고(위 테스트), 23→0 검사는 ± 버튼이라 shiftDateValue
+  // 경로이며, tsc 전용 스텁(`_2b1JsxContextTypingOnly`)은 렌더되지 않는다.
+  // 여기서 분 열에 완결되는 두 자리("1"→"5")를 쳐서 typeDigit이 즉시 확정하고
+  // commitTyped → model.setUnit(baseValue, "minute", 15, fields)가 실제로
+  // 불리는 경로를 고정한다.
+  it("분 열에 숫자 두 자리를 완결해 치면 setUnit(withUnitValue)의 시각 분기가 실행된다", () => {
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="출근 시각" value="03:00" fields={["hour", "minute"] as WheelUnit[]} onChange={onChange} />);
+    const field = fieldOf("출근 시각");
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowRight" });   // 활성을 시 → 분으로
+    fireEvent.keyDown(field, { key: "1" });             // minute soloFloor=6이라 "1"은 아직 확정 안 됨(버퍼)
+    fireEvent.keyDown(field, { key: "5" });             // "15" 완결 → 즉시 확정
+
+    expect(onChange).toHaveBeenCalledWith("03:15");
+  });
+});
+
+// ── 항목 3 — 열 라벨: 시·분·초는 두 자리 숫자만(일 열의 요일 같은 부가 표시
+//    없음), DEFAULT_DATE_WHEEL_LABELS.units의 hour/minute/second 채움 ──────
+//
+// 이 블록은 팝오버를 연다 — 열 렌더는 `model.label`(dateWheelLabel)과
+// `shifted()`(model.shift/model.isValid)를 실제로 거치므로 그 둘의 시·분·초
+// 지원이 이 블록의 전제다.
+describe("DateWheelPicker 열 라벨 — 시·분·초는 두 자리 숫자만 (Task 3 항목 3)", () => {
+  it("시·분·초 열의 aria-label과 선택된 행이 두 자리 숫자다", () => {
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T03:00:05" fields={["year", "month", "day", "hour", "minute", "second"] as WheelUnit[]} onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 시각"));
+
+    const hour = screen.getByRole("group", { name: "시 03" });
+    const minute = screen.getByRole("group", { name: "분 00" });
+    const second = screen.getByRole("group", { name: "초 05" });
+    expect(hour.querySelector(".date-wheel-values button.selected")?.textContent).toBe("03");
+    expect(minute.querySelector(".date-wheel-values button.selected")?.textContent).toBe("00");
+    expect(second.querySelector(".date-wheel-values button.selected")?.textContent).toBe("05");
+  });
+
+  // 대조군 — 일 열은 여전히 요일이 붙는다. 시·분·초만 "두 자리만"이지 날짜
+  // 열의 계약을 건드리지 않는다.
+  it("일 열은 여전히 요일이 붙는다 — 대조군", () => {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+
+    expect(screen.getByRole("group", { name: "일 12 수" })).toBeTruthy();
+  });
+
+  // ± 버튼으로 시 열을 옮기면(23→0 순환) 자리올림 없이 그 열 안에서만 돈다 —
+  // 월·일이 이미 하던 "자리올림 없음" 규칙이 시·분·초로도 확장된다는 증거.
+  //
+  // onChange 값만 보면 공허할 수 있다(이 계열에서 이미 겪었다 — 값은 맞는데
+  // 모션이 죽어 있던 자리) — 그래서 휠 슬라이드 클래스(moving-*)도 같이 본다.
+  it("시 열은 23에서 다음으로 가면 0으로 순환하고 날짜는 그대로다 — 값과 휠 모션 둘 다", () => {
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T23:30" fields={["year", "month", "day", "hour", "minute"] as WheelUnit[]} onChange={onChange} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    const hourButton = screen.getByRole("button", { name: "시 다음" });
+    const hourColumn = hourButton.closest(".date-wheel-column");
+
+    fireEvent.click(hourButton);
+
+    expect(onChange).toHaveBeenCalledWith("2026-08-12T00:30");
+    expect(hourColumn?.classList.contains("moving-next")).toBe(true);
+  });
+});
+
+// ── 항목 4 — model.now가 시각까지(설계 스펙 §9), "지금" 버튼 ────────────────
+describe("DateWheelPicker '지금' — 시간 열이 있으면 오늘 버튼이 지금이 된다 (Task 3 항목 4)", () => {
+  it("시간 열이 있으면 버튼 라벨이 '지금'이다", () => {
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T03:00:05" fields={["year", "month", "day", "hour", "minute", "second"] as WheelUnit[]} onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 시각"));
+
+    expect(screen.getByRole("button", { name: "지금" })).toBeTruthy();
+  });
+
+  // 대조군 — 시간 열이 없으면 여전히 "오늘"이다.
+  it("시간 열이 없으면 여전히 '오늘'이다 — 대조군", () => {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+
+    expect(screen.getByRole("button", { name: "오늘" })).toBeTruthy();
+  });
+
+  // sv-SE 함정(스펙 §9) — Intl.DateTimeFormat("sv-SE")에 시간을 붙이면 구분자가
+  // T가 아니라 공백이 된다. formatToParts로 조각을 뽑아 조립하면 이 문제가
+  // 애초에 생기지 않는다 — 그 증거로 초 단위까지 정확한 문자열이 onChange로
+  // 나가는 것을 본다(공백이 섞이면 이 값 자체가 다른 문자열이 된다).
+  it("지금 버튼은 sv-SE 공백 함정 없이 초 단위까지 조립한다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 12, 3, 0, 5));   // 로컬(Asia/Seoul) 2026-08-12 03:00:05
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 시각" value="" fields={["year", "month", "day", "hour", "minute", "second"] as WheelUnit[]} onChange={onChange} />);
+    fireEvent.click(fieldOf("거래 시각"));
+
+    fireEvent.click(screen.getByRole("button", { name: "지금" }));
+
+    expect(onChange).toHaveBeenCalledWith("2026-08-12T03:00:05");
   });
 });
 
