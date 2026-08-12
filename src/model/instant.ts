@@ -705,6 +705,16 @@ export type WheelModel = {
   outOfRange(value: string, bounds: { min?: string; max?: string }, fields: WheelUnit[]): boolean;
   clampToRange(value: string, bounds: { min?: string; max?: string }, fields: WheelUnit[]): string;
   parts(value: string, fields: WheelUnit[]): UnitParts | null;
+  /** `fields`가 날짜/시각/날짜+시각 중 어느 계열인지(설계 스펙 §3.2) — 전체
+   *  브랜치 리뷰 F-4(2b-4). 기계(DateWheelPicker.tsx)가 "오늘/지금" 버튼과
+   *  팝오버 안내 문구를 고를 때 이걸로 묻습니다. 예전에는 기계가
+   *  `fields.some((unit) => unit === "hour" || …)`로 직접 셋을 이름으로
+   *  나열했는데, 이건 `familyOf(fields) !== "date"`와 값이 완전히 같은
+   *  술어라 §3.2가 금지한 "기계가 단위 이름을 안다"를 그대로 어기고
+   *  있었습니다(순수 함수 `familyOf`가 이미 아래서 이 판정을 하고 있었고,
+   *  기계는 그걸 다시 손으로 베껴 쓴 것입니다) — 여기로 노출해 기계가
+   *  모델에 묻게 합니다. */
+  family(fields: WheelUnit[]): ValueFamily;
 };
 
 /* 기계가 이 객체 하나만 보고 돌게 하는 것이 목적입니다. 기간(duration) 모델이
@@ -728,4 +738,5 @@ export const instantModel: WheelModel = {
   outOfRange,
   clampToRange,
   parts: parseValue,
+  family: familyOf,
 };

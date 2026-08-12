@@ -39,6 +39,18 @@ export type DateWheelLabels = {
   placeholder: string;
   /** 팝오버 머리말의 조작 안내 */
   hint: string;
+  /** `hint`의 짝 — `now`/`today`와 같은 이유, 같은 방식으로 `fields`가 고릅니다(2b-4).
+   *  힌트 기본값이 "…Ctrl+; 오늘"인데 시각 단위가 있으면 버튼은 "지금"이라 안내와
+   *  버튼이 서로 다른 말을 하던 것을 고칩니다(Task 3에서 넘어온 결함).
+   *
+   *  ⚠️ **`now`와 달리 선택입니다 — 일부러입니다.** `now`를 필수로 두면서 전체
+   *  객체를 만들던 소비자의 컴파일이 깨졌습니다(`DEFAULT_DATE_WHEEL_LABELS` 자신이
+   *  그 "전체 객체"였고, 아래에서 `now: "지금"`을 새로 채워야 했습니다). `labels` prop
+   *  자체는 `Partial<DateWheelLabels>`라 부분 override는 원래도 영향이 없지만,
+   *  `DateWheelLabels`로 완전히 타입된 라벨 상수를 만드는 소비자는 새 필수 필드마다
+   *  깨집니다. 같은 실수를 한 번 더 반복할 이유가 없어 이번엔 선택으로 엽니다 —
+   *  없으면 컴포넌트가 `hint`로 그대로 대체합니다(아래 `hintText`). */
+  hintNow?: string;
   today: string;
   /** `today`의 짝 — `fields`에 시각 단위(시·분·초) 중 하나라도 있으면 팝오버의
    *  "오늘/지금" 버튼이 이걸 씁니다(Task 3 항목, 설계 스펙 §9). 라벨을 둘 다 두고
@@ -64,6 +76,7 @@ export type DateWheelLabels = {
 export const DEFAULT_DATE_WHEEL_LABELS: DateWheelLabels = {
   placeholder: "날짜 선택",
   hint: "휠·스와이프·방향키·숫자 입력 · Ctrl+; 오늘",
+  hintNow: "휠·스와이프·방향키·숫자 입력 · Ctrl+; 지금",
   today: "오늘",
   now: "지금",
   clear: "비우기",
@@ -186,9 +199,32 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // **소스를 그대로** 배포합니다 — 소비자의 번들러가 치환해 주지 않으면
   // `process`는 브라우저에 없는 전역이라 렌더마다 `ReferenceError`가 됩니다.
   // `import.meta`는 ESM 자체의 문법이라(런타임이 아니라 파서가 이해합니다)
-  // Vite가 아닌 번들러에서도 최소한 `undefined`로 안전하게 내려갑니다 — 던지는
-  // 쪽과 안 던지는 쪽 중 던지지 않는 쪽을 골랐습니다. 이 킷의 자체 빌드도
-  // Vite 기반이라(`vite.config.ts`) `.env`가 있다는 전제 자체는 그대로 유효합니다.
+  // Vite가 아닌 번들러에서도 최소한 `undefined`로 안전하게 내려갑니다.
+  //
+  // ⚠️ **전체 브랜치 리뷰 F-1(2b-4) — 바로 위 문장 "던지지 않는 쪽을 골랐다"는**
+  // **거짓이었습니다. `.env` 뒤에 옵셔널 체이닝이 없으면 던집니다.** 실측:
+  // `import.meta.env` → `undefined`(Vite 전용 확장이라 없음) ·
+  // `import.meta.env.DEV` → 그 자리에서 `TypeError: Cannot read properties of
+  // undefined` · `import.meta.env?.DEV` → 안전하게 `undefined`.
+  // `process.env`가 없으면 `ReferenceError`를 던지듯, `import.meta.env`가
+  // 없으면 `.DEV`를 읽는 순간 `TypeError`를 던집니다 — `?.` 하나가
+  // "던지지 않는다"는 원래 목적이 실제로 성립하는 데 필수입니다.
+  //
+  // **타입도 같은 이유로 갈립니다.** `tsconfig.json`의 `include`가
+  // `src`+`tests`+`demo`를 한 프로그램으로 묶어서, `tests/`의
+  // `/// <reference types="vite/client" />`가 `ImportMeta.env`(필수 `ImportMetaEnv`)를
+  // 프로그램 전역에 채워 줍니다 — 그래서 저장소 `tsc`는 이 줄에서 항상 초록이었습니다.
+  // 하지만 `package.json`의 `files`에는 **`tests`가 없어**, 소비자에게 배포되는
+  // `src/DateWheelPicker.tsx`만 단독으로 컴파일하면(vite 타입 없이)
+  // `Property 'env' does not exist on type 'ImportMeta'`로 거절됩니다 — 배포되는
+  // 소스의 타입 통과가 소비자가 절대 못 받는 파일에 기대고 있었던 것입니다.
+  // 그래서 아래는 지역 캐스트로 `env`가 아예 없는 경우까지 타입에서 인정합니다.
+  // **여기서 `declare global { interface ImportMeta { … } }`로 전역을 다시 선언하지
+  // 않는 이유**: 전체 프로그램(위 include)에서는 vite/client의
+  // `readonly env: ImportMetaEnv`(필수)와 병합되는데, 선택 필드로 다시 선언하면
+  // 타입이 어긋나 지금 초록인 전체 빌드가 깨집니다(실측). 그리고
+  // `/// <reference types="vite/client" />`를 여기 넣지 않는 이유는 소비자에게
+  // `vite`가 devDependency로 있으리란 보장이 없기 때문입니다.
   //
   // ⚠️ **전체 브랜치 리뷰 F-4 — 같은 `fields`에는 한 번만 경고합니다.** 가드가
   // 없으면 StrictMode 이중 렌더는 물론, 이 컴포넌트가 조작 하나(화살표 한 번,
@@ -200,7 +236,8 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // Set으로 다른 인스턴스의 경고까지 지우면 안 됩니다). `fields`가 다시 유효해졌다가
   // 다른 값으로 다시 깨지면 시그니처가 달라지므로 새로 경고합니다.
   const warnedFieldsRef = useRef<string | null>(null);
-  if (import.meta.env.DEV && !isContiguous(fields)) {
+  const importMetaEnv = (import.meta as { env?: { DEV?: boolean } }).env;
+  if (importMetaEnv?.DEV && !isContiguous(fields)) {
     const fieldsSignature = fields.join(",");
     if (warnedFieldsRef.current !== fieldsSignature) {
       warnedFieldsRef.current = fieldsSignature;
@@ -210,10 +247,34 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   const model = instantModel;
   const labels = { ...DEFAULT_DATE_WHEEL_LABELS, ...labelOverrides, units: { ...DEFAULT_DATE_WHEEL_LABELS.units, ...labelOverrides?.units } };
   // "오늘"의 짝 — fields에 시각 단위가 하나라도 있으면 팝오버 버튼이 "지금"이
-  // 됩니다(Task 3, 설계 스펙 §9). 값이 어떻게 생겼는지는 몰라도 되므로(래퍼는
-  // "값의 모양"을 모릅니다, §3.2) fields 멤버십만 봅니다 — familyOf를 부르지 않습니다.
-  const hasTimeUnit = fields.some((unit) => unit === "hour" || unit === "minute" || unit === "second");
+  // 됩니다(Task 3, 설계 스펙 §9).
+  //
+  // ⚠️ **전체 브랜치 리뷰 F-4(2b-4) — 예전에는 여기서 `fields.some((unit) =>
+  // unit === "hour" || unit === "minute" || unit === "second")`로 시각 단위
+  // 셋을 이름으로 직접 나열했습니다.** `familyOf(fields) !== "date"`와 값이
+  // 완전히 같은 술어인데도 기계(이 파일)가 그 판정을 손으로 다시 베껴 쓴
+  // 것이라 §3.2("기계는 단위가 무엇인지 모릅니다")를 어기고 있었습니다 — 값이
+  // 어떻게 생겼는지는 몰라도 된다면서 정작 시·분·초라는 **이름**은 알고
+  // 있었던 셈입니다. `model.family`(모델의 `familyOf`를 그대로 노출)로
+  // 물어 이 파일에서 시각 단위 이름이 나열되는 자리를 없앱니다.
+  const hasTimeUnit = model.family(fields) !== "date";
   const todayLabel = hasTimeUnit ? labels.now : labels.today;
+  // hint의 짝 — todayLabel과 같은 기준(hasTimeUnit)으로 고릅니다(2b-4). `hintNow`는
+  // 타입에서 선택이라(위 DateWheelLabels 주석) `labels.hintNow`가 `undefined`일 수
+  // 있어 `now`처럼 값을 바로 못 믿고 `?? labels.hint`로 떨어집니다.
+  //
+  // ⚠️ **전체 브랜치 리뷰 F-2 — 여기 한동안 "부분 override가 hintNow를 안 줘도
+  // hint로 대체된다"고 적혀 있었는데 거짓이었습니다.** 병합이
+  // `{ ...DEFAULT_DATE_WHEEL_LABELS, ...labelOverrides }`라, override가
+  // `hintNow`를 안 건드리면 `labels.hintNow`는 `undefined`가 **아니라
+  // DEFAULT의 한국어 값**을 그대로 지닙니다 — `today`만 override하고 `now`는
+  // 안 주면 시간 열에서 여전히 기본 `now`("지금")가 나오는 것과 **정확히 같은
+  // 비대칭**입니다(`tests/DateWheelPicker.test.tsx`의 "override가 hint만 주고
+  // hintNow를 생략하면…" 검사가 이 비대칭을 고정합니다). `?? labels.hint`가
+  // 실제로 실행되는 유일한 길은 override가 `hintNow`를 **명시적으로**
+  // `undefined`로 주는 것뿐입니다(타입이 그것도 허용합니다) — 그 죽지 않은
+  // 코드임을 같은 파일의 "?? 경로가 실제로 실행된다" 검사가 증명합니다.
+  const hintText = hasTimeUnit ? (labels.hintNow ?? labels.hint) : labels.hint;
   const [open, setOpen] = useState(false);
   // 겹쳐 있으면 가장 안쪽만 닫힙니다 — 다이얼로그 안에서 열렸을 때 다이얼로그까지 닫으면 안 됩니다.
   // Escape는 이 파일 전체에서 "값을 바꾸지 않고 닫기"를 뜻합니다 — flushTyping을
@@ -1580,7 +1641,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     {open && position && createPortal(<div ref={popoverRef} id={popoverId} className="date-wheel-popover dropdown-menu-surface" role="dialog" aria-modal="false" aria-label={`${ariaLabel} ${labels.select}`} onMouseDown={(event) => event.preventDefault()} style={{ top: position.top, bottom: position.bottom, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
       {/* 보이는 머리말만 `heading`으로 갈립니다 — 위 `aria-label`과 `triggerName`은 계속
           `ariaLabel`을 씁니다(§11). 안 넘기면 둘이 같은 값이라 지금까지와 동일합니다. */}
-      <div className="date-wheel-heading"><strong>{heading ?? ariaLabel}</strong><span>{labels.hint}</span></div>
+      <div className="date-wheel-heading"><strong>{heading ?? ariaLabel}</strong><span>{hintText}</span></div>
       <div className="date-wheel-columns" data-fields={columns.length}>
         {/* 열은 **포커스를 받지 않고 키도 받지 않습니다**(설계 스펙 §5·§6.2) — `tabIndex`가
             없고 `onKeyDown`도 없습니다. 활성 표시는 `resolvedActiveUnit`이 붙이는 `.active`
