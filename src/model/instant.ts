@@ -42,6 +42,118 @@ export function unitCeiling(unit: WheelUnit, context: { year: number; month: num
   return 59;   // minute, second
 }
 
+/* ---- 값 형식: 계열별 파싱과 직렬화 ----------------------------------------
+ *
+ * 값 문자열의 모양(연-월-일 대 시:분[:초])은 `fields` 자체가 아니라 그것이
+ * 가르는 **계열**(`familyOf`)이 정합니다. `fields`가 하는 일은 둘뿐입니다 —
+ * 계열을 가르는 것, 그리고 구간 아래를 누르는 경계를 정하는 것.
+ *
+ * 그 경계는 **사다리 상의 위치**(`UNIT_LADDER` 인덱스)로 비교하지, `fields`에
+ * 있고 없고(멤버십)로 비교하지 않습니다. 멤버십으로 비교하면 "구간 **위**의
+ * 단위는 값에서 그대로 가져온다"가 깨집니다 — `fields = ["month", "day"]`일
+ * 때 `year`는 `fields`의 멤버가 아니지만, `month`보다 사다리 위(왼쪽)에
+ * 있으므로 눌리지 않고 원래 값을 그대로 씁니다. 반대로 `fields = ["year",
+ * "month"]`일 때 `day`는 `month`보다 사다리 아래(오른쪽)이므로 바닥값으로
+ * 눌립니다. 두 규칙 다 "`fields`에서 가장 깊은(사다리 아래쪽) 단위보다 아래면
+ * 누른다" 하나의 기준(`deepestIndex`)에서 나옵니다.
+ */
+export type UnitParts = Record<WheelUnit, number>;
+export type ValueFamily = "date" | "time" | "datetime";
+
+const pad = (n: number, width: number) => String(n).padStart(width, "0");
+
+/** `fields` 중 사다리에서 가장 아래(깊은) 단위의 인덱스. 이보다 아래인 단위는
+ *  값 문자열에도 없고 바닥값으로 눌립니다. */
+function deepestIndex(fields: WheelUnit[]) {
+  return Math.max(...fields.map((unit) => UNIT_LADDER.indexOf(unit)));
+}
+
+/** `fields`가 날짜 단위·시각 단위 중 어느 쪽을 포함하는지로 계열을 가릅니다.
+ *  둘 다 있으면 "datetime", 시각만 있으면 "time", 그 외(날짜만 또는 아무것도
+ *  없음)는 "date"입니다. */
+export function familyOf(fields: WheelUnit[]): ValueFamily {
+  const hasDate = fields.some((unit) => unit === "year" || unit === "month" || unit === "day");
+  const hasTime = fields.some((unit) => unit === "hour" || unit === "minute" || unit === "second");
+  return hasDate && hasTime ? "datetime" : hasTime ? "time" : "date";
+}
+
+/** `fields`가 `UNIT_LADDER`에서 잘라낸 연속 구간인지 — 순서도 사다리를
+ *  따라야 합니다. 빈 배열은 구간이 아닙니다. */
+export function isContiguous(fields: WheelUnit[]): boolean {
+  if (fields.length === 0) return false;
+  const first = UNIT_LADDER.indexOf(fields[0]);
+  if (first === -1) return false;
+  return fields.every((unit, offset) => UNIT_LADDER[first + offset] === unit);
+}
+
+/**
+ * 문자열을 계열별 형식으로 파싱합니다. 형식이 안 맞으면 `null`.
+ *
+ * 날짜 계열은 언제나 `YYYY-MM-DD`(일까지), 시각 계열은 `fields`에 `second`가
+ * 있으면 `HH:MM:SS`, 없으면 `HH:MM`, datetime 계열은 그 둘을 `T`로 이은
+ * 모양입니다 — `fields`가 정확히 어느 단위를 담았는지와 무관합니다(연·월만
+ * 있어도 문자열은 여전히 일까지).
+ *
+ * `fields`에서 가장 깊은 단위보다 사다리 아래인 단위는 바닥값으로 누릅니다
+ * (예: 시각 계열에 `second`가 없으면 초는 언제나 0). 그 외(문자열에 실제로
+ * 있는 단위)는 정규식이 잡아낸 값 그대로 씁니다.
+ */
+export function parseValue(value: string, fields: WheelUnit[]): UnitParts | null {
+  const family = familyOf(fields);
+  const withSeconds = fields.includes("second");
+  const deepest = deepestIndex(fields);
+
+  const datePattern = "(\\d{4})-(\\d{2})-(\\d{2})";
+  const timePattern = withSeconds ? "(\\d{2}):(\\d{2}):(\\d{2})" : "(\\d{2}):(\\d{2})";
+  const pattern =
+    family === "date" ? new RegExp(`^${datePattern}$`)
+    : family === "time" ? new RegExp(`^${timePattern}$`)
+    : new RegExp(`^${datePattern}T${timePattern}$`);
+
+  const match = pattern.exec(value);
+  if (!match) return null;
+
+  // 문자열에 실제로 있는 값부터 채우고, 없는 단위(다른 계열의 단위)는 바닥값입니다.
+  const raw: UnitParts = {
+    year: unitFloor("year"), month: unitFloor("month"), day: unitFloor("day"),
+    hour: unitFloor("hour"), minute: unitFloor("minute"), second: unitFloor("second"),
+  };
+  if (family === "date" || family === "datetime") {
+    raw.year = Number(match[1]);
+    raw.month = Number(match[2]);
+    raw.day = Number(match[3]);
+  }
+  const timeGroupOffset = family === "datetime" ? 3 : 0;
+  if (family === "time" || family === "datetime") {
+    raw.hour = Number(match[timeGroupOffset + 1]);
+    raw.minute = Number(match[timeGroupOffset + 2]);
+    if (withSeconds) raw.second = Number(match[timeGroupOffset + 3]);
+  }
+
+  const at = (unit: WheelUnit) => (UNIT_LADDER.indexOf(unit) > deepest ? unitFloor(unit) : raw[unit]);
+  return { year: at("year"), month: at("month"), day: at("day"), hour: at("hour"), minute: at("minute"), second: at("second") };
+}
+
+/**
+ * `UnitParts`를 계열별 문자열로 되돌립니다. `fields`는 계열을 가르고(`second`
+ * 포함 여부 포함) `deepestIndex`로 구간 아래를 누르는 데만 쓰입니다 — **여기서
+ * 다시 누르는 게 아니라 그 경계를 정할 뿐**입니다. 구간 아래를 누르는 일 자체는
+ * `parseValue`가 값을 읽을 때 이미 했으므로, 여기서 멤버십(`fields.includes`)
+ * 으로 또 누르면 "구간 위는 값에서 그대로 가져온다"가 조용히 깨집니다.
+ */
+export function serializeValue(parts: UnitParts, fields: WheelUnit[]): string {
+  const family = familyOf(fields);
+  const withSeconds = fields.includes("second");
+  const deepest = deepestIndex(fields);
+  const at = (unit: WheelUnit) => (UNIT_LADDER.indexOf(unit) > deepest ? unitFloor(unit) : parts[unit]);
+
+  const date = `${pad(at("year"), 4)}-${pad(at("month"), 2)}-${pad(at("day"), 2)}`;
+  const time = `${pad(at("hour"), 2)}:${pad(at("minute"), 2)}${withSeconds ? `:${pad(at("second"), 2)}` : ""}`;
+  if (family === "date") return date;
+  if (family === "time") return time;
+  return `${date}T${time}`;
+}
+
 /** 그 열이 받는 최대 자릿수 — 타이핑 쪽 로컬 이름. `unitDigits`에 위임합니다.
  *  인자는 `WheelUnit`(여섯 단위) — `typeDigit`이 시·분·초로도 부릅니다. */
 function maxDigits(unit: WheelUnit) {

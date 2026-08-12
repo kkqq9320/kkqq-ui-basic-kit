@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits } from "../src/model/instant";
+import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits, familyOf, parseValue, serializeValue, isContiguous } from "../src/model/instant";
+import type { WheelUnit } from "../src/model/instant";
 
 const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -263,5 +264,62 @@ describe("instantModel", () => {
     expect(instantModel.normalize("2026-07-12", ["year"])).toBe(normalizeToFields("2026-07-12", ["year"]));
     expect(instantModel.keyLength(["year", "month"])).toBe(rangeKeyLength(["year", "month"]));
     expect(instantModel.isValid("2026-07-12")).toBe(validDateValue("2026-07-12"));
+  });
+});
+
+const DATE = ["year", "month", "day"] as WheelUnit[];
+const HM = ["hour", "minute"] as WheelUnit[];
+const HMS = ["hour", "minute", "second"] as WheelUnit[];
+const DATETIME = ["year", "month", "day", "hour", "minute"] as WheelUnit[];
+
+describe("계열 판정", () => {
+  it("구간이 어디서 시작하고 어디서 끝나는지로 갈린다", () => {
+    expect(familyOf(DATE)).toBe("date");
+    expect(familyOf(["year", "month"])).toBe("date");
+    expect(familyOf(HM)).toBe("time");
+    expect(familyOf(["minute", "second"])).toBe("time");
+    expect(familyOf(DATETIME)).toBe("datetime");
+    expect(familyOf(["day", "hour"])).toBe("datetime");
+  });
+});
+
+describe("연속 구간", () => {
+  it("사다리에서 잘라낸 구간만 받는다", () => {
+    expect(isContiguous(DATE)).toBe(true);
+    expect(isContiguous(["day", "hour", "minute"])).toBe(true);
+    expect(isContiguous(["year", "day"])).toBe(false);
+    expect(isContiguous(["day", "year"])).toBe(false);   // 순서도 사다리를 따라야 합니다
+    expect(isContiguous([])).toBe(false);
+  });
+});
+
+describe("값 형식은 계열이 정한다", () => {
+  it("날짜 계열은 언제나 일까지", () => {
+    const parts = parseValue("2026-08-12", DATE)!;
+    expect(serializeValue(parts, DATE)).toBe("2026-08-12");
+    expect(serializeValue(parts, ["year", "month"])).toBe("2026-08-01");
+  });
+
+  it("시각 계열은 분까지, 초는 fields에 있을 때만", () => {
+    expect(serializeValue(parseValue("03:00", HM)!, HM)).toBe("03:00");
+    expect(serializeValue(parseValue("03:00:05", HMS)!, HMS)).toBe("03:00:05");
+  });
+
+  it("걸치면 T로 잇는다 — 공백이 아닙니다", () => {
+    expect(serializeValue(parseValue("2026-08-12T03:00", DATETIME)!, DATETIME)).toBe("2026-08-12T03:00");
+  });
+
+  it("구간 위는 값에서 가져오고 아래는 바닥값으로 눌린다", () => {
+    const parts = parseValue("2026-08-12T03:45", DATETIME)!;
+    expect(serializeValue(parts, ["year", "month", "day"])).toBe("2026-08-12");
+    expect(serializeValue(parts, ["month", "day"])).toBe("2026-08-12");   // 연도는 값에서
+  });
+
+  it("형식이 안 맞으면 null이다 — 계열이 다른 것도 포함", () => {
+    expect(parseValue("", DATE)).toBe(null);
+    expect(parseValue("2026-8-12", DATE)).toBe(null);      // 0을 안 붙인 월
+    expect(parseValue("2026-08-12", HM)).toBe(null);       // 시각 픽커에 날짜
+    expect(parseValue("03:00", DATE)).toBe(null);
+    expect(parseValue("+010000-07-12", DATE)).toBe(null);  // 확장 표기
   });
 });
