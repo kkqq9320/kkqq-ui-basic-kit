@@ -58,6 +58,14 @@ export type ThemeColorEditorProps = {
   /** 색상 카드가 커질 수 있는 최대 폭. 안 주면 남는 폭을 나눠 가집니다(`1fr`) —
    *  **`cardMin`만으로는 카드를 줄일 수 없습니다.** */
   cardMax?: string;
+  /** 덮어쓴 색을 **앱이 소유**할 때 넘깁니다. 넘기면 편집기는 **저장하지 않고**
+   *  적용과 알림만 합니다 — 로그인해서 서버에서 받아 온 팔레트를 그대로 넘기면 됩니다.
+   *  안 넘기면 지금까지와 같습니다(킷이 읽고 씁니다).
+   *
+   * ⚠️ **이 맵은 그 테마의 덮어쓰기 전체입니다. 패치가 아닙니다** — 없는 키는
+   *  "안 바뀜"이 아니라 "기본값"입니다. 앱은 통째로 교체해 저장해야 하고, 병합하면
+   *  리셋만 영영 안 먹습니다. */
+  overrides?: Record<string, string>;
   /** 앱이 이 편집기 안을 겨눌 때의 출구. `Panel`의 것과 같은 뜻입니다.
    *
    * **이게 없어서 앱은 색상 카드에 높이조차 줄 수 없었습니다** — 편집기가 자기 패널을
@@ -71,7 +79,7 @@ export type ThemeColorEditorProps = {
   className?: string;
 };
 
-export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKEN_GROUPS, className = "", cardMin, cardMax }: ThemeColorEditorProps) {
+export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKEN_GROUPS, className = "", cardMin, cardMax, overrides }: ThemeColorEditorProps) {
   // groups가 다룰 토큰의 전부입니다. 프로젝트가 groups에 새 토큰을 더하면 읽기·기본값·
   // 적용이 전부 이 목록으로 돌아가, 키트를 안 고쳐도 새 색이 편집·저장·적용됩니다.
   // palette가 오면 groups 대신 그쪽을 씁니다 — 둘 다 오면 palette가 이깁니다.
@@ -89,7 +97,13 @@ export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKE
   const writeOverrides = (forTheme: ThemeName, next: Record<string, string>) => (palette ? palette.write(forTheme, next) : writeTokenOverrides(forTheme, next));
   const applyOverrides = (forTheme: ThemeName, next: Record<string, string>) => (palette ? palette.apply(forTheme, next) : applyTokenOverrides(forTheme, next, tokens));
 
-  const [overrides, setOverrides] = useState<Record<string, string>>(() => readOverrides(theme));
+  /* overrides가 오면(빈 객체 `{}`도 포함) 앱이 저장소를 소유합니다 — 참 값 검사가 아니라
+   * undefined 검사인 이유입니다. `{}`는 "덮어쓰기가 하나도 없다"는 뜻이지 "안 넘겼다"가
+   * 아닙니다. controlled일 때는 편집기가 자기 사본을 갖지 않습니다 — 가지면 다음 렌더에서
+   * 앱의 값과 갈라집니다. */
+  const controlled = overrides !== undefined;
+  const [ownOverrides, setOwnOverrides] = useState<Record<string, string>>(() => (controlled ? {} : readOverrides(theme)));
+  const current = controlled ? overrides : ownOverrides;
   /** 토큰별 직전 값 스택. Undo가 여기서 하나씩 꺼냅니다. */
   const [history, setHistory] = useState<Record<string, string[]>>({});
 
@@ -128,26 +142,32 @@ export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKE
   const [loadedTheme, setLoadedTheme] = useState(theme);
   if (loadedTheme !== theme) {
     setLoadedTheme(theme);
-    setOverrides(readOverrides(theme));
+    // controlled일 때는 앱이 이 테마의 값을 이미 overrides로 넘기고 있습니다 — 저장소를
+    // 다시 읽으면 그 값을 덮어써 앱과 갈라집니다. undo 기록·초안·세션은 테마와 함께
+    // 사는 것이 아니라 "지금 만지고 있던 것"과 함께 살므로 controlled 여부와 무관하게
+    // 리셋합니다.
+    if (!controlled) setOwnOverrides(readOverrides(theme));
     setHistory({});
     setDraft(null);
     endSession();
   }
 
   function commit(next: Record<string, string>) {
-    setOverrides(next);
-    writeOverrides(theme, next);
+    if (!controlled) {
+      setOwnOverrides(next);
+      writeOverrides(theme, next);
+    }
     applyOverrides(theme, next);
     onChange?.(next);
   }
 
-  function valueOf(token: ThemeToken, from: Record<string, string> = overrides) {
+  function valueOf(token: ThemeToken, from: Record<string, string> = current) {
     return from[token.name] ?? defaultTokenValue(token, theme, tokens);
   }
 
   /** 기본값과 같으면 저장하지 않는다 — 그래야 기본값이 바뀌면 따라간다. */
   function withValue(token: ThemeToken, hex: string) {
-    const next = { ...overrides };
+    const next = { ...current };
     if (hex === defaultTokenValue(token, theme, tokens)) delete next[token.name];
     else next[token.name] = hex;
     return next;
@@ -192,19 +212,19 @@ export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKE
 
   function resetAll() {
     // 지금 값들을 기록해 두면 카드마다 Undo로 되살릴 수 있습니다.
-    const changed = Object.keys(overrides);
+    const changed = Object.keys(current);
     if (!changed.length) return;
     setDraft(null);
     endSession();
-    setHistory((current) => {
-      const next = { ...current };
-      for (const name of changed) next[name] = [...(next[name] ?? []), overrides[name]];
+    setHistory((history) => {
+      const next = { ...history };
+      for (const name of changed) next[name] = [...(next[name] ?? []), current[name]];
       return next;
     });
     commit({});
   }
 
-  const changedCount = Object.keys(overrides).length;
+  const changedCount = Object.keys(current).length;
   return <section className={`panel theme-color-panel ${className}`.trim()} style={cardMin || cardMax ? ({ ...(cardMin ? { "--color-card-min": cardMin } : {}), ...(cardMax ? { "--color-card-max": cardMax } : {}) } as CSSProperties) : undefined}>
     <div className="panel-heading">
       <div><small>COLORS</small><h2>색상</h2></div>
@@ -227,7 +247,7 @@ export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKE
         {group.tokens.map((token) => {
           const fallback = defaultTokenValue(token, theme, tokens);
           const value = valueOf(token);
-          const changed = Boolean(overrides[token.name]);
+          const changed = Boolean(current[token.name]);
           return <div className="theme-color-card" key={token.name}>
             <input
               type="color"
