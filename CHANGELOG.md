@@ -23,19 +23,20 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.5.0
   (안 쓰면 0개).
 - **`ShortcutSettings`** — 사용자가 조합을 다시 녹음하거나 지우는 설정 UI. 등록
   중인 조합이 킷 컴포넌트나 다른 액션과 겹치면 등록을 막고 이유를 보여 줍니다.
-- **`sidebarToggleAction(onFire, label?)` · `SIDEBAR_TOGGLE_ID`** — 킷이 기본
+- **`sidebarToggleAction(onFire, options?)` · `SIDEBAR_TOGGLE_ID`** — 킷이 기본
   제공하는 유일한 액션. **핸들러는 앱 것입니다** — `Sidebar`가 controlled라 킷이
-  쥐는 것은 안정적인 `id`와 이름표뿐입니다. `defaultCombo`는 항상 `null`이라
-  조합은 앱이 정해야 합니다.
+  쥐는 것은 안정적인 `id`뿐입니다. `options`로 `label`과 `defaultCombo`를 넘길 수
+  있고, **킷이 정하는 기본값은 `null`**이라 조합은 앱이 정해야 합니다.
 - **`parseCombo` · `formatCombo` · `normalizeCombo` · `findConflict` ·
   `shouldTrigger` · `BARE_KEY_SCOPE_ATTR` · `KIT_RESERVED` · `displayCombo`** —
   조합 표기·매칭·충돌 검사의 나머지 공개 API.
 - **`css/shortcuts.css`** — `.kkqq-shortcuts` 뿌리 아래로만 선택자가 있어, 안 쓰는
   프로젝트에는 바이트 말고는 영향이 없습니다.
 - **데모에 조합 예시**(`demo/main.tsx`) — 사이드바 접기/펴기가 `Ctrl + \`에 걸려
-  있고 `overrides`로 그 값을 준 코드가 그대로 보입니다. `ShortcutSettings`도 실제로
-  띄워 눌러 볼 수 있고, `.workspace`에 `data-kkqq-shortcut-scope`를 붙여 맨 키 허용
-  구역의 예시도 하나 보여 줍니다.
+  있고, 앱이 `defaultCombo`로 그 값을 준 코드가 그대로 보입니다(`overrides`는
+  **사용자가 바꾼 것만** 담는 자리입니다). `ShortcutSettings`도 실제로 띄워 눌러 볼
+  수 있고, `.workspace`에 `data-kkqq-shortcut-scope`를 붙여 맨 키 허용 구역의 예시도
+  하나 보여 줍니다.
 
 ### 고친 것
 
