@@ -26,6 +26,7 @@ import {
   type ThemeToken,
   type ThemeTokenGroup,
 } from "./themeTokens";
+import { type ThemePalette } from "./themePalette";
 
 /** 이 시간 동안 조용하면 한 번의 조작이 끝난 것으로 봅니다. 피커를 끄는 동안의
  *  간격보다는 넉넉하고, 색을 고르고 다시 잡기까지보다는 짧습니다. */
@@ -47,6 +48,10 @@ export type ThemeColorEditorProps = {
    * 다릅니다("짙은 면"이 어디 쓰이는지는 그 앱만 압니다). 그래서 컴포넌트는
    * 그대로 쓰고 문구만 갈아 끼울 수 있게 열어 둡니다. */
   groups?: readonly ThemeTokenGroup[];
+  /** 앱의 토큰 목록을 묶은 팔레트. 넘기면 이 편집기의 목록·읽기·쓰기·적용이 전부
+   *  팔레트의 것이 됩니다. `groups`와 둘 다 오면 이쪽이 이깁니다.
+   *  넘기지 않으면 지금까지와 같습니다. */
+  palette?: ThemePalette;
   /** 이 편집기 **하나의** 색상 카드 최소 폭. 전역 `--color-card-min`보다 우선합니다.
    *  `PanelGrid`·`FieldGrid`·`SummaryGrid`의 `min`과 같은 뜻입니다. */
   cardMin?: string;
@@ -66,11 +71,21 @@ export type ThemeColorEditorProps = {
   className?: string;
 };
 
-export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS, className = "", cardMin, cardMax }: ThemeColorEditorProps) {
+export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKEN_GROUPS, className = "", cardMin, cardMax }: ThemeColorEditorProps) {
   // groups가 다룰 토큰의 전부입니다. 프로젝트가 groups에 새 토큰을 더하면 읽기·기본값·
   // 적용이 전부 이 목록으로 돌아가, 키트를 안 고쳐도 새 색이 편집·저장·적용됩니다.
-  const tokens = groups.flatMap((group) => group.tokens);
-  const [overrides, setOverrides] = useState<Record<string, string>>(() => readTokenOverrides(theme, tokens));
+  // palette가 오면 groups 대신 그쪽을 씁니다 — 둘 다 오면 palette가 이깁니다.
+  const activeGroups = palette ? palette.groups : groups;
+  const tokens = activeGroups.flatMap((group) => group.tokens);
+
+  /** 읽기·쓰기·적용 세 곳. palette가 있으면 그쪽으로, 없으면 지금까지의 함수로
+   *  보냅니다 — 이 셋을 우회해 readTokenOverrides 등을 직접 부르는 자리가 남으면
+   *  그 경로만 팔레트를 건너뛰어 목록이 갈라집니다. */
+  const readOverrides = (forTheme: ThemeName) => (palette ? palette.read(forTheme) : readTokenOverrides(forTheme, tokens));
+  const writeOverrides = (forTheme: ThemeName, next: Record<string, string>) => (palette ? palette.write(forTheme, next) : writeTokenOverrides(forTheme, next));
+  const applyOverrides = (forTheme: ThemeName, next: Record<string, string>) => (palette ? palette.apply(forTheme, next) : applyTokenOverrides(forTheme, next, tokens));
+
+  const [overrides, setOverrides] = useState<Record<string, string>>(() => readOverrides(theme));
   /** 토큰별 직전 값 스택. Undo가 여기서 하나씩 꺼냅니다. */
   const [history, setHistory] = useState<Record<string, string[]>>({});
 
@@ -109,7 +124,7 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS,
   const [loadedTheme, setLoadedTheme] = useState(theme);
   if (loadedTheme !== theme) {
     setLoadedTheme(theme);
-    setOverrides(readTokenOverrides(theme, tokens));
+    setOverrides(readOverrides(theme));
     setHistory({});
     setDraft(null);
     endSession();
@@ -117,8 +132,8 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS,
 
   function commit(next: Record<string, string>) {
     setOverrides(next);
-    writeTokenOverrides(theme, next);
-    applyTokenOverrides(theme, next, tokens);
+    writeOverrides(theme, next);
+    applyOverrides(theme, next);
     onChange?.(next);
   }
 
@@ -202,7 +217,7 @@ export function ThemeColorEditor({ theme, onChange, groups = THEME_TOKEN_GROUPS,
       지금은 <strong>{theme === "dark" ? "다크" : "라이트"} 모드</strong> 색을 바꾸고 있습니다.
       색 견본을 눌러 고르거나 <code>#575bd4</code> · <code>87, 91, 212</code> 형식으로 입력하세요.
     </p>
-    {groups.map((group) => <div className="theme-color-group" key={group.title}>
+    {activeGroups.map((group) => <div className="theme-color-group" key={group.title}>
       <h3>{group.title}</h3>
       <div className="theme-color-list">
         {group.tokens.map((token) => {

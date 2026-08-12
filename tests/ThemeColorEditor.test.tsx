@@ -8,6 +8,7 @@ import {
   THEME_TOKENS,
   ThemeColorEditor,
   applyTokenOverrides,
+  createThemePalette,
   normalizeColor,
   readTokenOverrides,
   toRgbText,
@@ -417,5 +418,24 @@ describe("헥스 칸은 지우고 다시 칠 수 있다", () => {
     fireEvent.change(teal.swatch, { target: { value: "#445566" } });
 
     expect(teal.text().value).toBe("#445566");
+  });
+});
+
+describe("팔레트", () => {
+  it("팔레트를 넘기면 앱이 신설한 토큰의 카드가 나온다", () => {
+    const palette = createThemePalette([{ title: "브랜드", tokens: [{ name: "--brand-2", label: "브랜드2", description: "앱 색" }] }]);
+
+    render(<ThemeColorEditor theme="light" palette={palette} />);
+
+    expect(screen.getByLabelText("브랜드2 색상 선택")).toBeTruthy();
+  });
+
+  it("팔레트로 고친 값이 :root에 적용된다", () => {
+    const palette = createThemePalette([{ title: "브랜드", tokens: [{ name: "--brand-2", label: "브랜드2", description: "앱 색" }] }]);
+    render(<ThemeColorEditor theme="light" palette={palette} />);
+
+    fireEvent.change(screen.getByLabelText("브랜드2 색상 값"), { target: { value: "#ff8a3d" } });
+
+    expect(document.documentElement.style.getPropertyValue("--brand-2")).toBe("#ff8a3d");
   });
 });
