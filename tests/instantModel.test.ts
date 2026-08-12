@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, instantModel } from "../src/model/instant";
+import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel } from "../src/model/instant";
+
+const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
 
 describe("typeDigit — 모호하지 않으면 즉시 확정한다", () => {
   it("월: 2~9는 한 자리로 확정하고 다음 열로", () => {
@@ -158,6 +160,18 @@ describe("모델로 옮겨 온 나머지 함수", () => {
     expect(lastDayOf(2024, 1)).toBe(29);
     expect(lastDayOf(2026, 1)).toBe(28);
     expect(lastDayOf(0, 1)).toBe(29);
+  });
+
+  // 월·일이 한 자리일 때 zero-pad가 실제로 적용되는지 — 월은 이 스위트의 fixture가
+  // 대부분 "07"·"08"처럼 이미 한 자리라 padStart 유무가 눈에 띄지만, 일은 fixture가
+  // 거의 항상 "12"(이미 두 자리)라 padStart를 지워도 결과가 우연히 같다. 그래서
+  // 일 쪽은 한 자리 값(5일)으로 따로 고정해야 padStart 유무가 실제로 갈린다.
+  it("dateWheelLabel은 한 자리 월을 두 자리로 채운다", () => {
+    expect(dateWheelLabel("2026-07-05", "month", WEEKDAYS_KO)).toBe("07");
+  });
+
+  it("dateWheelLabel은 한 자리 일을 두 자리로 채운다", () => {
+    expect(dateWheelLabel("2026-07-05", "day", WEEKDAYS_KO)).toBe("05 일");
   });
 
   it("dateTriggerParts의 조각을 이으면 옛 문자열과 같다", () => {
