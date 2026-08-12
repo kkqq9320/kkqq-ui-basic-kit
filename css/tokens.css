@@ -233,7 +233,19 @@
 }
 
 /* 전역 리셋 — 스크롤바 굵기를 4px로 통일하고, 오버플로가 생겨도
- * 문서 폭이 흔들리지 않도록 scrollbar-gutter를 예약합니다. */
+ * 문서 폭이 흔들리지 않도록 scrollbar-gutter를 예약합니다.
+ *
+ * **데스크톱에서 페이지 스크롤바를 그리는 것이 킷의 기본입니다.** 감추고 싶은 앱은
+ * 감출 수 있고, 실제로 칠 CSS는 `CUSTOMIZING.md`의 "페이지 스크롤바 감추기"에 있습니다
+ * — 아래 모바일 블록이 하는 일과 같은 모양이고, **이 `scrollbar-gutter`도 함께
+ * 되돌립니다**(스크롤바가 폭을 아예 안 먹으면 예약할 것이 없어 4px이 그냥 죽습니다.
+ * 실측: 문서 폭 1274 → 1278).
+ *
+ * ⚠️ **감출 때 대상을 `*`로 넓히지 마세요.** Select 메뉴·다이얼로그·사이드바 서랍은
+ * 안쪽에서 스스로 스크롤하는데, 그것들까지 감추면 **실제로 더 있는데 "더 있다"가
+ * 보이지 않습니다.** 페이지는 잘린 내용 자체가 그 신호를 주지만 안쪽 표면은 그렇지
+ * 않습니다. 아래 모바일 규칙이 처음부터 `html`·`body`·`#root` 셋으로 좁혀져 있는
+ * 이유가 그것입니다(PRINCIPLES §6). */
 html { scrollbar-gutter: stable; }
 * { box-sizing: border-box; }
 * { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
