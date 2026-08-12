@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits, familyOf, parseValue, serializeValue, isContiguous } from "../src/model/instant";
+import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits, familyOf, parseValue, serializeValue, isContiguous, comparisonPrecision, usableBound, outOfRange, clampToRange } from "../src/model/instant";
 import type { WheelUnit } from "../src/model/instant";
 
 const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
@@ -321,5 +321,98 @@ describe("값 형식은 계열이 정한다", () => {
     expect(parseValue("2026-08-12", HM)).toBe(null);       // 시각 픽커에 날짜
     expect(parseValue("03:00", DATE)).toBe(null);
     expect(parseValue("+010000-07-12", DATE)).toBe(null);  // 확장 표기
+  });
+
+  /* parseValue의 눌림(flooring) 경로 자체를 검사합니다. 위의 검사들은 전부
+   * fields가 계열 끝까지(DATE→day, HM→minute) 닿아 있어 눌릴 게 없었습니다 —
+   * 그 코드를 지우고 raw를 그대로 반환해도 878개가 전부 통과했습니다. 계열
+   * 끝보다 얕은 fields를 줘야 눌림 경로가 실제로 밟힙니다. */
+  it("parseValue도 구간 아래를 누른다 — 계열 끝보다 얕은 fields로", () => {
+    const parts = parseValue("2026-08-12", ["year", "month"])!;
+    expect(parts.day).toBe(1);      // 일이 바닥값으로 눌립니다
+    expect(parts.month).toBe(8);    // 구간 안이라 값에서 그대로
+  });
+});
+
+describe("비교 정밀도", () => {
+  it("픽커가 가진 열 중 최소 단위가 정한다", () => {
+    expect(comparisonPrecision(["year", "month", "day"])).toBe(10);
+    expect(comparisonPrecision(["year", "month"])).toBe(7);
+    expect(comparisonPrecision(["year"])).toBe(4);
+    expect(comparisonPrecision(["hour", "minute"])).toBe(5);
+    expect(comparisonPrecision(["hour", "minute", "second"])).toBe(8);
+    expect(comparisonPrecision(["year", "month", "day", "hour", "minute"])).toBe(16);
+  });
+});
+
+describe("쓸 수 없는 경계는 없는 것으로 본다 (§6.1)", () => {
+  it("계열이 다르면 버린다", () => {
+    expect(usableBound("2026-08-12", ["hour", "minute"])).toBe(null);
+  });
+
+  it("형식이 깨졌으면 버린다", () => {
+    expect(usableBound("2026-8-12", ["year", "month", "day"])).toBe(null);
+  });
+
+  it("멀쩡하면 그대로", () => {
+    expect(usableBound("2026-08-12", ["year", "month", "day"])).toBe("2026-08-12");
+    expect(usableBound(undefined, ["year", "month", "day"])).toBe(null);
+  });
+
+  /* 그대로 비교하면 무슨 일이 나는지 — 이 검사가 §6.1이 존재하는 이유입니다. */
+  it("버리지 않았다면 말이 안 되는 범위가 됐을 것이다", () => {
+    const dateBound = "2026-08-12";
+    expect("03:00".slice(0, 5) < dateBound.slice(0, 5)).toBe(true);   // 오전 3시가 범위 밖
+    expect("23:59".slice(0, 5) < dateBound.slice(0, 5)).toBe(false);  // 밤 11시는 범위 안
+  });
+});
+
+describe("경계 비교는 거친 쪽에서 (§6)", () => {
+  const DT = ["year", "month", "day", "hour", "minute"] as WheelUnit[];
+
+  it("날짜만 준 max는 그날 전체를 연다", () => {
+    for (const v of ["2026-08-12T00:00", "2026-08-12T03:00", "2026-08-12T23:59"])
+      expect(outOfRange(v, { max: "2026-08-12" }, DT)).toBe(false);
+    expect(outOfRange("2026-08-13T00:00", { max: "2026-08-12" }, DT)).toBe(true);
+  });
+
+  /* 회귀 대조군 — 1단계 전부터 참이던 동작입니다. 이게 깨지면 소비 프로젝트가 깨집니다. */
+  it("연·월 픽커의 min은 월 단위로 견준다", () => {
+    expect(outOfRange("2026-07-01", { min: "2026-07-15" }, ["year", "month"])).toBe(false);
+    expect(outOfRange("2026-06-01", { min: "2026-07-15" }, ["year", "month"])).toBe(true);
+  });
+
+  it("min과 max가 서로 다른 길이여도 각자의 길이로 본다", () => {
+    expect(outOfRange("2026-08-12T03:00", { min: "2026-08", max: "2026-08-12T04:00" }, DT)).toBe(false);
+  });
+});
+
+describe("클램프는 min은 이른 끝, max는 늦은 끝 (§6)", () => {
+  const DT = ["year", "month", "day", "hour", "minute"] as WheelUnit[];
+
+  it("max가 거칠면 그날 끝으로 보낸다", () => {
+    expect(clampToRange("2026-09-01T10:00", { max: "2026-08-12" }, DT)).toBe("2026-08-12T23:59");
+  });
+
+  it("min이 거칠면 그날 시작으로 보낸다", () => {
+    expect(clampToRange("2026-07-01T10:00", { min: "2026-08-12" }, DT)).toBe("2026-08-12T00:00");
+  });
+
+  it("초까지 있으면 초도 채운다", () => {
+    const DTS = ["year", "month", "day", "hour", "minute", "second"] as WheelUnit[];
+    expect(clampToRange("2026-09-01T10:00:00", { max: "2026-08-12" }, DTS)).toBe("2026-08-12T23:59:59");
+  });
+
+  it("월까지만 준 max는 그달 말일로 — 윤년도", () => {
+    expect(clampToRange("2026-05-01", { max: "2026-02" }, ["year", "month", "day"])).toBe("2026-02-28");
+    expect(clampToRange("2024-05-01", { max: "2024-02" }, ["year", "month", "day"])).toBe("2024-02-29");
+  });
+
+  /* §6.1 예시 표 3번째 줄 — 일이 fields에 없는 픽커(연·월 픽커)도 값 정밀도가
+   * 위쪽 한계라 값에 존재만 하는 일은 채움 대상입니다. fields 자체의 deepest에서
+   * 멈추면 serializeValue가 도로 눌러버립니다 — 그게 §6.1이 "같은 함수를 쓰지
+   * 않는다"고 못박은 이유입니다. */
+  it("일 없는 픽커도 그달 말일로 — §6.1 표 3번째 줄", () => {
+    expect(clampToRange("2026-09-01", { max: "2026-07" }, ["year", "month"])).toBe("2026-07-31");
   });
 });

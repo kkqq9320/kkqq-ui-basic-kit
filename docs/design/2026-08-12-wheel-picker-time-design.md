@@ -394,7 +394,7 @@ localStorage 접근은 `themeTokens.ts`가 이미 하는 대로 `try`로 감쌉�
 | 값이 달력이 아님 | 모델이 파싱·직렬화를 소유합니다 |
 | 하단 버튼에 "지금"이 없음 | 모델의 액션 목록 |
 | 값에서 단위별 수를 뽑기(`commitToday`) | 아직 기계. 2단계에서 모델로 올릴지 결정 |
-| 경계 비교(`outOfRange`·`clampToRange`) | 아직 기계. 2단계에서 모델로 올릴지 결정 |
+| 경계 비교(`outOfRange`·`clampToRange`) | 모델(2026-08-13, 2a-3에서 옮김). `comparisonPrecision`·`usableBound`·`outOfRange`·`clampToRange`로 `src/model/instant.ts`에 있음 — 컴포넌트는 아직 안 부름 |
 
 **"순환하지 않는 열"은 기계에 이미 있습니다.** 행 렌더링이
 `const rowValue = shifted(unit, offset)` 뒤에 `disabled={!rowValue}`와
