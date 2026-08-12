@@ -63,8 +63,22 @@ export type ValueFamily = "date" | "time" | "datetime";
 const pad = (n: number, width: number) => String(n).padStart(width, "0");
 
 /** `fields` 중 사다리에서 가장 아래(깊은) 단위의 인덱스. 이보다 아래인 단위는
- *  값 문자열에도 없고 바닥값으로 눌립니다. */
+ *  값 문자열에도 없고 바닥값으로 눌립니다.
+ *
+ *  빈 `fields`는 **사다리 전체를 쓴 것처럼** 다룹니다(마지막 인덱스, `second`) —
+ *  아무것도 누르지 않는다는 뜻입니다. 가드가 없으면 `Math.max()`(인자 없음)가
+ *  `-Infinity`를 돌려주고, 그러면 모든 단위의 인덱스가 그보다 커서 **연도까지
+ *  바닥값(0)으로 눌립니다.**
+ *
+ *  ⚠️ **이건 `normalizeToFields`의 선례가 아니라 새 계약입니다.** 옛
+ *  `normalizeToFields("2026-07-15", [])`는 `"2026-01-01"`이었습니다 — 연도는
+ *  지키되 월·일은 **항상** 눌렀습니다. 새 규칙은 `"2026-07-15"`로 **아무것도
+ *  안 누릅니다.** 공유하는 것은 "연도를 지운다"는 퇴행을 막는 목표뿐이고 월·일
+ *  처리는 정반대입니다. 두 경로를 동시에 부르는 호출자는 아직 없습니다
+ *  (`normalize`는 3단위 경로, 이쪽은 컴포넌트가 아직 안 씁니다) — **2b에서 둘을
+ *  합칠 때 이 차이를 먼저 정하세요.** */
 function deepestIndex(fields: WheelUnit[]) {
+  if (fields.length === 0) return UNIT_LADDER.length - 1;
   return Math.max(...fields.map((unit) => UNIT_LADDER.indexOf(unit)));
 }
 
@@ -262,9 +276,14 @@ export function outOfRange(value: string, bounds: { min?: string; max?: string }
  * `value`를 `bounds` 안으로 밀어 넣습니다(설계 스펙 §6). `min` 클램프는
  * `parseValue`의 바닥값 정규화와 같은 결로 앉습니다 — 이른 끝이 곧 바닥값이라
  * `matchBound`가 채우는 기본값이 그대로 맞아떨어집니다. `max` 클램프는 별도
- * 경로입니다 — 비교 길이 아래의 단위를 그 단위의 상한(월·일은 그달의 말일,
- * 시·분·초는 23·59·59)으로 채웁니다(§6.1). 쓸 수 없는 경계는 `usableBound`가
- * 걸러 없는 셈 칩니다.
+ * 경로입니다 — 비교 길이 아래이면서 **픽커의 최소 단위(`fields`에서 가장 깊은
+ * 단위) 이상인** 단위만 그 단위의 상한(월·일은 그달의 말일, 시·분·초는
+ * 23·59·59)으로 채웁니다(§6.1). 그보다 깊은 단위(픽커의 열이 아닌 단위)는
+ * §5가 바닥값으로 고정하는 자리라 채우지 않습니다 — `serializeValue(parts,
+ * fields)`가 그 자리를 어차피 눌러 버리므로 채워도 무의미하고, 채운 채로 두면
+ * 그 값이 준 `max`보다 큰 문자열이 되어(예: 연·월 픽커에서 `max="2026-07-15"`가
+ * `2026-07-31`을 내놓는 것) 클램프가 멱등하지 않게 됩니다. 쓸 수 없는 경계는
+ * `usableBound`가 걸러 없는 셈 칩니다.
  */
 export function clampToRange(value: string, bounds: { min?: string; max?: string }, fields: WheelUnit[]): string {
   const precision = comparisonPrecision(fields);
@@ -284,6 +303,7 @@ export function clampToRange(value: string, bounds: { min?: string; max?: string
       const family = familyOf(fields);
       const parts = { ...matchBound(max)!.parts };
       const context = { year: parts.year, month: parts.month };
+      const deepest = deepestIndex(fields);
       const relevant: WheelUnit[] =
         family === "date" ? ["year", "month", "day"]
         : family === "time" ? ["hour", "minute", "second"]
@@ -291,23 +311,18 @@ export function clampToRange(value: string, bounds: { min?: string; max?: string
       // 사다리 순서로 채웁니다 — 일의 상한이 연·월(이 루프에서 먼저 채워질 수
       // 있는)에 달려 있어서(§3.1), context가 그 순서로 갱신돼야 합니다.
       for (const unit of relevant) {
-        if (precisionThrough(unit, family) <= len) continue;   // 비교 길이 안 — 경계가 준 값 그대로
+        if (UNIT_LADDER.indexOf(unit) > deepest) continue;      // 픽커의 열 밖 — §5가 바닥값으로 고정하는 자리
+        if (precisionThrough(unit, family) <= len) continue;    // 비교 길이 안 — 경계가 준 값 그대로
         const ceiling = unitCeiling(unit, context);
         if (ceiling !== null) parts[unit] = ceiling;
         if (unit === "year") context.year = parts.year;
         if (unit === "month") context.month = parts.month;
       }
-      // **`fields`가 아니라 값의 전체 폭으로 직렬화합니다.** `serializeValue(parts,
-      // fields)`를 쓰면 fields의 deepest보다 깊은 자리(예: 연·월 픽커의 일)를
-      // 도로 눌러버려 방금 채운 상한이 사라집니다 — §6.1이 "min 클램프와 같은
-      // 함수를 쓰지 않는다"고 못박은 이유가 이것입니다. 값 정밀도(§5)가 위쪽
-      // 한계라, fields에 없어 값에 존재만 하는 단위도 채움 대상에 들어갑니다.
-      const withSeconds = fields.includes("second");
-      const valueSpan: WheelUnit[] =
-        family === "date" ? ["year", "month", "day"]
-        : family === "time" ? (withSeconds ? ["hour", "minute", "second"] : ["hour", "minute"])
-        : withSeconds ? ["year", "month", "day", "hour", "minute", "second"] : ["year", "month", "day", "hour", "minute"];
-      return serializeValue(parts, valueSpan);
+      // `fields`로 직렬화합니다 — `min` 클램프와 같은 폭입니다. 채움 루프가
+      // 이미 픽커의 열 밖은 건드리지 않으므로, 여기서 다시 누르는 것은
+      // `parseValue`/`serializeValue`가 늘 하는 정상적인 §5 바닥값 정규화이지
+      // 방금 채운 상한을 지우는 게 아닙니다.
+      return serializeValue(parts, fields);
     }
   }
   return normalized;
