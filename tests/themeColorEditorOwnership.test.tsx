@@ -117,15 +117,12 @@ describe("저장소가 막혔을 때", () => {
     expect(setItem).toHaveBeenCalled();
   });
 
-  it("색을 바꿔도 예외가 편집기 밖으로 나오지 않는다", () => {
-    blockStorage();
-    render(<ThemeColorEditor theme="light" palette={palette()} />);
-
-    expect(() =>
-      fireEvent.change(screen.getByLabelText("브랜드2 색상 값"), { target: { value: "#ff8a3d" } }),
-    ).not.toThrow();
-  });
-
+  /* ⚠️ **"예외가 밖으로 나오지 않는다"는 여기서 검사할 수 없습니다.** 그렇게 쓴 검사를
+   * 실제로 넣고 `writeTokenOverrides`의 `try/catch`를 빼 봤더니 **초록으로 남았습니다** —
+   * React가 이벤트 핸들러의 예외를 잡아 stderr로 보고할 뿐 `fireEvent` 호출부로
+   * 다시 던지지 않기 때문입니다(실측: `Error: blocked`가 stderr에만 찍히고
+   * `expect(...).not.toThrow()`는 통과). 못 실패하는 검사이므로 지웠습니다.
+   * 편집기 수준에서 갈리는 것은 **던진 뒤에 안 도는 것들**이고, 그게 아래 셋입니다. */
   it("저장이 막혀도 화면에는 적용된다", () => {
     blockStorage();
     render(<ThemeColorEditor theme="light" palette={palette()} />);
