@@ -756,6 +756,38 @@ describe("Select", () => {
       expect(screen.queryByRole("listbox")).toBeNull();
       expect(document.activeElement).toBe(trigger);
     });
+
+    /* 위 주석이 "앵커 이동 스크롤과 **뒤로가기**는 안 했다"고 적어 두었는데, 검사는 앵커
+     * 이동 쪽에만 있었습니다. 실측: `useBackToClose(open, closeAndReclaimFocus)`를
+     * `() => setOpen(false)`로 바꿔도 **Select 스위트 68개가 전부 초록**이었습니다.
+     *
+     * 이 경로가 특히 중요합니다 — 다이얼로그 안에서 열린 메뉴를 뒤로가기로 닫으면 메뉴만
+     * 닫히고 다이얼로그는 남는데, 그때 포커스가 `<body>`로 떨어지면 다음 Tab이
+     * **다이얼로그의 포커스 스코프 밖으로** 나갑니다.
+     *
+     * `state: null`로 popstate를 쏘는 것이 "표식이 사라진 자리에 착지했다"입니다 —
+     * `src/hooks.ts`의 `handlePopState`가 보는 것이 정확히 그 값입니다. */
+    it("뒤로가기로 닫으면 메뉴가 닫힌다", () => {
+      render(<ControlledSelect initialValue="a" />);
+      fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });
+
+      fireEvent.popState(window, { state: null });
+
+      expect(screen.queryByRole("listbox")).toBeNull();
+    });
+
+    /* ⚠️ 위와 **다른 `it`으로 나눕니다.** 한 블록에 두면 앞 단언이 먼저 터졌을 때 이 단언은
+     * 실행조차 안 되고, 그러면 "포커스도 검사됐다"가 거짓이 됩니다. */
+    it("뒤로가기로 닫을 때 포커스를 트리거로 회수한다", () => {
+      render(<ControlledSelect initialValue="a" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "첫째" }));
+
+      fireEvent.popState(window, { state: null });
+
+      expect(document.activeElement).toBe(trigger);
+    });
   });
 
   // 고를 수 있는 옵션이 0개면 컨트롤 자체를 disabled로 렌더한다. 이 규칙 전에는 열기
