@@ -96,7 +96,12 @@ export function shouldTrigger(event: KeyboardEvent): boolean {
   const combo = comboFromEvent(event);
   const active = document.activeElement;
   const typing = isTypingTarget(active);
-  if (hasModifier(combo)) {
+  // 규칙 2의 수식어는 Ctrl·Alt·Meta뿐입니다(스펙 §2 규칙 2 — 괄호 안에 Shift가 없습니다).
+  // hasModifier()는 그대로 둡니다 — 다른 Task가 "이 조합에 수식어가 있나"용으로 씁니다.
+  // 여기서만 따로 세는 이유: Shift까지 이 분기로 보내면 Shift 단독 조합이 규칙 4(타이핑
+  // 중 차단)를 건너뛰어 버립니다. 두벌식 쌍자음(ㄲㄸㅃㅆㅉ)·ㅒㅖ와 `?`(Shift+Slash)가
+  // 전부 Shift 조합이라, 그러면 어떤 <textarea>에서도 그 글자를 못 칩니다.
+  if (combo.ctrl || combo.alt || combo.meta) {
     // 규칙 5 — 타이핑 중에만, 그리고 Ctrl/Meta 조합에만 적용됩니다.
     if (typing && (combo.ctrl || combo.meta) && NATIVE_EDIT_CODES.has(combo.code)) return false;
     return true;                                        // 규칙 2
