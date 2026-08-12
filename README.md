@@ -711,9 +711,11 @@ keydown 리스너가 **0개**입니다 — 리스너는 이 컴포넌트의 effe
 아래), 렌더하지 않으면 그마저 화면에 영향이 없습니다.
 
 ```tsx
+import { ShortcutProvider, sidebarToggleAction, SIDEBAR_TOGGLE_ID } from "kkqq-ui-basic-kit";
+
 <ShortcutProvider
   actions={[sidebarToggleAction(() => setCollapsed((value) => !value))]}
-  overrides={{ "kkqq:sidebar-toggle": "Ctrl+Backslash" }}
+  overrides={{ [SIDEBAR_TOGGLE_ID]: "Ctrl+Backslash" }}
 >
   <AppShell>…</AppShell>
 </ShortcutProvider>

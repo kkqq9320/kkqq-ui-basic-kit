@@ -431,6 +431,9 @@ function Demo() {
   const [shortcutOverrides, setShortcutOverrides] = useState<Record<string, string | null>>({
     [SIDEBAR_TOGGLE_ID]: "Ctrl+Backslash",
   });
+  // 화면에 적힌 조합 문자열은 전부 이 값에서 파생시킵니다 — 리터럴로 박아 두면
+  // 아래 "단축키" 패널에서 재녹음/삭제해도 이 문구들만 낡은 채로 남습니다.
+  const sidebarCombo = shortcutOverrides[SIDEBAR_TOGGLE_ID] ?? null;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [page, setPage] = useState("dashboard");
   const [tab, setTab] = useState<(typeof TABS)[number]["value"]>("controls");
@@ -557,8 +560,9 @@ function Demo() {
         </div>
         <PageHeader eyebrow="DESIGN SYSTEM" title="컴포넌트 데모" description="드롭다운·날짜 피커·사이드바·탭이 한 화면에 모두 있습니다. 브라우저 폭을 760px 아래로 줄이면 모바일 레이아웃으로 바뀝니다." />
         {/* 단축키 예시 하나를 여기서도 문자로 적어 둡니다 — 자세한 설명과 설정 UI는
-            "컨트롤" 탭의 "단축키" 패널에 있습니다. */}
-        <p className="muted-copy">사이드바 접기/펴기 단축키: <strong>{displayCombo("Ctrl+Backslash")}</strong></p>
+            "컨트롤" 탭의 "단축키" 패널에 있습니다. 값은 실제 바인딩(sidebarCombo)에서
+            파생시킵니다 — 리터럴이면 아래 패널에서 재녹음해도 여기는 안 바뀝니다. */}
+        <p className="muted-copy">사이드바 접기/펴기 단축키: <strong>{sidebarCombo ? displayCombo(sidebarCombo) : "없음"}</strong></p>
         <SectionTabs ariaLabel="데모 섹션" value={tab} tabs={TABS as unknown as Array<{ value: string; label: string }>} onChange={(next) => setTab(next as typeof tab)} />
 
         {tab === "controls" && <>
@@ -654,11 +658,14 @@ function Demo() {
               눌러 볼 수 있는 자리입니다. */}
           <Panel title="단축키" hint="SHORTCUTS">
             <p className="muted-copy">
-              사이드바 접기/펴기가 <strong>{displayCombo("Ctrl+Backslash")}</strong>에 걸려
-              있습니다. 킷의 기본값은 <code>defaultCombo: null</code>이고(설계 스펙 §3.2),
-              이 조합은 킷이 아니라 <strong>이 데모(앱)</strong>가 <code>overrides</code>로
-              정했습니다 — 아래에서 다시 녹음하거나 지울 수 있습니다(저장은 없습니다.
-              새로고침하면 초기화됩니다 — 저장은 다음 작업 몫입니다).
+              {sidebarCombo
+                ? <>사이드바 접기/펴기가 <strong>{displayCombo(sidebarCombo)}</strong>에 걸려 있습니다.</>
+                : <>사이드바 접기/펴기에 지금 걸린 조합이 <strong>없음</strong>입니다 — 아래에서 새로 녹음해 보세요.</>}{" "}
+              킷의 기본값은 <code>defaultCombo: null</code>이고(설계 스펙 §3.2),
+              처음 걸려 있던 조합은 킷이 아니라 <strong>이 데모(앱)</strong>가
+              <code>overrides</code>로 정했습니다 — 아래에서 다시 녹음하거나 지울 수
+              있습니다(저장은 없습니다. 새로고침하면 초기화됩니다 — 저장은 다음
+              작업 몫입니다).
             </p>
             <p className="muted-copy">
               <strong>맨 키(수식어 없는 키) 허용 구역을 보려면:</strong> 아래에서 이 조합을
@@ -668,7 +675,7 @@ function Demo() {
               <code>.workspace</code>에 <code>data-kkqq-shortcut-scope</code>가 붙어 있어서입니다
               (설계 스펙 §2.2). ② 사이드바의 아무 버튼을 눌러 거기 포커스를 둔 채 누르면
               동작하지 않습니다 — 사이드바는 <code>.workspace</code> 밖의 형제라 표식이 안
-              걸립니다. ③ 아래 "텍스트와 버튼" 패널의 메모 칸에 포커스가 있을 때 누르면
+              걸립니다. ③ 위 "텍스트와 버튼" 패널의 메모 칸에 포커스가 있을 때 누르면
               그냥 <kbd>\</kbd>가 입력됩니다 — 타이핑 중에는 맨 키가 규칙 4로 막힙니다.
               <strong>Ctrl+\</strong>는 수식어 조합이라 규칙 2로 어디서나 걸리므로, 이
               차이는 맨 키로 바꿔야만 보입니다. (포커스를 아예 <code>body</code>로
