@@ -57,4 +57,27 @@ describe("데모 조작판 — 축이 죽어 있지 않다", () => {
 
     expect(dependenciesAfter(demoSource, at)).toContain("axis");
   });
+
+});
+
+/* 조작판을 접으면 **재는 일을 멈춥니다** — 접힌 표는 아무도 안 보는데, 400ms마다 옛 규칙을
+ * 얹었다 걷는 일은 공짜가 아닙니다(PR #29에서 스크롤 위치를 파괴한 것이 바로 그 주입입니다).
+ *
+ * ⚠️ **토큰을 넣는 이펙트가 아니라 재는 이펙트만** 멈춥니다. 접었다고 `--*-min`이 풀리면
+ * 조작판을 치우는 것만으로 화면이 바뀌어, 무엇을 보고 있었는지 알 수 없게 됩니다.
+ * 그래서 앵커도 `justify` 토큰이 아니라 **측정 주기**를 잡습니다. */
+describe("데모 조작판 — 접으면 재기를 멈춘다", () => {
+  const MEASURE_ANCHOR = "window.setInterval(measure, 400)";
+
+  it("측정 주기를 거는 자리를 찾을 수 있다", () => {
+    expect(demoSource.indexOf(MEASURE_ANCHOR)).toBeGreaterThan(-1);
+  });
+
+  /* 본문이 `open`을 읽는데 의존성에 없으면, 접었다 폈을 때 이펙트가 다시 안 돌아
+   * **표가 영원히 `…`에 머뭅니다** — 이 파일이 이미 한 번 잡은 결함과 같은 모양입니다. */
+  it("재는 이펙트가 open을 의존성에 적는다", () => {
+    const at = demoSource.indexOf(MEASURE_ANCHOR);
+
+    expect(dependenciesAfter(demoSource, at)).toContain("open");
+  });
 });
