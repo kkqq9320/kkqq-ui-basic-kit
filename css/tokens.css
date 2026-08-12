@@ -204,9 +204,12 @@
   --link: #aaaaf2;
 }
 
-/* 전역 리셋 — 스크롤바 굵기를 4px로 통일하고, 오버플로가 생겨도
- * 문서 폭이 흔들리지 않도록 scrollbar-gutter를 예약합니다. */
-html { scrollbar-gutter: stable; }
+/* 전역 리셋 — 스크롤바 굵기를 4px로 통일합니다.
+ *
+ * ⚠️ 여기 `html { scrollbar-gutter: stable; }`이 있었습니다. 목적은 "오버플로가 생겨도
+ * 문서 폭이 흔들리지 않게"였는데, 아래에서 **페이지 스크롤바가 폭을 아예 안 먹게** 되어
+ * 흔들릴 것이 없어졌습니다. 남겨 두면 4px이 영구히 죽기만 합니다 —
+ * 실측으로 그 4px을 돌려받았습니다(문서 폭 1274 → 1278). */
 * { box-sizing: border-box; }
 * { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
 *::-webkit-scrollbar { width: var(--scrollbar-size); height: var(--scrollbar-size); }
@@ -218,18 +221,36 @@ html { scrollbar-gutter: stable; }
 @supports selector(::-webkit-scrollbar) {
   * { scrollbar-width: auto; scrollbar-color: auto; }
 }
+
+/* **페이지 스크롤바는 보이지 않고, 스크롤은 그대로 됩니다**(오너 요청 2026-08-12:
+ * "기능은 하는데 그냥 보이지만 않았으면"). 실측(실제 크롬): 숨긴 뒤에도 넘침 67px은
+ * 그대로고 `scrollTo(40)`이 40으로 갑니다 — 못 쓰게 된 게 아니라 안 그려질 뿐입니다.
+ *
+ * ⚠️ **대상이 이 셋뿐인 것이 요점입니다.** 예전에 `*`로 전부 숨겨서 안쪽에서 스스로
+ * 스크롤하는 표면(Select 메뉴, 다이얼로그, 사이드바 서랍)까지 잃었고, 그것들은 실제로
+ * 스크롤되는데도 **"더 있다"가 안 보이는** 결함이 됐습니다. 페이지는 잘린 내용 자체가
+ * 그 신호를 주지만 안쪽 표면은 그렇지 않습니다. 그 표면들은 위 전역 리셋의 4px thin을
+ * 그대로 이어받습니다(§6:138: 컴포넌트는 스크롤바 외형을 바꾸지 않는다).
+ * `tests/pageScrollbarHidden.test.ts`가 이 목록을 낱낱이 못박습니다.
+ *
+ * 아래 모바일 블록에 있던 규칙을 그대로 올린 것입니다 — 모바일에서는 `#root`가,
+ * 데스크톱에서는 문서가 스크롤 호스트라 셋을 함께 적습니다. */
+html, body, #root { scrollbar-width: none !important; -ms-overflow-style: none; }
+html::-webkit-scrollbar, body::-webkit-scrollbar, #root::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; background: transparent !important; }
+html::-webkit-scrollbar-track, body::-webkit-scrollbar-track, #root::-webkit-scrollbar-track,
+html::-webkit-scrollbar-thumb, body::-webkit-scrollbar-thumb, #root::-webkit-scrollbar-thumb { background: transparent !important; }
+
 body { margin: 0; min-width: 0; min-height: 100vh; color: var(--text); background: radial-gradient(circle at 80% 0%, color-mix(in srgb, var(--green) 7%, transparent), transparent 32%), var(--bg); font-family: var(--font-family-base); font-size: var(--font-size-body); line-height: 1.45; }
 #root { min-width: 0; }
 
-/* 모바일: 문서 대신 #root를 세로 스크롤 호스트로 쓰고, "그 페이지 스크롤 호스트"의
- * 스크롤바만 숨깁니다 — 고정 하단 바가 주소창 변화에 흔들리지 않게 하는 전제 조건은
- * html/body/#root에만 해당합니다(§6). 이전에는 `*`로 전부(안쪽에서 스스로 스크롤하는
- * Select 메뉴, 다이얼로그, 사이드바 서랍 등도) 숨겨서, 그 표면들이 실제로 스크롤되는데도
- * 스크롤바가 안 보여 "더 있다"는 게 안 보이는 결함이 있었다. 대상을 좁혀도 안쪽 표면은
- * 방치되지 않는다 — 위 전역 리셋(96-104줄)의 공용 4px thin 처리가 그대로 이어받는다
- * (§6:138: 컴포넌트는 스크롤바 외형을 바꾸지 않는다). */
+/* 모바일: 문서 대신 #root를 세로 스크롤 호스트로 씁니다 — 고정 하단 바가 주소창
+ * 변화에 흔들리지 않게 하는 전제 조건입니다(§6).
+ *
+ * ⚠️ **스크롤바 숨김은 여기 있었는데 위 전역으로 올라갔습니다**(오너 요청 2026-08-12).
+ * 대상 선택자는 그대로 html/body/#root 셋이고, 좁게 유지되는 이유도 그대로입니다 —
+ * 사연과 근거는 위 전역 규칙의 주석에 있습니다. */
 @media (max-width: 760px), (hover: none) and (pointer: coarse) {
-  html, body { height: 100%; overflow: hidden; scrollbar-gutter: auto; }
+  html, body { height: 100%; overflow: hidden; }
   /* scroll-padding-bottom: 40dvh를 여기 뒀었다 — AppShell.tsx의
    * useKeyboardScrollCompensation이 생기기 전, 포커스된 필드를 키보드 위로 세우는
    * 유일한(암묵적) 시도였다(git 히스토리 확인: 조상 저장소의 베이스라인부터 주석 하나
@@ -248,8 +269,4 @@ body { margin: 0; min-width: 0; min-height: 100vh; color: var(--text); backgroun
    * 브라우저의 내장 "포커스 요소가 안 보이면 스크롤" 동작 자체는 이 패딩 없이도
    * 계속 일어나고, 이 패딩은 그 여유(cushion) 크기만 조절했을 뿐이다. */
   #root { width: 100%; height: 100vh; height: 100dvh; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-  html, body, #root { scrollbar-width: none !important; -ms-overflow-style: none; }
-  html::-webkit-scrollbar, body::-webkit-scrollbar, #root::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; background: transparent !important; }
-  html::-webkit-scrollbar-track, body::-webkit-scrollbar-track, #root::-webkit-scrollbar-track,
-  html::-webkit-scrollbar-thumb, body::-webkit-scrollbar-thumb, #root::-webkit-scrollbar-thumb { background: transparent !important; }
 }
