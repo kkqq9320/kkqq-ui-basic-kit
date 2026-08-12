@@ -93,7 +93,9 @@
 - **Panel**: `title`, `hint`, `actions` (전부 optional — 없으면 머리말을 안 그림)
 - **MobileQuickBar**: `items`(**정확히 3개**), `barRef`
 - **Dialog**: `ariaLabel`(필수·고유), `wide`, `scroll`, `closeOnBackdrop`·`closeOnEscape`·`closeOnBack`
-- **ThemeColorEditor**: `theme`, `groups`(토큰 이름표·설명 교체 또는 새 토큰 추가), `onChange`
+- **ThemeColorEditor**: `theme`, `groups`(토큰 이름표·설명 교체 또는 새 토큰 추가), `onChange`,
+  `palette`(앱의 토큰 목록을 묶은 팔레트 — 읽기·쓰기·적용이 전부 이쪽으로),
+  `overrides`(앱이 저장소를 소유 — 넘기면 킷은 저장하지 않음), `onCommit`(손을 둔 뒤 한 번)
 
 > ⚠️ `labels`·`groups`처럼 **키가 있는 표를 갈아 끼울 때는 키 이름이 키트 쪽과
 > 같아야** 합니다. 로직이 키트 목록으로 돌기 때문에 이름이 어긋나면 에러 없이
@@ -387,5 +389,5 @@ body::-webkit-scrollbar,
 
 | 키 | 주인 | 비고 |
 |---|---|---|
-| `themeColors:light` / `themeColors:dark` | **키트** (`ThemeColorEditor`) | 사용자 팔레트 오버라이드 |
+| `themeColors:light` / `themeColors:dark` | **키트** (`ThemeColorEditor`) — **단, `overrides`를 넘기면 앱** | `overrides`가 오면 편집기가 저장을 멈추고, 그 저장소는 앱이 소유합니다 |
 | 사이드바 접힘·테마 등 | **앱** | 키트는 controlled — 저장은 앱 책임(예: `sidebarCollapsed`, `theme`) |

@@ -92,7 +92,9 @@ export function createThemePalette(groups: readonly ThemeTokenGroup[]): ThemePal
         light: cleanTheme(source.light, known, dropped),
         dark: cleanTheme(source.dark, known, dropped),
       };
-      return { backup: { version: 1, colors }, dropped };
+      // 같은 이름이 라이트·다크 양쪽에서 버려지면 dropped에 두 번 들어옵니다 — 그대로
+      // 돌려주면 "모르는 색 1개"가 "2개"로 보입니다. 이름 하나당 한 번만 남깁니다.
+      return { backup: { version: 1, colors }, dropped: [...new Set(dropped)] };
     },
     applyBackup: (backup, theme) => {
       for (const t of THEMES) {

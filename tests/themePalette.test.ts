@@ -145,6 +145,17 @@ describe("백업 형식", () => {
     expect(parsed?.dropped).toEqual(["--nope"]);
   });
 
+  /* ⚠️ 같은 이름이 라이트·다크 양쪽에서 버려지면 dropped에 두 번 들어갈 수 있습니다.
+   * CUSTOMIZING.md는 `parsed.dropped.length`를 "버린 색 개수"로 보여 주라고 안내하므로,
+   * 중복이 남으면 모르는 토큰 1개가 사용자에게 "2개"로 보입니다. */
+  it("같은 이름이 두 테마에서 버려져도 dropped엔 한 번만 남는다", () => {
+    const palette = createThemePalette([APP_GROUP]);
+
+    const parsed = palette.parse({ version: 1, colors: { light: { "--nope": "#123456" }, dark: { "--nope": "#654321" } } });
+
+    expect(parsed?.dropped).toEqual(["--nope"]);
+  });
+
   it("색 형식이 아닌 값도 버리고 이름을 남긴다", () => {
     const palette = createThemePalette([APP_GROUP]);
 

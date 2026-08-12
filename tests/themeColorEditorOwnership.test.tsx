@@ -80,6 +80,16 @@ describe("앱이 소유할 때", () => {
 
     expect((screen.getByLabelText("브랜드2 색상 값") as HTMLInputElement).value).toBe("#ffa866");
   });
+
+  /* 리셋은 값을 되돌릴 뿐 토큰을 없애지 않습니다 — 카드가 사라지면 앱이 신설한 색을
+   * 다시 고를 방법이 없어집니다. */
+  it("리셋해도 앱이 신설한 토큰의 카드는 남는다", () => {
+    render(<ThemeColorEditor theme="light" palette={palette()} overrides={{ "--brand-2": "#ff8a3d" }} />);
+
+    fireEvent.click(screen.getByLabelText("브랜드2 기본값으로"));
+
+    expect(screen.queryByLabelText("브랜드2 색상 선택") !== null).toBe(true);
+  });
 });
 
 describe("저장 경계", () => {
