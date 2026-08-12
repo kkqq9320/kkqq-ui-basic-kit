@@ -711,30 +711,41 @@ keydown 리스너가 **0개**입니다 — 리스너는 이 컴포넌트의 effe
 아래), 렌더하지 않으면 그마저 화면에 영향이 없습니다.
 
 ```tsx
-import { ShortcutProvider, sidebarToggleAction, SIDEBAR_TOGGLE_ID } from "kkqq-ui-basic-kit";
+import { ShortcutProvider, sidebarToggleAction } from "kkqq-ui-basic-kit";
+
+// 사용자가 바꾼 것만 담습니다 — 그래서 시작값이 빈 객체입니다.
+const [overrides, setOverrides] = useState<Record<string, string | null>>({});
 
 <ShortcutProvider
-  actions={[sidebarToggleAction(() => setCollapsed((value) => !value))]}
-  overrides={{ [SIDEBAR_TOGGLE_ID]: "Ctrl+Backslash" }}
+  actions={[sidebarToggleAction(() => setCollapsed((value) => !value), { defaultCombo: "Ctrl+Backslash" })]}
+  overrides={overrides}
 >
   <AppShell>…</AppShell>
 </ShortcutProvider>
 ```
 
-**액션은 앱이 넘깁니다.** 킷이 기본 제공하는 액션은 `sidebarToggleAction(onFire, label?)`
+**액션은 앱이 넘깁니다.** 킷이 기본 제공하는 액션은 `sidebarToggleAction(onFire, options?)`
 하나뿐이고, 그것도 킷이 쥐는 것은 안정적인 `id`(`SIDEBAR_TOGGLE_ID`)와 이름표뿐입니다
 — `Sidebar`는 controlled라 접힘 상태도 토글 함수도 앱 것입니다(`Sidebar`, 접힘 상태는
-`localStorage`처럼 쓰는 쪽이 저장). 그 밖의 단축키는 `{ id, label, defaultCombo, onFire }`
-모양의 액션을 직접 만들어 `actions` 배열에 넣으세요. `id`는 저장의 키이므로 **바뀌면
-그 액션의 덮어쓰기가 고아가 됩니다.**
+`localStorage`처럼 쓰는 쪽이 저장). `options`는 `{ label?, defaultCombo? }` 모양입니다.
+그 밖의 단축키는 `{ id, label, defaultCombo, onFire }` 모양의 액션을 직접 만들어
+`actions` 배열에 넣으세요. `id`는 저장의 키이므로 **바뀌면 그 액션의 덮어쓰기가
+고아가 됩니다.**
 
-**`defaultCombo`는 킷이 주는 액션이든 앱이 만든 액션이든 항상 `null`로 시작해도
-됩니다 — 킷은 어떤 조합도 대신 정해 주지 않습니다.** 실제로 `sidebarToggleAction`은
-`defaultCombo: null`을 반환합니다. 그래서 **조합은 앱이 정해야** 하고, 그 자리가
-`overrides`입니다(사용자가 바꾼 것만 담는 자리가 아니라, 앱이 처음부터 어떤 조합을
-쓸지 정하는 자리이기도 합니다). `overrides`도 안 주면 그 액션은 아무 키에도 안
-걸립니다 — 안내 없이 켜면 "켰는데 안 되는데요"가 됩니다. 데모(`demo/main.tsx`)의
+**`defaultCombo`는 킷이 대신 정해 주지 않습니다 — 항상 `null`이 기본값입니다.**
+`sidebarToggleAction`도 `options`를 안 넘기면 `defaultCombo: null`을 반환합니다.
+**조합은 앱이 정해야 하고, 그 자리는 `defaultCombo`입니다** — `sidebarToggleAction`이면
+`options.defaultCombo`(위 예시), 직접 만든 액션이면 `{ id, label, defaultCombo, onFire }`의
+`defaultCombo` 필드입니다. `defaultCombo`도 안 주면 그 액션은 아무 키에도 안 걸립니다
+— 안내 없이 켜면 "켰는데 안 되는데요"가 됩니다. 데모(`demo/main.tsx`)의
 `Ctrl + \`가 그 예시입니다.
+
+**`overrides`는 앱의 기본값을 담는 자리가 아니라, 사용자가 실제로 바꾼 것만
+담는 자리입니다.** 키가 없는 액션은 `defaultCombo`를 그대로 쓰고, 키가 있는데
+값이 `null`이면 사용자가 그 조합을 **지운** 것입니다(기본값으로 돌아가지 않습니다).
+이 구분이 있어야 "기본 조합을 나중에 바꿨는데 이미 저장한 사용자만 옛 조합에
+갇힌다"가 구조적으로 안 생깁니다 — 저장에는 `overrides`만 넣고 `defaultCombo`는
+코드에 남겨 두면 됩니다.
 
 사용자가 조합을 직접 바꾸게 하려면 `ShortcutSettings`를 띄우세요 — 녹음기이자
 충돌 검사기입니다(같은 조합을 다른 액션에, 또는 킷 컴포넌트가 이미 쓰는 조합에

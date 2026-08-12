@@ -107,16 +107,25 @@
 
 ### 2.1 규칙 1이 성립하는 근거는 실측입니다
 
-킷의 키 소비자 전수(`src/` 일곱 곳, 2026-08-12 측정):
+킷의 키 소비자 전수(`src/` 여덟 곳, 2026-08-12 측정 + 전체 리뷰로 2026-08-13에
+`ShortcutProvider`·`ShortcutSettings` 두 곳을 더함):
 
-| 소비자 | 범위 | Ctrl/Meta 조합 | `preventDefault` |
-|---|---|---|---|
-| `DateWheelPicker` `handleFieldKey` | 포커스(트리거 **버튼**) | 전부 양보, `Ctrl+;`만 씀 | 처리한 분기마다 부름 |
-| `Select` `handleKeyDown` | 포커스(트리거 **버튼**·메뉴) | 전부 양보 | 처리한 분기마다 부름 |
-| `Dialog` `handleKeyDown` (`:69`) | 열림, document. **`Tab` 포커스 트랩** | — | **조건부** — 트랩이 감쌀 때만(`:72`·`:75`·`:76`) |
-| `useEscapeToClose` (`src/hooks.ts:25`) | 열린 팝업, document | — | **안 부름** |
-| `SectionTabs` `closeOnEscape` ×2 (`:70`·`:145`) | 모바일 메뉴, document | — | **안 부름** |
-| `PageChrome` `closeOnEscape` (`:183`) | `<details>`, document | — | **안 부름** |
+| 소비자 | 부착 자리 | 범위 | Ctrl/Meta 조합 | `preventDefault` |
+|---|---|---|---|---|
+| `DateWheelPicker` `handleFieldKey` | 1 | 포커스(트리거 **버튼**) | 전부 양보, `Ctrl+;`만 씀 | 처리한 분기마다 부름 |
+| `Select` `handleKeyDown` | 2 | 포커스(트리거 **버튼**·메뉴) | 전부 양보 | 처리한 분기마다 부름 |
+| `Dialog` `handleKeyDown` (`:69`) | 1 | 열림, document. **`Tab` 포커스 트랩** | — | **조건부** — 트랩이 감쌀 때만(`:72`·`:75`·`:76`) |
+| `useEscapeToClose` (`src/hooks.ts:25`) | 1 | 열린 팝업, document | — | **안 부름** |
+| `SectionTabs` `closeOnEscape` ×2 (`:70`·`:145`) | 2 | 모바일 메뉴, document | — | **안 부름** |
+| `PageChrome` `closeOnEscape` (`:183`) | 1 | `<details>`, document | — | **안 부름** |
+| `ShortcutProvider` `handleKeyDown` (`:67`) | 1 | 마운트 내내, document, **버블** | 바인딩되면 소비, 그 외엔 무시 — `Escape`·`Tab`(`Shift+Tab` 포함)은 `bindingOf`가 드롭해 애초에 바인딩 자체가 안 됨(§6.2, 전체 리뷰 Important 2) | 트리거된 것만 부름(규칙 6) — 소비하면서 안 부르는 경우 없음 |
+| `ShortcutSettings` 녹음기 `handleKeyDown` (`:40`) | 1 | 녹음 중만, document, **캡처** | 전부 소비(녹음 대상) | **조건부** — `Escape`·`Tab`만 의도적으로 안 부름(§6.2), 그 외엔 부름 |
+
+**'부착 자리' 열의 단위는 `tests/keyConsumers.test.ts`의 `KNOWN_CONSUMERS`와 같습니다**
+— `addEventListener("keydown", …)`·`onKeyDown={…}`이 나온 자리 수(파일별)입니다.
+**'소비자' 열은 사람이 읽는 이름 단위**라 `Select`처럼 자리가 둘이어도 한 줄입니다 —
+두 열이 다른 것을 세므로 맞대 볼 때는 '부착 자리' 쪽을 검사와 비교하세요(전체 리뷰
+Important 3-나).
 
 `Dialog`의 `Escape`는 이 표에 따로 없습니다 — `useEscapeToClose` 줄이 그것입니다.
 
@@ -127,18 +136,27 @@
 `if (event.ctrlKey || event.metaKey) return;`이고, 주석이 이유를 적어 두었습니다 —
 *"브라우저·OS 단축키입니다."* 킷이 점유한 조합은 **`Ctrl+;` 하나뿐**입니다.
 
-**(나) `defaultPrevented`의 구멍은 넷이고, 걸린 키는 `Escape`와 `Tab` 둘뿐입니다.**
-셋은 `Escape`를 먹으면서 `preventDefault`를 안 부르고, `Dialog`의 포커스 트랩은
-**감싸지 않는 평범한 `Tab` 이동에서** 안 부릅니다.
+**(나) `defaultPrevented`의 구멍은 다섯이고, 걸린 키는 여전히 `Escape`와 `Tab`
+둘뿐입니다.** 셋(`useEscapeToClose`·`SectionTabs`·`PageChrome`)은 `Escape`를 먹으면서
+`preventDefault`를 안 부르고, `Dialog`의 포커스 트랩은 **감싸지 않는 평범한 `Tab`
+이동에서** 안 부르고, `ShortcutSettings`의 녹음기는 **녹음 중** `Escape`·`Tab` 양쪽에서
+**의도적으로** 안 부릅니다(§6.2 — 포커스가 그대로 나가야 하고, `Escape`가 다른
+document 리스너로 전파돼야 하기 때문입니다). `ShortcutProvider`는 이 구멍에 안
+더해집니다 — 소비하면(바인딩이 맞으면) 항상 `preventDefault`를 부르고, 게다가
+Important 2 수정 뒤로는 `Escape`·`Tab`을 애초에 바인딩할 수조차 없습니다.
 
-그런데 이 넷은 포커스 범위가 아니라 **document 리스너**라서 규칙 1이 말하는 "포커스한
-컨트롤"이라는 범주에 애초에 안 들어갑니다. 그리고 `Escape`와 `Tab`은 §6.2에 따라
-**조합으로 등록할 수 없습니다** — `Shift+Tab`도 같이 빠집니다. 그래서 이 구멍은 규칙 1의
-반례가 아니라, **§6.2가 우연이 아니라 필연이라는 근거**입니다.
+그런데 이 다섯은 포커스 범위가 아니라 **document 리스너**라서 규칙 1이 말하는
+"포커스한 컨트롤"이라는 범주에 애초에 안 들어갑니다. 그리고 `Escape`와 `Tab`은
+§6.2에 따라 **조합으로 등록할 수 없습니다** — `Shift+Tab`도 같이 빠집니다. 그래서 이
+구멍은 규칙 1의 반례가 아니라, **§6.2가 우연이 아니라 필연이라는 근거**입니다.
 
-> ⚠️ **이 표는 재서 얻은 것이고, 주석이 아니라 검사로 지켜야 합니다.** 이 저장소는
-> "주석에 적은 숫자는 아무도 다시 재지 않는다"로 이미 값을 치렀습니다. 새 키 소비자가
-> 생겼는데 `preventDefault`를 안 부르면 규칙 1이 조용히 새기 시작합니다 — §10-1.
+> ⚠️ **이 표의 '부착 자리' 열은 검사(§10-1, `tests/keyConsumers.test.ts`)로
+> 지킵니다** — 파일별 자리 수가 달라지면 빨개집니다. **다만 그 검사는 개수만 재고,
+> `preventDefault`를 부르는지나 어떤 키를 먹는지는 안 봅니다.** 그 둘은 이 표를
+> 사람이 다시 재서 지켜야 합니다 — 새 키 소비자가 생기거나, 기존 소비자가 분기를
+> 늘려 새 키를 먹기 시작했는데 자리 수는 그대로라면, 검사는 조용하고 이 표만
+> 낡습니다(전체 리뷰 Important 3-가 — 전에는 이 경고가 검사가 실제로 못 잡는 것까지
+> 잡는 것처럼 읽혔습니다).
 
 ### 2.2 규칙 3의 대가를 명시합니다
 
@@ -463,10 +481,15 @@ restoring them"*입니다. 저장이 맨 JSON이 아니라 **버전 붙은 봉�
 
 ### 검사
 
-1. **킷의 키 소비자 전수가 §2.1 표와 같다** — `preventDefault`를 안 부르며 키를 먹는
-   자리는 그 표의 넷뿐이고, 걸린 키는 `Escape`·`Tab`뿐이다. 새 소비자가 생기거나
-   기존 소비자가 다른 키를 먹기 시작하면 빨개집니다.
+1. **킷의 키 소비자 전수(파일별 '부착 자리' 수)가 §2.1 표의 그 열과 같다** —
+   `addEventListener("keydown", …)`·`onKeyDown={…}`을 합친 자리 수를 파일별로 셉니다.
+   새 파일이 키를 먹기 시작하거나 자리 수가 바뀌면 빨개집니다.
    (선례: `colorLiterals.test.ts`, `classNameContract.test.ts`)
+   ⚠️ **이 검사는 개수만 봅니다** — 어떤 핸들러가 `preventDefault`를 부르는지도, 어떤
+   키를 먹는지도 안 봅니다. 그래서 기존 소비자 안에 분기가 하나 늘어 새 키를 먹기
+   시작해도 자리 수가 그대로면 빨개지지 않습니다. `preventDefault`를 안 부르는 자리는
+   §2.1 표대로 다섯이고 걸린 키는 `Escape`·`Tab`뿐이라는 것은, 이 검사가 아니라
+   §2.1을 사람이 다시 재서 지킵니다(전체 리뷰 Important 3-가).
 2. **§5.2의 예약 목록은 코드에서 파생된다.** 손으로 적은 목록이면 빨개집니다.
 3. **`ShortcutProvider` 없이 킷을 쓰면 `document`에 keydown 리스너가 안 붙는다.**
 4. **`css/shortcuts.css`의 모든 규칙이 `.kkqq-shortcuts` 아래에 있다.**
