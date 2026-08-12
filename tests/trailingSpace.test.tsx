@@ -168,3 +168,44 @@ describe("끝 여백 판정", () => {
     expect(observations.map((o) => o.target)).toEqual([workspace()]);
   });
 });
+
+/* 저장소 규칙은 "새 축은 기본값이 '지금과 같음'"인데 이번엔 **기본이 새 동작**입니다
+ * (오너 결정 2026-08-12: 안 그러면 아무도 이걸 안 받는다). 그 대신 앱이 예전 동작으로
+ * 돌아갈 문이 반드시 있어야 하고, 아래가 그 문을 지킵니다. */
+describe("trailingSpace prop — 앱이 끝 여백을 도로 고정할 수 있다", () => {
+  it('"fixed"면 내용이 화면에 들어가도 여백을 그대로 둔다', () => {
+    // adaptive였다면 "free"가 나오는 지오메트리입니다 — 위 두 번째 테스트와 같은 값.
+    documentHeight = 1337;
+    viewportHeight = 1270;
+    spacerHeight = "80px";
+
+    render(<AppShell sidebar={<nav />} trailingSpace="fixed"><p>내용</p></AppShell>);
+
+    expect(workspace().dataset.trailingSpace).toBe("fixed");
+  });
+
+  /* "재지도, 관찰하지도 않는다"가 prop 문서에 적힌 약속입니다. 관찰을 걸어 두면
+   * 앱이 끝 여백에 기대는 동안에도 이 킷이 계속 레이아웃을 읽습니다. */
+  it('"fixed"면 아무것도 관찰하지 않는다', () => {
+    documentHeight = 1337;
+    viewportHeight = 1270;
+    spacerHeight = "80px";
+
+    render(<AppShell sidebar={<nav />} trailingSpace="fixed"><p>내용</p></AppShell>);
+
+    expect(observations).toEqual([]);
+  });
+
+  /* 기본값이 무엇인지가 이 라운드의 결정 사항이었습니다. 값을 안 주면 새 동작입니다 —
+   * 위 `renderShell()`이 prop을 안 넘기므로 그 전제가 이 파일 전체에 깔려 있고,
+   * 여기서 한 번 이름으로 못박습니다. */
+  it("prop을 안 주면 adaptive다", () => {
+    documentHeight = 1337;
+    viewportHeight = 1270;
+    spacerHeight = "80px";
+
+    renderShell();
+
+    expect(workspace().dataset.trailingSpace).toBe("free");
+  });
+});

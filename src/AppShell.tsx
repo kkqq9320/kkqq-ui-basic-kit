@@ -935,6 +935,16 @@ export type AppShellProps = {
   /** MobilePageTabs */
   pageTabs?: ReactNode;
   overlayLabel?: string;
+  /** 페이지 **끝 여백**을 어떻게 둘지.
+   *
+   * - `"adaptive"`(기본) — 여백이 **스스로 스크롤을 만들지 않습니다.** 내용이 화면에
+   *   들어가면 남는 자리만 쓰고, 이미 넘치는 페이지에서는 여백을 그대로 둡니다.
+   * - `"fixed"` — 언제나 `--workspace-space-bottom`만큼. **이 킷의 예전 동작**입니다.
+   *   내용이 화면을 거의 채우면 그 여백만으로 스크롤이 생깁니다.
+   *
+   * 앱이 페이지 끝 여백에 무언가를 기대고 있다면(직접 띄운 고정 바 자리 등)
+   * `"fixed"`로 두세요. 그 경우 재지도, 관찰하지도 않습니다. */
+  trailingSpace?: "adaptive" | "fixed";
 };
 
 /** 페이지 끝 여백이 **스스로 스크롤을 만들지 않게** 하되, 내용이 이미 넘치는
@@ -956,11 +966,18 @@ export type AppShellProps = {
  * `content: none`으로 꺼서 이 표식이 매치할 규칙이 없습니다. 모바일 하단 패딩은
  * 고정 바 자리와 키보드 보정이 기대는 값이라 성격이 완전히 다릅니다.
  */
-function useContentDrivenTrailingSpace(workspaceRef: { current: HTMLElement | null }) {
+function useContentDrivenTrailingSpace(workspaceRef: { current: HTMLElement | null }, mode: "adaptive" | "fixed") {
   useLayoutEffect(() => {
     const workspace = workspaceRef.current;
     const view = workspace?.ownerDocument.defaultView;
     if (!workspace || !view) return;
+
+    /* 앱이 이미 정했으면 재지 않습니다 — 관찰도 걸지 않습니다. 판정이 없으니 값이
+     * 흔들릴 일도 없고, 끝 여백에 무언가를 기대는 앱이 그 기대를 지킬 수 있습니다. */
+    if (mode === "fixed") {
+      workspace.dataset.trailingSpace = "fixed";
+      return;
+    }
 
     const measure = () => {
       const root = workspace.ownerDocument.documentElement;
@@ -981,10 +998,10 @@ function useContentDrivenTrailingSpace(workspaceRef: { current: HTMLElement | nu
       observer?.disconnect();
       view.removeEventListener("resize", measure);
     };
-  }, [workspaceRef]);
+  }, [workspaceRef, mode]);
 }
 
-export function AppShell({ sidebar, children, collapsed = false, mobileOpen = false, onMobileClose, navHidden = false, keyboardOpen = false, quickBar, pageTabs, overlayLabel = "사이드바 닫기", className = "" }: AppShellProps) {
+export function AppShell({ sidebar, children, collapsed = false, mobileOpen = false, onMobileClose, navHidden = false, keyboardOpen = false, quickBar, pageTabs, overlayLabel = "사이드바 닫기", className = "", trailingSpace = "adaptive" }: AppShellProps) {
   // 소비 앱은 보통 useVirtualKeyboardOpen()(불리언만)으로 keyboardOpen prop을 주므로,
   // 스크롤 보정에 필요한 inset은 여기서 직접 한 번 더 구독합니다 — Dialog.tsx가
   // useVisualViewportBox()를 prop이 아니라 직접 부르는 것과 같은 선례입니다.
@@ -1026,7 +1043,7 @@ export function AppShell({ sidebar, children, collapsed = false, mobileOpen = fa
   // 틱마다 강제 리플로우를 만들지 않습니다.
   // 페이지 끝 여백이 스스로 스크롤을 만들지 않게 하는 판정(위 훅 문서 참고).
   const workspaceRef = useRef<HTMLElement | null>(null);
-  useContentDrivenTrailingSpace(workspaceRef);
+  useContentDrivenTrailingSpace(workspaceRef, trailingSpace);
 
   const releaseInProgress = !keyboard.open && keyboardInset > 0;
   const shellClassName = ["app-shell", className, collapsed && "sidebar-collapsed", navHidden && "mobile-nav-hidden", keyboardOpen && "mobile-keyboard-open", keyboard.open && "keyboard-inset-open", releaseInProgress && "keyboard-inset-holding"].filter(Boolean).join(" ");
