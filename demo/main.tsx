@@ -662,15 +662,18 @@ function Demo() {
             </p>
             <p className="muted-copy">
               <strong>맨 키(수식어 없는 키) 허용 구역을 보려면:</strong> 아래에서 이 조합을
-              지우고 수식어 없이 <kbd>\</kbd> 하나만 다시 녹음하세요. ① 이 패널의 빈 곳을
-              클릭해 포커스를 <code>body</code>로 보낸 채 <kbd>\</kbd>를 누르면 동작합니다 —
+              지우고 수식어 없이 <kbd>\</kbd> 하나만 다시 녹음하세요. ① 바로 아래
+              "지우기" 버튼처럼 <code>.workspace</code> 안의(타이핑 칸이 아닌) 요소를
+              클릭해 거기 포커스를 둔 채 <kbd>\</kbd>를 누르면 동작합니다 —
               <code>.workspace</code>에 <code>data-kkqq-shortcut-scope</code>가 붙어 있어서입니다
               (설계 스펙 §2.2). ② 사이드바의 아무 버튼을 눌러 거기 포커스를 둔 채 누르면
               동작하지 않습니다 — 사이드바는 <code>.workspace</code> 밖의 형제라 표식이 안
               걸립니다. ③ 아래 "텍스트와 버튼" 패널의 메모 칸에 포커스가 있을 때 누르면
               그냥 <kbd>\</kbd>가 입력됩니다 — 타이핑 중에는 맨 키가 규칙 4로 막힙니다.
               <strong>Ctrl+\</strong>는 수식어 조합이라 규칙 2로 어디서나 걸리므로, 이
-              차이는 맨 키로 바꿔야만 보입니다.
+              차이는 맨 키로 바꿔야만 보입니다. (포커스를 아예 <code>body</code>로
+              보내도 동작하지만 그건 규칙 3 때문이라 이 표식과 무관합니다 — 위 ①이
+              표식이 실제로 하는 일을 보여 주는 자리입니다.)
             </p>
             <ShortcutSettings onChange={(id, combo) => setShortcutOverrides((current) => ({ ...current, [id]: combo }))} />
           </Panel>
