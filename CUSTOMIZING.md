@@ -121,8 +121,8 @@ CSS에서 같은 변수를 다시 정의**하면 그걸로 끝입니다. 라이�
 
 | 묶음 | 토큰 |
 |---|---|
-| 강조·브랜드 | `--accent`, `--accent-soft`, `--deep` |
-| 상태색 | `--green`, `--green-soft`, `--orange`, `--red`, `--gold` |
+| 강조·브랜드 | `--accent`, `--accent-soft`, `--deep`※ |
+| 상태색 | `--green`, `--green-soft`, `--orange`, `--red`, `--gold`※ |
 | 표면·선·글자 | `--bg`, `--surface`, `--surface-soft`, `--input`, `--sidebar`, `--line`, `--text`, `--muted` |
 | 타이포 | `--font-family-base`, `--font-size-*`(control 13 / nav 14 / section-title 18 / dialog-title 20 / page-title 31 …) |
 | 컨트롤 높이 | `--action-height`(38), `--compact-action-height`(32), `--action-min-width`(88), `--compact-action-min-width`(64) |
@@ -130,6 +130,19 @@ CSS에서 같은 변수를 다시 정의**하면 그걸로 끝입니다. 라이�
 | 사이드바 | `--sidebar-width`(238), `--sidebar-width-collapsed`(76), `--sidebar-motion`, `--sidebar-ease` |
 | 스크롤바·모션 | `--scrollbar-size`(4), `--scrollbar-thumb`, `--scrollbar-thumb-hover`, `--motion-fast`(140ms) |
 | 날짜 활성 세그먼트 | `--date-segment-active-background`, `--date-segment-active-text` (아래 주의) |
+
+> ※ **`--deep`·`--gold`는 CSS로 바꿀 수는 있지만 `ThemeColorEditor`에는 안 나옵니다.**
+> 킷 CSS가 그 둘을 쓰지 않아 편집기에서 고쳐도 화면이 안 바뀌었기 때문입니다 —
+> 안 쓰는 색을 편집기에 얹으면 사용자에게는 고장으로 보입니다. **앱이 그 둘을 쓰고
+> 사용자가 고르게까지 하고 싶다면** 자기 목록에 넣으세요(아래 "새 색 토큰을 더하기"와
+> 같은 방법입니다):
+>
+> ```ts
+> const palette = createThemePalette([
+>   ...THEME_TOKEN_GROUPS,
+>   { title: "브랜드", tokens: [{ name: "--deep", label: "짙은 면", description: "어두운 배경 면" }] },
+> ]);
+> ```
 
 > ⚠️ **날짜 활성 세그먼트 둘은 짝입니다.** 기본값이 `var(--text)`와 `var(--input)`이라
 > **반전**(칩은 글자색, 글자는 필드색)이고, 그래서 `--text`·`--input`만 바꿔도 저절로
