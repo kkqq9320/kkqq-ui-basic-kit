@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts } from "../src/model/instant";
+import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, instantModel } from "../src/model/instant";
 
 describe("typeDigit — 모호하지 않으면 즉시 확정한다", () => {
   it("월: 2~9는 한 자리로 확정하고 다음 열로", () => {
@@ -168,5 +168,24 @@ describe("모델로 옮겨 온 나머지 함수", () => {
   it("dateTriggerParts는 버퍼를 자리 지켜 그린다", () => {
     const parts = dateTriggerParts("2026-07-12", ["year", "month", "day"], { unit: "year", digits: "20" });
     expect(parts[0].text).toBe("20\u2012\u2012");
+  });
+});
+
+describe("instantModel", () => {
+  it("사다리 순서를 갖는다", () => {
+    expect(instantModel.units).toEqual(["year", "month", "day"]);
+  });
+
+  it("지금은 fields를 그대로 열로 쓴다", () => {
+    expect(instantModel.columns(["year", "month"])).toEqual(["year", "month"]);
+  });
+
+  /* 위임이 실제로 같은 함수를 부르는지 — 이름만 바꿔 놓고 다른 걸 부르면
+   * 컴포넌트 테스트가 잡아 주지만, 여기서 잡으면 어느 칸인지 바로 압니다. */
+  it("위임한 것들이 같은 답을 낸다", () => {
+    expect(instantModel.shift("2026-01-31", "month", 1)).toBe(shiftDateValue("2026-01-31", "month", 1));
+    expect(instantModel.normalize("2026-07-12", ["year"])).toBe(normalizeToFields("2026-07-12", ["year"]));
+    expect(instantModel.keyLength(["year", "month"])).toBe(rangeKeyLength(["year", "month"]));
+    expect(instantModel.isValid("2026-07-12")).toBe(validDateValue("2026-07-12"));
   });
 });

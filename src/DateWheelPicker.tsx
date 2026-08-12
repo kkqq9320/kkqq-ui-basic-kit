@@ -15,16 +15,7 @@ import { createPortal } from "react-dom";
 
 import {
   DATE_WHEEL_FILL,
-  dateTriggerParts,
-  dateWheelLabel,
-  flushBuffer,
-  normalizeToFields,
-  rangeKeyLength,
-  shiftDateValue,
-  todayIn,
-  typeDigit,
-  validDateValue,
-  withUnitValue,
+  instantModel,
   type DateWheelUnit,
 } from "./model/instant";
 import { useBackToClose, useEscapeToClose } from "./hooks";
@@ -160,6 +151,7 @@ export type DateWheelPickerProps = {
 };
 
 export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DATE_WHEEL_FIELDS, allowClear = false, ariaLabel, heading, id, disabled = false, labels: labelOverrides, timeZone = "Asia/Seoul", mobileBottomInset = 78, className = "" }: DateWheelPickerProps) {
+  const model = instantModel;
   const labels = { ...DEFAULT_DATE_WHEEL_LABELS, ...labelOverrides, units: { ...DEFAULT_DATE_WHEEL_LABELS.units, ...labelOverrides?.units } };
   const [open, setOpen] = useState(false);
   // 겹쳐 있으면 가장 안쪽만 닫힙니다 — 다이얼로그 안에서 열렸을 때 다이얼로그까지 닫으면 안 됩니다.
@@ -498,16 +490,16 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
 
   // 남은 최소 단위로만 비교합니다(연·월 픽커면 "월" 단위). 함수 선언이라 baseValue보다
   // 아래에 있어도 호출 시점엔 keyLen이 이미 초기화돼 있습니다.
-  const keyLen = rangeKeyLength(fields);
+  const keyLen = model.keyLength(fields);
   function rangeKey(v: string) { return v.slice(0, keyLen); }
   function outOfRange(v: string) { return (!!min && rangeKey(v) < rangeKey(min)) || (!!max && rangeKey(v) > rangeKey(max)); }
   function clampToRange(v: string) {
-    const normalized = normalizeToFields(v, fields);
-    if (min && rangeKey(normalized) < rangeKey(min)) return normalizeToFields(min, fields);
-    if (max && rangeKey(normalized) > rangeKey(max)) return normalizeToFields(max, fields);
+    const normalized = model.normalize(v, fields);
+    if (min && rangeKey(normalized) < rangeKey(min)) return model.normalize(min, fields);
+    if (max && rangeKey(normalized) > rangeKey(max)) return model.normalize(max, fields);
     return normalized;
   }
-  const baseValue = clampToRange(validDateValue(value) ? value : todayIn(timeZone));
+  const baseValue = clampToRange(model.isValid(value) ? value : model.now(timeZone));
 
   // 트리거가 그릴 조각들. null이면 placeholder를 그린다는 뜻입니다.
   //
@@ -517,8 +509,8 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   //
   // 값이 유효하지 않은데(빈 값·깨진 값) 버퍼도 없으면 예전 formatDateTrigger와 똑같이
   // placeholder입니다 — 판정도 그때와 같은 validDateValue입니다.
-  const hasDateValue = validDateValue(value);
-  const triggerParts = hasDateValue || resolvedTyping ? dateTriggerParts(hasDateValue ? value : baseValue, fields, resolvedTyping) : null;
+  const hasDateValue = model.isValid(value);
+  const triggerParts = hasDateValue || resolvedTyping ? model.triggerParts(hasDateValue ? value : baseValue, fields, resolvedTyping) : null;
 
   /**
    * 트리거의 접근성 이름 — **레이블 뒤에 지금 화면에 보이는 값을 잇습니다**
@@ -742,14 +734,14 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   }
 
   function shiftedFrom(sourceValue: string, unit: DateWheelUnit, amount: number) {
-    const next = normalizeToFields(shiftDateValue(sourceValue, unit, amount), fields);
+    const next = model.normalize(model.shift(sourceValue, unit, amount), fields);
     // 연도가 10000 이상(또는 음수)이 되면 Date#toISOString()이 확장 표기
     // (+010000-07-12)로 바뀌고, 그 뒤 slice(0, 10)·normalizeToFields를 거치며
     // "+010000-07-undefined" 같은 깨진 문자열이 된다. validDateValue는 이미
     // 컴포넌트 전체가 "쓸 수 없는 값"의 신호로 쓰는 판정이므로, 여기서도 그대로
     // null을 돌려줍니다 — outOfRange 판정으로는 min/max가 없는 필드에서 이 값을
     // 걸러내지 못합니다.
-    if (!validDateValue(next)) return null;
+    if (!model.isValid(next)) return null;
     if (outOfRange(next)) return null;
     return next;
   }
@@ -845,7 +837,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 맞습니다. 열이 그리는 것이 그 열의 수이기 때문입니다.
    */
   function commitToday() {
-    const next = clampToRange(todayIn(timeZone));
+    const next = clampToRange(model.now(timeZone));
     const numbersOf = (value: string) => value.split("-").map(Number);
     const index: Record<DateWheelUnit, number> = { year: 0, month: 1, day: 2 };
     const [from, to] = [numbersOf(baseValue), numbersOf(next)];
@@ -865,7 +857,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 타이핑은 휠 이동이 아닙니다.
    */
   function commitTyped(unit: DateWheelUnit, amount: number) {
-    const next = clampToRange(withUnitValue(baseValue, unit, amount));
+    const next = clampToRange(model.setUnit(baseValue, unit, amount));
     onChange(next);
     return next;
   }
@@ -905,7 +897,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     setTyping(null);
     const buffer = resolvedTyping;
     if (!buffer?.digits) return null;
-    const amount = flushBuffer(buffer.unit, buffer.digits);
+    const amount = model.flushBuffer(buffer.unit, buffer.digits);
     if (amount === null) return null;
     return commitTyped(buffer.unit, amount);
   }
@@ -1097,7 +1089,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       setActiveUnit(unit);
       setEditing(true);
       const buffer = resolvedTyping?.unit === unit ? resolvedTyping.digits : "";
-      const step = typeDigit(unit, buffer, key);
+      const step = model.typeDigit(unit, buffer, key);
       if (step.commit !== null) {
         setTyping(null);
         commitTyped(unit, step.commit);
@@ -1512,12 +1504,12 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
 
             `onPointerDown`의 `setActiveUnit(unit)`이 **포인터 경로가 활성 세그먼트를 따라가는
             유일한 길**입니다(열의 `onFocus`가 하던 일). 지우지 마세요. */}
-        {fields.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${dateWheelLabel(baseValue, unit, labels.weekdays)}`} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {model.columns(fields).map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${model.label(baseValue, unit, labels.weekdays)}`} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
               컨테이너의 key가 바뀌어 행이 통째로 리마운트되므로 포커스를 둘 수도 없습니다. */}
-          <div className="date-wheel-viewport"><div className="date-wheel-values" key={`${unit}-${motion.sequence}`}>{DATE_WHEEL_OFFSETS.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === 3; const buffered = offset === 0 && resolvedTyping?.unit === unit ? resolvedTyping.digits : null; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={() => rowValue && applyShift(unit, offset)} key={offset}>{buffered ?? (rowValue ? dateWheelLabel(rowValue, unit, labels.weekdays) : "—")}</button>; })}</div></div>
+          <div className="date-wheel-viewport"><div className="date-wheel-values" key={`${unit}-${motion.sequence}`}>{DATE_WHEEL_OFFSETS.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === 3; const buffered = offset === 0 && resolvedTyping?.unit === unit ? resolvedTyping.digits : null; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={() => rowValue && applyShift(unit, offset)} key={offset}>{buffered ?? (rowValue ? model.label(rowValue, unit, labels.weekdays) : "—")}</button>; })}</div></div>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.next}`} disabled={!shifted(unit, 1)} onClick={() => applyShift(unit, 1)}><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></button>
         </section>; })}
       </div>

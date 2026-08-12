@@ -217,3 +217,40 @@ export function dateTriggerParts(source: string, fields: DateWheelUnit[], typing
   if (!fields.includes("day")) return [...parts, { unit: null, text: "." }];
   return [...parts, { unit: null, text: ". " }, segment("day", day), { unit: null, text: "." }];
 }
+
+/** 기계(컴포넌트)가 시점 값 모델에 기대하는 계약. 기간(duration) 모델이 생기면
+ *  같은 모양을 구현합니다 — 설계 스펙 §3.3·§12. */
+export type WheelModel = {
+  units: DateWheelUnit[];                                   // 사다리 순서
+  columns(fields: DateWheelUnit[]): DateWheelUnit[];         // 그릴 열
+  isValid(value: string): boolean;
+  normalize(value: string, fields: DateWheelUnit[]): string;
+  keyLength(fields: DateWheelUnit[]): number;
+  shift(value: string, unit: DateWheelUnit, direction: number): string;
+  setUnit(value: string, unit: DateWheelUnit, amount: number): string;
+  label(value: string, unit: DateWheelUnit, weekdays: string[]): string;
+  triggerParts(source: string, fields: DateWheelUnit[], typing: { unit: DateWheelUnit; digits: string } | null): DateTriggerPart[];
+  typeDigit(unit: DateWheelUnit, buffer: string, digit: string): TypingStep;
+  flushBuffer(unit: DateWheelUnit, buffer: string): number | null;
+  now(timeZone: string): string;
+};
+
+/* 기계가 이 객체 하나만 보고 돌게 하는 것이 목적입니다. 기간(duration) 모델이
+ * 생기면 같은 모양을 구현하고, 기계는 안 바뀝니다 — 설계 스펙 §3.3·§12.
+ *
+ * `columns`가 `fields`를 그대로 돌려주는 것은 **지금 단계에서만** 참입니다.
+ * 3단계에서 오전/오후 버튼이 붙으면 여기가 갈라집니다. */
+export const instantModel: WheelModel = {
+  units: ["year", "month", "day"],
+  columns: (fields) => fields,
+  isValid: validDateValue,
+  normalize: normalizeToFields,
+  keyLength: rangeKeyLength,
+  shift: shiftDateValue,
+  setUnit: withUnitValue,
+  label: dateWheelLabel,
+  triggerParts: dateTriggerParts,
+  typeDigit,
+  flushBuffer,
+  now: todayIn,
+};
