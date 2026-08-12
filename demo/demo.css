@@ -43,6 +43,20 @@
   border: 1px solid var(--line); border-radius: 10px;
   background: var(--surface); box-shadow: 0 6px 20px rgba(0, 0, 0, .18);
 }
+/* 접힘 머리줄. 접으면 이것만 남아 알약 하나가 됩니다 — 왼쪽 아래를 비워야 그 자리에 있는
+ * 화면을 볼 수 있습니다(오너 요청). 버튼 자체가 머리줄이라 어디를 눌러도 접힙니다.
+ * 킷 버튼 규격(높이 38 등)을 일부러 벗어납니다: 이건 계측 도구의 손잡이지 앱 컨트롤이
+ * 아니고, 접었을 때 최대한 작아야 가리는 면적이 줄어듭니다. */
+.layout-switch-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-width: 0; height: auto; min-height: 0; padding: 0; border: 0; border-radius: 0;
+  background: none; color: var(--muted); cursor: pointer;
+  font: 700 10px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .06em;
+}
+.layout-switch-head:hover { color: var(--text); }
+.layout-switch-head em { color: var(--accent); font-style: normal; font-weight: 700; }
+.layout-switch.closed { gap: 0; padding: 7px 11px; }
+
 .layout-switch-row { display: grid; gap: 4px; }
 .layout-switch-row strong { color: var(--muted); font: 700 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .06em; }
 .layout-switch-buttons { display: flex; gap: 6px; }

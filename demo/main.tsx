@@ -190,6 +190,11 @@ function LayoutSwitch() {
   const [viewport, setViewport] = useState(0);
   const [justify, setJustify] = useState<(typeof JUSTIFY_CHOICES)[number]>("normal");
   const [fakeWidth, setFakeWidth] = useState(0);
+  /* 조작판을 접을 수 있습니다. 이건 화면 왼쪽 아래를 **고정으로** 덮고 있어서, 정작 그
+   * 자리를 보려면 치울 방법이 있어야 합니다(오너 요청). 기본은 지금까지대로 펼침이고,
+   * 선택은 기억합니다 — 접어 두고 새로 고쳤는데 다시 펴져 있으면 접은 의미가 없습니다. */
+  const [open, setOpen] = useState(() => localStorage.getItem("layoutSwitchOpen") !== "false");
+  useEffect(() => { localStorage.setItem("layoutSwitchOpen", String(open)); }, [open]);
 
   useEffect(() => {
     for (const a of AXES) document.documentElement.style.setProperty(a.token, `${axis[a.token]}px`);
@@ -228,6 +233,12 @@ function LayoutSwitch() {
   }, [fakeWidth]);
 
   useEffect(() => {
+    /* 접혀 있으면 아예 재지 않습니다 — 표를 아무도 안 보는데 400ms마다 옛 규칙을 얹었다
+       걷을 이유가 없습니다. **그 주입이 PR #29에서 스크롤 위치를 파괴한 바로 그 동작**
+       입니다(문서가 창 높이까지 짧아지는 순간 브라우저가 스크롤을 깎습니다).
+       ⚠️ 토큰을 넣는 위 이펙트는 계속 돕니다 — 접었다고 `--*-min`이 풀리면 조작판을
+       치우는 것만으로 화면이 바뀌어 무엇을 보고 있었는지 알 수 없게 됩니다. */
+    if (!open) return;
     /* ⚠️ **접힌 트랙을 빼고 셉니다.** `auto-fit`은 빈 트랙을 `0px`로 접어 두는데
        `gridTemplateColumns`에는 **그대로 남아 있습니다**(실측: `1077px 1077px 0px`).
        그냥 세면 패널 2장이 나눠 쓰는 줄을 "3칸"이라고 찍습니다 — 조작판이 화면과 다른
@@ -316,7 +327,8 @@ function LayoutSwitch() {
     const timer = window.setInterval(measure, 400);
     window.addEventListener("resize", measure);
     return () => { window.clearInterval(timer); window.removeEventListener("resize", measure); };
-  }, [axis, justify, fakeWidth]);
+    // `open`이 빠지면 접었다 펴도 이펙트가 다시 안 돌아 표가 영원히 `…`입니다.
+  }, [axis, justify, fakeWidth, open]);
 
   const slider = (a: (typeof AXES)[number] | (typeof MAX_AXES)[number]) =>
     <div className="layout-switch-row" key={a.token}>
@@ -345,7 +357,20 @@ function LayoutSwitch() {
      조작판이 고장 난 것처럼 보이는데, 실제로는 그 요소가 이 화면에 없을 뿐입니다. */
   const cell = (cols: number, px: number, where: string) => px ? `${cols ? cols + "칸 " : ""}${px}px` : where;
 
-  return <div className="layout-switch">
+  return <div className={`layout-switch${open ? "" : " closed"}`}>
+    {/* 접힘 머리줄. 접었을 때도 **지금 무엇이 걸려 있는지**는 한 줄로 남깁니다 — 접었다는
+        이유로 폭 흉내가 켜진 것을 잊으면, 화면이 왜 그런지 설명할 수 없게 됩니다. */}
+    <button
+      type="button"
+      className="layout-switch-head"
+      aria-expanded={open}
+      aria-label={open ? "조작판 접기" : "조작판 펴기"}
+      onClick={() => setOpen((shown) => !shown)}
+    >
+      <span>{open ? "▾" : "▸"} 조작판</span>
+      {!open && <em>{justify}{fakeWidth ? ` · 흉내 ${fakeWidth}` : ""}</em>}
+    </button>
+    {open && <>
     {AXES.map(slider)}
     {MAX_AXES.map(slider)}
     <div className="layout-switch-row">
@@ -401,6 +426,7 @@ function LayoutSwitch() {
           ? "이 화면 폭에서는 옛 규칙과 같습니다 — 의도한 대로입니다. 카드는 1920부터, 패널은 --panel-min 폭부터 갈립니다."
           : "이 화면 폭에서 달라집니다."}
     </small>
+    </>}
   </div>;
 }
 
