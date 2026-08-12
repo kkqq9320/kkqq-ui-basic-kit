@@ -6,21 +6,350 @@
  * 이 모듈이 아는 유일한 단위 간 의존은 **일의 상한이 연·월에 달려 있다**는 것뿐입니다
  * (lastDayOf, 윤년). 월의 상한은 12로 상수, 연은 상한이 없습니다. 설계 스펙 §3.1.
  */
+export type WheelUnit = "year" | "month" | "day" | "hour" | "minute" | "second";
+/** 기존 이름. `WheelUnit`의 부분집합입니다 — **별칭이 아닙니다.** 컴포넌트와 기존 테스트가
+ *  이 좁은 세 단위 그대로 `Record<DateWheelUnit, …>`를 3키로 채워 쓰므로, 별칭으로 넓히면
+ *  그 자리들이 전부 깨집니다(타이핑·확정 함수의 **인자**만 `WheelUnit`으로 넓히고, 반환
+ *  타입과 `Record`는 좁게 남겨 두는 것이 이 파일과 컴포넌트가 동시에 컴파일되는 유일한
+ *  조합입니다). 좁은 타입을 넓은 인자에 넘기는 건 항상 되므로 기존 호출부는 그대로 통과합니다. */
 export type DateWheelUnit = "year" | "month" | "day";
 
-/** 그 열이 받는 최대 자릿수. */
-function maxDigits(unit: DateWheelUnit) {
+/** 여섯 단위의 순서. 큰 단위부터 작은 단위로. */
+export const UNIT_LADDER = ["year", "month", "day", "hour", "minute", "second"] as const satisfies readonly WheelUnit[];
+
+/** 그 단위가 시작하는 최소값. 월·일만 1이고 나머지(연·시·분·초)는 0입니다. */
+export function unitFloor(unit: WheelUnit) {
+  return unit === "month" || unit === "day" ? 1 : 0;
+}
+
+/** 그 열이 받는 최대 자릿수. 연도만 4자리이고 나머지는 2자리입니다. */
+export function unitDigits(unit: WheelUnit) {
   return unit === "year" ? 4 : 2;
 }
 
-/** 한 자리만으로 확정되는 최소값 — 두 자리가 시작될 수 없는 첫 숫자. */
-function soloFloor(unit: DateWheelUnit) {
-  return unit === "month" ? 2 : 4;   // 월: 2~9, 일: 4~9
+/**
+ * 그 단위에 존재하는 가장 큰 수. 연도는 상한이 없어 `null`입니다.
+ *
+ * **문맥을 보는 단위는 `day` 하나뿐입니다** — 이 모델 전체에서 유일한 단위 간
+ * 의존이고(스펙 §3.1), 그래서 나머지는 `context`를 무시합니다. 둘째 의존이
+ * 생기면 모델을 뗄 수 있었던 근거가 사라집니다.
+ */
+export function unitCeiling(unit: WheelUnit, context: { year: number; month: number }): number | null {
+  if (unit === "year") return null;
+  if (unit === "month") return 12;
+  if (unit === "day") return lastDayOf(context.year, context.month - 1);
+  if (unit === "hour") return 23;
+  return 59;   // minute, second
 }
 
-/** 그 열에 존재하는 수의 상한. 일의 말일 판정은 withUnitValue가 따로 합니다. */
-function unitCeiling(unit: DateWheelUnit) {
-  return unit === "month" ? 12 : 31;
+/* ---- 값 형식: 계열별 파싱과 직렬화 ----------------------------------------
+ *
+ * 값 문자열의 모양(연-월-일 대 시:분[:초])은 `fields` 자체가 아니라 그것이
+ * 가르는 **계열**(`familyOf`)이 정합니다. `fields`가 하는 일은 둘뿐입니다 —
+ * 계열을 가르는 것, 그리고 구간 아래를 누르는 경계를 정하는 것.
+ *
+ * 그 경계는 **사다리 상의 위치**(`UNIT_LADDER` 인덱스)로 비교하지, `fields`에
+ * 있고 없고(멤버십)로 비교하지 않습니다. 멤버십으로 비교하면 "구간 **위**의
+ * 단위는 값에서 그대로 가져온다"가 깨집니다 — `fields = ["month", "day"]`일
+ * 때 `year`는 `fields`의 멤버가 아니지만, `month`보다 사다리 위(왼쪽)에
+ * 있으므로 눌리지 않고 원래 값을 그대로 씁니다. 반대로 `fields = ["year",
+ * "month"]`일 때 `day`는 `month`보다 사다리 아래(오른쪽)이므로 바닥값으로
+ * 눌립니다. 두 규칙 다 "`fields`에서 가장 깊은(사다리 아래쪽) 단위보다 아래면
+ * 누른다" 하나의 기준(`deepestIndex`)에서 나옵니다.
+ */
+export type UnitParts = Record<WheelUnit, number>;
+export type ValueFamily = "date" | "time" | "datetime";
+
+const pad = (n: number, width: number) => String(n).padStart(width, "0");
+
+/** `fields` 중 사다리에서 가장 아래(깊은) 단위의 인덱스. 이보다 아래인 단위는
+ *  값 문자열에도 없고 바닥값으로 눌립니다.
+ *
+ *  빈 `fields`는 **사다리 전체를 쓴 것처럼** 다룹니다(마지막 인덱스, `second`) —
+ *  아무것도 누르지 않는다는 뜻입니다. 가드가 없으면 `Math.max()`(인자 없음)가
+ *  `-Infinity`를 돌려주고, 그러면 모든 단위의 인덱스가 그보다 커서 **연도까지
+ *  바닥값(0)으로 눌립니다.**
+ *
+ *  ⚠️ **이건 `normalizeToFields`의 선례가 아니라 새 계약입니다.** 옛
+ *  `normalizeToFields("2026-07-15", [])`는 `"2026-01-01"`이었습니다 — 연도는
+ *  지키되 월·일은 **항상** 눌렀습니다. 새 규칙은 `"2026-07-15"`로 **아무것도
+ *  안 누릅니다.** 공유하는 것은 "연도를 지운다"는 퇴행을 막는 목표뿐이고 월·일
+ *  처리는 정반대입니다. 두 경로를 동시에 부르는 호출자는 아직 없습니다
+ *  (`normalize`는 3단위 경로, 이쪽은 컴포넌트가 아직 안 씁니다) — **2b에서 둘을
+ *  합칠 때 이 차이를 먼저 정하세요.** */
+function deepestIndex(fields: WheelUnit[]) {
+  if (fields.length === 0) return UNIT_LADDER.length - 1;
+  return Math.max(...fields.map((unit) => UNIT_LADDER.indexOf(unit)));
+}
+
+/** `fields`가 날짜 단위·시각 단위 중 어느 쪽을 포함하는지로 계열을 가릅니다.
+ *  둘 다 있으면 "datetime", 시각만 있으면 "time", 그 외(날짜만 또는 아무것도
+ *  없음)는 "date"입니다. */
+export function familyOf(fields: WheelUnit[]): ValueFamily {
+  const hasDate = fields.some((unit) => unit === "year" || unit === "month" || unit === "day");
+  const hasTime = fields.some((unit) => unit === "hour" || unit === "minute" || unit === "second");
+  return hasDate && hasTime ? "datetime" : hasTime ? "time" : "date";
+}
+
+/** `fields`가 `UNIT_LADDER`에서 잘라낸 연속 구간인지 — 순서도 사다리를
+ *  따라야 합니다. 빈 배열은 구간이 아닙니다. */
+export function isContiguous(fields: WheelUnit[]): boolean {
+  if (fields.length === 0) return false;
+  const first = UNIT_LADDER.indexOf(fields[0]);
+  if (first === -1) return false;
+  return fields.every((unit, offset) => UNIT_LADDER[first + offset] === unit);
+}
+
+/**
+ * 문자열을 계열별 형식으로 파싱합니다. 형식이 안 맞으면 `null`.
+ *
+ * 날짜 계열은 언제나 `YYYY-MM-DD`(일까지), 시각 계열은 `fields`에 `second`가
+ * 있으면 `HH:MM:SS`, 없으면 `HH:MM`, datetime 계열은 그 둘을 `T`로 이은
+ * 모양입니다 — `fields`가 정확히 어느 단위를 담았는지와 무관합니다(연·월만
+ * 있어도 문자열은 여전히 일까지).
+ *
+ * `fields`에서 가장 깊은 단위보다 사다리 아래인 단위는 바닥값으로 누릅니다
+ * (예: 시각 계열에 `second`가 없으면 초는 언제나 0). 그 외(문자열에 실제로
+ * 있는 단위)는 정규식이 잡아낸 값 그대로 씁니다.
+ */
+export function parseValue(value: string, fields: WheelUnit[]): UnitParts | null {
+  const family = familyOf(fields);
+  const withSeconds = fields.includes("second");
+  const deepest = deepestIndex(fields);
+
+  const datePattern = "(\\d{4})-(\\d{2})-(\\d{2})";
+  const timePattern = withSeconds ? "(\\d{2}):(\\d{2}):(\\d{2})" : "(\\d{2}):(\\d{2})";
+  const pattern =
+    family === "date" ? new RegExp(`^${datePattern}$`)
+    : family === "time" ? new RegExp(`^${timePattern}$`)
+    : new RegExp(`^${datePattern}T${timePattern}$`);
+
+  const match = pattern.exec(value);
+  if (!match) return null;
+
+  // 문자열에 실제로 있는 값부터 채우고, 없는 단위(다른 계열의 단위)는 바닥값입니다.
+  const raw: UnitParts = {
+    year: unitFloor("year"), month: unitFloor("month"), day: unitFloor("day"),
+    hour: unitFloor("hour"), minute: unitFloor("minute"), second: unitFloor("second"),
+  };
+  if (family === "date" || family === "datetime") {
+    raw.year = Number(match[1]);
+    raw.month = Number(match[2]);
+    raw.day = Number(match[3]);
+  }
+  const timeGroupOffset = family === "datetime" ? 3 : 0;
+  if (family === "time" || family === "datetime") {
+    raw.hour = Number(match[timeGroupOffset + 1]);
+    raw.minute = Number(match[timeGroupOffset + 2]);
+    if (withSeconds) raw.second = Number(match[timeGroupOffset + 3]);
+  }
+
+  const at = (unit: WheelUnit) => (UNIT_LADDER.indexOf(unit) > deepest ? unitFloor(unit) : raw[unit]);
+  return { year: at("year"), month: at("month"), day: at("day"), hour: at("hour"), minute: at("minute"), second: at("second") };
+}
+
+/**
+ * `UnitParts`를 계열별 문자열로 되돌립니다. `fields`는 계열을 가르고(`second`
+ * 포함 여부 포함) `deepestIndex`로 구간 아래를 누르는 데만 쓰입니다 — **여기서
+ * 다시 누르는 게 아니라 그 경계를 정할 뿐**입니다. 구간 아래를 누르는 일 자체는
+ * `parseValue`가 값을 읽을 때 이미 했으므로, 여기서 멤버십(`fields.includes`)
+ * 으로 또 누르면 "구간 위는 값에서 그대로 가져온다"가 조용히 깨집니다.
+ */
+export function serializeValue(parts: UnitParts, fields: WheelUnit[]): string {
+  const family = familyOf(fields);
+  const withSeconds = fields.includes("second");
+  const deepest = deepestIndex(fields);
+  const at = (unit: WheelUnit) => (UNIT_LADDER.indexOf(unit) > deepest ? unitFloor(unit) : parts[unit]);
+
+  const date = `${pad(at("year"), 4)}-${pad(at("month"), 2)}-${pad(at("day"), 2)}`;
+  const time = `${pad(at("hour"), 2)}:${pad(at("minute"), 2)}${withSeconds ? `:${pad(at("second"), 2)}` : ""}`;
+  if (family === "date") return date;
+  if (family === "time") return time;
+  return `${date}T${time}`;
+}
+
+/* ---- 경계 비교: min/max를 모델로 -------------------------------------
+ *
+ * 값 지식이 기계(DateWheelPicker.tsx)에 남아 있던 두 자리 중 하나였습니다
+ * (설계 스펙 §1단계 측정·§12) — `rangeKey`·`outOfRange`·`clampToRange`가
+ * 원래 기계 안 지역 함수였고, 그때는 날짜 세 단위만 알았습니다. 여기서
+ * 시·분·초까지 다루는 여섯 단위로 넓혀 모델로 옮깁니다. **컴포넌트는 아직
+ * 이 함수들을 부르지 않습니다** — 그건 다음 단계입니다.
+ *
+ * 비교 정밀도(§6)는 값 정밀도(계열이 정하는 고정폭, 위 parseValue/
+ * serializeValue의 개념)와 다릅니다 — 픽커가 가진 열 중 최소 단위(사다리에서
+ * 가장 깊은 것)가 정합니다.
+ */
+
+/** `unit`까지의 접두사 길이. `comparisonPrecision`과 `clampToRange`의 채움이
+ *  함께 씁니다. `family`는 비교 대상 문자열의 계열(`familyOf(fields)`)이어야
+ *  합니다. */
+function precisionThrough(unit: WheelUnit, family: ValueFamily): number {
+  if (family === "time") return unit === "second" ? 8 : unit === "minute" ? 5 : 2;
+  const dateLen = unit === "day" ? 10 : unit === "month" ? 7 : 4;
+  if (family === "date") return dateLen;
+  // datetime: 날짜 단위는 그 접두사 그대로, 시각 단위는 "날짜 10 + T + 시각 접두사".
+  return unit === "year" || unit === "month" || unit === "day" ? dateLen : 11 + (unit === "second" ? 8 : unit === "minute" ? 5 : 2);
+}
+
+/** 비교 정밀도(설계 스펙 §6) — 픽커가 가진 열 중 사다리에서 가장 깊은 단위가
+ *  정하는 비교용 문자열 길이. 지금 코드의 `rangeKeyLength`(연·월이면 7,
+ *  일까지면 10)를 시·분·초까지 시각으로 연장한 것입니다. */
+export function comparisonPrecision(fields: WheelUnit[]): number {
+  return precisionThrough(UNIT_LADDER[deepestIndex(fields)], familyOf(fields));
+}
+
+/** 경계 문자열이 매치할 수 있는 형식들. `usableBound`와 `clampToRange`의
+ *  채움 둘 다 "경계에 무엇이 실제로 주어졌는지"를 여기서 읽습니다 —
+ *  `parseValue`와 달리 `fields`의 정밀도와 무관하게 그 계열의 아무
+ *  정밀도나(연만·연월·연월일 …) 받습니다. 경계는 값과 달리 짧을 수 있는
+ *  것이 §6의 핵심입니다. */
+const BOUND_FORMATS: { pattern: RegExp; family: ValueFamily; units: WheelUnit[] }[] = [
+  { pattern: /^(\d{4})$/, family: "date", units: ["year"] },
+  { pattern: /^(\d{4})-(\d{2})$/, family: "date", units: ["year", "month"] },
+  { pattern: /^(\d{4})-(\d{2})-(\d{2})$/, family: "date", units: ["year", "month", "day"] },
+  { pattern: /^(\d{2})$/, family: "time", units: ["hour"] },
+  { pattern: /^(\d{2}):(\d{2})$/, family: "time", units: ["hour", "minute"] },
+  { pattern: /^(\d{2}):(\d{2}):(\d{2})$/, family: "time", units: ["hour", "minute", "second"] },
+  { pattern: /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/, family: "datetime", units: ["year", "month", "day", "hour", "minute"] },
+  { pattern: /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/, family: "datetime", units: ["year", "month", "day", "hour", "minute", "second"] },
+];
+
+/** 경계 문자열을 `UnitParts`로. 형식이 `BOUND_FORMATS`의 어느 것과도 안 맞으면
+ *  `null`. 명시되지 않은 단위는 바닥값입니다 — `parseValue`의 눌림과 같은
+ *  결입니다(단, 여기서는 "안 준 단위"가 기준이지 "구간 아래"가 기준이
+ *  아닙니다 — 경계 문자열 자체가 짧을 수 있어서입니다). */
+function matchBound(bound: string): { family: ValueFamily; parts: UnitParts } | null {
+  for (const format of BOUND_FORMATS) {
+    const match = format.pattern.exec(bound);
+    if (!match) continue;
+    const parts: UnitParts = {
+      year: unitFloor("year"), month: unitFloor("month"), day: unitFloor("day"),
+      hour: unitFloor("hour"), minute: unitFloor("minute"), second: unitFloor("second"),
+    };
+    format.units.forEach((unit, index) => { parts[unit] = Number(match[index + 1]); });
+    return { family: format.family, parts };
+  }
+  return null;
+}
+
+/**
+ * 쓸 수 없는 경계는 없는 것으로 봅니다(설계 스펙 §6.1) — 경계가 값과 계열이
+ * 다르거나 형식이 깨졌으면 `null`. `bound`가 `undefined`여도 `null`(경계
+ * 없음과 같은 취급).
+ *
+ * datetime 계열은 date 모양(연·연월·연월일)과 datetime 모양(분까지·초까지)
+ * 둘 다 받습니다 — "월까지만 준 max"(§6.1)가 이 관용을 요구합니다. 시각만
+ * 있는 경계는 받지 않습니다 — 날짜 기준이 없는 시각은 datetime 값과 견줄
+ * 말이 안 됩니다.
+ */
+export function usableBound(bound: string | undefined, fields: WheelUnit[]): string | null {
+  if (bound === undefined) return null;
+  const matched = matchBound(bound);
+  if (!matched) return null;
+  const family = familyOf(fields);
+  const usable = family === "datetime" ? matched.family === "date" || matched.family === "datetime" : matched.family === family;
+  return usable ? bound : null;
+}
+
+/**
+ * `value`가 `bounds`를 벗어나는지(설계 스펙 §6). 거친 쪽(비교 정밀도와 경계
+ * 문자열 길이 중 짧은 쪽)에서 비교합니다 — 그래야 "날짜만 준 max"가 그날
+ * 전체를 엽니다. 쓸 수 없는 경계는 `usableBound`가 걸러 없는 셈 칩니다.
+ */
+export function outOfRange(value: string, bounds: { min?: string; max?: string }, fields: WheelUnit[]): boolean {
+  const precision = comparisonPrecision(fields);
+  const min = usableBound(bounds.min, fields);
+  const max = usableBound(bounds.max, fields);
+  if (min) {
+    const len = Math.min(precision, min.length);
+    if (value.slice(0, len) < min.slice(0, len)) return true;
+  }
+  if (max) {
+    const len = Math.min(precision, max.length);
+    if (value.slice(0, len) > max.slice(0, len)) return true;
+  }
+  return false;
+}
+
+/**
+ * `value`를 `bounds` 안으로 밀어 넣습니다(설계 스펙 §6). `min` 클램프는
+ * `parseValue`의 바닥값 정규화와 같은 결로 앉습니다 — 이른 끝이 곧 바닥값이라
+ * `matchBound`가 채우는 기본값이 그대로 맞아떨어집니다. `max` 클램프는 별도
+ * 경로입니다 — 비교 길이 아래이면서 **픽커의 최소 단위(`fields`에서 가장 깊은
+ * 단위) 이상인** 단위만 그 단위의 상한(월·일은 그달의 말일, 시·분·초는
+ * 23·59·59)으로 채웁니다(§6.1). 그보다 깊은 단위(픽커의 열이 아닌 단위)는
+ * §5가 바닥값으로 고정하는 자리라 채우지 않습니다 — `serializeValue(parts,
+ * fields)`가 그 자리를 어차피 눌러 버리므로 채워도 무의미하고, 채운 채로 두면
+ * 그 값이 준 `max`보다 큰 문자열이 되어(예: 연·월 픽커에서 `max="2026-07-15"`가
+ * `2026-07-31`을 내놓는 것) 클램프가 멱등하지 않게 됩니다. 쓸 수 없는 경계는
+ * `usableBound`가 걸러 없는 셈 칩니다.
+ */
+export function clampToRange(value: string, bounds: { min?: string; max?: string }, fields: WheelUnit[]): string {
+  const precision = comparisonPrecision(fields);
+  const min = usableBound(bounds.min, fields);
+  const max = usableBound(bounds.max, fields);
+
+  const valueParts = parseValue(value, fields);
+  const normalized = valueParts ? serializeValue(valueParts, fields) : value;
+
+  if (min) {
+    const len = Math.min(precision, min.length);
+    if (normalized.slice(0, len) < min.slice(0, len)) return serializeValue(matchBound(min)!.parts, fields);
+  }
+  if (max) {
+    const len = Math.min(precision, max.length);
+    if (normalized.slice(0, len) > max.slice(0, len)) {
+      const family = familyOf(fields);
+      const parts = { ...matchBound(max)!.parts };
+      const context = { year: parts.year, month: parts.month };
+      const deepest = deepestIndex(fields);
+      const relevant: WheelUnit[] =
+        family === "date" ? ["year", "month", "day"]
+        : family === "time" ? ["hour", "minute", "second"]
+        : ["year", "month", "day", "hour", "minute", "second"];
+      // 사다리 순서로 채웁니다 — 일의 상한이 연·월(이 루프에서 먼저 채워질 수
+      // 있는)에 달려 있어서(§3.1), context가 그 순서로 갱신돼야 합니다.
+      for (const unit of relevant) {
+        if (UNIT_LADDER.indexOf(unit) > deepest) continue;      // 픽커의 열 밖 — §5가 바닥값으로 고정하는 자리
+        if (precisionThrough(unit, family) <= len) continue;    // 비교 길이 안 — 경계가 준 값 그대로
+        const ceiling = unitCeiling(unit, context);
+        if (ceiling !== null) parts[unit] = ceiling;
+        if (unit === "year") context.year = parts.year;
+        if (unit === "month") context.month = parts.month;
+      }
+      // `fields`로 직렬화합니다 — `min` 클램프와 같은 폭입니다. 채움 루프가
+      // 이미 픽커의 열 밖은 건드리지 않으므로, 여기서 다시 누르는 것은
+      // `parseValue`/`serializeValue`가 늘 하는 정상적인 §5 바닥값 정규화이지
+      // 방금 채운 상한을 지우는 게 아닙니다.
+      return serializeValue(parts, fields);
+    }
+  }
+  return normalized;
+}
+
+/** 그 열이 받는 최대 자릿수 — 타이핑 쪽 로컬 이름. `unitDigits`에 위임합니다.
+ *  인자는 `WheelUnit`(여섯 단위) — `typeDigit`이 시·분·초로도 부릅니다. */
+function maxDigits(unit: WheelUnit) {
+  return unitDigits(unit);
+}
+
+/** 한 자리만으로 확정되는 최소값 — 두 자리가 시작될 수 없는 첫 숫자.
+ *  월 2(13~19가 없음) · 일 4(40~49가 없음) · 시 3(24~29가 없음) · 분·초 6(60~69가 없음). */
+function soloFloor(unit: WheelUnit) {
+  if (unit === "month") return 2;
+  if (unit === "day") return 4;
+  if (unit === "hour") return 3;
+  return 6;   // minute, second
+}
+
+/** 자릿수 판정용 상한. 문맥이 없으므로 일은 31로 넉넉히 잡고,
+ *  말일 자르기는 값 설정 쪽(`withUnitValue`)이 따로 합니다 — 지금과 같은 분담입니다. */
+function typingCeiling(unit: WheelUnit) {
+  if (unit === "month") return 12;
+  if (unit === "day") return 31;
+  if (unit === "hour") return 23;
+  return 59;   // minute, second
 }
 
 export type TypingStep = {
@@ -35,8 +364,10 @@ export type TypingStep = {
 const WAIT = (digits: string): TypingStep => ({ digits, commit: null, advance: false });
 const DONE = (commit: number): TypingStep => ({ digits: "", commit, advance: true });
 
-/** 버퍼에 숫자 하나를 더한 결과. `digit`은 "0"~"9" 한 글자여야 합니다. */
-export function typeDigit(unit: DateWheelUnit, buffer: string, digit: string): TypingStep {
+/** 버퍼에 숫자 하나를 더한 결과. `digit`은 "0"~"9" 한 글자여야 합니다.
+ *  인자가 `DateWheelUnit`이 아니라 `WheelUnit`인 것은 의도입니다 — 이 함수는 시·분·초로도
+ *  불립니다. `DateWheelUnit`(3단위)은 `WheelUnit`의 부분집합이라 기존 호출부는 그대로 통과합니다. */
+export function typeDigit(unit: WheelUnit, buffer: string, digit: string): TypingStep {
   if (unit === "year") {
     const next = buffer + digit;
     return next.length >= maxDigits(unit) ? DONE(Number(next)) : WAIT(next);
@@ -48,7 +379,8 @@ export function typeDigit(unit: DateWheelUnit, buffer: string, digit: string): T
   }
 
   const combined = Number(buffer + digit);
-  if (combined >= 1 && combined <= unitCeiling(unit)) return DONE(combined);
+  // 하한은 unitFloor입니다 — 월·일은 1(0월·0일이 없음)이지만 시·분·초는 0(0시가 있음).
+  if (combined >= unitFloor(unit) && combined <= typingCeiling(unit)) return DONE(combined);
   // 두 자리 조합이 애초에 존재하지 않는 수입니다(월 13, 일 39). 첫 자리를 버리고
   // 이 숫자를 새 입력의 첫 자리로 다시 읽습니다 — 네이티브가 이렇게 합니다.
   return typeDigit(unit, "", digit);
@@ -60,12 +392,15 @@ export function typeDigit(unit: DateWheelUnit, buffer: string, digit: string): T
  * 연도의 1~2자리를 2000년대로 읽는 것이 이 함수의 존재 이유입니다 — `26`은
  * 2026년입니다. 과거 연도는 네 자리로 치면 언제나 들어가므로 못 넣는 값은
  * 없습니다.
+ *
+ * 인자가 `WheelUnit`인 이유는 `typeDigit`과 같습니다 — 시·분·초로도 불립니다.
  */
-export function flushBuffer(unit: DateWheelUnit, buffer: string): number | null {
+export function flushBuffer(unit: WheelUnit, buffer: string): number | null {
   if (!buffer) return null;
   const typed = Number(buffer);
   if (unit === "year") return buffer.length <= 2 ? 2000 + typed : typed;
-  return typed >= 1 ? typed : null;   // 0월·0일은 없습니다
+  // 0월·0일은 없지만 0시·0분·0초는 있습니다.
+  return typed >= unitFloor(unit) ? typed : null;
 }
 
 /** 연도를 다루면서 0~99를 1900년대로 옮기지 않는 안전한 말일 계산.
