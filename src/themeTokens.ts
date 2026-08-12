@@ -3,6 +3,13 @@
  * 기본값은 여기 적지 않습니다. tokens.css가 유일한 출처이고 실제 계산된 값을 읽어
  * 씁니다 — 표를 복사해 두면 CSS만 바뀌었을 때 조용히 어긋납니다. 여기 있는 건 어떤
  * 토큰을 노출할지와 사람이 읽을 이름뿐입니다.
+ *
+ * ⚠️ **여기 넣는 기준은 "킷 CSS가 그 토큰을 실제로 쓰는가"입니다.** 안 쓰는 토큰을
+ * 노출하면 사용자가 색을 고쳐도 화면이 안 바뀝니다 — 그건 결함으로 보입니다.
+ * `tests/themeTokens.test.ts`가 예외 없이 그것을 지킵니다.
+ * `--deep`·`--gold`가 그래서 빠졌습니다(2026-08-13, 오너 결정). 토큰은 `tokens.css`에
+ * 그대로 있으므로 앱이 `var(--deep)`로 쓸 수 있고, 편집까지 하고 싶으면 자기
+ * `groups`(또는 `createThemePalette`)에 그 항목을 넣으면 됩니다.
  */
 export type ThemeName = "light" | "dark";
 
@@ -35,7 +42,6 @@ export const THEME_TOKEN_GROUPS: ThemeTokenGroup[] = [
       { name: "--accent", label: "강조색", description: "선택 상태·주요 버튼·링크" },
       { name: "--accent-soft", label: "강조 배경", description: "선택된 항목의 옅은 배경" },
       { name: "--link", label: "링크 글자", description: "텍스트 버튼·링크" },
-      { name: "--deep", label: "짙은 면", description: "어두운 배경 면" },
     ],
   },
   {
@@ -61,7 +67,6 @@ export const THEME_TOKEN_GROUPS: ThemeTokenGroup[] = [
       { name: "--red", label: "빨강", description: "위험·경고" },
       { name: "--orange", label: "주황", description: "주의" },
       { name: "--orange-soft", label: "주황 배경", description: "주의 상태의 옅은 배경" },
-      { name: "--gold", label: "금색", description: "보조 강조" },
       { name: "--badge", label: "뱃지", description: "사이드바 메뉴의 개수 뱃지" },
       /* 메시지 색은 `--red`/`--green`을 그대로 쓰지 않습니다 — 옅은 배경 위 13px 글자라
          기준 대비가 4.5인데 `var(--red)`는 라이트에서 정확히 4.50, 다크에서 5.67까지
