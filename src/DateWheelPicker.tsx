@@ -13,11 +13,27 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
 import { createPortal } from "react-dom";
 
-import { flushBuffer, lastDayOf, typeDigit, withUnitValue } from "./dateWheelTyping";
+import {
+  DATE_WHEEL_FILL,
+  dateTriggerParts,
+  dateWheelLabel,
+  flushBuffer,
+  normalizeToFields,
+  rangeKeyLength,
+  shiftDateValue,
+  todayIn,
+  typeDigit,
+  validDateValue,
+  withUnitValue,
+  type DateWheelUnit,
+} from "./model/instant";
 import { useBackToClose, useEscapeToClose } from "./hooks";
 import { dropdownViewportSpace, focusTriggerOnClick, isPrimaryButton, onViewportChange } from "./positioning";
 
-export type DateWheelUnit = "year" | "month" | "day";
+/* `todayIn`은 `index.ts`가 내보내고, `DateWheelUnit`은 tests/DateWheelPicker.test.tsx가
+ * 이 경로로 가져옵니다. 모델로 옮긴 뒤에도 그 경로를 그대로 유지합니다 — 이 단계는
+ * 공개 표면을 하나도 바꾸지 않습니다. */
+export { todayIn, type DateWheelUnit } from "./model/instant";
 
 /** 기본은 연·월·일 3열. 상수로 둬서 기본값일 때 매 렌더 새 배열이 생기지 않게 합니다. */
 const DEFAULT_DATE_WHEEL_FIELDS: DateWheelUnit[] = ["year", "month", "day"];
@@ -51,34 +67,6 @@ export const DEFAULT_DATE_WHEEL_LABELS: DateWheelLabels = {
   weekdays: ["일", "월", "화", "수", "목", "금", "토"],
   units: { year: "연도", month: "월", day: "일" },
 };
-
-/** 지정한 시간대의 오늘을 YYYY-MM-DD로. sv-SE 로케일이 ISO 형식을 내줍니다. */
-export function todayIn(timeZone: string) {
-  return new Intl.DateTimeFormat("sv-SE", { timeZone }).format(new Date());
-}
-
-function shiftDateValue(value: string, unit: DateWheelUnit, direction: number) {
-  const date = new Date(value + "T00:00:00Z");
-  const year = date.getUTCFullYear();
-  const month = date.getUTCMonth();
-  const day = date.getUTCDate();
-  // 말일은 dateWheelTyping.ts의 lastDayOf로 구합니다 — new Date(Date.UTC(year, ...))는
-  // 0~99년을 1900년대로 재매핑해 연도 0(윤년)을 1900년(평년)으로 잘못 읽습니다.
-  if (unit === "day") {
-    const lastDay = lastDayOf(year, month);
-    const targetDay = ((day - 1 + direction) % lastDay + lastDay) % lastDay + 1;
-    date.setUTCFullYear(year, month, targetDay);
-  } else if (unit === "year") {
-    const targetYear = year + direction;
-    const lastDay = lastDayOf(targetYear, month);
-    date.setUTCFullYear(targetYear, month, Math.min(day, lastDay));
-  } else {
-    const targetMonth = ((month + direction) % 12 + 12) % 12;
-    const lastDay = lastDayOf(year, targetMonth);
-    date.setUTCFullYear(year, targetMonth, Math.min(day, lastDay));
-  }
-  return date.toISOString().slice(0, 10);
-}
 
 /** 양끝 ±3은 보이지 않지만 미리 그려두는 프리로드 행입니다. */
 const DATE_WHEEL_OFFSETS = [-3, -2, -1, 0, 1, 2, 3];
@@ -137,94 +125,6 @@ const SWIPE_SLOP = 18;
 const DATE_WHEEL_ENTER_TOTAL_MS = 360;
 
 type DateWheelMotion = { sequence: number; direction: "next" | "previous"; playing: boolean };
-
-function validDateValue(value: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
-
-/** 남은 최소 단위 기준 비교 길이. 일 있으면 10(YYYY-MM-DD), 월까지면 7(YYYY-MM), 연만이면 4.
- *  연·월 픽커(일 없음)에서 min/max를 "월" 단위로 비교하게 만드는 핵심입니다 —
- *  일이 01로 고정돼도, 예산이 7월 중순부터 시작(min="2026-07-15")하면 7월 전체가 선택 가능해야 합니다. */
-function rangeKeyLength(fields: DateWheelUnit[]) {
-  return fields.includes("day") ? 10 : fields.includes("month") ? 7 : 4;
-}
-
-/** 빠진 열을 01로 채웁니다. 월 없으면 월=01, 일 없으면 일=01. 값 형식은 늘 YYYY-MM-DD. */
-function normalizeToFields(value: string, fields: DateWheelUnit[]) {
-  const [year, month, day] = value.split("-");
-  return `${year}-${fields.includes("month") ? month : "01"}-${fields.includes("day") ? day : "01"}`;
-}
-
-function dateWheelLabel(value: string, unit: DateWheelUnit, weekdays: string[]) {
-  const date = new Date(value + "T00:00:00Z");
-  if (unit === "year") return String(date.getUTCFullYear());
-  if (unit === "month") return String(date.getUTCMonth() + 1).padStart(2, "0");
-  return `${String(date.getUTCDate()).padStart(2, "0")} ${weekdays[date.getUTCDay()]}`;
-}
-
-/** 세그먼트가 지키는 자릿수. 버퍼가 덜 찼을 때 이 길이까지 아래 문자로 채웁니다. */
-const DATE_WHEEL_SEGMENT_WIDTH: Record<DateWheelUnit, number> = { year: 4, month: 2, day: 2 };
-
-/**
- * 빈 자리를 채우는 문자 — **U+2012 FIGURE DASH**. 밑줄(`_`)이 아닙니다(설계 스펙 §4.5).
- *
- * **폭이 흔들리지 않는 것이 "자리를 지키는" 표시를 고른 유일한 이유**인데, 밑줄로는 그것이
- * 달성되지 않습니다. `font-variant-numeric: tabular-nums`는 OpenType `tnum`으로 매핑되고
- * `tnum`은 **숫자 글리프에만** 균일 어드밴스를 줍니다 — `_`는 숫자가 아니라 그 치환을 아예
- * 받지 못합니다. 킷이 직접 싣는 `fonts/PretendardVariable.woff2`를 열어 `wght` 축을
- * 인스턴스화해 잰 값입니다(단위: 폰트 units, unitsPerEm 2048):
- *
- *   wght  45 : tabular 숫자 1132 · U+2012 1132 (±0) · `_` 804 (−16.02% em)
- *   wght 400 : tabular 숫자 1258 · U+2012 1258 (±0) · `_` 870 (−18.95% em)
- *   wght 700 : tabular 숫자 1341 · U+2012 1341 (±0) · `_` 933 (−19.92% em)
- *   wght 930 : tabular 숫자 1404 · U+2012 1404 (±0) · `_` 982 (−20.61% em)
- *
- * 15px 기준 빈 자리 하나당 약 2.8px이라, 밑줄이면 연도를 치는 동안 뒤 세그먼트가 5.7px
- * 밀렸다가 돌아옵니다. U+2012는 **축 전 구간에서 tabular 숫자와 정확히 같고**, 이 폰트의
- * cmap에 실제로 들어 있습니다(글리프 `figuredash`) — 없으면 폴백 폰트로 새서 보장이
- * 깨지므로 폰트를 교체하는 소비자는 이 둘을 다시 재야 합니다(`css/fonts.css`).
- *
- * **그래서 `display: inline-block`도 `ch` 고정폭도 필요 없고, 써서도 안 됩니다** — 둘 다
- * 인라인 박스를 원자 박스로 바꿔 바깥 컨테이너의 말줄임 동작까지 건드립니다(스펙 §4.5).
- *
- * 글리프를 그대로 쓰지 않고 코드포인트 이스케이프로 적습니다 — `‒`(U+2012)는 `-`(U+002D)·
- * `–`(U+2013)와 화면에서 구별되지 않아, 눈으로는 못 잡는 조용한 폭 회귀가 됩니다.
- */
-const DATE_WHEEL_FILL = "\u2012";
-
-/** 트리거를 이루는 조각. `unit: null`이 구두점(`. `)이고, 렌더에서 aria-hidden으로 나갑니다. */
-type DateTriggerPart = { unit: DateWheelUnit | null; text: string };
-
-/**
- * 트리거 문구를 **세그먼트와 구두점으로 쪼갭니다**(설계 스펙 §4.5).
- *
- * **조각 텍스트를 순서대로 이으면 예전 `formatDateTrigger`가 만들던 문자열과 글자 하나까지
- * 같습니다.** 트리거를 `textContent` 하나로 보는 테스트가 스무 곳 넘게 있고, 그것들이 손대지
- * 않은 채로 계속 참이어야 이 변경이 "표시 구조만 바꿨다"는 뜻이 됩니다. 구두점을 세그먼트에
- * 붙여 넣거나(`"2026. "`) 사이 공백을 CSS 여백으로 옮기면 그 등가성이 조용히 깨집니다.
- *
- * **버퍼는 자리를 지켜 그립니다** — "20" → `20‒‒`, "203" → `203‒`, 월 "1" → `1‒`
- * (채움 문자는 `DATE_WHEEL_FILL`, U+2012). 친 만큼만 그리는 안(`203. 07. 12.`)은
- * 기각됐습니다: 자릿수가 늘었다 줄었다 하며 필드 폭이 요동치고, 세 자리 `203`이 순간적으로
- * 유효한 연도처럼 읽힙니다.
- *
- * **폭을 지키는 장치가 둘이고 역할이 다릅니다.** `css/date-picker.css`의
- * `.date-wheel-segment`가 거는 `tabular-nums`는 **숫자끼리** 폭을 맞추고(이 폰트에서
- * 비례폭 `1`은 898, `4`는 1278로 크게 다릅니다), `DATE_WHEEL_FILL`은 **빈 자리를 숫자
- * 폭에** 맞춥니다. `tabular-nums`는 숫자 글리프에만 적용되므로 채움 문자를 덮지
- * **않습니다** — 그래서 둘 다 필요하고, 하나만으로는 폭이 흔들립니다.
- */
-function dateTriggerParts(source: string, fields: DateWheelUnit[], typing: { unit: DateWheelUnit; digits: string } | null): DateTriggerPart[] {
-  const [year, month, day] = source.split("-");
-  function segment(unit: DateWheelUnit, text: string): DateTriggerPart {
-    return { unit, text: typing?.unit === unit && typing.digits ? typing.digits.padEnd(DATE_WHEEL_SEGMENT_WIDTH[unit], DATE_WHEEL_FILL) : text };
-  }
-  const parts: DateTriggerPart[] = [segment("year", year)];
-  if (!fields.includes("month")) return [...parts, { unit: null, text: "." }];
-  parts.push({ unit: null, text: ". " }, segment("month", month));
-  if (!fields.includes("day")) return [...parts, { unit: null, text: "." }];
-  return [...parts, { unit: null, text: ". " }, segment("day", day), { unit: null, text: "." }];
-}
 
 export type DateWheelPickerProps = {
   /** 앱이 이 컴포넌트를 겨눌 때의 출구. **내보내는 컴포넌트는 전부 이걸 받습니다** —
