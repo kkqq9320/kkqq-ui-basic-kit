@@ -141,6 +141,10 @@ export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKE
   // useState 초기값은 다시 계산되지 않으므로, 테마가 바뀌면 저장값을 다시 읽습니다.
   const [loadedTheme, setLoadedTheme] = useState(theme);
   if (loadedTheme !== theme) {
+    /* ⚠️ 이 줄은 controlled에서도 **반드시** 돌아야 합니다. 아래 `if (!controlled)` 안으로
+     * 옮기면 loadedTheme이 갱신되지 않아 이 조건이 매 렌더마다 참이고, 아래 setHistory·
+     * setDraft가 계속 불려 "Too many re-renders"가 납니다. controlled에서 건너뛸 것은
+     * 저장소를 다시 읽는 줄 하나뿐입니다. */
     setLoadedTheme(theme);
     // controlled일 때는 앱이 이 테마의 값을 이미 overrides로 넘기고 있습니다 — 저장소를
     // 다시 읽으면 그 값을 덮어써 앱과 갈라집니다. undo 기록·초안·세션은 테마와 함께
@@ -174,7 +178,7 @@ export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKE
   }
 
   function pushHistory(token: ThemeToken, value: string) {
-    setHistory((current) => ({ ...current, [token.name]: [...(current[token.name] ?? []), value] }));
+    setHistory((history) => ({ ...history, [token.name]: [...(history[token.name] ?? []), value] }));
   }
 
   /** 견본·입력칸에서 들어오는 값. 같은 조작이 이어지는 동안은 기록을 남기지 않습니다. */

@@ -68,4 +68,16 @@ describe("앱이 소유할 때", () => {
 
     expect(JSON.parse(localStorage.getItem("themeColors:light") ?? "null")).toEqual({ "--brand-2": "#ff8a3d" });
   });
+
+  /* ⚠️ 이 테스트가 지키는 것은 값이 아니라 **`setLoadedTheme`이 controlled에서도 돈다**는
+   * 것입니다. 그 줄을 `if (!controlled)` 안으로 옮기면 loadedTheme이 영원히 뒤처져 바깥
+   * 조건이 매 렌더마다 참이 되고, setHistory·setDraft가 계속 불려 "Too many re-renders"가
+   * 납니다. 계획서 문구를 문자 그대로 따르면 그 버그가 되므로 여기서 못박습니다. */
+  it("controlled에서 테마를 바꿔도 앱이 준 값을 따른다", () => {
+    const view = render(<ThemeColorEditor theme="light" palette={palette()} overrides={{ "--brand-2": "#ff8a3d" }} />);
+
+    view.rerender(<ThemeColorEditor theme="dark" palette={palette()} overrides={{ "--brand-2": "#ffa866" }} />);
+
+    expect((screen.getByLabelText("브랜드2 색상 값") as HTMLInputElement).value).toBe("#ffa866");
+  });
 });
