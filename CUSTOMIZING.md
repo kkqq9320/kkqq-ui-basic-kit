@@ -222,11 +222,85 @@ CSS에서 같은 변수를 다시 정의**하면 그걸로 끝입니다. 라이�
    ```css
    :root { --brand-2: #ff8a3d; }  :root[data-theme="dark"] { --brand-2: #ffa866; }
    ```
+
+> ⚠️ **둘 다 정의해야 하는 이유는 리셋입니다.** 리셋은 값을 넣는 것이 아니라 인라인
+> 스타일을 **걷어내는** 동작이라, CSS에 돌아갈 기본값이 없으면 검정(`#000000`)으로
+> 갑니다 — 사용자 눈에는 "리셋했더니 색이 사라졌다"로 보입니다. 리셋해도 **토큰과
+> 카드는 그대로 남습니다.** 사라지는 것은 사용자가 고친 값뿐입니다.
+
 2. 어딘가에서 실제로 쓰고 (`color: var(--brand-2)`),
 3. `groups`에 항목을 더하면 (`[...THEME_TOKEN_GROUPS, { title:"브랜드", tokens:[{name:"--brand-2", …}] }]`)
 
 편집기에 그 색이 뜨고 저장·적용됩니다 — 키트를 안 고치고 색이 늘어납니다.
 (색 토큰은 누군가 `var(--x)`로 **써야** 화면에 나타납니다. 어디 쓸지는 코드가 정합니다.)
+
+### 색 설정을 앱이 소유하기 (서버 저장·백업·복원)
+
+`localStorage`는 **origin(scheme+host+port)마다 별개**입니다. 그래서 같은 노트북이라도
+`http://10.1.1.254:3000`과 `https://myapp.example.com`은 색 설정이 갈립니다. 어디서 접속해도
+같게 하려면 **앱이 자기 저장소에 두어야** 하고, 킷은 그 기계를 줍니다.
+
+**토큰 목록을 한 번만 묶습니다.**
+
+```ts
+import { createThemePalette, THEME_TOKEN_GROUPS } from "kkqq-ui-basic-kit";
+
+const palette = createThemePalette([...THEME_TOKEN_GROUPS, MY_GROUP]);   // 앱이 한 번
+```
+
+이후 모든 조작이 이 객체를 지나므로 **목록을 넘길 자리가 없습니다.** 하나만 빠뜨려도
+앱이 신설한 색이 말없이 사라지던 자리가 없어집니다.
+
+| 멤버 | 하는 일 |
+|---|---|
+| `groups` / `tokens` | 편집기가 그릴 목록 |
+| `apply(theme, overrides?)` | `:root`에 적용 |
+| `read(theme)` / `write(theme, overrides)` | 로컬 저장소. `write`는 성공 여부를 돌려줍니다 |
+| `serialize(colors?)` | 두 테마를 봉투 하나로. 안 넘기면 `read`로 읽습니다 |
+| `parse(input)` | 검증. `{ backup, dropped } \| null` |
+| `applyBackup(backup)` | 두 테마에 적용 + 저장 |
+
+**로그인해서 서버 값으로 그리기:**
+
+```tsx
+<ThemeColorEditor
+  palette={palette}
+  theme={theme}
+  overrides={fromServer}          // 넘기면 킷은 저장하지 않습니다
+  onChange={(next) => palette.apply(theme, next)}   // 미리 보기
+  onCommit={(next) => save(next)}                   // 손을 둔 뒤 한 번
+/>
+```
+
+**백업·복원:**
+
+```ts
+const file = palette.serialize({ light: myLight, dark: myDark });   // 앱이 가진 값으로
+
+const parsed = palette.parse(JSON.parse(text));
+if (!parsed) return alert("이 파일은 색 백업이 아닙니다");
+if (parsed.dropped.length) alert(`이 버전이 모르는 색 ${parsed.dropped.length}개는 뺐습니다`);
+palette.applyBackup(parsed.backup);   // 로컬에 저장하는 앱이라면
+```
+
+> ⚠️ **`applyBackup`은 저장까지 합니다.** `overrides`로 앱이 소유하는 경우에는 쓰지 말고
+> `parse` → 내 상태에 넣기 → `palette.apply(theme, ...)` 순으로 가세요. 안 그러면 앱이
+> 소유하기로 한 저장소 **밖에 사본이 하나 더** 생깁니다.
+
+#### ⚠️ 이 맵은 전체 집합입니다 — 패치가 아닙니다
+
+`onChange`·`onCommit`·`serialize`·`parse`가 주고받는 맵은 그 테마의 덮어쓰기 **전체**이고,
+**없는 키는 "안 바뀜"이 아니라 "기본값"**입니다. 편집기에서 리셋이 값을 넣는 것이 아니라
+**키를 지우는** 동작이기 때문입니다.
+
+| 앱이 이렇게 저장하면 | 무슨 일이 나나 |
+|---|---|
+| `PATCH { 바뀐것만 }` 또는 `{ ...기존, ...받은것 }` | **리셋만 영영 안 먹습니다** — 지운 색이 다음 로그인에 되살아납니다 |
+| `{}`를 "값 없음"으로 보고 저장을 건너뜀 | **모두 초기화가 안 먹습니다** |
+| 통째로 교체(PUT) | 리셋·모두 초기화가 그대로 동작합니다 |
+
+빈 백업(`{}` 둘)은 "전부 기본값"이라는 **정상 상태**이고, `parse`가 돌려주는 `null`
+(= 백업이 아님)과 다릅니다.
 
 ### 폰트 바꾸기
 
