@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ShortcutProvider, type ShortcutAction } from "../src/ShortcutProvider";
 import { Select } from "../src/Select";
+import { sidebarToggleAction } from "../src/shortcuts";
 
 afterEach(cleanup);
 
@@ -60,6 +61,19 @@ describe("디스패치", () => {
     render(<ShortcutProvider actions={[action({ onFire, defaultCombo: null })]} />);
     press({ code: "KeyB", ctrlKey: true });
     expect(onFire).not.toHaveBeenCalled();
+  });
+
+  /* `tests/shortcutCombo.test.ts`는 `sidebarToggleAction(fn, { defaultCombo })`가
+   * 반환하는 **객체의 필드**만 봅니다 — 그 값이 실제로 `Provider`를 거쳐 바인딩되고
+   * 트리거되는지는 안 봅니다. 데모(`demo/main.tsx`)가 쓰는 자리가 정확히 이 경로
+   * (`options.defaultCombo` → `action.defaultCombo` → `bindingOf` → 디스패치)라서,
+   * 여기서 이어 붙여 재는 것이 전체 리뷰 Important 1이 요구한 "새 인자에 대한
+   * 테스트"의 일부입니다. */
+  it("sidebarToggleAction의 defaultCombo가 실제로 바인딩된다 (전체 리뷰 Important 1)", () => {
+    const onFire = vi.fn();
+    render(<ShortcutProvider actions={[sidebarToggleAction(onFire, { defaultCombo: "Ctrl+Backslash" })]} />);
+    press({ code: "Backslash", ctrlKey: true });
+    expect(onFire).toHaveBeenCalledTimes(1);
   });
 });
 
