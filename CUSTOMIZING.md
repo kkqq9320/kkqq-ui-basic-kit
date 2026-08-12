@@ -266,11 +266,16 @@ const palette = createThemePalette([...THEME_TOKEN_GROUPS, MY_GROUP]);   // 앱�
 <ThemeColorEditor
   palette={palette}
   theme={theme}
-  overrides={fromServer}          // 넘기면 킷은 저장하지 않습니다
-  onChange={(next) => palette.apply(theme, next)}   // 미리 보기
-  onCommit={(next) => save(next)}                   // 손을 둔 뒤 한 번
+  overrides={fromServer}           // 넘기면 킷은 저장하지 않습니다
+  onChange={setFromServer}         // 화면 적용은 편집기가 이미 끝냈습니다 — 이 맵을 앱 상태로 되먹이는 것뿐입니다
+  onCommit={(next) => save(next)}  // 손을 둔 뒤 한 번
 />
 ```
+
+> ⚠️ **`onChange`가 받은 맵을 반드시 `overrides`로 되먹이세요.** controlled 모드에서는
+> 편집기가 매 조작을 그 순간의 `overrides` 프롭에서 계산합니다 — 되먹이지 않으면 두
+> 번째 편집이 첫 번째 편집의 키를 잊은 맵으로 나오고, 이 맵을 통째 교체(PUT)로
+> 저장하면 사용자가 손대지 않은 색이 영구히 사라집니다.
 
 **백업·복원:**
 
