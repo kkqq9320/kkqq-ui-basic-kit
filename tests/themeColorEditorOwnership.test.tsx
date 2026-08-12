@@ -14,6 +14,7 @@ const palette = () => createThemePalette([{ title: "브랜드", tokens: [BRAND] 
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   localStorage.clear();
   document.documentElement.removeAttribute("style");
 });
@@ -89,6 +90,68 @@ describe("앱이 소유할 때", () => {
     fireEvent.click(screen.getByLabelText("브랜드2 기본값으로"));
 
     expect(screen.queryByLabelText("브랜드2 색상 선택") !== null).toBe(true);
+  });
+});
+
+/* 스펙 §7이 지키기로 한 문장은 "저장소가 막혀 있어도 **편집기가** 안 터진다"인데,
+ * 지금까지의 검사는 `writeTokenOverrides`를 직접 부르는 함수 수준뿐이었다. 함수가
+ * `false`를 돌려주는 것과 **화면이 계속 도는 것**은 다른 질문이다 — 편집기는 그 반환값을
+ * 보지도 않으므로, 저장이 커밋 경로 한가운데서 던지면 그 **뒤에 오는 적용·알림이 통째로
+ * 안 돈다.**(`commit`은 write → apply → onChange 순서다.) 그 뒤쪽을 여기서 못박는다.
+ *
+ * ⚠️ `overrides`를 넘기면(controlled) 킷은 아예 저장하지 않으므로 막힌 저장소를 지나지
+ * 않는다 — 이 절은 **일부러 uncontrolled**로 렌더한다. 첫 검사가 그 전제(쓰기 경로에
+ * 실제로 닿는가)를 따로 못박는 이유도 같다. */
+describe("저장소가 막혔을 때", () => {
+  const blockStorage = () =>
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+
+  it("색을 바꾸면 막힌 저장 경로에 실제로 닿는다", () => {
+    const setItem = blockStorage();
+    render(<ThemeColorEditor theme="light" palette={palette()} />);
+
+    fireEvent.change(screen.getByLabelText("브랜드2 색상 값"), { target: { value: "#ff8a3d" } });
+
+    expect(setItem).toHaveBeenCalled();
+  });
+
+  /* ⚠️ **"예외가 밖으로 나오지 않는다"는 여기서 검사할 수 없습니다.** 그렇게 쓴 검사를
+   * 실제로 넣고 `writeTokenOverrides`의 `try/catch`를 빼 봤더니 **초록으로 남았습니다** —
+   * React가 이벤트 핸들러의 예외를 잡아 stderr로 보고할 뿐 `fireEvent` 호출부로
+   * 다시 던지지 않기 때문입니다(실측: `Error: blocked`가 stderr에만 찍히고
+   * `expect(...).not.toThrow()`는 통과). 못 실패하는 검사이므로 지웠습니다.
+   * 편집기 수준에서 갈리는 것은 **던진 뒤에 안 도는 것들**이고, 그게 아래 셋입니다. */
+  it("저장이 막혀도 화면에는 적용된다", () => {
+    blockStorage();
+    render(<ThemeColorEditor theme="light" palette={palette()} />);
+
+    fireEvent.change(screen.getByLabelText("브랜드2 색상 값"), { target: { value: "#ff8a3d" } });
+
+    expect(document.documentElement.style.getPropertyValue("--brand-2")).toBe("#ff8a3d");
+  });
+
+  it("저장이 막혀도 onChange로 알린다", () => {
+    blockStorage();
+    const onChange = vi.fn();
+    render(<ThemeColorEditor theme="light" palette={palette()} onChange={onChange} />);
+
+    fireEvent.change(screen.getByLabelText("브랜드2 색상 값"), { target: { value: "#ff8a3d" } });
+
+    expect(onChange).toHaveBeenLastCalledWith({ "--brand-2": "#ff8a3d" });
+  });
+
+  /* 한 번 막힌 뒤에도 계속 고를 수 있어야 한다 — 사용자에게 "저장은 안 되지만 지금
+   * 화면에서는 색을 고른다"가 남는 것이 이 경로의 목적이다. */
+  it("막힌 뒤에도 다음 색을 계속 고를 수 있다", () => {
+    blockStorage();
+    render(<ThemeColorEditor theme="light" palette={palette()} />);
+    fireEvent.change(screen.getByLabelText("브랜드2 색상 값"), { target: { value: "#ff8a3d" } });
+
+    fireEvent.change(screen.getByLabelText("브랜드2 색상 값"), { target: { value: "#123456" } });
+
+    expect(document.documentElement.style.getPropertyValue("--brand-2")).toBe("#123456");
   });
 });
 
