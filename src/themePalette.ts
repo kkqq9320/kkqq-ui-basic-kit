@@ -40,6 +40,11 @@ export type ThemePalette = {
   parse(input: unknown): ParsedThemeColors | null;
 };
 
+/** 봉투의 한 테마 값이 "객체이거나 아예 없거나" 둘 중 하나여야 합니다. 문자열·배열·숫자가
+ *  오면 봉투가 아닙니다 — 그걸 조용히 빈 맵으로 바꾸면 `dropped`가 빈 채로 돌아가
+ *  "아무것도 안 버렸다"고 거짓말하고, 그 테마는 통째로 기본값이 됩니다. */
+const isThemeShaped = (raw: unknown) => raw === undefined || (typeof raw === "object" && raw !== null && !Array.isArray(raw));
+
 function cleanTheme(raw: unknown, known: Set<string>, dropped: string[]): Record<string, string> {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
   const out: Record<string, string> = {};
@@ -71,8 +76,9 @@ export function createThemePalette(groups: readonly ThemeTokenGroup[]): ThemePal
       const envelope = input as { version?: unknown; colors?: unknown };
       if (envelope.version !== 1) return null;
       if (typeof envelope.colors !== "object" || envelope.colors === null || Array.isArray(envelope.colors)) return null;
-      const known = new Set(tokens.map((token) => token.name));
       const source = envelope.colors as Record<string, unknown>;
+      if (!isThemeShaped(source.light) || !isThemeShaped(source.dark)) return null;
+      const known = new Set(tokens.map((token) => token.name));
       const dropped: string[] = [];
       const colors = {
         light: cleanTheme(source.light, known, dropped),

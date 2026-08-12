@@ -175,4 +175,26 @@ describe("백업 형식", () => {
       dropped: [],
     });
   });
+
+  /* ⚠️ 조용히 버리면 `dropped`가 빈 채로 돌아가 "아무것도 안 버렸다"고 거짓말한다.
+   * 봉투의 한 테마가 객체가 아니면 그건 봉투가 아니다(§5.2 표). */
+  it("테마 값이 객체가 아니면 null이다", () => {
+    const palette = createThemePalette([APP_GROUP]);
+
+    expect([
+      palette.parse({ version: 1, colors: { light: "빨강", dark: {} } }),
+      palette.parse({ version: 1, colors: { light: {}, dark: [] } }),
+      palette.parse({ version: 1, colors: { light: 3, dark: {} } }),
+    ]).toEqual([null, null, null]);
+  });
+
+  /* 테마 키가 **없는** 것은 다르다 — 그 테마에 덮어쓴 색이 없다는 정상 백업이다. */
+  it("테마 키가 아예 없으면 빈 백업으로 읽는다", () => {
+    const palette = createThemePalette([APP_GROUP]);
+
+    expect(palette.parse({ version: 1, colors: { light: { "--brand-2": "#ff8a3d" } } })).toEqual({
+      backup: { version: 1, colors: { light: { "--brand-2": "#ff8a3d" }, dark: {} } },
+      dropped: [],
+    });
+  });
 });
