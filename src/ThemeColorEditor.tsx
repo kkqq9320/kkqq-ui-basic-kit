@@ -66,6 +66,15 @@ export type ThemeColorEditorProps = {
    *  "안 바뀜"이 아니라 "기본값"입니다. 앱은 통째로 교체해 저장해야 하고, 병합하면
    *  리셋만 영영 안 먹습니다. */
   overrides?: Record<string, string>;
+  /** 편집 **세션이 끝날 때** 한 번 불립니다 — 포커스가 떠나거나, 버튼을 누르거나,
+   *  500ms 쉬면 끝납니다. 피커를 끄는 동안은 안 불립니다.
+   *
+   *  `onChange`는 매 변경이라 미리 보기·실시간 적용용이고, 서버로 보내는 것은 이쪽입니다.
+   *  경계를 새로 만들지 않고 **Undo가 한 칸을 묶는 그 경계**를 그대로 씁니다 —
+   *  사용자가 이미 "한 번의 편집"으로 느끼는 지점입니다.
+   *
+   * ⚠️ `onChange`와 같은 맵입니다 — 그 테마의 덮어쓰기 **전체**이지 패치가 아닙니다. */
+  onCommit?: (overrides: Record<string, string>) => void;
   /** 앱이 이 편집기 안을 겨눌 때의 출구. `Panel`의 것과 같은 뜻입니다.
    *
    * **이게 없어서 앱은 색상 카드에 높이조차 줄 수 없었습니다** — 편집기가 자기 패널을
@@ -79,7 +88,7 @@ export type ThemeColorEditorProps = {
   className?: string;
 };
 
-export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKEN_GROUPS, className = "", cardMin, cardMax, overrides }: ThemeColorEditorProps) {
+export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKEN_GROUPS, className = "", cardMin, cardMax, overrides, onCommit }: ThemeColorEditorProps) {
   // groups가 다룰 토큰의 전부입니다. 프로젝트가 groups에 새 토큰을 더하면 읽기·기본값·
   // 적용이 전부 이 목록으로 돌아가, 키트를 안 고쳐도 새 색이 편집·저장·적용됩니다.
   // palette가 오면 groups 대신 그쪽을 씁니다 — 둘 다 오면 palette가 이깁니다.
@@ -104,6 +113,8 @@ export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKE
   const controlled = overrides !== undefined;
   const [ownOverrides, setOwnOverrides] = useState<Record<string, string>>(() => (controlled ? {} : readOverrides(theme)));
   const current = controlled ? overrides : ownOverrides;
+  /** `commit`이 넣는 최신 값. 세션이 끝날 때 `onCommit`에 이 값을 넘깁니다. */
+  const latestRef = useRef<Record<string, string>>(current);
   /** 토큰별 직전 값 스택. Undo가 여기서 하나씩 꺼냅니다. */
   const [history, setHistory] = useState<Record<string, string[]>>({});
 
@@ -126,17 +137,25 @@ export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKE
    * 세션은 포커스가 떠나거나 잠시 멈추면 끝납니다. */
   const sessionRef = useRef<{ name: string; timer: number } | null>(null);
 
-  function endSession() {
+  /** 세션이 끝나면 "손을 둔" 것이므로 앱에 알립니다.
+   *
+   * ⚠️ **`notify`가 필요한 이유:** 버튼 경로(Undo·Reset·모두 초기화)는 자기 변경을
+   * 커밋하기 **전에** 이전 세션을 닫습니다. 거기서 알리면 **아직 커밋 안 된 낡은 값**으로
+   * 한 번, 커밋 뒤에 또 한 번 — 두 번 불립니다. 그리고 언마운트 정리에서 알리면 앱이
+   * 사라지는 컴포넌트의 콜백으로 상태를 건드리게 됩니다. 그 둘은 끄고 부릅니다. */
+  function endSession(notify = true) {
+    const had = sessionRef.current !== null;
     if (sessionRef.current) window.clearTimeout(sessionRef.current.timer);
     sessionRef.current = null;
+    if (had && notify) onCommit?.(latestRef.current);
   }
 
   function extendSession(name: string) {
     if (sessionRef.current) window.clearTimeout(sessionRef.current.timer);
-    sessionRef.current = { name, timer: window.setTimeout(endSession, EDIT_SESSION_MS) };
+    sessionRef.current = { name, timer: window.setTimeout(() => endSession(), EDIT_SESSION_MS) };
   }
 
-  useEffect(() => endSession, []);
+  useEffect(() => () => endSession(false), []);
 
   // useState 초기값은 다시 계산되지 않으므로, 테마가 바뀌면 저장값을 다시 읽습니다.
   const [loadedTheme, setLoadedTheme] = useState(theme);
@@ -153,7 +172,7 @@ export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKE
     if (!controlled) setOwnOverrides(readOverrides(theme));
     setHistory({});
     setDraft(null);
-    endSession();
+    endSession(false); // 테마 전환이지 편집이 아니다
   }
 
   function commit(next: Record<string, string>) {
@@ -163,6 +182,7 @@ export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKE
     }
     applyOverrides(theme, next);
     onChange?.(next);
+    latestRef.current = next;
   }
 
   function valueOf(token: ThemeToken, from: Record<string, string> = current) {
@@ -199,9 +219,11 @@ export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKE
     const stack = history[token.name] ?? [];
     if (!stack.length) return;
     setDraft(null);
-    endSession();   // 버튼을 누른 건 별개의 조작이다
+    endSession(false);   // 버튼을 누른 건 별개의 조작이다 — 자기 커밋 전에 알리지 않는다
     setHistory((current) => ({ ...current, [token.name]: stack.slice(0, -1) }));
-    commit(withValue(token, stack[stack.length - 1]));
+    const next = withValue(token, stack[stack.length - 1]);
+    commit(next);
+    onCommit?.(next);
   }
 
   function resetToken(token: ThemeToken) {
@@ -209,9 +231,11 @@ export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKE
     const fallback = defaultTokenValue(token, theme, tokens);
     if (previous === fallback) return;
     setDraft(null);
-    endSession();
+    endSession(false);
     pushHistory(token, previous);
-    commit(withValue(token, fallback));
+    const next = withValue(token, fallback);
+    commit(next);
+    onCommit?.(next);
   }
 
   function resetAll() {
@@ -219,13 +243,14 @@ export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKE
     const changed = Object.keys(current);
     if (!changed.length) return;
     setDraft(null);
-    endSession();
+    endSession(false);
     setHistory((history) => {
       const next = { ...history };
       for (const name of changed) next[name] = [...(next[name] ?? []), current[name]];
       return next;
     });
     commit({});
+    onCommit?.({});
   }
 
   const changedCount = Object.keys(current).length;
@@ -262,7 +287,7 @@ export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKE
               /* 견본으로 고르면 초안은 버립니다 — 안 그러면 헥스 칸이 치다 만 글자를
                  계속 보여, 화면의 글자와 실제 색이 갈라진 채로 남습니다. */
               onChange={(event) => { setDraft(null); setToken(token, event.target.value); }}
-              onBlur={endSession}
+              onBlur={() => endSession()}
             />
             <span className="theme-color-copy">
               {/* ⚠️ 이름을 `span`으로 감쌉니다. CSS의 말줄임 규칙이 `strong > :first-child`

@@ -81,3 +81,70 @@ describe("앱이 소유할 때", () => {
     expect((screen.getByLabelText("브랜드2 색상 값") as HTMLInputElement).value).toBe("#ffa866");
   });
 });
+
+describe("저장 경계", () => {
+  it("피커를 끄는 동안은 onCommit이 안 불린다", () => {
+    const onCommit = vi.fn();
+    render(<ThemeColorEditor theme="light" palette={palette()} overrides={{}} onCommit={onCommit} />);
+    const swatch = screen.getByLabelText("브랜드2 색상 선택");
+
+    for (const value of ["#111111", "#222222", "#333333"]) fireEvent.change(swatch, { target: { value } });
+
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it("포커스가 떠나면 한 번 불린다", () => {
+    const onCommit = vi.fn();
+    render(<ThemeColorEditor theme="light" palette={palette()} overrides={{}} onCommit={onCommit} />);
+    const swatch = screen.getByLabelText("브랜드2 색상 선택");
+    for (const value of ["#111111", "#222222", "#333333"]) fireEvent.change(swatch, { target: { value } });
+
+    fireEvent.blur(swatch);
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it("마지막 값으로 불린다", () => {
+    const onCommit = vi.fn();
+    render(<ThemeColorEditor theme="light" palette={palette()} overrides={{}} onCommit={onCommit} />);
+    const swatch = screen.getByLabelText("브랜드2 색상 선택");
+    for (const value of ["#111111", "#222222", "#333333"]) fireEvent.change(swatch, { target: { value } });
+
+    fireEvent.blur(swatch);
+
+    expect(onCommit).toHaveBeenLastCalledWith({ "--brand-2": "#333333" });
+  });
+
+  /* 모두 초기화도 경계다 — 빈 맵을 안 알리면 앱이 초기화를 저장할 수 없다. */
+  it("모두 초기화하면 빈 맵으로 불린다", () => {
+    const onCommit = vi.fn();
+    render(<ThemeColorEditor theme="light" palette={palette()} overrides={{ "--brand-2": "#ff8a3d" }} onCommit={onCommit} />);
+
+    fireEvent.click(screen.getByLabelText("색상 1개 모두 기본값으로"));
+
+    expect(onCommit).toHaveBeenLastCalledWith({});
+  });
+
+  /* ⚠️ 버튼 경로는 자기 변경을 커밋하기 **전에** 이전 세션을 닫는다. 거기서도 알리면
+   * 낡은 값으로 한 번 더 불린다. 횟수를 따로 못박는다 — `toHaveBeenLastCalledWith`만
+   * 보면 두 번 불려도 통과한다. */
+  it("모두 초기화는 한 번만 알린다", () => {
+    const onCommit = vi.fn();
+    render(<ThemeColorEditor theme="light" palette={palette()} overrides={{ "--brand-2": "#ff8a3d" }} onCommit={onCommit} />);
+
+    fireEvent.click(screen.getByLabelText("색상 1개 모두 기본값으로"));
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+  });
+
+  /* 사라지는 컴포넌트의 콜백으로 앱 상태를 건드리게 하면 안 된다. */
+  it("언마운트로는 알리지 않는다", () => {
+    const onCommit = vi.fn();
+    const view = render(<ThemeColorEditor theme="light" palette={palette()} overrides={{}} onCommit={onCommit} />);
+    fireEvent.change(screen.getByLabelText("브랜드2 색상 선택"), { target: { value: "#111111" } });
+
+    view.unmount();
+
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+});
