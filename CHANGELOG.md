@@ -3,7 +3,7 @@
 버전은 태그로 답니다. 소비 프로젝트는 SHA 대신 태그로 걸 수 있습니다:
 
 ```bash
-npm i github:kkqq9320/kkqq-ui-basic-kit#v0.6.0
+npm i github:kkqq9320/kkqq-ui-basic-kit#v0.7.0
 ```
 
 `0.x`에서는 **minor 자리가 breaking 자리**입니다(semver의 0.x 규칙).
@@ -13,7 +13,15 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.6.0
 
 ---
 
-## 미출시
+## v0.7.0 — 2026-08-13
+
+[전체 diff: v0.6.0...v0.7.0](https://github.com/kkqq9320/kkqq-ui-basic-kit/compare/v0.6.0...v0.7.0)
+
+**루트에서 내보내는 것은 하나도 안 바뀝니다** — `src/index.ts`가 `v0.6.0`과 **글자 하나까지
+같습니다**(실측). 그런데도 minor인 이유는 둘입니다: **편집기에서 색상 카드 두 장이
+사라지고**(사용자가 바로 봅니다), **내부 모듈 하나의 파일 경로가 없어집니다**(아래
+"눈으로 볼 것"). v0.3.0~v0.6.0과 같은 판단입니다 — 규칙이 타입만 말할 때는 **소비자가
+무엇을 보게 되는가**로 판단합니다.
 
 ### 고친 것
 
@@ -38,6 +46,13 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.6.0
   남습니다). 목록에 넣어 두면 계속 살아 있습니다.
 - **`--color-card-min`은 `240px` 그대로입니다.** 주석만 360이던 시절을 설명하고
   있었을 뿐이라, 값과 화면은 안 바뀝니다(목록 폭 1014px·gap 8px 기준 계산상 4열).
+- ⚠️ **`src/dateWheelTyping.ts`가 없어졌습니다.** 날짜 피커의 값 모델이
+  **`src/model/instant.ts`** 한 곳으로 모였습니다(내부 정리). `package.json`의 `exports`가
+  `./src/*`를 열어 두므로 **그 파일을 직접 import 하던 코드는 깨집니다.** 루트에서 쓰는
+  정상 경로는 그대로입니다 — `DateWheelPicker`가 `todayIn`과 `DateWheelUnit`을 그대로
+  재수출하고, `import { … } from "kkqq-ui-basic-kit"`는 아무것도 안 바뀝니다.
+- **날짜 피커의 화면·동작은 그대로입니다.** 값 해석·범위 판정이 컴포넌트에서 모델로
+  옮겨갔을 뿐이고, 그 이동을 검사가 각각 지킵니다.
 
 ---
 
