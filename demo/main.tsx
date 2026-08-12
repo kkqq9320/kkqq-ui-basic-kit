@@ -166,7 +166,7 @@ const OLD_RULES = `
   .theme-color-list { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
 `;
 
-type Reading = { colorCols: number; colorCard: number; colorField: number; cardCols: number; card: number; fieldCols: number; field: number; panelCols: number; panel: number; memo: number };
+type Reading = { cardLeftover: number; cardEmptyTail: number; colorCols: number; colorCard: number; colorField: number; cardCols: number; card: number; fieldCols: number; field: number; panelCols: number; panel: number; memo: number };
 
 function LayoutSwitch() {
   const [axis, setAxis] = useState<Record<string, number>>(() => Object.fromEntries([...AXES, ...MAX_AXES].map((a) => [a.token, a.initial])));
@@ -226,7 +226,32 @@ function LayoutSwitch() {
       const el = document.querySelector(selector);
       return el ? Math.round(el.getBoundingClientRect().width) : 0;
     };
+    /* ⚠️ **`justify`는 트랙 바깥에 남은 폭만 옮깁니다.** 트랙이 `1fr`이면 그 폭이 0이라
+       **어떤 값을 골라도 화면이 안 바뀝니다** — 실측으로 `normal`·`start`·`space-between`·
+       `space-around`·`space-evenly` 다섯이 좌표까지 완전히 같았습니다. 오너가 같은 자리에서
+       세 번 막혔고, 세 번 다 이 숫자가 화면에 없어서였습니다. */
+    const leftover = (selector: string) => {
+      const el = document.querySelector(selector);
+      if (!el) return 0;
+      const style = getComputedStyle(el);
+      const sizes = style.gridTemplateColumns.split(" ").map(Number.parseFloat).filter(Number.isFinite);
+      if (sizes.length === 0) return 0;
+      const gap = Number.parseFloat(style.columnGap) || 0;
+      const used = sizes.reduce((total, size) => total + size, 0) + gap * (sizes.length - 1);
+      return Math.max(0, Math.round(el.getBoundingClientRect().width - used));
+    };
+    /** 마지막 줄에 남는 **빈 칸** 수. 오른쪽에 비어 보이는 자리는 "남는 폭"이 아니라
+     *  이것이고, `justify`는 여기를 못 건드립니다 — `auto-fill`이 빈 트랙을 접지 않기
+     *  때문입니다(그게 넓은 화면에서 카드가 커지는 것을 막는 장치입니다). */
+    const emptyTail = (selector: string) => {
+      const el = document.querySelector(selector);
+      if (!el) return 0;
+      const count = tracks(selector);
+      if (count === 0) return 0;
+      return (count - (el.children.length % count)) % count;
+    };
     const read = (): Reading => ({
+      cardLeftover: leftover(".summary-grid"), cardEmptyTail: emptyTail(".summary-grid"),
       colorCols: tracks(".theme-color-list"), colorCard: width(".theme-color-card"), colorField: width(".theme-color-text"),
       cardCols: tracks(".summary-grid"), card: width(".summary-card"),
       fieldCols: tracks(".field-grid"), field: width(".field-grid > label"),
@@ -309,9 +334,19 @@ function LayoutSwitch() {
           className={choice === justify ? "primary" : "secondary-button"}
           aria-pressed={choice === justify}
           onClick={() => setJustify(choice)}
+          title={choice}
         >{choice === "normal" ? "왼쪽" : choice === "center" ? "가운데" : choice === "end" ? "오른쪽" : "양끝"}</button>)}
       </div>
     </div>
+    {/* ⚠️ **이 줄이 없어서 오너가 같은 자리에서 세 번 막혔습니다.** 버튼이 어떤 CSS 값을
+        넣는지, 그리고 지금 그 축이 옮길 폭이 있기는 한지가 화면 어디에도 없었습니다. */}
+    <small className="layout-switch-note">
+      지금 <code>--*-justify: {justify}</code>
+      {now ? ` · 요약 카드 남는 폭 ${now.cardLeftover}px · 마지막 줄 빈 칸 ${now.cardEmptyTail}개` : " · 재는 중…"}
+      {now && now.cardLeftover === 0
+        ? " — 남는 폭이 0이라 위 버튼은 어떤 값을 골라도 화면이 안 바뀝니다. 오른쪽에 비어 보이는 자리는 남는 폭이 아니라 빈 칸이고 justify가 못 건드립니다. max를 길이로 줘야 남는 폭이 생깁니다."
+        : ""}
+    </small>
     <div className="layout-switch-row">
       <strong>폭 흉내 <small>(창은 그대로)</small></strong>
       <div className="layout-switch-buttons">
