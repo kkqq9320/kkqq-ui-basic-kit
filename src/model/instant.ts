@@ -7,15 +7,22 @@
  * (lastDayOf, 윤년). 월의 상한은 12로 상수, 연은 상한이 없습니다. 설계 스펙 §3.1.
  */
 export type WheelUnit = "year" | "month" | "day" | "hour" | "minute" | "second";
-/** 기존 이름. `WheelUnit`의 부분집합입니다 — **별칭이 아닙니다.** 컴포넌트와 기존 테스트가
- *  이 좁은 세 단위 그대로 `Record<DateWheelUnit, …>`를 3키로 채워 쓰므로, 별칭으로 넓히면
- *  그 자리들이 전부 깨집니다(타이핑·확정 함수의 **인자**만 `WheelUnit`으로 넓히고, 반환
- *  타입과 `Record`는 좁게 남겨 두는 것이 이 파일과 컴포넌트가 동시에 컴파일되는 유일한
- *  조합입니다). 좁은 타입을 넓은 인자에 넘기는 건 항상 되므로 기존 호출부는 그대로 통과합니다. */
-export type DateWheelUnit = "year" | "month" | "day";
+/** 기존 이름. **2b-1부터 `WheelUnit`의 별칭입니다.** 2a에서는 별칭으로 넓히면 컴포넌트의
+ *  3키짜리 `Record<DateWheelUnit, …>`(컬럼 모션 상태 등)가 깨져서 "부분집합, 별칭 아님"으로
+ *  남겨야 했습니다 — 그때는 컴포넌트를 못 건드리는 제약이 있었습니다. 2b는 컴포넌트를 고칠 수
+ *  있으므로 그 자리들을 여섯 단위로 채우고 여기서 별칭으로 통일합니다. `export`는 그대로
+ *  유지합니다 — tests/DateWheelPicker.test.tsx와 컴포넌트가 이 이름으로 가져옵니다. */
+export type DateWheelUnit = WheelUnit;
 
 /** 여섯 단위의 순서. 큰 단위부터 작은 단위로. */
 export const UNIT_LADDER = ["year", "month", "day", "hour", "minute", "second"] as const satisfies readonly WheelUnit[];
+
+/** `fields`를 받는 값-지식 함수들의 기본값 — 안 넘기면 지금까지와 똑같은 연·월·일
+ *  픽커로 동작합니다(Task 3, 설계 스펙 §5). 옵션 인자 하나로 두는 이유는
+ *  tests/instantModel.test.ts가 `shiftDateValue`·`withUnitValue`·`dateWheelLabel`·
+ *  `validDateValue`·`todayIn`을 fields 없이(3-인자 이하로) 직접 부르는 기존 호출을
+ *  그대로 유지하기 때문입니다 — 이 상수가 그 호출들의 암묵적 계약입니다. */
+const DEFAULT_FIELDS: WheelUnit[] = ["year", "month", "day"];
 
 /** 그 단위가 시작하는 최소값. 월·일만 1이고 나머지(연·시·분·초)는 0입니다. */
 export function unitFloor(unit: WheelUnit) {
@@ -419,54 +426,102 @@ export function lastDayOf(year: number, monthIndex: number) {
  * 직접 받습니다.
  *
  * 컴포넌트의 계약을 그대로 지킵니다 — 목적지에 없는 날은 **말일로 자르고 다른
- * 열로 자리올림하지 않습니다.**
+ * 열로 자리올림하지 않습니다.** 시·분·초는 `typeDigit`/`flushBuffer`가 이미
+ * 범위를 검증해 넘기므로 그대로 앉히기만 합니다 — 일과 달리 그 자체로
+ * 검증이 필요한 상한이 없습니다(시는 0~23, 분·초는 0~59로 타이핑 쪽이 이미
+ * 막습니다).
+ *
+ * Task 3부터 `new Date(...)`를 쓰지 않습니다 — parseValue/serializeValue로
+ * 값을 드나들어 `fields`의 계열(date/time/datetime) 무엇이든 다룹니다(§5).
  */
-export function withUnitValue(value: string, unit: DateWheelUnit, amount: number): string {
-  const date = new Date(value + "T00:00:00Z");
-  const year = date.getUTCFullYear();
-  const monthIndex = date.getUTCMonth();
-  const day = date.getUTCDate();
-  if (unit === "year") {
-    date.setUTCFullYear(amount, monthIndex, Math.min(day, lastDayOf(amount, monthIndex)));
-  } else if (unit === "month") {
-    const targetMonth = amount - 1;
-    date.setUTCFullYear(year, targetMonth, Math.min(day, lastDayOf(year, targetMonth)));
-  } else {
-    date.setUTCFullYear(year, monthIndex, Math.min(amount, lastDayOf(year, monthIndex)));
-  }
-  return date.toISOString().slice(0, 10);
-}
-
-/** 지정한 시간대의 오늘을 YYYY-MM-DD로. sv-SE 로케일이 ISO 형식을 내줍니다. */
-export function todayIn(timeZone: string) {
-  return new Intl.DateTimeFormat("sv-SE", { timeZone }).format(new Date());
-}
-
-export function shiftDateValue(value: string, unit: DateWheelUnit, direction: number) {
-  const date = new Date(value + "T00:00:00Z");
-  const year = date.getUTCFullYear();
-  const month = date.getUTCMonth();
-  const day = date.getUTCDate();
-  // 말일은 이 파일의 lastDayOf로 구합니다 — new Date(Date.UTC(year, ...))는
-  // 0~99년을 1900년대로 재매핑해 연도 0(윤년)을 1900년(평년)으로 잘못 읽습니다.
+export function withUnitValue(value: string, unit: DateWheelUnit, amount: number, fields: WheelUnit[] = DEFAULT_FIELDS): string {
+  const parts = parseValue(value, fields);
+  if (!parts) return value;
+  const next = { ...parts, [unit]: amount };
   if (unit === "day") {
-    const lastDay = lastDayOf(year, month);
-    const targetDay = ((day - 1 + direction) % lastDay + lastDay) % lastDay + 1;
-    date.setUTCFullYear(year, month, targetDay);
-  } else if (unit === "year") {
-    const targetYear = year + direction;
-    const lastDay = lastDayOf(targetYear, month);
-    date.setUTCFullYear(targetYear, month, Math.min(day, lastDay));
-  } else {
-    const targetMonth = ((month + direction) % 12 + 12) % 12;
-    const lastDay = lastDayOf(year, targetMonth);
-    date.setUTCFullYear(year, targetMonth, Math.min(day, lastDay));
+    // 일은 스스로도 상한 검증이 필요합니다 — 타이핑이 다른 달의 말일보다 큰
+    // 값을 칠 수 있습니다(4월에 "31"). 연·월과 달리 열 자신이 그 상한을 결정합니다.
+    next.day = Math.min(amount, lastDayOf(parts.year, parts.month - 1));
+  } else if (unit === "year" || unit === "month") {
+    // 일은 연·월에 의존합니다(§3.1의 유일한 단위 간 의존) — 연·월이 바뀌어
+    // 일이 더는 유효하지 않으면 목적지 달의 말일로 자릅니다.
+    next.day = Math.min(parts.day, lastDayOf(next.year, next.month - 1));
   }
-  return date.toISOString().slice(0, 10);
+  return serializeValue(next, fields);
 }
 
-export function validDateValue(value: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+/** 지정한 시간대의 지금을 초 단위까지 UnitParts로.
+ *
+ * ⚠️ **sv-SE 함정(설계 스펙 §9).** `Intl.DateTimeFormat("sv-SE", {timeZone})`에
+ * 시·분·초 옵션을 붙이면 날짜와 시각 사이 구분자가 `T`가 아니라 **공백**입니다
+ * (실측: `2026-08-12 03:00:05`). 그 문자열을 파싱해 다시 조립하는 대신,
+ * `formatToParts`로 각 조각을 **타입별로** 뽑아 우리가 직접 UnitParts를
+ * 조립합니다 — 구분자 문자 자체를 아예 안 봅니다. `hourCycle: "h23"`으로
+ * 24시간제를 명시합니다(12시간제·오전/오후는 3단계의 몫입니다).
+ */
+function nowParts(timeZone: string): UnitParts {
+  const formatted = new Intl.DateTimeFormat("sv-SE", {
+    timeZone,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const read = (type: string) => Number(formatted.find((part) => part.type === type)?.value ?? 0);
+  return { year: read("year"), month: read("month"), day: read("day"), hour: read("hour"), minute: read("minute"), second: read("second") };
+}
+
+/**
+ * 지정한 시간대의 지금을 `fields`의 계열·정밀도로 문자열화합니다(Task 3 항목 4,
+ * 설계 스펙 §9). 기본 `fields`(연·월·일)에서는 예전과 글자 하나까지 같은
+ * `YYYY-MM-DD`입니다 — `serializeValue`가 date 계열에서 시·분·초 조각을
+ * 그냥 무시하기 때문입니다.
+ */
+export function todayIn(timeZone: string, fields: WheelUnit[] = DEFAULT_FIELDS): string {
+  return serializeValue(nowParts(timeZone), fields);
+}
+
+/**
+ * 한 열을 ±1 이동합니다. **자리올림이 없습니다** — 연·월·일뿐 아니라 시·분·초도
+ * 자기 열 안에서만 돕니다(오전/오후만 예외인 것은 3단계의 몫이고, 설계 스펙 §7이
+ * "자리올림 없음 규칙의 유일한 예외"라고 명시합니다).
+ *
+ * Task 3부터 `new Date(...)`를 쓰지 않습니다 — 연도가 10000 이상이 되면
+ * `Date#toISOString()`이 확장 표기(`+010000-07-12`)로 깨지던 함정(설계 스펙 §9의
+ * 예전 주석)이 이 경로에서 함께 사라집니다: `serializeValue`의 `pad`는 4자리보다
+ * 긴 연도를 자르지 않고 그대로 두므로 `parseValue`의 `\d{4}` 정규식이 그 결과를
+ * 그냥 매치 실패로 걸러내고, `shiftedFrom`의 `model.isValid` 가드가 null로
+ * 받아냅니다 — 별도 방어 코드가 필요 없습니다.
+ */
+export function shiftDateValue(value: string, unit: DateWheelUnit, direction: number, fields: WheelUnit[] = DEFAULT_FIELDS): string {
+  const parts = parseValue(value, fields);
+  if (!parts) return value;
+  const next = { ...parts };
+  if (unit === "year") {
+    // 연도는 상한이 없습니다(§4) — 순환하지 않고 그대로 더합니다.
+    next.year = parts.year + direction;
+  } else {
+    // 월·일·시·분·초는 전부 "바닥값부터 상한까지 순환"이라는 하나의 규칙입니다.
+    // unitCeiling이 문맥(day만 연·월을 봅니다, §3.1)을 받아 상한을 내주므로
+    // 여기서 단위별 분기가 더 필요 없습니다.
+    const ceiling = unitCeiling(unit, parts)!;   // year는 위에서 걸렀으므로 null이 아닙니다
+    const floor = unitFloor(unit);
+    const size = ceiling - floor + 1;
+    next[unit] = ((parts[unit] - floor + direction) % size + size) % size + floor;
+  }
+  // 일은 연·월에 의존합니다(§3.1의 유일한 단위 간 의존) — 연·월이 움직여 그
+  // 값이 더는 유효하지 않으면 목적지 달의 말일로 자르고, 다른 열로 자리올림하지
+  // 않습니다.
+  if (unit === "year" || unit === "month") next.day = Math.min(parts.day, lastDayOf(next.year, next.month - 1));
+  return serializeValue(next, fields);
+}
+
+/**
+ * `value`가 `fields`의 계열·형식에서 유효한지(Task 3 항목 1, 설계 스펙 §5).
+ * `fields`를 안 넘기면 예전 이름 그대로(`/^\d{4}-\d{2}-\d{2}$/`) 연·월·일만
+ * 받습니다 — `parseValue`가 date 계열에서 정확히 같은 정규식을 씁니다.
+ */
+export function validDateValue(value: string, fields: WheelUnit[] = DEFAULT_FIELDS): boolean {
+  return parseValue(value, fields) !== null;
 }
 
 /** 남은 최소 단위 기준 비교 길이. 일 있으면 10(YYYY-MM-DD), 월까지면 7(YYYY-MM), 연만이면 4.
@@ -476,21 +531,47 @@ export function rangeKeyLength(fields: DateWheelUnit[]) {
   return fields.includes("day") ? 10 : fields.includes("month") ? 7 : 4;
 }
 
-/** 빠진 열을 01로 채웁니다. 월 없으면 월=01, 일 없으면 일=01. 값 형식은 늘 YYYY-MM-DD. */
-export function normalizeToFields(value: string, fields: DateWheelUnit[]) {
-  const [year, month, day] = value.split("-");
-  return `${year}-${fields.includes("month") ? month : "01"}-${fields.includes("day") ? day : "01"}`;
+/**
+ * 빠진 열을 바닥값으로 채웁니다(월·일은 01, 시·분·초는 00) — parseValue의 눌림
+ * 규칙(§5의 deepestIndex)을 그대로 씁니다. **값 형식은 늘 YYYY-MM-DD가 아니라
+ * `fields`의 계열이 정합니다**(Task 3, §5) — 이 함수가 3단위(연·월·일) 전용
+ * 문자열 자르기(`value.split("-")`)였던 것이 §3.1이 말하는 "달력을 아는 코드"
+ * 세 곳 중 하나는 아니었지만(그 셋은 shiftDateValue/dateWheelLabel/
+ * withUnitValue), 시·분·초 fields를 받으면 `"03:00".split("-")`가
+ * `["03:00", undefined, undefined]`이 되어 깨진 문자열을 만드는 같은 종류의
+ * 함정이었습니다. parseValue/serializeValue로 왕복하면 계열을 몰라도 됩니다.
+ *
+ * `value`가 이미 `fields` 안에서 유효하지 않으면(형식이 안 맞으면) 그대로
+ * 돌려줍니다 — 예전에도 형식을 검증하지 않았으므로 이 자리에서 새로 던지지
+ * 않습니다.
+ */
+export function normalizeToFields(value: string, fields: DateWheelUnit[]): string {
+  const parts = parseValue(value, fields);
+  return parts ? serializeValue(parts, fields) : value;
 }
 
-export function dateWheelLabel(value: string, unit: DateWheelUnit, weekdays: string[]) {
-  const date = new Date(value + "T00:00:00Z");
-  if (unit === "year") return String(date.getUTCFullYear());
-  if (unit === "month") return String(date.getUTCMonth() + 1).padStart(2, "0");
-  return `${String(date.getUTCDate()).padStart(2, "0")} ${weekdays[date.getUTCDay()]}`;
+/** year(넉넉한 범위)·month(1~12)·day로 요일 인덱스(0=일요일)를 구합니다.
+ *  `lastDayOf`와 같은 이유로 `setUTCFullYear` 3-인자를 씁니다 —
+ *  `Date.UTC`/생성자의 숫자 인자는 0~99년을 1900년대로 재매핑합니다. */
+function weekdayIndex(year: number, month: number, day: number): number {
+  const probe = new Date(0);
+  probe.setUTCFullYear(year, month - 1, day);
+  return probe.getUTCDay();
 }
 
-/** 세그먼트가 지키는 자릿수. 버퍼가 덜 찼을 때 이 길이까지 아래 문자로 채웁니다. */
-export const DATE_WHEEL_SEGMENT_WIDTH: Record<DateWheelUnit, number> = { year: 4, month: 2, day: 2 };
+/**
+ * 열에 그릴 라벨(Task 3 항목 3). 연·월·일은 지금과 같고(연도 네 자리, 월 두 자리,
+ * 일 두 자리 + 요일), **시·분·초는 두 자리 숫자만입니다** — 일 열의 요일 같은
+ * 부가 표시가 없습니다.
+ */
+export function dateWheelLabel(value: string, unit: DateWheelUnit, weekdays: string[], fields: WheelUnit[] = DEFAULT_FIELDS): string {
+  const parts = parseValue(value, fields);
+  if (!parts) return "";
+  if (unit === "year") return String(parts.year);
+  if (unit === "month") return pad(parts.month, 2);
+  if (unit === "day") return `${pad(parts.day, 2)} ${weekdays[weekdayIndex(parts.year, parts.month, parts.day)]}`;
+  return pad(parts[unit], 2);   // hour, minute, second
+}
 
 /**
  * 빈 자리를 채우는 문자 — **U+2012 FIGURE DASH**. 밑줄(`_`)이 아닙니다(설계 스펙 §4.5).
@@ -522,54 +603,118 @@ export const DATE_WHEEL_FILL = "\u2012";
 /** 트리거를 이루는 조각. `unit: null`이 구두점(`. `)이고, 렌더에서 aria-hidden으로 나갑니다. */
 export type DateTriggerPart = { unit: DateWheelUnit | null; text: string };
 
+const TRIGGER_DATE_UNITS: WheelUnit[] = ["year", "month", "day"];
+const TRIGGER_TIME_UNITS: WheelUnit[] = ["hour", "minute", "second"];
+
 /**
- * 트리거 문구를 **세그먼트와 구두점으로 쪼갭니다**(설계 스펙 §4.5).
+ * 트리거 문구를 **세그먼트와 구두점으로 쪼갭니다**(설계 스펙 §4.5, Task 3 항목 2는
+ * §10의 시각 구분자를 더합니다).
  *
  * **조각 텍스트를 순서대로 이으면 예전 `formatDateTrigger`가 만들던 문자열과 글자 하나까지
- * 같습니다.** 트리거를 `textContent` 하나로 보는 테스트가 스무 곳 넘게 있고, 그것들이 손대지
- * 않은 채로 계속 참이어야 이 변경이 "표시 구조만 바꿨다"는 뜻이 됩니다. 구두점을 세그먼트에
- * 붙여 넣거나(`"2026. "`) 사이 공백을 CSS 여백으로 옮기면 그 등가성이 조용히 깨집니다.
+ * 같습니다(연·월·일 fields에서).** 트리거를 `textContent` 하나로 보는 테스트가 스무 곳
+ * 넘게 있고, 그것들이 손대지 않은 채로 계속 참이어야 이 변경이 "표시 구조만 바꿨다"는
+ * 뜻이 됩니다. 구두점을 세그먼트에 붙여 넣거나(`"2026. "`) 사이 공백을 CSS 여백으로
+ * 옮기면 그 등가성이 조용히 깨집니다.
  *
  * **버퍼는 자리를 지켜 그립니다** — "20" → `20‒‒`, "203" → `203‒`, 월 "1" → `1‒`
- * (채움 문자는 `DATE_WHEEL_FILL`, U+2012). 친 만큼만 그리는 안(`203. 07. 12.`)은
- * 기각됐습니다: 자릿수가 늘었다 줄었다 하며 필드 폭이 요동치고, 세 자리 `203`이 순간적으로
- * 유효한 연도처럼 읽힙니다.
+ * (채움 문자는 `DATE_WHEEL_FILL`, U+2012), **시각 세그먼트도 마찬가지입니다**(Task 3
+ * 항목 2). 친 만큼만 그리는 안(`203. 07. 12.`)은 기각됐습니다: 자릿수가 늘었다 줄었다
+ * 하며 필드 폭이 요동치고, 세 자리 `203`이 순간적으로 유효한 연도처럼 읽힙니다.
  *
  * **폭을 지키는 장치가 둘이고 역할이 다릅니다.** `css/date-picker.css`의
  * `.date-wheel-segment`가 거는 `tabular-nums`는 **숫자끼리** 폭을 맞추고(이 폰트에서
  * 비례폭 `1`은 898, `4`는 1278로 크게 다릅니다), `DATE_WHEEL_FILL`은 **빈 자리를 숫자
  * 폭에** 맞춥니다. `tabular-nums`는 숫자 글리프에만 적용되므로 채움 문자를 덮지
  * **않습니다** — 그래서 둘 다 필요하고, 하나만으로는 폭이 흔들립니다.
+ *
+ * **시각 구분자(Task 3 항목 2, 설계 스펙 §10).** 날짜는 `. `(마침표+공백)로 잇고,
+ * 시각은 `:`로 잇습니다. 날짜 부분과 시각 부분
+ * 사이는 **날짜의 마지막 세그먼트가 원래 다는 `. `가 곧 그 공백**입니다 —
+ * `"2026. 08. 12. 03:00:05"`에서 `12`와 `03` 사이의 `". "`는 "일" 세그먼트가
+ * 뒤에 무언가 더 있을 때 다는 구분자이지, 별도로 공백을 끼워 넣는 것이 아닙니다.
+ * 날짜만 있으면(시각이 없으면) 마지막 세그먼트 뒤는 공백 없는 `.`뿐입니다 —
+ * 예전(연·월·일 전용) 동작과 글자 하나까지 같습니다.
+ *
+ * **자리 지키기(U+2012 채움)는 시각 세그먼트에도 그대로 적용됩니다** — `segment`가
+ * `unit`만 보고 판단하므로 날짜·시각을 가르지 않습니다.
+ *
+ * `parseValue`로 값을 읽으므로 **`fields`가 정하는 계열(date/time/datetime)
+ * 무엇이든** 다룹니다 — 예전처럼 `source.split("-")`로 날짜만 가정하지 않습니다.
+ * `source`가 `fields`에서 유효하지 않으면(형식이 안 맞으면) 빈 배열을 돌려줍니다 —
+ * 컴포넌트는 이미 유효성을 확인한 값만 이 함수에 넘깁니다(`hasDateValue`/
+ * `baseValue`).
  */
 export function dateTriggerParts(source: string, fields: DateWheelUnit[], typing: { unit: DateWheelUnit; digits: string } | null): DateTriggerPart[] {
-  const [year, month, day] = source.split("-");
-  function segment(unit: DateWheelUnit, text: string): DateTriggerPart {
-    return { unit, text: typing?.unit === unit && typing.digits ? typing.digits.padEnd(DATE_WHEEL_SEGMENT_WIDTH[unit], DATE_WHEEL_FILL) : text };
+  const parsed = parseValue(source, fields);
+  if (!parsed) return [];
+  const values: UnitParts = parsed;   // 아래 중첩 함수로 좁혀진 타입을 넘기려면 새 바인딩이 필요합니다 — TS는 중첩 함수 클로저까지 좁히지 않습니다.
+
+  function segment(unit: WheelUnit): DateTriggerPart {
+    // 자릿수는 unitDigits(unit)에서 읽습니다 — 연도만 4, 나머지(월·일·시·분·초)는
+    // 전부 2입니다.
+    const text = pad(values[unit], unitDigits(unit));
+    return { unit, text: typing?.unit === unit && typing.digits ? typing.digits.padEnd(unitDigits(unit), DATE_WHEEL_FILL) : text };
   }
-  const parts: DateTriggerPart[] = [segment("year", year)];
-  if (!fields.includes("month")) return [...parts, { unit: null, text: "." }];
-  parts.push({ unit: null, text: ". " }, segment("month", month));
-  if (!fields.includes("day")) return [...parts, { unit: null, text: "." }];
-  return [...parts, { unit: null, text: ". " }, segment("day", day), { unit: null, text: "." }];
+
+  const dateFields = fields.filter((unit) => TRIGGER_DATE_UNITS.includes(unit));
+  const timeFields = fields.filter((unit) => TRIGGER_TIME_UNITS.includes(unit));
+
+  const parts: DateTriggerPart[] = [];
+  dateFields.forEach((unit, index) => {
+    parts.push(segment(unit));
+    if (index < dateFields.length - 1) parts.push({ unit: null, text: ". " });
+  });
+  // 날짜 부분의 마지막 구두점 — 시각이 뒤따르면 공백까지 겸하는 ". ", 그것으로
+  // 끝이면 공백 없는 "."입니다.
+  if (dateFields.length > 0) parts.push({ unit: null, text: timeFields.length > 0 ? ". " : "." });
+
+  timeFields.forEach((unit, index) => {
+    parts.push(segment(unit));
+    if (index < timeFields.length - 1) parts.push({ unit: null, text: ":" });
+  });
+
+  return parts;
 }
 
 /** 기계(컴포넌트)가 시점 값 모델에 기대하는 계약. 기간(duration) 모델이 생기면
  *  같은 모양을 구현합니다 — 설계 스펙 §3.3·§12. */
 export type WheelModel = {
   units: DateWheelUnit[];                                   // 사다리 순서
-  // 그릴 열. 이 타입은 3단계에서 넓어집니다 — 오전/오후는 단위가 아니라서
-  // DateWheelUnit[]에 담을 수 없습니다(설계 스펙 §7).
-  columns(fields: DateWheelUnit[]): DateWheelUnit[];
-  isValid(value: string): boolean;
+  // 그릴 열. 2b-1에서 `WheelUnit`(여섯 단위)까지 넓혔습니다 — 컴포넌트가 이 반환값을
+  // 그대로 받습니다(§2b-1). 이 타입은 나중 단계에서 다시 넓어집니다 — 오전/오후는
+  // 단위가 아니라서 WheelUnit[]에 담을 수 없습니다(설계 스펙 §7).
+  columns(fields: WheelUnit[]): WheelUnit[];
+  // fields는 Task 3부터 값 형식을 고릅니다(§5) — 안 넘기면 예전처럼 연·월·일입니다.
+  // 옵션인 이유는 위 DEFAULT_FIELDS 주석과 같습니다: tests/instantModel.test.ts가
+  // 이 다섯을 fields 없이 직접(그리고 instantModel을 거쳐) 부르는 기존 호출을
+  // 그대로 유지합니다.
+  isValid(value: string, fields?: WheelUnit[]): boolean;
   normalize(value: string, fields: DateWheelUnit[]): string;
   keyLength(fields: DateWheelUnit[]): number;
-  shift(value: string, unit: DateWheelUnit, direction: number): string;
-  setUnit(value: string, unit: DateWheelUnit, amount: number): string;
-  label(value: string, unit: DateWheelUnit, weekdays: string[]): string;
+  shift(value: string, unit: DateWheelUnit, direction: number, fields?: WheelUnit[]): string;
+  setUnit(value: string, unit: DateWheelUnit, amount: number, fields?: WheelUnit[]): string;
+  label(value: string, unit: DateWheelUnit, weekdays: string[], fields?: WheelUnit[]): string;
   triggerParts(source: string, fields: DateWheelUnit[], typing: { unit: DateWheelUnit; digits: string } | null): DateTriggerPart[];
   typeDigit(unit: DateWheelUnit, buffer: string, digit: string): TypingStep;
   flushBuffer(unit: DateWheelUnit, buffer: string): number | null;
-  now(timeZone: string): string;
+  now(timeZone: string, fields?: WheelUnit[]): string;
+  // 값 지식 둘이 기계(DateWheelPicker.tsx)에 남아 있었습니다(설계 스펙 §1단계 측정·
+  // §12) — min/max 접두 비교(rangeKey/outOfRange/clampToRange)와 commitToday의 값
+  // 분해. 여기 셋이 그 둘을 마저 모델로 옮깁니다 — outOfRange/clampToRange는 위
+  // 순수 함수 그대로, parts는 parseValue 그대로입니다(설계 스펙 §12, 2b-2).
+  outOfRange(value: string, bounds: { min?: string; max?: string }, fields: WheelUnit[]): boolean;
+  clampToRange(value: string, bounds: { min?: string; max?: string }, fields: WheelUnit[]): string;
+  parts(value: string, fields: WheelUnit[]): UnitParts | null;
+  /** `fields`가 날짜/시각/날짜+시각 중 어느 계열인지(설계 스펙 §3.2) — 전체
+   *  브랜치 리뷰 F-4(2b-4). 기계(DateWheelPicker.tsx)가 "오늘/지금" 버튼과
+   *  팝오버 안내 문구를 고를 때 이걸로 묻습니다. 예전에는 기계가
+   *  `fields.some((unit) => unit === "hour" || …)`로 직접 셋을 이름으로
+   *  나열했는데, 이건 `familyOf(fields) !== "date"`와 값이 완전히 같은
+   *  술어라 §3.2가 금지한 "기계가 단위 이름을 안다"를 그대로 어기고
+   *  있었습니다(순수 함수 `familyOf`가 이미 아래서 이 판정을 하고 있었고,
+   *  기계는 그걸 다시 손으로 베껴 쓴 것입니다) — 여기로 노출해 기계가
+   *  모델에 묻게 합니다. */
+  family(fields: WheelUnit[]): ValueFamily;
 };
 
 /* 기계가 이 객체 하나만 보고 돌게 하는 것이 목적입니다. 기간(duration) 모델이
@@ -590,4 +735,8 @@ export const instantModel: WheelModel = {
   typeDigit,
   flushBuffer,
   now: todayIn,
+  outOfRange,
+  clampToRange,
+  parts: parseValue,
+  family: familyOf,
 };

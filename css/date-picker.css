@@ -144,6 +144,14 @@
 /* fields prop로 열 개수가 줄면(연·월 픽커 등) 트랙 수도 따라갑니다. 열 높이는 그대로입니다. */
 .date-wheel-columns[data-fields="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .date-wheel-columns[data-fields="1"] { grid-template-columns: minmax(0, 1fr); }
+/* Task 3(2b-3)부터 시·분·초가 실제로 그려지면서 열 개수가 4·5·6까지 늘었습니다 —
+ * 이 세 규칙이 없던 동안은 6열 픽커를 열어도 위 기본 3열 규칙이 그대로 걸려
+ * 마지막 세 열이 다음 줄로 밀렸습니다(2b-4). 6열을 한 줄로 둘지 두 줄(날짜 줄 /
+ * 시각 줄)로 접을지는 설계 스펙 §16의 미결이고 실기기에서만 판단됩니다 — 접는
+ * 변형은 이 컨트롤의 규칙이 아니라 `demo/demo.css`의 데모 전용 토글이 맡습니다. */
+.date-wheel-columns[data-fields="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.date-wheel-columns[data-fields="5"] { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.date-wheel-columns[data-fields="6"] { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 /* 진입 애니메이션은 **열(`.date-wheel-column`)에 겁니다. 값 컨테이너가 아닙니다.**
  * 열은 팝오버와 함께 마운트되므로 **열릴 때 한 번** 재생되고, 커밋은 값 컨테이너만
  * 갈아치우므로(key가 `${unit}-${sequence}`) 여기까지 다시 시작시키지 못합니다.

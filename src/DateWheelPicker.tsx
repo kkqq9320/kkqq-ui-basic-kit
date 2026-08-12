@@ -16,7 +16,9 @@ import { createPortal } from "react-dom";
 import {
   DATE_WHEEL_FILL,
   instantModel,
+  isContiguous,
   type DateWheelUnit,
+  type WheelUnit,
 } from "./model/instant";
 import { useBackToClose, useEscapeToClose } from "./hooks";
 import { dropdownViewportSpace, focusTriggerOnClick, isPrimaryButton, onViewportChange } from "./positioning";
@@ -26,15 +28,34 @@ import { dropdownViewportSpace, focusTriggerOnClick, isPrimaryButton, onViewport
  * 공개 표면을 하나도 바꾸지 않습니다. */
 export { todayIn, type DateWheelUnit } from "./model/instant";
 
-/** 기본은 연·월·일 3열. 상수로 둬서 기본값일 때 매 렌더 새 배열이 생기지 않게 합니다. */
-const DEFAULT_DATE_WHEEL_FIELDS: DateWheelUnit[] = ["year", "month", "day"];
+/** 기본은 연·월·일 3열. 상수로 둬서 기본값일 때 매 렌더 새 배열이 생기지 않게 합니다.
+ *  타입은 `WheelUnit`(여섯 단위)까지 넓고, Task 3부터 컴포넌트가 시·분·초를 실제로
+ *  그립니다 — 기본값 자체는 그대로 3열입니다(연·월·일이 아닌 조합을 쓰려면
+ *  `fields`를 명시해야 합니다). */
+const DEFAULT_DATE_WHEEL_FIELDS: WheelUnit[] = ["year", "month", "day"];
 
 export type DateWheelLabels = {
   /** 값이 비었을 때 트리거 문구 */
   placeholder: string;
   /** 팝오버 머리말의 조작 안내 */
   hint: string;
+  /** `hint`의 짝 — `now`/`today`와 같은 이유, 같은 방식으로 `fields`가 고릅니다(2b-4).
+   *  힌트 기본값이 "…Ctrl+; 오늘"인데 시각 단위가 있으면 버튼은 "지금"이라 안내와
+   *  버튼이 서로 다른 말을 하던 것을 고칩니다(Task 3에서 넘어온 결함).
+   *
+   *  ⚠️ **`now`와 달리 선택입니다 — 일부러입니다.** `now`를 필수로 두면서 전체
+   *  객체를 만들던 소비자의 컴파일이 깨졌습니다(`DEFAULT_DATE_WHEEL_LABELS` 자신이
+   *  그 "전체 객체"였고, 아래에서 `now: "지금"`을 새로 채워야 했습니다). `labels` prop
+   *  자체는 `Partial<DateWheelLabels>`라 부분 override는 원래도 영향이 없지만,
+   *  `DateWheelLabels`로 완전히 타입된 라벨 상수를 만드는 소비자는 새 필수 필드마다
+   *  깨집니다. 같은 실수를 한 번 더 반복할 이유가 없어 이번엔 선택으로 엽니다 —
+   *  없으면 컴포넌트가 `hint`로 그대로 대체합니다(아래 `hintText`). */
+  hintNow?: string;
   today: string;
+  /** `today`의 짝 — `fields`에 시각 단위(시·분·초) 중 하나라도 있으면 팝오버의
+   *  "오늘/지금" 버튼이 이걸 씁니다(Task 3 항목, 설계 스펙 §9). 라벨을 둘 다 두고
+   *  `fields`가 고릅니다 — 인스턴스별로 하나를 고정하지 않습니다. */
+  now: string;
   clear: string;
   done: string;
   previous: string;
@@ -43,20 +64,31 @@ export type DateWheelLabels = {
   select: string;
   /** 일요일부터 7개 */
   weekdays: string[];
-  units: { year: string; month: string; day: string };
+  /** 열의 aria-label 접두사. `year`·`month`·`day`는 늘 그려지므로 필수, `hour`·`minute`·
+   *  `second`는 **타입은 여전히 선택**입니다 — `fields`가 그 열들을 아예 안 가진 소비자가
+   *  `labels.units`를 부분 override(연·월·일만)해도 계속 컴파일되게 두는 것입니다.
+   *  `DEFAULT_DATE_WHEEL_LABELS.units`는 Task 3부터 여섯 다 채워져 있고, override가
+   *  일부만 주면 `{ ...DEFAULT.units, ...override.units }` 병합이 나머지를 그 기본값으로
+   *  메웁니다 — 그래서 시·분·초 열이 실제로 그려지는 순간에도 `undefined`로 새지 않습니다. */
+  units: { year: string; month: string; day: string; hour?: string; minute?: string; second?: string };
 };
 
 export const DEFAULT_DATE_WHEEL_LABELS: DateWheelLabels = {
   placeholder: "날짜 선택",
   hint: "휠·스와이프·방향키·숫자 입력 · Ctrl+; 오늘",
+  hintNow: "휠·스와이프·방향키·숫자 입력 · Ctrl+; 지금",
   today: "오늘",
+  now: "지금",
   clear: "비우기",
   done: "완료",
   previous: "이전",
   next: "다음",
   select: "선택",
   weekdays: ["일", "월", "화", "수", "목", "금", "토"],
-  units: { year: "연도", month: "월", day: "일" },
+  // hour·minute·second를 Task 3에서 채운다 — 앞 태스크들(2b-1·2b-2)이 일부러 비워
+  // 뒀던 자리다. 그 열들이 이제 실제로 그려지므로(§4의 columns가 fields를 그대로
+  // 돌려주고, model.label이 시·분·초를 두 자리 숫자로 낸다) 라벨도 필요하다.
+  units: { year: "연도", month: "월", day: "일", hour: "시", minute: "분", second: "초" },
 };
 
 /** 양끝 ±3은 보이지 않지만 미리 그려두는 프리로드 행입니다. */
@@ -129,8 +161,12 @@ export type DateWheelPickerProps = {
   max?: string;
   /** 표시할 열. 기본은 연·월·일 3열. `["year", "month"]`로 주면 연·월 픽커가 됩니다.
    *  빠진 열은 값에서 01로 정규화되고(월 없으면 월=01, 일 없으면 일=01),
-   *  min/max 비교도 남은 최소 단위(연·월·일)로만 이뤄집니다. 값 형식은 늘 YYYY-MM-DD. */
-  fields?: DateWheelUnit[];
+   *  min/max 비교도 남은 최소 단위(연·월·일)로만 이뤄집니다. 값 형식은 늘 YYYY-MM-DD.
+   *
+   *  ⚠️ **타입은 `WheelUnit`(연·월·일·시·분·초)까지 받지만, 지금(2b-1) 이 컴포넌트가 실제로
+   *  그리는 것은 여전히 연·월·일뿐입니다.** `"hour"` 등을 넘기면 컴파일은 통과해도 동작은
+   *  정의돼 있지 않습니다 — 시·분·초를 실제로 받는 것은 2b-3의 몫입니다. */
+  fields?: WheelUnit[];
   allowClear?: boolean;
   /** **필수입니다**(PRINCIPLES §11). 스크린리더 때문만이 아니라 **팝오버 머리말로 그대로
    *  그려지기 때문입니다** — 기본값을 두면 한 폼의 날짜 필드가 전부 같은 머리말을 답니다.
@@ -151,8 +187,94 @@ export type DateWheelPickerProps = {
 };
 
 export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DATE_WHEEL_FIELDS, allowClear = false, ariaLabel, heading, id, disabled = false, labels: labelOverrides, timeZone = "Asia/Seoul", mobileBottomInset = 78, className = "" }: DateWheelPickerProps) {
+  // fields는 UNIT_LADDER에서 잘라낸 연속 구간이어야 합니다(설계 스펙 §4) — 지금
+  // 소스는 불연속 조합(예: ["year","hour"])을 그리지 못하고, 그린다고 해도 트리거와
+  // 팝오버가 서로 다른 열 개수를 말하는 등 정의되지 않은 동작이 됩니다. 타입
+  // 유니온으로 막으면 유효 구간을 21가지 나열해야 해서(§4) 런타임 + 개발 모드
+  // 경고로 대신합니다(Task 3 항목 5) — 던지지 않습니다. 던지면 이 킷이 소비자
+  // 화면을 죽이는 것이라 §6.1의 "무시 + 경고" 결과 규칙과 결이 같습니다.
+  //
+  // ⚠️ **전체 브랜치 리뷰 F-3 — `process.env.NODE_ENV`가 아니라
+  // `import.meta.env.DEV`를 씁니다.** 이 킷은 `exports["."]`가 `./src/index.ts`라
+  // **소스를 그대로** 배포합니다 — 소비자의 번들러가 치환해 주지 않으면
+  // `process`는 브라우저에 없는 전역이라 렌더마다 `ReferenceError`가 됩니다.
+  // `import.meta`는 ESM 자체의 문법이라(런타임이 아니라 파서가 이해합니다)
+  // Vite가 아닌 번들러에서도 최소한 `undefined`로 안전하게 내려갑니다.
+  //
+  // ⚠️ **전체 브랜치 리뷰 F-1(2b-4) — 바로 위 문장 "던지지 않는 쪽을 골랐다"는**
+  // **거짓이었습니다. `.env` 뒤에 옵셔널 체이닝이 없으면 던집니다.** 실측:
+  // `import.meta.env` → `undefined`(Vite 전용 확장이라 없음) ·
+  // `import.meta.env.DEV` → 그 자리에서 `TypeError: Cannot read properties of
+  // undefined` · `import.meta.env?.DEV` → 안전하게 `undefined`.
+  // `process.env`가 없으면 `ReferenceError`를 던지듯, `import.meta.env`가
+  // 없으면 `.DEV`를 읽는 순간 `TypeError`를 던집니다 — `?.` 하나가
+  // "던지지 않는다"는 원래 목적이 실제로 성립하는 데 필수입니다.
+  //
+  // **타입도 같은 이유로 갈립니다.** `tsconfig.json`의 `include`가
+  // `src`+`tests`+`demo`를 한 프로그램으로 묶어서, `tests/`의
+  // `/// <reference types="vite/client" />`가 `ImportMeta.env`(필수 `ImportMetaEnv`)를
+  // 프로그램 전역에 채워 줍니다 — 그래서 저장소 `tsc`는 이 줄에서 항상 초록이었습니다.
+  // 하지만 `package.json`의 `files`에는 **`tests`가 없어**, 소비자에게 배포되는
+  // `src/DateWheelPicker.tsx`만 단독으로 컴파일하면(vite 타입 없이)
+  // `Property 'env' does not exist on type 'ImportMeta'`로 거절됩니다 — 배포되는
+  // 소스의 타입 통과가 소비자가 절대 못 받는 파일에 기대고 있었던 것입니다.
+  // 그래서 아래는 지역 캐스트로 `env`가 아예 없는 경우까지 타입에서 인정합니다.
+  // **여기서 `declare global { interface ImportMeta { … } }`로 전역을 다시 선언하지
+  // 않는 이유**: 전체 프로그램(위 include)에서는 vite/client의
+  // `readonly env: ImportMetaEnv`(필수)와 병합되는데, 선택 필드로 다시 선언하면
+  // 타입이 어긋나 지금 초록인 전체 빌드가 깨집니다(실측). 그리고
+  // `/// <reference types="vite/client" />`를 여기 넣지 않는 이유는 소비자에게
+  // `vite`가 devDependency로 있으리란 보장이 없기 때문입니다.
+  //
+  // ⚠️ **전체 브랜치 리뷰 F-4 — 같은 `fields`에는 한 번만 경고합니다.** 가드가
+  // 없으면 StrictMode 이중 렌더는 물론, 이 컴포넌트가 조작 하나(화살표 한 번,
+  // 휠 한 칸)마다 `onChange`로 리렌더되는 성격상 **거의 매 조작마다** 같은 경고가
+  // 반복됩니다 — 신호가 아니라 소음입니다. `warnedFieldsRef`는 **이 인스턴스가**
+  // 마지막으로 경고한 `fields` 시그니처만 기억합니다(모듈 수준 Set이 아니라
+  // 인스턴스별 ref인 이유: 페이지에 같은 실수를 한 서로 다른 인스턴스가 여럿
+  // 있으면 그건 각자 다른 소비 지점의 버그이므로 각자 한 번씩 봐야 합니다 — 전역
+  // Set으로 다른 인스턴스의 경고까지 지우면 안 됩니다). `fields`가 다시 유효해졌다가
+  // 다른 값으로 다시 깨지면 시그니처가 달라지므로 새로 경고합니다.
+  const warnedFieldsRef = useRef<string | null>(null);
+  const importMetaEnv = (import.meta as { env?: { DEV?: boolean } }).env;
+  if (importMetaEnv?.DEV && !isContiguous(fields)) {
+    const fieldsSignature = fields.join(",");
+    if (warnedFieldsRef.current !== fieldsSignature) {
+      warnedFieldsRef.current = fieldsSignature;
+      console.warn(`DateWheelPicker: fields는 연·월·일·시·분·초 사다리에서 잘라낸 연속 구간이어야 합니다. 받은 값: [${fields.join(", ")}]`);
+    }
+  }
   const model = instantModel;
   const labels = { ...DEFAULT_DATE_WHEEL_LABELS, ...labelOverrides, units: { ...DEFAULT_DATE_WHEEL_LABELS.units, ...labelOverrides?.units } };
+  // "오늘"의 짝 — fields에 시각 단위가 하나라도 있으면 팝오버 버튼이 "지금"이
+  // 됩니다(Task 3, 설계 스펙 §9).
+  //
+  // ⚠️ **전체 브랜치 리뷰 F-4(2b-4) — 예전에는 여기서 `fields.some((unit) =>
+  // unit === "hour" || unit === "minute" || unit === "second")`로 시각 단위
+  // 셋을 이름으로 직접 나열했습니다.** `familyOf(fields) !== "date"`와 값이
+  // 완전히 같은 술어인데도 기계(이 파일)가 그 판정을 손으로 다시 베껴 쓴
+  // 것이라 §3.2("기계는 단위가 무엇인지 모릅니다")를 어기고 있었습니다 — 값이
+  // 어떻게 생겼는지는 몰라도 된다면서 정작 시·분·초라는 **이름**은 알고
+  // 있었던 셈입니다. `model.family`(모델의 `familyOf`를 그대로 노출)로
+  // 물어 이 파일에서 시각 단위 이름이 나열되는 자리를 없앱니다.
+  const hasTimeUnit = model.family(fields) !== "date";
+  const todayLabel = hasTimeUnit ? labels.now : labels.today;
+  // hint의 짝 — todayLabel과 같은 기준(hasTimeUnit)으로 고릅니다(2b-4). `hintNow`는
+  // 타입에서 선택이라(위 DateWheelLabels 주석) `labels.hintNow`가 `undefined`일 수
+  // 있어 `now`처럼 값을 바로 못 믿고 `?? labels.hint`로 떨어집니다.
+  //
+  // ⚠️ **전체 브랜치 리뷰 F-2 — 여기 한동안 "부분 override가 hintNow를 안 줘도
+  // hint로 대체된다"고 적혀 있었는데 거짓이었습니다.** 병합이
+  // `{ ...DEFAULT_DATE_WHEEL_LABELS, ...labelOverrides }`라, override가
+  // `hintNow`를 안 건드리면 `labels.hintNow`는 `undefined`가 **아니라
+  // DEFAULT의 한국어 값**을 그대로 지닙니다 — `today`만 override하고 `now`는
+  // 안 주면 시간 열에서 여전히 기본 `now`("지금")가 나오는 것과 **정확히 같은
+  // 비대칭**입니다(`tests/DateWheelPicker.test.tsx`의 "override가 hint만 주고
+  // hintNow를 생략하면…" 검사가 이 비대칭을 고정합니다). `?? labels.hint`가
+  // 실제로 실행되는 유일한 길은 override가 `hintNow`를 **명시적으로**
+  // `undefined`로 주는 것뿐입니다(타입이 그것도 허용합니다) — 그 죽지 않은
+  // 코드임을 같은 파일의 "?? 경로가 실제로 실행된다" 검사가 증명합니다.
+  const hintText = hasTimeUnit ? (labels.hintNow ?? labels.hint) : labels.hint;
   const [open, setOpen] = useState(false);
   // 겹쳐 있으면 가장 안쪽만 닫힙니다 — 다이얼로그 안에서 열렸을 때 다이얼로그까지 닫으면 안 됩니다.
   // Escape는 이 파일 전체에서 "값을 바꾸지 않고 닫기"를 뜻합니다 — flushTyping을
@@ -197,10 +319,15 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 둘 다 넣으면 상자 높이가 그 둘로 고정되어 `maxHeight`가 무력해집니다. 왜 위쪽이
   // `bottom`이어야 하는지는 `placePicker`의 주석에 있습니다.
   const [position, setPosition] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
-  const [columnMotion, setColumnMotion] = useState<Record<DateWheelUnit, DateWheelMotion>>({
+  // 시·분·초 세 키는 아직 아무 열도 만들지 않지만(2b-3에서 붙습니다), Record<WheelUnit, …>가
+  // 여섯 키를 다 요구하므로 초기값에 채워 둡니다 — 안 채우면 tsc가 거절합니다(2b-1).
+  const [columnMotion, setColumnMotion] = useState<Record<WheelUnit, DateWheelMotion>>({
     year: { sequence: 0, direction: "next", playing: false },
     month: { sequence: 0, direction: "next", playing: false },
     day: { sequence: 0, direction: "next", playing: false },
+    hour: { sequence: 0, direction: "next", playing: false },
+    minute: { sequence: 0, direction: "next", playing: false },
+    second: { sequence: 0, direction: "next", playing: false },
   });
   /**
    * 팝오버가 막 열렸는가. 열 셋이 함께 굴러 들어오는 진입 애니메이션의 **게이트**입니다
@@ -437,8 +564,14 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     //
     // `sequence`는 건드리지 않습니다 — 그것은 값 컨테이너의 key이고, 여기서 0으로
     // 되돌리면 R1에서 고친 리마운트 결함이 그대로 돌아옵니다.
+    // 여섯 키 다 꺼야 Record<WheelUnit, …>를 채웁니다 — hour·minute·second는 아직 아무
+    // 열도 안 켜므로(playing이 될 일이 없음) 사실상 no-op이지만, 타입은 완전한 객체를
+    // 요구합니다(2b-1).
     setColumnMotion((current) => (Object.values(current).some((motion) => motion.playing)
-      ? { year: { ...current.year, playing: false }, month: { ...current.month, playing: false }, day: { ...current.day, playing: false } }
+      ? {
+          year: { ...current.year, playing: false }, month: { ...current.month, playing: false }, day: { ...current.day, playing: false },
+          hour: { ...current.hour, playing: false }, minute: { ...current.minute, playing: false }, second: { ...current.second, playing: false },
+        }
       : current));
   }, [open]);
 
@@ -488,18 +621,15 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    */
   useLayoutEffect(() => { if (disabled) setOpen(false); }, [disabled]);
 
-  // 남은 최소 단위로만 비교합니다(연·월 픽커면 "월" 단위). 함수 선언이라 baseValue보다
-  // 아래에 있어도 호출 시점엔 keyLen이 이미 초기화돼 있습니다.
-  const keyLen = model.keyLength(fields);
-  function rangeKey(v: string) { return v.slice(0, keyLen); }
-  function outOfRange(v: string) { return (!!min && rangeKey(v) < rangeKey(min)) || (!!max && rangeKey(v) > rangeKey(max)); }
-  function clampToRange(v: string) {
-    const normalized = model.normalize(v, fields);
-    if (min && rangeKey(normalized) < rangeKey(min)) return model.normalize(min, fields);
-    if (max && rangeKey(normalized) > rangeKey(max)) return model.normalize(max, fields);
-    return normalized;
-  }
-  const baseValue = clampToRange(model.isValid(value) ? value : model.now(timeZone));
+  // 경계 비교·클램프는 모델이 합니다(설계 스펙 §6·§12) — 계열별 비교 정밀도와
+  // 경계 형식 판정이 값 지식이라 기계에 남으면 안 됩니다(§1단계 측정). 예전에는
+  // 여기 `keyLen`/`rangeKey` 지역 함수가 그 비교를 3단위 접두사 슬라이스로
+  // 직접 했었는데, 그 자리가 2a에서 모델로 옮겨졌고(`outOfRange`/`clampToRange`,
+  // 시·분·초까지) 이 두 래퍼는 인자만 이어 함수로 씁니다 — `min`/`max`/`fields`를
+  // 매 호출 다시 안 적어도 되게 하는 것이 유일한 목적입니다.
+  function outOfRange(v: string) { return model.outOfRange(v, { min, max }, fields); }
+  function clampToRange(v: string) { return model.clampToRange(v, { min, max }, fields); }
+  const baseValue = clampToRange(model.isValid(value, fields) ? value : model.now(timeZone, fields));
 
   // 트리거가 그릴 조각들. null이면 placeholder를 그린다는 뜻입니다.
   //
@@ -509,7 +639,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   //
   // 값이 유효하지 않은데(빈 값·깨진 값) 버퍼도 없으면 예전 formatDateTrigger와 똑같이
   // placeholder입니다 — 판정도 그때와 같은 validDateValue(model.isValid)입니다.
-  const hasDateValue = model.isValid(value);
+  const hasDateValue = model.isValid(value, fields);
   const triggerParts = hasDateValue || resolvedTyping ? model.triggerParts(hasDateValue ? value : baseValue, fields, resolvedTyping) : null;
 
   /**
@@ -734,14 +864,15 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   }
 
   function shiftedFrom(sourceValue: string, unit: DateWheelUnit, amount: number) {
-    const next = model.normalize(model.shift(sourceValue, unit, amount), fields);
-    // 연도가 10000 이상(또는 음수)이 되면 Date#toISOString()이 확장 표기
-    // (+010000-07-12)로 바뀌고, 그 뒤 slice(0, 10)·normalizeToFields(model.normalize)를
-    // 거치며 "+010000-07-undefined" 같은 깨진 문자열이 된다. validDateValue(model.isValid)는
-    // 이미 컴포넌트 전체가 "쓸 수 없는 값"의 신호로 쓰는 판정이므로, 여기서도 그대로
-    // null을 돌려줍니다 — outOfRange 판정으로는 min/max가 없는 필드에서 이 값을
-    // 걸러내지 못합니다.
-    if (!model.isValid(next)) return null;
+    const next = model.normalize(model.shift(sourceValue, unit, amount, fields), fields);
+    // 연도가 10000 이상(또는 음수)이 되면 (Task 3부터) parseValue의 \d{4} 정규식이
+    // 매치에 실패해 next가 조용히 깨진 문자열이 됩니다 — model.isValid가 그것을
+    // 그대로 걸러냅니다. (예전엔 Date#toISOString()의 확장 표기(+010000-07-12)가
+    // slice(0,10) 이후 "+010000-07-undefined"를 만드는 경로였는데, shiftDateValue가
+    // 더는 Date를 안 쓰므로 그 경로 자체가 사라졌습니다 — validDateValue(model.isValid)는
+    // 여전히 같은 자리에서 같은 이유로 걸러냅니다.) outOfRange 판정으로는 min/max가
+    // 없는 필드에서 이 값을 걸러내지 못합니다.
+    if (!model.isValid(next, fields)) return null;
     if (outOfRange(next)) return null;
     return next;
   }
@@ -837,11 +968,23 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 맞습니다. 열이 그리는 것이 그 열의 수이기 때문입니다.
    */
   function commitToday() {
-    const next = clampToRange(model.now(timeZone));
-    const numbersOf = (value: string) => value.split("-").map(Number);
-    const index: Record<DateWheelUnit, number> = { year: 0, month: 1, day: 2 };
-    const [from, to] = [numbersOf(baseValue), numbersOf(next)];
-    for (const unit of fields) markColumnMotion(unit, Math.sign(to[index[unit]] - from[index[unit]]));
+    const next = clampToRange(model.now(timeZone, fields));
+    // 값 분해는 모델이 합니다(설계 스펙 §12, 2b-2) — 예전에는 `value.split("-")`와
+    // 고정 인덱스 표(`{year:0,month:1,day:2,hour:3,minute:4,second:5}`)로 **위치만**
+    // 보고 셌는데, 그 표는 값이 늘 "YYYY-MM-DD" 세 자리일 때만 맞습니다. 값에 시각이
+    // 섞이면(계열이 datetime이 되어 `T`가 붙으면) `-`로 쪼갠 조각이 더는 숫자가
+    // 아니게 되어 `Number(...)`가 `NaN`이 되고, `markColumnMotion`의 `if (amount)`
+    // 가드가 그 `NaN`을 거짓으로 걸러 **조용히** 그 열의 모션이 사라졌습니다(테스트
+    // "지금 버튼이 시각을 가진 값에서도 열 모션을 만든다"가 이 회귀를 고정합니다).
+    // `model.parts`(=parseValue)는 **이름**으로 꺼내므로 사다리 여섯 단위 전부에
+    // 그대로 맞고, 위치 가정이 아예 없습니다.
+    //
+    // 형식이 안 맞는 값(계열 불일치 등)이 들어오면 `parts`는 `null`을 돌려줍니다 —
+    // 그때는 모션을 걸지 않고 값만 확정합니다. `shiftedFrom`이 `model.isValid`로
+    // 이미 같은 결의 방어를 합니다.
+    const from = model.parts(baseValue, fields);
+    const to = model.parts(next, fields);
+    if (from && to) for (const unit of fields) markColumnMotion(unit, Math.sign(to[unit] - from[unit]));
     onChange(next);
   }
 
@@ -857,7 +1000,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 타이핑은 휠 이동이 아닙니다.
    */
   function commitTyped(unit: DateWheelUnit, amount: number) {
-    const next = clampToRange(model.setUnit(baseValue, unit, amount));
+    const next = clampToRange(model.setUnit(baseValue, unit, amount, fields));
     onChange(next);
     return next;
   }
@@ -1498,7 +1641,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     {open && position && createPortal(<div ref={popoverRef} id={popoverId} className="date-wheel-popover dropdown-menu-surface" role="dialog" aria-modal="false" aria-label={`${ariaLabel} ${labels.select}`} onMouseDown={(event) => event.preventDefault()} style={{ top: position.top, bottom: position.bottom, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
       {/* 보이는 머리말만 `heading`으로 갈립니다 — 위 `aria-label`과 `triggerName`은 계속
           `ariaLabel`을 씁니다(§11). 안 넘기면 둘이 같은 값이라 지금까지와 동일합니다. */}
-      <div className="date-wheel-heading"><strong>{heading ?? ariaLabel}</strong><span>{labels.hint}</span></div>
+      <div className="date-wheel-heading"><strong>{heading ?? ariaLabel}</strong><span>{hintText}</span></div>
       <div className="date-wheel-columns" data-fields={columns.length}>
         {/* 열은 **포커스를 받지 않고 키도 받지 않습니다**(설계 스펙 §5·§6.2) — `tabIndex`가
             없고 `onKeyDown`도 없습니다. 활성 표시는 `resolvedActiveUnit`이 붙이는 `.active`
@@ -1508,12 +1651,12 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
 
             `onPointerDown`의 `setActiveUnit(unit)`이 **포인터 경로가 활성 세그먼트를 따라가는
             유일한 길**입니다(열의 `onFocus`가 하던 일). 지우지 마세요. */}
-        {columns.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${model.label(baseValue, unit, labels.weekdays)}`} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {columns.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${model.label(baseValue, unit, labels.weekdays, fields)}`} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
               컨테이너의 key가 바뀌어 행이 통째로 리마운트되므로 포커스를 둘 수도 없습니다. */}
-          <div className="date-wheel-viewport"><div className="date-wheel-values" key={`${unit}-${motion.sequence}`}>{DATE_WHEEL_OFFSETS.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === 3; const buffered = offset === 0 && resolvedTyping?.unit === unit ? resolvedTyping.digits : null; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={() => rowValue && applyShift(unit, offset)} key={offset}>{buffered ?? (rowValue ? model.label(rowValue, unit, labels.weekdays) : "—")}</button>; })}</div></div>
+          <div className="date-wheel-viewport"><div className="date-wheel-values" key={`${unit}-${motion.sequence}`}>{DATE_WHEEL_OFFSETS.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === 3; const buffered = offset === 0 && resolvedTyping?.unit === unit ? resolvedTyping.digits : null; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={() => rowValue && applyShift(unit, offset)} key={offset}>{buffered ?? (rowValue ? model.label(rowValue, unit, labels.weekdays, fields) : "—")}</button>; })}</div></div>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.next}`} disabled={!shifted(unit, 1)} onClick={() => applyShift(unit, 1)}><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></button>
         </section>; })}
       </div>
@@ -1521,7 +1664,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
           이 버튼들은 그 단축키의 동등물이므로(title에 단축키를 적어 뒀다), 버퍼를 안 지우면
           같은 뜻의 단축키와 버튼이 다르게 굴며, 남은 버퍼가 이 버튼이 방금 설정한 값을
           나중에(예: 다음 Tab) 도로 덮어쓸 수 있다. */}
-      <div className="date-wheel-actions"><button type="button" tabIndex={-1} title={`${labels.today} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" onClick={() => { setTyping(null); commitToday(); }}>{labels.today}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" onClick={() => { setTyping(null); clearedRef.current = true; onChange(""); }}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" aria-keyshortcuts="Enter" onClick={commitAndClose}>{labels.done}</button></div>
+      <div className="date-wheel-actions"><button type="button" tabIndex={-1} title={`${todayLabel} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" onClick={() => { setTyping(null); commitToday(); }}>{todayLabel}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" onClick={() => { setTyping(null); clearedRef.current = true; onChange(""); }}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" aria-keyshortcuts="Enter" onClick={commitAndClose}>{labels.done}</button></div>
     </div>, document.body)}
   </div>;
 }

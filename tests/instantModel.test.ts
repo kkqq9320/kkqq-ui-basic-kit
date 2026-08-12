@@ -425,6 +425,22 @@ describe("클램프는 min은 이른 끝, max는 늦은 끝 (§6)", () => {
     expect(clampToRange(once, { max: "2026-07-15" }, fields)).toBe(once);
     expect(once <= "2026-07-15").toBe(true);
   });
+
+  /* 전체 브랜치 리뷰 F-3(2b-4) — 연도만(4자) 준 max의 클램프 값을 여기서 처음
+   * 긍정적으로 고정한다. `tests/DateWheelPicker.test.tsx`의 "F-1.1 — 거친
+   * max(연도만 준 값)는 그 해 전체를 연다"는 값이 "2026-07-12"·max가
+   * "2026"이라 **같은 해 안**이고, 검사도 일 라벨·다음/이전 버튼 활성화만
+   * 본다 — max를 통째로 무시해도(경계가 아예 없는 것처럼 굴어도) 세 단언이
+   * 전부 그대로 통과한다. "거친 max가 그 해를 연다"와 "그 경계가 무시된다"를
+   * 그 검사는 구별하지 못하고, 4자리 연도 경계가 실제로 값을 **밀어내는지**를
+   * 긍정적으로 고정하는 검사는 저장소에 0건이었다.
+   *
+   * **뮤테이션으로 실측했다** — `unitCeiling`의 `unit === "month"` 분기가
+   * 돌려주는 12를 6으로 바꾸자 이 검사가 기대한 "2026-12-31" 대신
+   * "2026-06-30"을 받아 빨개졌다(되돌린 뒤 다시 초록 확인). */
+  it("연도만(4자) 준 max는 그 해 마지막 날로 클램프한다 — F-1.1의 모델 쪽 대응", () => {
+    expect(clampToRange("2027-01-01", { max: "2026" }, ["year", "month", "day"])).toBe("2026-12-31");
+  });
 });
 
 /* 전체 브랜치 리뷰 F-2 — 뮤테이션으로 지워도 초록이던 자리 넷을 검사로 막습니다.
@@ -480,6 +496,35 @@ describe("usableBound은 시각 경계를 datetime에서 거절한다 (F-2.5)", 
    * datetime 분기가 "time"도 허용하도록 뒤집혀도 초록이었을 자리입니다. */
   it("시각 경계는 datetime 픽커에서 쓸 수 없다", () => {
     expect(usableBound("03:00", ["year", "month", "day", "hour", "minute"])).toBe(null);
+  });
+});
+
+/* 전체 브랜치 리뷰 F-1.2 — 계열이 다른 경계는 outOfRange/clampToRange 끝까지
+ * 무시로 이어져야 한다 (§6.1, 2026-08-13).
+ *
+ * 2b-2 리뷰가 확인한 divergence 갈래 셋 중 하나. 컴포넌트 수준(tests/
+ * DateWheelPicker.test.tsx)이 아니라 여기 두는 이유 — 시각 전용 픽커(fields가
+ * hour/minute만)를 재현하려면 시각 열이 실제로 그려져야 하는데, 이 시점(2b-2)의
+ * DateWheelPicker는 연·월·일 열만 그린다(시·분·초 열은 2b-3의 몫). `shiftDateValue`가
+ * 여전히 `value + "T00:00:00Z"`를 무조건 이어붙이는 상태라, 시각 전용 fields로
+ * 팝오버를 실제로 열면 값 형식이 안 맞아 렌더가 깨진다(2b-2 태스크 자체 검사의
+ * 주석에 그 RangeError를 기록해 두었다) — 억지로 렌더하는 대신 모델 함수를 직접
+ * 부른다.
+ *
+ * usableBound(F-2.5)는 이미 "계열이 다르면 null"을 단위로 검사하지만, 그 null이
+ * outOfRange/clampToRange 끝까지 "제한이 없는 것처럼" 이어지는지는 검사된 적이
+ * 없었다 — usableBound 안의 null 반환 자체를 지우고 원래 bound 문자열을 그대로
+ * 돌려주도록 바꿔도(뮤테이션으로 직접 넣어 확인) 그 결과가 outOfRange/clampToRange
+ * 밖으로 새는지 보는 검사가 없어 초록이었을 자리다. */
+describe("계열이 다른 경계는 무시된다 — outOfRange/clampToRange까지 (F-1.2)", () => {
+  it("시각 픽커에 날짜 min을 주면 어느 시각도 범위 밖이 아니다", () => {
+    const fields: WheelUnit[] = ["hour", "minute"];
+    for (const v of ["00:00", "03:00", "12:30", "23:59"])
+      expect(outOfRange(v, { min: "2026-08-12" }, fields)).toBe(false);
+  });
+
+  it("시각 픽커에 날짜 min을 주면 클램프가 값을 그대로 통과시킨다", () => {
+    expect(clampToRange("03:00", { min: "2026-08-12" }, ["hour", "minute"])).toBe("03:00");
   });
 });
 
