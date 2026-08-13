@@ -5127,12 +5127,31 @@ describe("DateWheelPicker 오전/오후 버튼 (3단계)", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it("반대 절반이 경계로 통째로 막혀 있으면 그 버튼이 disabled다 — 열의 ± 버튼과 같은 규칙", () => {
+  /* ⚠️ **제목을 정확히 적습니다.** 코드가 판정하는 것은 "반대 절반이 통째로 막혔는가"가
+   * 아니라 **"반대 절반의 같은 시각이 경계 밖인가"**입니다 — `shifted(MERIDIEM_UNIT, ±12)`가
+   * 곧 그 질문이고, 열의 ± 버튼이 쓰는 것과 **같은 함수**입니다. 아래 첫 검사의 값에서는
+   * 둘이 우연히 같은 답을 내므로, 그것만으로는 무엇이 고정됐는지 갈리지 않습니다. 그래서
+   * 갈라지는 값을 두 번째 검사로 함께 둡니다. */
+  it("반대 절반의 같은 시각이 경계 밖이면 그 버튼이 disabled다 — 열의 ± 버튼과 같은 함수", () => {
     setHourFormat("12");
-    // max가 정오 직전이라 오후는 통째로 갈 수 없다.
+    // max가 정오 직전이라 오후는 통째로 갈 수 없다 — 두 판정이 같은 답을 내는 값.
     openAt("2026-08-12T03:00:05", { max: "2026-08-12T11:59:59" });
     expect((screen.getByRole("button", { name: "오후" }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "오전" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  /* 🔴 **두 판정이 갈리는 값 — 지금 동작을 있는 그대로 고정합니다.** `min`이 오전 09:00이면
+   * 오전은 09~11시가 **남아 있는데도** 15시의 거울인 03시가 경계 밖이라 오전 버튼이
+   * 잠깁니다. 버튼이 "±12 한 번"이라는 스펙 §7의 정의를 그대로 따른 결과이고, 절반 안으로
+   * 클램프하면 "12만큼 움직인다"가 깨집니다 — 자리올림 없음 규칙의 예외를 정당화하던
+   * 근거가 바로 그것이라 임의로 바꾸지 않았습니다.
+   *
+   * **막다른 길은 아닙니다** — 시 열을 직접 굴리면 09시로 갈 수 있습니다. 잠기는 것은
+   * 지름길뿐입니다. 그래도 **오너 판단 항목**이라 원장에 올렸습니다. */
+  it("반대 절반이 일부만 열려 있어도 거울 시각이 막혔으면 잠긴다 — 지금 동작(오너 판단 대기)", () => {
+    setHourFormat("12");
+    openAt("2026-08-12T15:00:05", { min: "2026-08-12T09:00:00" });
+    expect((screen.getByRole("button", { name: "오전" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("누르면 시 열이 휠 이동을 재생한다 — '지금' 버튼이 여러 칸을 건너뛸 때와 같은 이유", () => {
@@ -5343,5 +5362,35 @@ describe("DateWheelPicker 12시간제 시 타이핑 (3단계)", () => {
     setHourFormat("12");
     const { onChange } = typeHour("15:00:05", ["ArrowRight", "1", "5"]);
     expect(onChange).toHaveBeenLastCalledWith("15:15:05");
+  });
+});
+
+/* 🔴 `meridiem`을 **명시적으로 `undefined`로** override하는 경로. `hintNow`가 같은
+ * 자리에서 이미 검사를 하나 갖고 있습니다("hintNow를 명시적으로 undefined로
+ * override하면 hint로 대체된다") — `Partial<DateWheelLabels>`가 그것을 타입으로
+ * 허용하고(이 저장소 tsconfig에 `exactOptionalPropertyTypes`가 없습니다), 스프레드
+ * 병합에서 명시적 `undefined`는 **기본값으로 안 떨어지고 덮어씁니다.**
+ *
+ * `hintNow`는 `?? labels.hint`가 받아 주지만 `meridiem`에는 그게 없었습니다. 그리고
+ * 여기는 값이 아니라 **객체**라, `labels.meridiem.am`이 `useMemo`의 의존성 배열에서
+ * 곧바로 터집니다 — 의존성 배열은 본문보다 **먼저** 평가되므로 24시간제에서도,
+ * 날짜 전용 픽커에서도, 매 렌더 터집니다. 단언 실패가 아니라 렌더 크래시입니다. */
+describe("labels.meridiem을 명시적으로 undefined로 줘도 터지지 않는다 (3단계 후속)", () => {
+  it("24시간제 날짜 전용 픽커가 렌더된다", () => {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} labels={{ meridiem: undefined }} />);
+    expect(fieldOf("거래 날짜").textContent).toBe("2026. 08. 12.");
+  });
+
+  it("12시간제에서는 기본 오전/오후로 떨어진다", () => {
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 시각" value="15:00:05" fields={TIME_ONLY} onChange={() => undefined} labels={{ meridiem: undefined }} />);
+    expect(fieldOf("거래 시각").textContent).toBe("오후 03:00:05");
+  });
+
+  it("오전/오후 버튼도 기본 문구로 그려진다", () => {
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 시각" value="15:00:05" fields={TIME_ONLY} onChange={() => undefined} labels={{ meridiem: undefined }} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    expect(screen.getByRole("button", { name: "오후" }).getAttribute("aria-pressed")).toBe("true");
   });
 });
