@@ -81,3 +81,37 @@ describe("데모 조작판 — 접으면 재기를 멈춘다", () => {
     expect(dependenciesAfter(demoSource, at)).toContain("open");
   });
 });
+
+/* 3단계 — `hourFormat` 토글(설계 스펙 §7·§11).
+ *
+ * 이 축이 죽는 방식은 위 `justify` 사고와 **모양이 다릅니다.** 여기서 나올 결함은
+ * 의존성 배열이 아니라 **상태를 어디에 두었나**입니다: 데모가 `useState`로 형식을
+ * 들고 자기 버튼 글자만 바꾸면, 화면의 시각 픽커 셋은 24시간제 그대로인데 조작판은
+ * "12시간제"라고 말합니다 — 조작판이 화면과 다른 말을 하는, 이 저장소의 단골 결함
+ * 그대로입니다. 값은 킷 안에 있고(전역 설정), 데모는 **구독해서** 읽어야 합니다.
+ *
+ * ⚠️ **이 파일이 못 보는 것:** 소스가 그렇게 쓰여 있다는 것까지입니다. "버튼을 누르면
+ * 세 픽커가 전부 바뀐다"는 실제 렌더라 여기서는 못 봅니다 — 그건
+ * tests/DateWheelPicker.test.tsx의 "마운트한 뒤 설정을 바꾸면 이미 떠 있는 픽커가
+ * 따라 바뀐다"가 컴포넌트 쪽에서 잡습니다. */
+describe("데모 조작판 — 12시간제 토글이 킷 전역 설정을 쓴다", () => {
+  it("킷의 설정 API 셋을 가져온다", () => {
+    expect(demoSource).toContain("getHourFormat");
+    expect(demoSource).toContain("setHourFormat");
+    expect(demoSource).toContain("subscribeHourFormat");
+  });
+
+  it("형식을 구독해서 읽는다 — 데모가 자기 상태로 흉내 내지 않는다", () => {
+    expect(demoSource).toContain("useSyncExternalStore(subscribeHourFormat");
+  });
+
+  it("데모에 hourFormat을 담는 useState가 없다", () => {
+    // 있으면 두 개의 진실이 생기고, 둘이 갈라지는 순간 조작판이 거짓말을 시작합니다.
+    const localState = demoSource.split("\n").filter((line) => line.includes("useState") && line.toLowerCase().includes("hourformat"));
+    expect(localState).toEqual([]);
+  });
+
+  it("토글이 setHourFormat을 실제로 부른다", () => {
+    expect(demoSource).toContain("onClick={() => setHourFormat(");
+  });
+});

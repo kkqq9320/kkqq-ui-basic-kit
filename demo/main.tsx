@@ -1,7 +1,7 @@
 /* 데모 겸 CSS 누락 확인용 페이지. 다른 프로젝트로 복사할 때는 필요 없습니다.
  * 실행: design-system 폴더에서 node_modules/.bin/vite → http://localhost:5273
  */
-import { StrictMode, useEffect, useState, type ReactElement } from "react";
+import { StrictMode, useEffect, useState, useSyncExternalStore, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 
 import "../css/index.css";
@@ -46,6 +46,9 @@ import {
   displayCombo,
   normalizeCombo,
   sidebarToggleAction,
+  getHourFormat,
+  setHourFormat,
+  subscribeHourFormat,
 } from "../src";
 
 /** 사이드바 토글의 **앱** 기본 조합. 킷의 기본은 여전히 `null`입니다(단축키 설계 스펙
@@ -507,6 +510,11 @@ function Demo() {
    *  3열×2줄로 접습니다. 킷 컴포넌트의 팝오버는 body 포털이라 이 컴포넌트를 감싸는
    *  것으로는 스코프를 못 잡고, 그래서 body 클래스로 토글합니다(아래 useEffect). */
   const [foldSixColumns, setFoldSixColumns] = useState(false);
+  /* 12시간제는 **킷 전역 설정**이라 `useState`로 들고 있으면 안 됩니다(설계 스펙 §11) —
+   * 값은 킷 안에 있고 데모는 **구독해서 읽습니다.** 로컬 상태로 흉내 내면 이 화면의
+   * 다른 픽커들이 안 따라오는데, 그러면 조작판이 화면과 다른 말을 하는 이 저장소의
+   * 단골 결함이 그대로 재현됩니다. 지속성은 아직 없어서 새로고침하면 24로 돌아옵니다. */
+  const hourFormat = useSyncExternalStore(subscribeHourFormat, getHourFormat, getHourFormat);
   // 설계 스펙 §7.1이 **미해결로** 적어 둔 경합 — "숫자를 반쯤 친 상태에서 소비자가
   // `disabled`를 켜면 그 숫자가 확정되는가". 아래 카운트다운이 그 순간을 만듭니다.
   const [raceDisabled, setRaceDisabled] = useState(false);
@@ -736,7 +744,25 @@ function Demo() {
                 <button type="button" className="secondary-button" aria-pressed={foldSixColumns} onClick={() => setFoldSixColumns((value) => !value)}>
                   {foldSixColumns ? "6열 — 두 줄로 접음 (다시 눌러 한 줄로)" : "6열 — 한 줄 유지 (기본, 눌러서 두 줄과 비교)"}
                 </button>
+                {/* 3단계 — 12시간제(설계 스펙 §7·§11). **인스턴스 prop이 아니라 킷 전역
+                    설정**이라, 이 버튼 하나가 이 화면의 시각 픽커 셋을 전부 바꿉니다.
+                    그게 눈에 보이는 것이 이 토글의 값어치입니다: 하나만 바뀌면 구독이
+                    안 도는 것입니다. */}
+                <button type="button" className="secondary-button" aria-pressed={hourFormat === "12"} onClick={() => setHourFormat(hourFormat === "12" ? "24" : "12")}>
+                  {hourFormat === "12" ? "12시간제 — 오후 03 (다시 눌러 24시간제)" : "24시간제 — 15 (기본, 눌러서 12시간제와 비교)"}
+                </button>
               </div>
+              <p className="muted-copy" style={{ marginTop: 8 }}>
+                <strong>실기기 미확인 — 12시간제에서 볼 것 셋</strong>(설계 스펙 §14).
+                위 토글을 켜고 <strong>“날짜+시각”</strong> 픽커를 여세요.
+                ① <strong>시 열의 폭</strong> — 라벨이 <code>오후 03</code>으로 다섯 글자가
+                되어 열이 좁으면 잘립니다. ② <strong>오전/오후 버튼의 크기와 자리</strong> —
+                열 바로 위에 두 칸으로 있습니다(하단 <code>오늘·비우기·완료</code> 줄과
+                일부러 다르게 생겼습니다). 엄지로 눌러 보세요.
+                ③ <strong>한글 입력 상태에서 <code>a</code>·<code>p</code></strong> — 트리거에
+                포커스를 두고 시 자리에서 <code>p</code>를 치면 오후로 넘어가야 합니다.
+                IME가 먹는지 아직 아무도 모릅니다.
+              </p>
               <p className="muted-copy" style={{ marginTop: 8 }}>
                 <strong>실기기 미확인</strong> — 설계 스펙 §16 미결 1번(6열을 폰에서 한 줄로
                 둘지, 날짜 줄·시각 줄 두 줄로 접을지). 열당 약 50px이라 스와이프 대상이
