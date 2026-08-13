@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useShortcutRegistry } from "./ShortcutProvider";
-import { beginRecording, comboFromEvent, endRecording, findConflict, formatCombo, UNBINDABLE_CODES } from "./shortcuts";
+import { beginRecording, bindingWarning, comboFromEvent, endRecording, findConflict, formatCombo, UNBINDABLE_CODES, unbindableReason, type UnbindableReason } from "./shortcuts";
 
 export type ShortcutSettingsProps = {
   /** 있으면 이 함수로 커밋합니다(앱이 소유) — 지금까지의 동작입니다. **없으면**
@@ -47,6 +47,16 @@ export function displayCombo(combo: string): string {
 }
 
 const MODIFIER_CODES = /^(Control|Alt|Shift|Meta|OS)/;
+
+/** 등록 금지의 **문구**는 UI의 것입니다 — `shortcuts.ts`는 이유 코드만 줍니다(§9의
+ * 파일 경계). `kit-listener`는 여기 안 씁니다: `Escape`·`Tab`은 그 자리에서 녹음을
+ * 조용히 취소하는 것이 계약이라(§6.2 — 포커스가 나가야 하고 `Escape`가 전파돼야
+ * 합니다) 이 표에 닿기 전에 걸러집니다. `bindingOf` 쪽에서만 그 이유를 씁니다. */
+const UNBINDABLE_COPY: Record<UnbindableReason, (text: string) => string> = {
+  "kit-listener": (text) => `${displayCombo(text)}는 등록할 수 없습니다 — 킷이 쓰는 키입니다`,
+  activation: (text) => `${displayCombo(text)}는 등록할 수 없습니다 — 포커스한 버튼·링크를 누르는 키입니다`,
+  "native-edit": (text) => `${displayCombo(text)}는 등록할 수 없습니다 — 브라우저의 복사·붙여넣기·되돌리기입니다`,
+};
 
 export function ShortcutSettings({ onChange, className }: ShortcutSettingsProps) {
   const registry = useShortcutRegistry();
@@ -103,7 +113,14 @@ export function ShortcutSettings({ onChange, className }: ShortcutSettingsProps)
       if (MODIFIER_CODES.test(event.code)) return;              // 수식어만 눌린 상태
       // 맨 키도 등록할 수 있습니다(규칙 3이 뜨는 자리를 좁히지, 등록을 막지 않습니다).
       // 충돌 검사는 수식어 조합과 똑같이 겁니다.
-      const text = formatCombo(comboFromEvent(event));
+      const combo = comboFromEvent(event);
+      const text = formatCombo(combo);
+      /* §6.2 — 걸 수 없는 조합. `bindingOf`도 같은 관문(`unbindableReason`)을 봅니다.
+       * 충돌 검사보다 **먼저** 봅니다: `Ctrl+C`가 어떤 액션과도 안 겹칠 때 "안 겹치니
+       * 등록"으로 새면 안 되고, 사용자에게는 "왜 안 되는지"가 충돌 사유보다 먼저 알
+       * 정보이기 때문입니다. */
+      const blocked = unbindableReason(combo);
+      if (blocked) { setMessage(UNBINDABLE_COPY[blocked](text)); setRecording(null); return; }
       const bindings = Object.fromEntries(registry.actions.map((item) => [item.id, registry.bindingOf(item.id)]));
       const conflict = findConflict(text, recording!, bindings);
       if (conflict?.withKit) { setMessage(`${displayCombo(text)}는 킷의 날짜 선택기가 씁니다`); setRecording(null); return; }
@@ -113,7 +130,11 @@ export function ShortcutSettings({ onChange, className }: ShortcutSettingsProps)
         setRecording(null);
         return;
       }
-      setMessage(null);
+      /* 경고는 **막지 않습니다** — 등록은 그대로 하고 한계만 알려 줍니다(스펙 §6.2).
+       * `Ctrl+A`가 그 자리입니다: 규칙 5가 텍스트 입력 안에서 양보하므로 거기서는
+       * 안 뜹니다. 오너가 "막지 말고 알려주기"로 정한 결과입니다(2026-08-13). */
+      const warning = bindingWarning(combo);
+      setMessage(warning ? `${displayCombo(text)}는 등록됐지만, 텍스트 입력 안에서는 뜨지 않습니다 — 브라우저의 편집 동작이 먼저입니다` : null);
       commit(recording!, text);
       setRecording(null);
     }

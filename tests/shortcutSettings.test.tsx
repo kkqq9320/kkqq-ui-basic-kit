@@ -110,6 +110,68 @@ describe("녹음", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  /* 스펙 §6.2 — 활성화 키와 브라우저 편집 조합도 등록할 수 없습니다(오너 결정
+   * 2026-08-13). `Escape`·`Tab`과 달리 **조용히 취소하지 않고 이유를 말합니다** —
+   * 사용자가 "왜 안 되지"로 남으면 안 되니까요. */
+  it("맨 Enter는 등록되지 않고 이유를 말한다", () => {
+    const onChange = setup();
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "Enter" });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("맨 Enter를 누르면 이유가 화면에 뜬다", () => {
+    setup();
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "Enter" });
+    expect(screen.getByRole("alert").textContent).toMatch(/버튼·링크를 누르는 키/);
+  });
+
+  it("Ctrl+V는 등록되지 않는다", () => {
+    const onChange = setup();
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "KeyV", ctrlKey: true });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("Ctrl+V를 누르면 브라우저 편집이라고 말한다", () => {
+    setup();
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "KeyV", ctrlKey: true });
+    expect(screen.getByRole("alert").textContent).toMatch(/복사·붙여넣기·되돌리기/);
+  });
+
+  // 대조군 — 수식어가 붙은 Enter는 정상적인 단축키라 그대로 등록됩니다.
+  it("Ctrl+Enter는 등록된다 — 활성화 키 금지는 맨 키에만 걸린다", () => {
+    const onChange = setup();
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "Enter", ctrlKey: true });
+    expect(onChange).toHaveBeenCalledWith("toggle", "Ctrl+Enter");
+  });
+
+  /* `Ctrl+A`만 막지 않기로 했습니다(오너 결정) — 대신 알려 줍니다. **등록은 됩니다.** */
+  it("Ctrl+A는 등록된다", () => {
+    const onChange = setup();
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "KeyA", ctrlKey: true });
+    expect(onChange).toHaveBeenCalledWith("toggle", "Ctrl+KeyA");
+  });
+
+  it("Ctrl+A를 등록하면 텍스트 입력 안에서는 안 뜬다고 알려 준다", () => {
+    setup();
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "KeyA", ctrlKey: true });
+    expect(screen.getByRole("alert").textContent).toMatch(/텍스트 입력 안에서는 뜨지 않습니다/);
+  });
+
+  // 대조군 — 경고가 붙지 않는 조합은 안내가 아예 안 뜹니다(모든 등록에 뜨면 소음입니다).
+  it("평범한 조합을 등록하면 안내가 안 뜬다", () => {
+    setup();
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "KeyJ", ctrlKey: true });
+    expect(screen.queryByRole("alert")).toBe(null);
+  });
+
   /* 스펙 §6.2 — "포커스가 나가면 녹음 종료"입니다. preventDefault를 부르면 Tab의
    * 기본 동작(포커스 이동) 자체가 막혀서 포커스가 안 나갑니다 — 녹음만 끝나고
    * 그 자리에 그대로 남는 결함. UNRECORDABLE(Escape·Tab)은 preventDefault를
