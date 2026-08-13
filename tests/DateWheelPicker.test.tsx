@@ -5977,3 +5977,160 @@ describe("units 누수가 닫혔다 (오너 결정 2026-08-13)", () => {
     expect(names).toContain("Hour 15");
   });
 });
+
+/* 필드의 복사·붙여넣기·되돌리기·저장, 그리고 손가락 탭(오너 리포트 2026-08-14).
+ *
+ * 이 컨트롤의 필드는 `<span>`이라 고를 텍스트가 없어서 네이티브 날짜 필드가 공짜로
+ * 갖는 것들이 전부 안 됩니다. 아래는 그것을 직접 구현한 자리의 계약입니다. */
+describe("필드의 복사·붙여넣기·되돌리기·저장", () => {
+  const POPOVER = { name: "거래 날짜 선택" };
+
+  /** 🔴 **jsdom에는 `navigator.clipboard`가 아예 없습니다.** 소스가 `navigator.clipboard?.`로
+   *  읽으므로 스텁 없이 쓴 검사는 "동작이 옳아서"가 아니라 **아무 일도 안 일어나서** 초록이
+   *  됩니다 — 이 파일이 `pointer()` 헬퍼에서 이미 한 번 치른 함정입니다. */
+  function stubClipboard(readValue = "") {
+    const written: string[] = [];
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: (text: string) => { written.push(text); return Promise.resolve(); },
+        readText: () => Promise.resolve(readValue),
+      },
+    });
+    return written;
+  }
+  // 스텁을 걷습니다 — `vi.restoreAllMocks()`는 `defineProperty`를 되돌리지 않아
+  // 다음 스위트로 샙니다.
+  afterEach(() => { Reflect.deleteProperty(navigator, "clipboard"); });
+
+  /** `matches`를 **질의 문자열로 갈라** 돌려줍니다. 전부 true인 스텁을 쓰면 이 파일이
+   *  같이 묻는 `(prefers-reduced-motion: reduce)`까지 뒤집혀 무엇을 재는지 알 수 없습니다. */
+  function stubPointer(coarse: boolean) {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query.includes("pointer: coarse") ? coarse : false,
+      media: query, onchange: null,
+      addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false,
+    }));
+  }
+
+  const segment = (unit: string) => document.querySelector(`.date-wheel-segment[data-unit="${unit}"]`) as HTMLElement;
+
+  it("Ctrl+C는 화면에 보이는 그대로를 클립보드에 쓴다", () => {
+    const written = stubClipboard();
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "c", code: "KeyC", ctrlKey: true });
+    expect(written).toEqual(["2026. 07. 12."]);
+  });
+
+  // 대조군 — 수식어가 없으면 이 컨트롤의 것이 아닙니다.
+  it("수식어 없는 C는 복사하지 않는다", () => {
+    const written = stubClipboard();
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "c", code: "KeyC" });
+    expect(written).toEqual([]);
+  });
+
+  it("Ctrl+C는 치던 버퍼를 먼저 확정한다 — 본 것과 붙여넣은 것이 같아야 하므로", () => {
+    const written = stubClipboard();
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    for (const key of ["2", "0", "3"]) fireEvent.keyDown(fieldOf("거래 날짜"), { key });
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "c", code: "KeyC", ctrlKey: true });
+    expect(written).toEqual(["0203. 07. 12."]);
+  });
+
+  it("Ctrl+V는 클립보드를 읽어 값으로 만든다", async () => {
+    stubClipboard("2031. 03. 05.");
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "v", code: "KeyV", ctrlKey: true });
+    await waitFor(() => expect(fieldOf("거래 날짜").textContent).toContain("2031. 03. 05."));
+  });
+
+  // 🔴 실패가 값을 지우면 사용자는 되돌릴 것도 없이 잃습니다.
+  it("읽을 수 없는 글자를 붙여넣으면 값을 그대로 둔다", async () => {
+    stubClipboard("점심 약속");
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "v", code: "KeyV", ctrlKey: true });
+    await act(async () => { await Promise.resolve(); });
+    expect(fieldOf("거래 날짜").textContent).toContain("2026. 07. 12.");
+  });
+
+  it("Ctrl+Z는 마지막 조작을 되돌린다", () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    for (const key of ["2", "0", "3", "1"]) fireEvent.keyDown(fieldOf("거래 날짜"), { key });
+    expect(fieldOf("거래 날짜").textContent).toContain("2031. 07. 12.");
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "z", code: "KeyZ", ctrlKey: true });
+    expect(fieldOf("거래 날짜").textContent).toContain("2026. 07. 12.");
+  });
+
+  it("되돌릴 것이 없으면 Ctrl+Z는 아무것도 안 한다", () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "z", code: "KeyZ", ctrlKey: true });
+    expect(fieldOf("거래 날짜").textContent).toContain("2026. 07. 12.");
+  });
+
+  /* 🔴 **이 검사가 되돌리기 설계의 핵심입니다.** 휠 세 칸은 `onChange`를 세 번
+   * 부르지만 **조작은 하나**입니다. 항목을 `onChange`마다 쌓으면 Ctrl+Z가 한 칸씩
+   * 되돌아와 세 번 눌러야 합니다. */
+  it("휠 한 무리는 되돌리기 항목 하나다 — 한 번에 세 칸 전부 되돌아온다", () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    const column = document.querySelector('.date-wheel-column[data-unit="day"]') as HTMLElement;
+    for (let notch = 0; notch < 3; notch += 1) fireEvent.wheel(column, { deltaY: 1 });
+    expect(fieldOf("거래 날짜").textContent).toContain("2026. 07. 15.");
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "z", code: "KeyZ", ctrlKey: true });
+    expect(fieldOf("거래 날짜").textContent).toContain("2026. 07. 12.");
+  });
+
+  it("Ctrl+S는 완료 버튼처럼 확정하고 닫는다", () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    expect(screen.queryByRole("dialog", POPOVER)).toBeTruthy();
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "s", code: "KeyS", ctrlKey: true });
+    expect(screen.queryByRole("dialog", POPOVER)).toBeNull();
+  });
+
+  /* ⚠️ 닫힌 채로 `commitAndClose()`를 부르면 `!value && !clearedRef.current` 가지에 걸려
+   * **한 번도 연 적 없는 빈 필드에 오늘 날짜가 조용히 들어갑니다.** */
+  it("닫힌 빈 필드에서 Ctrl+S는 값을 만들지 않는다", () => {
+    render(<ControlledDateWheel initialValue="" />);
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "s", code: "KeyS", ctrlKey: true });
+    expect(fieldOf("거래 날짜").textContent).toContain(DEFAULT_DATE_WHEEL_LABELS.placeholder);
+  });
+
+  it("손가락에서는 세그먼트를 눌러도 그 세그먼트를 고르지 않는다", () => {
+    stubPointer(true);
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.click(segment("day"));
+    expect(activeSegment()).not.toBe("day");
+  });
+
+  it("손가락에서는 세그먼트 탭이 여닫기다", () => {
+    stubPointer(true);
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.click(segment("day"));
+    expect(screen.queryByRole("dialog", POPOVER)).toBeTruthy();
+    fireEvent.click(segment("day"));
+    expect(screen.queryByRole("dialog", POPOVER)).toBeNull();
+  });
+
+  // 대조군 — 가는 포인터의 동작은 글자 하나도 안 바뀝니다.
+  it("가는 포인터에서는 그대로 그 세그먼트를 고른다", () => {
+    stubPointer(false);
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.click(segment("day"));
+    expect(activeSegment()).toBe("day");
+  });
+
+  /* 대조군 — 굵기 판정이 **질의 문자열을 실제로 보는지**. 아무 질의나 물어서 `matches`를
+   * 쓰면(예: 소스가 reduce 질의를 물으면) 이 스텁에서 참이 되어 손가락으로 읽힙니다. */
+  it("굵기 판정은 질의 문자열로 가른다 — reduce 질의를 굵은 포인터로 읽지 않는다", () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query.includes("prefers-reduced-motion"),
+      media: query, onchange: null,
+      addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false,
+    }));
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.click(segment("day"));
+    expect(activeSegment()).toBe("day");
+  });
+});
