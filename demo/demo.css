@@ -153,7 +153,8 @@ body.date-wheel-fold-demo .date-wheel-popover[aria-label="초까지 예약 시�
  * 글자 수로 폭이 정해지면 **버튼 수가 같은 줄끼리도 상자 폭이 달라집니다** — 설정 화면은
  * 세로로 훑는 자리라 그 들쭉날쭉함이 그대로 읽힙니다. 고정 폭이면 버튼 수만 폭을 정합니다. */
 .demo-setting-choices .secondary-button { width: 64px; min-width: 64px; padding: 0; white-space: nowrap; }
-.demo-setting-choices .secondary-button[aria-pressed="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+/* 눌린 상태는 이제 **킷이** 그립니다(`css/controls.css`) — 데모가 자기 버전을 갖고
+ * 있던 것이 포커스와 겹쳐 보이던 원인이었습니다. 여기서 지웁니다. */
 
 
 /* 🔴 **성능 격리 모드** — 오너: "전체적으로 안드로이드에서 엄청 버벅대네. 그냥 느린 것
