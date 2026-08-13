@@ -25,6 +25,17 @@ export const THEME_TOKEN_GROUPS: ThemeTokenGroup[] = [
       { name: "--surface-soft", label: "보조 배경", description: "카드 안의 옅은 영역" },
       { name: "--input", label: "입력칸 배경", description: "입력·드롭다운·날짜 필드" },
       { name: "--line", label: "테두리", description: "카드와 입력칸의 선" },
+      /* 🔴 **쌍입니다 — 둘을 같이 내놓습니다**(오너 결정 2026-08-13).
+       * 한동안 이 둘만 편집기에서 빼 뒀는데, 그 위에 얹히는 `--accent-text`는 내놓고
+       * 있었습니다. 즉 **대비 쌍의 한쪽만 사용자가 바꿀 수 있는 상태**였습니다 — 글자를
+       * 어둡게 바꾸면 칩 위에서 안 읽히는데 바탕을 따라 조정할 방법이 없었습니다.
+       *
+       * ⚠️ **이 둘은 값보다 관계가 중요합니다** — 칩이 트랙보다 밝아야 "떠 있는" 것으로
+       * 읽힙니다(기본값은 16단계). 사용자가 순서를 뒤집으면 그 느낌이 사라지는데, 그건
+       * `--accent`를 열어 둔 지금도 이미 같은 종류의 자유입니다. 검사는 **기본값**의
+       * 순서와 대비만 지킵니다(`tests/segmentedControl.test.tsx`). */
+      { name: "--segmented-track", label: "세그먼트 바탕", description: "선택 묶음의 움푹한 트랙" },
+      { name: "--segmented-chip", label: "세그먼트 칩", description: "선택 묶음에서 고른 칸 — 트랙보다 밝아야 떠 보입니다" },
     ],
   },
   {
