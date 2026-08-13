@@ -188,7 +188,22 @@
  * 슬라이드와 같은 말을 하게 되고, 이 애니메이션이 생긴 계기였던 거짓 신호가 돌아옵니다.
  * (오너가 좋아했던 "열 때 애니메이션"은 원래 그 거짓 신호였습니다 — 한 열이 이동 클래스를
  * 세션 내내 달고 있다가 열 때마다 재생한 것이고, 그래서 그 열만 되고 나머지는 안 됐습니다.) */
-.date-wheel-column { width: 100%; min-width: 0; height: 212px; display: grid; grid-template-rows: 30px 150px 30px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--line) 82%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--surface-soft) 78%, transparent); outline: none; touch-action: none; user-select: none; transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease; }
+/* 🔴 **휠 표면의 높이와 정지 위치는 토큰 둘로 묶여 있습니다** — 따로 고치면 선택된 행이
+ * 가운데에서 벗어납니다(그리고 아래 키프레임 셋도 같이 어긋납니다).
+ *
+ *   --date-wheel-rows-h  : 보이는 창의 높이. 30px × (보이는 행 수)
+ *   --date-wheel-rest    : 값 컨테이너의 정지 translateY. 선택 행(offset 0, 위에서 네 번째)이
+ *                          창 한가운데 오는 값
+ *
+ * 기본은 **위아래 2개씩 = 5행 = 150px**이고 정지가 −30px입니다(지금까지와 같습니다).
+ * 위아래 1개씩(3행)은 90px / −60px입니다. 오너가 실기기에서 고르는 중이라 데모가
+ * `demo.css`에서 이 둘만 덮어씁니다(설계 스펙 §16과 같은 방식).
+ *
+ * ⚠️ **`DATE_WHEEL_OFFSETS`(±3)와 `preloadOnly`는 아직 이 토큰을 안 봅니다.** 위아래
+ * 1개로 정해지면 ±2가 화면 밖인데도 `aria-hidden`이 안 붙습니다 — **정해질 때 같이
+ * 고쳐야 합니다.** 실험 변형에만 있는 어긋남이라 데모에서만 보입니다. */
+.date-wheel-column { --date-wheel-rows-h: 150px; --date-wheel-rest: -30px; }
+.date-wheel-column { width: 100%; min-width: 0; height: calc(var(--date-wheel-rows-h) + 62px); display: grid; grid-template-rows: 30px var(--date-wheel-rows-h) 30px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--line) 82%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--surface-soft) 78%, transparent); outline: none; touch-action: none; user-select: none; transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease; }
 /* 진입 시차 — 열마다 다른 것은 **이것 하나뿐**입니다. `animation-delay`를 별도 규칙으로
  * 주면 그 규칙이 아래 이동 규칙보다 특이도가 높아져 **커밋 프레임의 슬라이드에까지**
  * 지연이 붙습니다. 커스텀 프로퍼티로 주면 진입 규칙이 하나로 유지돼 그 문제가 없습니다.
@@ -217,8 +232,31 @@
 
 /* 7행(30px x 7 = 210px)을 렌더하고 150px만 보여줍니다. 위아래 양끝 1개는
  * 미리 그려두는 프리로드 행이라 스와이프 중 빈 칸이 생기지 않습니다. */
-.date-wheel-viewport { width: 100%; height: 150px; overflow: hidden; border-top: 1px solid color-mix(in srgb, var(--line) 68%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--line) 68%, transparent); }
-.date-wheel-values { width: 100%; height: 210px; display: grid; grid-template-rows: repeat(7, 30px); overflow: hidden; transform: translateY(calc(-30px + var(--date-wheel-drag-offset, 0px))); transform-origin: 50% 50%; transition: transform 110ms cubic-bezier(.22, .8, .3, 1); will-change: transform, opacity; }
+/* 🔴 **날짜 줄과 시각 줄을 눈으로 가릅니다**(오너 리포트 5번, 2026-08-13):
+ * "날짜랑 시각이랑 명확하게 구분되지가 않네. 시각 사이에 : 기호도 있으면 좋겠어."
+ *
+ * 둘을 같이 합니다 — 하나만으로는 부족합니다.
+ *   ① **시각 열 사이에 `:`** — 분·초 열의 왼쪽 안쪽에 그립니다.
+ *   ② **날짜 묶음과 시각 묶음 사이를 더 벌립니다** — 시 열에만 왼쪽 여백.
+ *
+ * ⚠️ **구분자를 그리드 항목으로 넣지 않았습니다.** `.date-wheel-columns[data-fields="N"]`이
+ * `repeat(N, …)`이고 `data-fields`는 **열 개수**라, 자식을 더하면 트랙 수와 항목 수가
+ * 어긋납니다(데모의 6열 두 줄 접기 토글도 같은 규칙을 씁니다). 그래서 `::before`입니다.
+ *
+ * ⚠️ **`:`가 열 **안쪽**에 있는 것은 `.date-wheel-column`이 `overflow: hidden`이라
+ * 그렇습니다** — 간격(6px)으로 내보내면 잘립니다. 폭이 아주 좁으면 가운데 정렬된 숫자와
+ * 가까워질 수 있어 **실기기 확인 항목**입니다. */
+.date-wheel-column[data-unit="minute"], .date-wheel-column[data-unit="second"] { position: relative; }
+.date-wheel-column:is([data-unit="minute"], [data-unit="second"])::before {
+  content: ":"; position: absolute; z-index: 1; left: 2px; top: calc(30px + var(--date-wheel-rows-h) / 2);
+  transform: translateY(-50%); color: var(--muted); font-size: var(--font-size-control); font-weight: 700; line-height: 1; pointer-events: none;
+}
+/* 날짜 묶음 → 시각 묶음 경계. 시 열 앞에만 붙으므로, 시각 전용 픽커(첫 열이 시)에서는
+ * 앞에 날짜 열이 없어 그냥 왼쪽 여백이 됩니다 — 그건 원하지 않으므로 첫 열은 뺍니다. */
+.date-wheel-column[data-unit="hour"]:not(:first-child) { margin-left: 10px; }
+
+.date-wheel-viewport { width: 100%; height: var(--date-wheel-rows-h); overflow: hidden; border-top: 1px solid color-mix(in srgb, var(--line) 68%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--line) 68%, transparent); }
+.date-wheel-values { width: 100%; height: 210px; display: grid; grid-template-rows: repeat(7, 30px); overflow: hidden; transform: translateY(calc(var(--date-wheel-rest) + var(--date-wheel-drag-offset, 0px))); transform-origin: 50% 50%; transition: transform 110ms cubic-bezier(.22, .8, .3, 1); will-change: transform, opacity; }
 /* 팝오버 진입 — **열 셋이 함께 한 행만큼 굴러 내려와 멎습니다**(오너: "휠이 드르륵
  * 움직이는 것 같은 애니메이션"). 이동 신호와 넷으로 갈라 둡니다: 모든 열이 함께 움직인다
  * (이동은 한 열만) · 이름이 다르다 · 게이트가 다르다(`.entering`은 열림 창에만) ·
@@ -282,21 +320,21 @@
 }
 
 @keyframes date-wheel-slide-next {
-  from { opacity: .58; transform: translateY(-15px) scale(.975); }
+  from { opacity: .58; transform: translateY(calc(var(--date-wheel-rest) + 15px)) scale(.975); }
   65% { opacity: 1; }
-  to { opacity: 1; transform: translateY(-30px) scale(1); }
+  to { opacity: 1; transform: translateY(var(--date-wheel-rest)) scale(1); }
 }
 @keyframes date-wheel-slide-previous {
-  from { opacity: .58; transform: translateY(-45px) scale(.975); }
+  from { opacity: .58; transform: translateY(calc(var(--date-wheel-rest) - 15px)) scale(.975); }
   65% { opacity: 1; }
-  to { opacity: 1; transform: translateY(-30px) scale(1); }
+  to { opacity: 1; transform: translateY(var(--date-wheel-rest)) scale(1); }
 }
 /* 진입 — 한 행 위에서 굴러 내려와 5px 지나쳤다가 제자리에 멎습니다("드르륵"의 멎는 맛). */
 @keyframes date-wheel-enter {
-  0% { opacity: .35; transform: translateY(-60px); }
+  0% { opacity: .35; transform: translateY(calc(var(--date-wheel-rest) - 30px)); }
   62% { opacity: 1; }
-  78% { transform: translateY(-25px); }
-  100% { opacity: 1; transform: translateY(-30px); }
+  78% { transform: translateY(calc(var(--date-wheel-rest) + 5px)); }
+  100% { opacity: 1; transform: translateY(var(--date-wheel-rest)); }
 }
 @keyframes date-wheel-selected-pop {
   0% { transform: scale(.88); }

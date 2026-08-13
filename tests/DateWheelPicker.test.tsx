@@ -3988,18 +3988,37 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
 
   // **이제는 방향이 있어야 합니다.** 없으면 "드르륵"이 아니라 예전의 방향 없는 진입입니다.
   // 전제(키프레임이 있다)는 바로 위 테스트가 집니다.
-  it("진입 키프레임은 굴러 내려온다", () => {
+  /* 🔴 **좌표가 리터럴에서 토큰으로 바뀌었습니다**(오너 리포트 6번, 2026-08-13) — 보이는
+   * 행 수를 실기기에서 고르는 중이라 `--date-wheel-rest`(정지 위치)와 `--date-wheel-rows-h`
+   * (창 높이)가 그 둘을 **한 벌로** 묶습니다. 그래서 이 검사도 절대 좌표가 아니라 **정지
+   * 위치와의 관계**를 봅니다 — 그게 원래 이 검사가 말하려던 것이기도 합니다("한 행 위에서
+   * 시작해 제자리로 멎는다"). 리터럴로 뒀으면 토큰을 바꾼 순간 통과하면서 거짓이 됩니다. */
+  it("진입 키프레임은 정지 위치보다 한 행 위에서 굴러 내려온다", () => {
     const keyframes = /@keyframes date-wheel-enter\s*\{[\s\S]*?\n\}/.exec(datePickerCssSource)?.[0] ?? "(진입 키프레임이 없다)";
-    expect(keyframes).toMatch(/0%\s*\{[^}]*translateY\(-60px\)/);
+    expect(keyframes).toContain("translateY(calc(var(--date-wheel-rest) - 30px))");
   });
 
   // **travel은 프리로드가 감당하는 30px이 상한입니다.** 값 컨테이너 210px(7행), 뷰포트
   // 150px이므로 뷰포트가 보는 구간은 [Y, Y+150]이고 Y는 0~60만 가능합니다. 기본이 -30px
   // 이므로 시작점은 -60px보다 위로 갈 수 없습니다 — 넘기면 뷰포트 끝에 행이 없는 빈 띠가
   // 생깁니다. F1의 드래그 클램프 ±30과 **같은 기하에서 나온 같은 수**입니다.
-  it("진입은 -60px에서 시작해 기본 자리 -30px로 멎는다", () => {
+  it("진입은 정지 위치로 멎는다", () => {
     const keyframes = /@keyframes date-wheel-enter\s*\{[\s\S]*?\n\}/.exec(datePickerCssSource)?.[0] ?? "(진입 키프레임이 없다)";
-    expect(keyframes).toMatch(/100%\s*\{[^}]*translateY\(-30px\)/);
+    expect(keyframes).toContain("100% { opacity: 1; transform: translateY(var(--date-wheel-rest)); }");
+  });
+
+  /* 그리고 **토큰 둘이 짝을 이룬다**는 것을 따로 못 박습니다 — 이 라운드에서 새로 생긴
+   * 계약이고, 하나만 고치면 선택된 행이 창 가운데에서 벗어납니다. 기본값은 지금까지와
+   * 같은 5행(150px)/−30px입니다("새 축은 기본값이 지금과 같음", PRINCIPLES §14). */
+  it("휠 창 높이와 정지 위치는 한 벌로 선언된다 — 기본은 5행", () => {
+    expect(datePickerCssSource).toContain(".date-wheel-column { --date-wheel-rows-h: 150px; --date-wheel-rest: -30px; }");
+  });
+
+  it("창 높이와 정지 위치를 쓰는 자리 셋이 리터럴로 되돌아가지 않는다", () => {
+    // 뷰포트 높이 · 열 높이 · 정지 transform이 전부 토큰을 지나가야 데모 토글이 한 벌로 움직인다.
+    expect(datePickerCssSource).toContain(".date-wheel-viewport { width: 100%; height: var(--date-wheel-rows-h);");
+    expect(datePickerCssSource).toContain("height: calc(var(--date-wheel-rows-h) + 62px)");
+    expect(datePickerCssSource).toContain("transform: translateY(calc(var(--date-wheel-rest) + var(--date-wheel-drag-offset, 0px)))");
   });
 
   // **모든 열이 함께 구릅니다** — 축 1. 규칙은 하나이고, 열마다 다른 것은 **시차뿐**입니다.
@@ -5011,16 +5030,48 @@ describe("DateWheelPicker 12시간제 (3단계)", () => {
     expect(fieldOf("거래 시각").textContent).toBe("2026. 08. 12. 15:00:05");
   });
 
-  it("시 열이 24칸 그대로다 — 라벨만 12시간제로 읽힌다", () => {
-    // 위·아래 프리로드까지 일곱 행이 연속한 24시간 값을 그대로 읽어야 한다. 12칸으로
-    // 순환시켰다면 정오를 넘는 이 구간에서 어긋난다(스펙 §7이 24칸을 고른 이유).
+  /* 🔴 **오너 결정(2026-08-13)으로 열에서 오전/오후 글자를 뺐습니다.** 그래서 이 검사가
+   * 예전에 쓰던 증거("행이 오전 11 → 오후 12로 넘어간다")가 **사라졌습니다** — 이제 행은
+   * `11, 12, 01`이라 24칸 열과 12칸 열이 **글자로 구별되지 않습니다.** 라벨만 보는 검사를
+   * 그대로 뒀으면 통과는 계속하면서 아무것도 증명하지 않았을 것입니다.
+   *
+   * **그래서 증거를 값으로 옮깁니다:** 11시에서 한 칸 내리면 `12:00`(정오)이 되어야 하고,
+   * 그 값에서 오전/오후 버튼이 **오후로 뒤집혀야** 합니다. 12칸으로 순환하는 열이었다면
+   * 11 다음이 12로 보이더라도 값은 오전에 머뭅니다 — 그게 스펙 §7이 24칸을 고른 이유이고,
+   * 이 검사가 그것을 값으로 봅니다. */
+  it("열에는 숫자만 그린다 — 오전/오후 글자가 행에 안 붙는다", () => {
     setHourFormat("12");
     render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T11:00:05" fields={TIME_FIELDS} onChange={() => undefined} />);
     fireEvent.click(fieldOf("거래 시각"));
 
     const hour = screen.getByRole("group", { name: "시 오전 11" });
     const rows = [...hour.querySelectorAll(".date-wheel-values button")].map((row) => row.textContent);
-    expect(rows).toEqual(["오전 08", "오전 09", "오전 10", "오전 11", "오후 12", "오후 01", "오후 02"]);
+    expect(rows).toEqual(["08", "09", "10", "11", "12", "01", "02"]);
+  });
+
+  it("열의 접근성 이름에는 절반이 남는다 — 스크린리더에는 버튼이 안 보인다", () => {
+    // 화면과 이름이 갈리는 것은 이 파일의 선례다(트리거 이름이 U+2012를 빼고 읽는다).
+    // 근거도 같다: 화면과 귀는 서로 다른 것을 놓친다. 24칸 열에 `03`이 두 번 나오는데
+    // 이름까지 `시 03`이면 오전인지 오후인지 알 방법이 없다.
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:00:05" fields={TIME_FIELDS} onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    expect(screen.getByRole("group", { name: "시 오후 03" })).toBeTruthy();
+  });
+
+  it("🔴 열이 24칸이라는 증거 — 11시에서 한 칸 내리면 정오가 되고 버튼이 오후로 뒤집힌다", () => {
+    setHourFormat("12");
+    const onChange = vi.fn();
+    const { rerender } = render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T11:00:05" fields={TIME_FIELDS} onChange={onChange} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    expect(screen.getByRole("button", { name: "오전" }).getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "시 다음" }));
+    // 12칸으로 순환하는 열이었다면 값이 오전에 머문다. 값이 정오로 간 것이 24칸의 증거다.
+    expect(onChange).toHaveBeenLastCalledWith("2026-08-12T12:00:05");
+
+    rerender(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T12:00:05" fields={TIME_FIELDS} onChange={onChange} />);
+    expect(screen.getByRole("button", { name: "오후" }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("분·초 열은 12시간제와 무관하다 — 대조군", () => {
