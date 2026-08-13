@@ -99,12 +99,24 @@ describe("SegmentedControl — 라디오 그룹", () => {
     expect(screen.getByRole("radiogroup", { name: "시간 표기" }).classList.contains("mine")).toBe(true);
   });
 
-  /* 🔴 **고른 칸은 강조색 채움이 아닙니다.** 킷에서 강조색 채움은 일곱 자리가 "행동·위치"로
-   * 쓰고 있고(오너 리포트로 겹침이 실제로 났습니다), **고름은 행동이 아니라 값**입니다.
-   * 트랙 안에 앉는 칩이라는 구조가 이미 "묶음에서 고른 것"을 말하므로, 색은 **채움이
-   * 아니라 색조**로만 씁니다. */
-  it("고른 칸이 강조색으로 통째 채워지지 않는다", () => {
-    expect(segmentedCssSource).not.toContain("background: var(--accent);");
+  /* 🔴 **고른 칸은 색으로 말하지 않습니다 — 자리로 말합니다**(오너 결정 2026-08-13).
+   * 강조색 색조를 얹은 판을 한 번 거쳤는데 오너가 **중립색** 쪽을 골랐고, 그게 설계와도
+   * 맞습니다: 색으로 말하면 강조색을 쓰는 일곱 자리와 계속 겨루고, 여기서 말해야 하는
+   * 것은 "이 묶음에서 지금 이것"이라는 **위치**이지 강조가 아닙니다.
+   *
+   * 그래서 칩에는 강조색이 **아예 안 들어갑니다**(포커스 링만 예외 — 그건 상태가 아니라
+   * 입력 장치가 어디 있는지를 말합니다). 강조색이 다시 새면 이 검사가 빨개집니다. */
+  it("고른 칸에 강조색이 안 들어간다 — 포커스 링만 예외", () => {
+    const chipRule = /\.segmented > button\[aria-checked="true"\] \{[^}]*\}/.exec(segmentedCssSource)?.[0] ?? "(칩 규칙이 없다)";
+    expect(chipRule).not.toContain("--accent");
+    expect(chipRule).toContain("background: var(--surface);");
+  });
+
+  /* "좀 더 진하게"를 **트랙 쪽에서** 얻은 것이 요점입니다 — 칩을 어둡게 하려면 색을 어느
+   * 방향으로 섞을지 정해야 하는데 그 방향이 라이트/다크에서 반대라 한쪽이 반드시
+   * 이상해집니다. 트랙만 짙게 하면 선언 하나가 두 테마에서 다 맞습니다. */
+  it("트랙이 칩보다 짙다 — 대비는 트랙 쪽에서 만든다", () => {
+    expect(segmentedCssSource).toContain("background: color-mix(in srgb, var(--surface-soft) 52%, var(--line));");
   });
 
   it("묶음이 움푹한 트랙이고 고른 칸만 떠 있다", () => {
