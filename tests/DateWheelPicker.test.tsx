@@ -5706,3 +5706,47 @@ describe("오전/오후 줄의 격자 좌표 (오너 리포트 3차)", () => {
     expect(style).toContain("--date-wheel-time-start: 1");
   });
 });
+
+// ── 팝오버 바닥 폭이 열 개수를 따라간다 (오너 리포트 2026-08-13) ──────────────
+//
+// "모바일에선 5열도 6열도 괜찮아 보이는데, 데스크톱에서 좀 문제네. 카드 사이즈를 조금 더
+// 키우면 안돼?" — 팝오버 폭은 트리거 폭에서 나오는데 데스크톱 트리거는 폼 칸 하나라
+// 좁습니다. 화면은 넓은데 6열이 292px 안에 구겨집니다.
+describe("팝오버 바닥 폭 (오너 리포트: 데스크톱에서 답답함)", () => {
+  const widthFor = (fields?: WheelUnit[], value = "2026-08-12") => {
+    render(<DateWheelPicker ariaLabel="폭" value={value} fields={fields} onChange={() => undefined} />);
+    fireEvent.click(fieldOf("폭"));
+    return (document.querySelector(".date-wheel-popover") as HTMLElement).style.width;
+  };
+
+  it("대조군: 3열 날짜 픽커는 글자 하나 안 바뀐다 — 292px 그대로", () => {
+    // 3열의 필요 폭은 204px이라 기존 바닥 292가 그대로 이깁니다. 이 검사가 없으면
+    // "넓히는 변경"이 조용히 모든 픽커를 넓힙니다.
+    expect(widthFor()).toBe("292px");
+  });
+
+  it("6열은 열이 읽히는 폭까지 넓어진다", () => {
+    // 12*2(팝오버 패딩) + 5*6(간격) + 6*(56 열최소 + 8 가장 큰 여백) = 438
+    // 트랙마다 최대 여백을 실어야 **가장 좁은 열**(시)이 56을 지킵니다 — 총합으로 더하면
+    // 그 여유가 여섯 열에 퍼져 시 열은 여전히 51px입니다(실측).
+    expect(widthFor(["year", "month", "day", "hour", "minute", "second"], "2026-08-12T15:00:05")).toBe("438px");
+  });
+
+  it("시각 전용은 경계 여백을 안 센다 — 앞에 날짜 열이 없다", () => {
+    // 24 + 1*6 + 2*(56 + 6) = 154 → 292 바닥이 이긴다
+    expect(widthFor(["hour", "minute"], "15:00")).toBe("292px");
+  });
+
+  it("연·월 픽커도 그대로다", () => {
+    expect(widthFor(["year", "month"])).toBe("292px");
+  });
+
+  /* ⚠️ **바닥 폭 계산이 CSS의 실제 값과 갈라지면 조용히 틀립니다.** 팝오버 패딩과 시각
+   * 묶음 마진은 두 곳에 각각 적혀 있고, 한쪽만 바뀌면 폭이 어긋난 채 그럴듯해 보입니다 —
+   * 이 저장소가 트레이스 패널 상수에서 이미 두 번 경고한 모양입니다. 대조합니다. */
+  it("바닥 폭이 쓰는 수는 CSS에 적힌 그 수다", () => {
+    expect(datePickerCssSource).toContain(".date-wheel-popover { position: fixed; z-index: 450; overflow-y: auto; padding: 12px;");
+    expect(datePickerCssSource).toContain('.date-wheel-column[data-unit="hour"]:not(:first-child) { margin-left: 8px; }');
+    expect(datePickerCssSource).toContain('.date-wheel-column:is([data-unit="minute"], [data-unit="second"]) { margin-left: 6px; }');
+  });
+});

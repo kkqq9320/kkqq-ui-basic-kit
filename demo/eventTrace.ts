@@ -689,6 +689,18 @@ function startTapTrace(button: Element, x: number, y: number) {
    *
    * `elementFromPoint`가 결정적인 필드입니다: **손가락 아래에 아직 그 버튼이 있는가.**
    * 좌표는 pointerdown이 준 것을 그대로 씁니다. */
+  /* 🔴 **손가락 자신의 이동** — v2가 못 보던 마지막 필드입니다. v2는 **버튼이** 움직였는지만
+   * 봤는데, 브라우저는 **손가락이** 슬롭(보통 8~15px)을 넘게 움직이면 그 탭의 click을 안
+   * 만듭니다. 실패한 캡처에서 v2의 세 필드가 전부 N/0으로 나왔으므로, 남은 읽기 둘
+   * ("손가락이 끌렸다" / "브라우저가 제스처로 삼켰다")을 가르는 것이 이 값입니다. */
+  let fingerDrift = 0;
+  const onMove = (event: PointerEvent) => {
+    const dx = (event.clientX ?? x) - x;
+    const dy = (event.clientY ?? y) - y;
+    const moved = Math.round(Math.sqrt(dx * dx + dy * dy));
+    if (moved > fingerDrift) fingerDrift = moved;
+  };
+  document.addEventListener("pointermove", onMove, true);
   let worstShift = 0;
   let leftFinger = false;
   let leftFingerAt = -1;
@@ -734,13 +746,14 @@ function startTapTrace(button: Element, x: number, y: number) {
     const endRect = button.getBoundingClientRect();
     append(`tap verdict "${label}"  click=${sawClick ? "Y" : "🔴N"}  mousedown=${sawMouseDown ? "Y" : "N"}`
       + ` mousedown막힘=${mouseDownBlocked ? "Y" : "N"}  스크롤Δ=${endTop - startTop}  버튼이동Δy(끝)=${Math.round(endRect.top - startRect.top)}`
-      + `  🔎최대이동=${worstShift}px  손가락밑을떠남=${leftFinger ? `Y(+${leftFingerAt}ms)` : "N"}  팝오버top바뀜=${popTopChanges}회  frames=${frames}`
+      + `  🔎손가락이동=${fingerDrift}px  버튼최대이동=${worstShift}px  손가락밑을떠남=${leftFinger ? `Y(+${leftFingerAt}ms)` : "N"}  팝오버top바뀜=${popTopChanges}회  frames=${frames}`
       + `  +${Math.round(performance.now() - started)}ms`);
     append(sawClick
       ? "  읽는 법: click이 났으므로 탭은 도착했습니다 — 값이 안 바뀌었다면 핸들러 쪽입니다(데모의 ── onChange 표식을 보세요)."
-      : "  🔴 읽는 법: click이 아예 안 났습니다. 손가락밑을떠남=Y면 그 시점에 버튼이 손가락 아래에서 사라진 것이고(리렌더·재배치), 최대이동≠0이면 움직였다 돌아온 것입니다. 둘 다 N이면 브라우저가 제스처로 삼킨 것입니다.");
+      : "  🔴 읽는 법: click이 아예 안 났습니다. ①손가락이동이 8px을 넘으면 브라우저가 '끌었다'로 보고 click을 안 만든 것입니다(슬롭). ②손가락밑을떠남=Y면 버튼이 손가락 아래에서 사라진 것(리렌더·재배치). ③셋 다 0/N이면 브라우저가 제스처로 삼킨 것입니다.");
     document.removeEventListener("click", onClick, true);
     document.removeEventListener("mousedown", onMouseDown, true);
+    document.removeEventListener("pointermove", onMove, true);
   }, 700);
   void timer;
 }

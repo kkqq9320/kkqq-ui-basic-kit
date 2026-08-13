@@ -359,6 +359,18 @@
  * ⚠️ **불투명 배경이 필요합니다.** 팝오버 표면은 반투명 유리라, 배경이 없으면 아래로
  * 지나가는 휠 숫자가 버튼 위로 비칩니다. */
 .date-wheel-actions { position: sticky; z-index: 1; bottom: -12px; display: flex; justify-content: flex-end; gap: 6px; margin: 0 -12px -12px; padding: 10px 12px 12px; border-top: 1px solid color-mix(in srgb, var(--line) 68%, transparent); background: var(--surface); }
+/* 🔴 **`touch-action: manipulation` — 이 버튼들에 더블탭 줌 제스처를 붙이지 않습니다.**
+ *
+ * 오너 실기기 캡처(2026-08-13)에서 "지금"을 탭했는데 **mousedown·mouseup·click이 하나도
+ * 안 난** 경우가 잡혔습니다. 프로브가 같이 잰 것: 버튼은 안 움직였고(최대이동 0px),
+ * 손가락 밑을 떠나지도 않았고, 팝오버는 재배치되지 않았고, `touchcancel`도 없었습니다.
+ * 남는 읽기는 **브라우저가 그 터치를 제스처로 삼켰다** 하나입니다.
+ *
+ * ⚠️ **이것이 그 결함의 확인된 고침이라고 주장하지 않습니다.** 기전을 아직 못 박았습니다
+ * (다음 캡처가 손가락 자체의 이동을 잽니다). 다만 버튼에 더블탭 줌 판정을 남겨 둘 이유가
+ * 애초에 없고, 그 판정이 클릭을 삼키는 경로 중 하나인 것은 사실이라 **여기서 지웁니다.**
+ * 아니어도 손해가 없고, 맞으면 이 줄이 답입니다. */
+.date-wheel-actions button, .date-wheel-meridiem button { touch-action: manipulation; }
 .date-wheel-actions button { min-width: var(--compact-action-min-width); height: var(--compact-action-height); display: inline-flex; align-items: center; justify-content: center; padding: 0 11px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: var(--surface); font-size: var(--action-font-size); font-weight: 700; }
 .date-wheel-actions .primary { color: #fff; border-color: var(--accent); background: var(--accent); }
 /* 호버는 **`.primary`를 빼고** 걸어야 합니다. 예전에는 `.date-wheel-actions button:hover`
