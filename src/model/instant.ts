@@ -572,17 +572,30 @@ export function lastDayOf(year: number, monthIndex: number) {
 export function withUnitValue(value: string, unit: DateWheelUnit, amount: number, fields: WheelUnit[] = DEFAULT_FIELDS, step?: WheelStep): string {
   const parts = parseValue(value, fields);
   if (!parts) return value;
-  // 격자에 안 얹힌 값은 **내립니다**(스펙 §8). 일은 아래에서 목적지 달의 말일로 한 번 더
-  // 잘리는데, 순서가 이래야 합니다 — 말일로 자른 뒤 내리면 격자 밖 값이 남습니다.
+  // 격자에 안 얹힌 값은 **내립니다**(스펙 §8).
   const next = { ...parts, [unit]: snapToStep(unit, amount, step) };
   if (unit === "day") {
     // 일은 스스로도 상한 검증이 필요합니다 — 타이핑이 다른 달의 말일보다 큰
     // 값을 칠 수 있습니다(4월에 "31"). 연·월과 달리 열 자신이 그 상한을 결정합니다.
-    next.day = Math.min(amount, lastDayOf(parts.year, parts.month - 1));
+    //
+    // 🔴 **자른 뒤에 격자로 내립니다 — 순서가 반대면 격자 밖 값이 남습니다.**
+    // 여기 한동안 `Math.min(amount, …)`가 있었는데, 그건 위에서 스냅한 값을 버리고
+    // **원래 친 수를 다시 쓰는** 것이라 일 열이 `step`을 통째로 무시했습니다(4월에
+    // 일 step 5로 `9`를 치면 6이 아니라 9). 오너가 문서의 한 문장을 의심해서 재보다
+    // 잡았습니다.
+    //
+    // 이 순서라야 **말일이 격자 밖일 때도 값이 격자 위에 남습니다.** 스펙 §8은 상한을
+    // 끝점으로 넣지 않습니다 — 분 step 7의 열이 `0…56` 다음 바로 `0`으로 순환하지 59를
+    // 끼워 넣지 않는 것과 같은 규칙입니다. 2월에 일 step 5면 열이 `1·6·11·16·21·26`이고
+    // 여기서 `31`을 쳐도 **26**입니다(28이 아닙니다). 28은 **휠이 내줄 수 없는 값**이라
+    // 거기 앉으면 위로 한 칸이 1로 튑니다(실측).
+    next.day = snapToStep("day", Math.min(amount, lastDayOf(parts.year, parts.month - 1)), step);
   } else if (unit === "year" || unit === "month") {
     // 일은 연·월에 의존합니다(§3.1의 유일한 단위 간 의존) — 연·월이 바뀌어
-    // 일이 더는 유효하지 않으면 목적지 달의 말일로 자릅니다.
-    next.day = Math.min(parts.day, lastDayOf(next.year, next.month - 1));
+    // 일이 더는 유효하지 않으면 목적지 달의 말일로 자릅니다. 여기도 **자른 뒤에**
+    // 내립니다(같은 이유). `step`이 없으면 `snapToStep`이 인자를 그대로 돌려주므로
+    // 지금까지의 동작과 글자 하나 안 바뀝니다.
+    next.day = snapToStep("day", Math.min(parts.day, lastDayOf(next.year, next.month - 1)), step);
   }
   return serializeValue(next, fields);
 }
