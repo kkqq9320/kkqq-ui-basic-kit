@@ -3192,7 +3192,9 @@ describe("DateWheelPicker 단축키", () => {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} />);
     fireEvent.click(fieldOf("거래 날짜"));
     const heading = screen.getByRole("dialog", { name: "거래 날짜 선택" }).querySelector(".date-wheel-heading span");
-    expect(heading?.textContent).toBe("휠·스와이프·방향키·숫자 입력 · Ctrl+; 오늘");
+    // 오너 리포트 4번으로 "길게 눌러 초기화"가 들어왔다 — 그 제스처는 화면에 다른 단서가
+    // 하나도 없어서 이 줄이 유일한 발견 경로다(진행 막대는 이미 누른 사람에게만 보인다).
+    expect(heading?.textContent).toBe("휠·스와이프·방향키·숫자 입력 · 길게 눌러 초기화 · Ctrl+; 오늘");
   });
 
   // 리뷰 Finding 4 — title은 마우스 hover에만 뜬다. 단축키가 필요한 사람(키보드
@@ -5469,5 +5471,127 @@ describe("시각 묶음 경계 여백 (오너 리포트 5번)", () => {
     fireEvent.click(fieldOf("시각만"));
     const units = [...document.querySelectorAll(".date-wheel-column")].map((column) => column.getAttribute("data-unit"));
     expect(units.indexOf("hour")).toBe(0);
+  });
+});
+
+// ── 오너 리포트 4번 — 휠의 행을 2초 길게 누르면 그 열이 초기화된다 ────────────
+//
+// 제스처가 **± 버튼이 아니라 행**인 것은 오너 결정이다: ± 버튼에 걸면 그 버튼이 나중에
+// "꾹 눌러 연속 증감"을 가질 수 없게 되고, 그건 되돌릴 수 없는 문이다.
+describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () => {
+  const HOLD_MS = 2000;
+
+  const openTime = (value: string, onChange = vi.fn()) => {
+    render(<DateWheelPicker ariaLabel="거래 시각" value={value} fields={TIME_FIELDS} onChange={onChange} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    return onChange;
+  };
+  const rowOf = (unitLabel: string, offset: number) => {
+    const column = screen.getByRole("group", { name: (name: string) => name.startsWith(unitLabel) });
+    return column.querySelectorAll(".date-wheel-values button")[offset + 3] as HTMLElement;
+  };
+
+  it("초 열의 행을 2초 누르면 초가 0이 된다", () => {
+    vi.useFakeTimers();
+    const onChange = openTime("2026-08-12T15:07:41");
+    const row = rowOf("초", 0);
+    pointer("pointerDown", row, { pointerId: 1, clientY: 100, button: 0, isPrimary: true });
+    act(() => { vi.advanceTimersByTime(HOLD_MS); });
+    expect(onChange).toHaveBeenLastCalledWith("2026-08-12T15:07:00");
+  });
+
+  it("임계 전에 떼면 초기화가 아니라 평범한 행 클릭이다 — 오너 선택", () => {
+    vi.useFakeTimers();
+    const onChange = openTime("2026-08-12T15:07:41");
+    const row = rowOf("초", 1);   // 한 칸 아래 행
+    pointer("pointerDown", row, { pointerId: 2, clientY: 100, button: 0, isPrimary: true });
+    act(() => { vi.advanceTimersByTime(HOLD_MS - 400); });
+    pointer("pointerUp", row, { pointerId: 2, clientY: 100 });
+    fireEvent.click(row);
+    expect(onChange).toHaveBeenLastCalledWith("2026-08-12T15:07:42");
+  });
+
+  /* 임계를 넘겨 초기화가 걸린 **뒤** 손을 떼면, 그 손 떼기가 만드는 클릭이 행의 평범한
+   * 이동으로 또 한 번 값을 바꾸면 안 된다. 이 파일에는 이미 그 억제 장치가 있다
+   * (`suppressColumnClickRef` — 스와이프가 같은 문제를 갖는다). 같은 것을 쓴다. */
+  it("초기화가 걸린 뒤의 손 떼기는 행 클릭으로 두 번 세지 않는다", () => {
+    vi.useFakeTimers();
+    const onChange = openTime("2026-08-12T15:07:41");
+    pointer("pointerDown", rowOf("초", 1), { pointerId: 3, clientY: 100, button: 0, isPrimary: true });
+    act(() => { vi.advanceTimersByTime(HOLD_MS); });
+    /* 🔴 **행을 다시 찾아야 합니다.** 초기화가 `markColumnMotion`을 타면 값 컨테이너의
+     * `key`가 `${unit}-${sequence}`라 **행 일곱 개가 리마운트**됩니다 — 처음에 잡아 둔
+     * 노드는 DOM에서 떨어져 나가고, 거기에 클릭을 쏘면 열의 `onClickCapture`에 닿지도
+     * 못합니다. 처음엔 그 죽은 노드를 클릭하고 있었고, **억제 장치를 통째로 지워도
+     * 0 red였습니다**(뮤테이션으로 확인). 공허한 검사의 여섯 번째 형태: **리마운트된
+     * 뒤에 옛 노드를 조작한다.** */
+    const live = rowOf("초", 1);
+    pointer("pointerUp", live, { pointerId: 3, clientY: 100 });
+    fireEvent.click(live);
+    expect(onChange).toHaveBeenLastCalledWith("2026-08-12T15:07:00");
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  /* 🔴 **이 검사는 반드시 `pointer()` 헬퍼를 써야 합니다** — 이 파일이 그 이유를 위에
+   * 적어 뒀는데 제가 그대로 밟았습니다. 평범한 `fireEvent.pointerMove(el, { clientY })`는
+   * jsdom에서 **좌표도 pointerId도 안 실립니다**(실측: 둘 다 `undefined`로 도착).
+   * 그러면 이동 거리 비교가 `NaN > 4`가 되어 **언제나 거짓**이고, 취소가 안 걸리는 것을
+   * "구현이 없다"로 읽게 됩니다. 실제 브라우저에서는 좌표가 오므로 코드는 멀쩡했습니다. */
+  it("손가락이 움직이면 스와이프이지 길게 누르기가 아니다", () => {
+    vi.useFakeTimers();
+    const onChange = openTime("2026-08-12T15:07:41");
+    const row = rowOf("초", 0);
+    pointer("pointerDown", row, { pointerId: 4, clientY: 100, button: 0, isPrimary: true });
+    pointer("pointerMove", row, { pointerId: 4, clientY: 140, buttons: 1 });
+    act(() => { vi.advanceTimersByTime(HOLD_MS); });
+    // 스와이프가 만든 값은 있을 수 있지만, 초가 0으로 간 적은 없어야 한다.
+    expect(onChange.mock.calls.map((call) => String(call[0]))).not.toContain("2026-08-12T15:07:00");
+  });
+
+  it("연도 열은 바닥이 없으므로 지금 연도로 간다 — 오너 결정", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2031-05-08T15:00:00Z"));   // = Asia/Seoul 2031-05-09
+    const onChange = openTime("2026-08-12T15:07:41");
+    const row = rowOf("연도", 0);
+    pointer("pointerDown", row, { pointerId: 5, clientY: 100, button: 0, isPrimary: true });
+    act(() => { vi.advanceTimersByTime(HOLD_MS); });
+    expect(onChange).toHaveBeenLastCalledWith("2031-08-12T15:07:41");
+  });
+
+  it("월·일은 1로 간다", () => {
+    vi.useFakeTimers();
+    const onChange = openTime("2026-08-12T15:07:41");
+    pointer("pointerDown", rowOf("월", 0), { pointerId: 6, clientY: 100, button: 0, isPrimary: true });
+    act(() => { vi.advanceTimersByTime(HOLD_MS); });
+    expect(onChange).toHaveBeenLastCalledWith("2026-01-12T15:07:41");
+  });
+
+  it("누르는 동안 그 열에 표시가 붙고, 떼면 사라진다 — 없으면 아무도 이 기능을 못 찾는다", () => {
+    vi.useFakeTimers();
+    openTime("2026-08-12T15:07:41");
+    const row = rowOf("초", 0);
+    const column = row.closest(".date-wheel-column")!;
+    expect(column.classList.contains("holding")).toBe(false);
+    pointer("pointerDown", row, { pointerId: 7, clientY: 100, button: 0, isPrimary: true });
+    expect(column.classList.contains("holding")).toBe(true);
+    pointer("pointerUp", row, { pointerId: 7, clientY: 100 });
+    expect(column.classList.contains("holding")).toBe(false);
+  });
+
+  it("이미 그 값이면 아무 일도 안 일어난다", () => {
+    vi.useFakeTimers();
+    const onChange = openTime("2026-08-12T15:07:00");
+    pointer("pointerDown", rowOf("초", 0), { pointerId: 8, clientY: 100, button: 0, isPrimary: true });
+    act(() => { vi.advanceTimersByTime(HOLD_MS); });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("± 버튼을 길게 눌러도 초기화가 아니다 — 그 제스처는 비워 둔다", () => {
+    vi.useFakeTimers();
+    const onChange = openTime("2026-08-12T15:07:41");
+    const step = screen.getByRole("button", { name: "초 이전" });
+    pointer("pointerDown", step, { pointerId: 9, clientY: 100, button: 0, isPrimary: true });
+    act(() => { vi.advanceTimersByTime(HOLD_MS); });
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

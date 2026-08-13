@@ -76,6 +76,26 @@ export function meridiemOf(value: string, fields: WheelUnit[]): "am" | "pm" | nu
  *
  *  부호가 있는 이유는 화면입니다: 열은 오전 00…11 다음에 오후 12…23이 오는 24칸이라,
  *  오후로 갈 때는 아래로, 오전으로 되돌릴 때는 위로 도는 것이 눈에 맞습니다. */
+/** 열의 행을 길게 눌렀을 때 그 열이 갈 값(오너 리포트 4번, 오너 결정 2026-08-13).
+ *
+ * **모든 열은 바닥값으로, 연도만 지금 연도로.** 연도에는 바닥이 없어서입니다 — "0년"은
+ * 뜻이 없고, 아무 상수나 정하면 그건 값 규칙이 아니라 임의값입니다.
+ *
+ * 판정이 여기 있는 이유는 §3.2입니다. "연도만 예외"도 "월·일은 1이고 시·분·초는 0"도
+ * 전부 값 지식이라 기계가 알면 안 됩니다 — 기계는 이 함수를 부르고 `null`이면
+ * 아무것도 안 합니다.
+ *
+ * `nowValue`는 기계가 `now(timeZone, fields)`로 얻어 넘깁니다. 이 파일은 시간대를
+ * 모르고, 알 필요도 없습니다.
+ *
+ * ⚠️ 길게 누르기를 **행**에 걸기로 한 것은 오너 결정입니다 — ± 버튼에 걸면 그 버튼이
+ * 나중에 "꾹 눌러 연속 증감"을 가질 수 없게 되고, 그건 되돌릴 수 없는 문입니다. */
+export function resetTarget(unit: WheelUnit, nowValue: string, fields: WheelUnit[]): number | null {
+  if (unit !== "year") return unitFloor(unit);
+  const parts = parseValue(nowValue, fields);
+  return parts ? parts.year : null;
+}
+
 export const MERIDIEM_NOTCHES = 12;
 
 /** 오전/오후가 움직이는 열. **이름이 모델에 있는 이유는 §3.2입니다** — 기계는 어느
@@ -828,6 +848,9 @@ export type WheelModel = {
   /** 오전/오후 조작이 존재하는가 + 지금 어느 절반인가(3단계, 스펙 §7). 시 열이 없으면
    *  `null` — `family`와 같은 이유로 여기 있습니다(기계가 단위 이름을 알지 않게). */
   meridiem(value: string, fields: WheelUnit[]): "am" | "pm" | null;
+  /** 행을 길게 눌렀을 때 그 열이 갈 값(오너 리포트 4번). 연도만 "지금", 나머지는 바닥값.
+   *  `null`이면 기계는 아무것도 하지 않습니다. */
+  resetTarget(unit: WheelUnit, nowValue: string, fields: WheelUnit[]): number | null;
 };
 
 /* 기계가 이 객체 하나만 보고 돌게 하는 것이 목적입니다. 기간(duration) 모델이
@@ -854,4 +877,5 @@ export const instantModel: WheelModel = {
   parts: parseValue,
   family: familyOf,
   meridiem: meridiemOf,
+  resetTarget,
 };

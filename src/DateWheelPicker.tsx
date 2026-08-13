@@ -98,8 +98,11 @@ export type DateWheelLabels = {
 
 export const DEFAULT_DATE_WHEEL_LABELS: DateWheelLabels = {
   placeholder: "날짜 선택",
-  hint: "휠·스와이프·방향키·숫자 입력 · Ctrl+; 오늘",
-  hintNow: "휠·스와이프·방향키·숫자 입력 · Ctrl+; 지금",
+  /* "길게 눌러 초기화"가 여기 있는 이유: 그 제스처는 **화면에 아무 단서가 없습니다.**
+   * 누르기 시작하면 열 바닥에 진행 막대가 뜨지만, 그건 이미 누른 사람에게만 보입니다 —
+   * 안내가 없으면 아무도 처음 한 번을 안 눌러 봅니다(오너 리포트 4번). */
+  hint: "휠·스와이프·방향키·숫자 입력 · 길게 눌러 초기화 · Ctrl+; 오늘",
+  hintNow: "휠·스와이프·방향키·숫자 입력 · 길게 눌러 초기화 · Ctrl+; 지금",
   today: "오늘",
   now: "지금",
   clear: "비우기",
@@ -116,6 +119,11 @@ export const DEFAULT_DATE_WHEEL_LABELS: DateWheelLabels = {
 };
 
 /** 양끝 ±3은 보이지 않지만 미리 그려두는 프리로드 행입니다. */
+/** 휠의 행을 이만큼 누르고 있으면 그 열이 초기화됩니다(오너 리포트 4번, 오너 결정
+ *  2026-08-13: 2초). 보통 앱의 롱프레스는 500~700ms이고 2초는 길게 느껴집니다 —
+ *  오너가 그 값을 알고 고른 것이라 그대로 둡니다. 바꾸려면 여기 하나만 고치면 됩니다. */
+const DATE_WHEEL_HOLD_MS = 2000;
+
 const DATE_WHEEL_OFFSETS = [-3, -2, -1, 0, 1, 2, 3];
 /**
  * 열의 휠 이동 모션. **필드 셋이 서로 다른 것을 몰고 있고, 그게 요점입니다.**
@@ -946,6 +954,60 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 하는 것과 **같은 판정, 같은 함수**입니다. 별도 규칙을 만들지 않습니다. */
   const meridiemShift = meridiem ? shifted(MERIDIEM_UNIT, meridiemDirection) : null;
   function flipMeridiem() { applyShift(MERIDIEM_UNIT, meridiemDirection); }
+
+  /* 🔴 **행을 길게 누르면 그 열이 초기화됩니다**(오너 리포트 4번, 오너 결정 2026-08-13).
+   * 모든 열은 바닥값으로, **연도만 지금 연도로** — 연도에는 바닥이 없습니다. 목적지는
+   * 전부 `model.resetTarget`이 정합니다(§3.2: 기계는 "월이 1부터"를 모릅니다).
+   *
+   * **제스처가 ± 버튼이 아니라 행인 것이 요점입니다.** ± 버튼에 걸면 그 버튼은 나중에
+   * "꾹 눌러 연속 증감"을 영영 가질 수 없습니다 — 같은 제스처를 두 뜻으로 쓸 수 없어서
+   * 되돌릴 수 없는 문이고, 오너가 그걸 알고 행 쪽을 골랐습니다.
+   *
+   * **여러 칸을 건너뛰므로 휠 슬라이드를 재생합니다** — `오늘`/`지금`과 같은 이유이고
+   * (오너 리포트: "선택한 애니메이션이 없이 바뀌어서 어색해") 같은 `markColumnMotion`을
+   * 지납니다.
+   *
+   * ⚠️ **손 떼기가 만드는 행 클릭을 억제해야 합니다.** 안 그러면 초기화 뒤에 그 행의
+   * 평범한 이동이 한 번 더 붙어 값이 두 번 바뀝니다. 스와이프가 이미 같은 문제를 갖고
+   * 있어 `suppressColumnClickRef`가 있습니다 — **새 장치를 만들지 않고 그것을 씁니다.** */
+  const holdRef = useRef<{ unit: DateWheelUnit; pointerId: number; y: number; timer: number } | null>(null);
+  /* ⚠️ **누르고 있다는 표시는 상태입니다. `classList.add`가 아닙니다.** 이 열의
+   * `className`은 React가 매 렌더 통째로 다시 쓰므로, 직접 붙인 클래스는 바로 다음
+   * 렌더에 조용히 사라집니다 — 그리고 `pointerdown` 핸들러가 `setActiveUnit`을 부르므로
+   * 그 렌더는 **거의 언제나 일어납니다.** 처음에 `classList`로 붙였다가 검사가 잡았습니다. */
+  const [holdingUnit, setHoldingUnit] = useState<DateWheelUnit | null>(null);
+
+  function cancelHold() {
+    const hold = holdRef.current;
+    setHoldingUnit(null);
+    if (!hold) return;
+    window.clearTimeout(hold.timer);
+    holdRef.current = null;
+  }
+
+  function armHold(unit: DateWheelUnit, pointerId: number, y: number) {
+    cancelHold();
+    setHoldingUnit(unit);
+    const timer = window.setTimeout(() => {
+      holdRef.current = null;
+      setHoldingUnit(null);
+      // 손 떼기가 만드는 클릭이 행의 평범한 이동으로 또 값을 바꾸지 않게 합니다.
+      suppressColumnClickRef.current = true;
+      swipeRef.current = null;
+      setTyping(null);
+      const target = model.resetTarget(unit, model.now(timeZone, fields), fields);
+      if (target === null) return;
+      const from = model.parts(baseValue, fields);
+      const next = clampToRange(model.setUnit(baseValue, unit, target, fields));
+      if (!model.isValid(next, fields) || next === baseValue) return;
+      if (from) markColumnMotion(unit, Math.sign(target - from[unit]));
+      onChange(next);
+    }, DATE_WHEEL_HOLD_MS);
+    holdRef.current = { unit, pointerId, y, timer };
+  }
+
+  // 언마운트로 타이머가 살아남지 않게 합니다 — 사라진 필드에 onChange를 보내는 자리입니다(§4.2).
+  useEffect(() => cancelHold, []);
 
   /* 12시간제에서 **시 열에 친 숫자는 값이 아니라 읽기**입니다(3단계, 스펙 §7) —
    * 오후에 `3`을 치면 15시입니다. 어느 절반인지는 지금 값이 정하므로, 타이핑 경로
@@ -1792,7 +1854,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
 
             `onPointerDown`의 `setActiveUnit(unit)`이 **포인터 경로가 활성 세그먼트를 따라가는
             유일한 길**입니다(열의 `onFocus`가 하던 일). 지우지 마세요. */}
-        {columns.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}`} aria-label={columnName(unit)} data-unit={unit} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {columns.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}${holdingUnit === unit ? " holding" : ""}`} aria-label={columnName(unit)} data-unit={unit} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; armHold(unit, event.pointerId, event.clientY); }} onPointerMove={(event) => { const hold = holdRef.current; if (hold && hold.pointerId === event.pointerId && Math.abs(event.clientY - hold.y) > 4) cancelHold(); moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget); }} onPointerUp={(event) => { cancelHold(); finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget); }} onPointerCancel={(event) => { cancelHold(); swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이

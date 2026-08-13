@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits, familyOf, parseValue, serializeValue, isContiguous, comparisonPrecision, usableBound, outOfRange, clampToRange, meridiemOf, hourFromTwelve, twelveHourText } from "../src/model/instant";
+import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits, familyOf, parseValue, serializeValue, isContiguous, comparisonPrecision, usableBound, outOfRange, clampToRange, meridiemOf, hourFromTwelve, twelveHourText, resetTarget } from "../src/model/instant";
 import type { WheelUnit } from "../src/model/instant";
 
 const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
@@ -738,5 +738,47 @@ describe("hourFromTwelve — 친 숫자는 읽기이지 값이 아니다 (3단�
     expect(hourFromTwelve(3, "am")).toBe(3);
     expect(hourFromTwelve(3, "pm")).toBe(15);
     expect(hourFromTwelve(11, "pm")).toBe(23);
+  });
+});
+
+// ── 오너 리포트 4번 — 길게 눌러 그 열을 초기화 (2026-08-13 오너 결정) ──────────
+//
+// "초를 0초로 설정하는 기능이 있어야겠다" → 제스처는 **휠의 행을 길게 누르기**(± 버튼이
+// 아님 — 그래야 ± 버튼이 나중에 '꾹 눌러 연속 증감'을 가질 수 있다), 임계 2초,
+// **모든 열의 바닥값**, 다만 **연도는 바닥이 없으므로 현재 연도**.
+//
+// 판정이 모델에 있는 이유는 §3.2다: "연도만 예외"도 "월·일은 1이고 시·분·초는 0"도
+// 전부 값 지식이라, 기계가 알면 안 된다.
+describe("resetTarget — 길게 눌러 초기화할 목적지 (오너 리포트 4번)", () => {
+  const F: WheelUnit[] = ["year", "month", "day", "hour", "minute", "second"];
+  const NOW = "2031-05-09T07:08:09";
+
+  it("시·분·초는 0이다", () => {
+    expect(resetTarget("hour", NOW, F)).toBe(0);
+    expect(resetTarget("minute", NOW, F)).toBe(0);
+    expect(resetTarget("second", NOW, F)).toBe(0);
+  });
+
+  it("월·일은 1이다 — 0월도 0일도 없다", () => {
+    expect(resetTarget("month", NOW, F)).toBe(1);
+    expect(resetTarget("day", NOW, F)).toBe(1);
+  });
+
+  it("연도만 예외다 — 바닥값이 없으므로 지금 연도로 간다(오너 결정)", () => {
+    expect(resetTarget("year", NOW, F)).toBe(2031);
+  });
+
+  it("연도는 '지금'을 못 읽으면 목적지가 없다", () => {
+    // 기계는 이 null을 "아무 일도 안 함"으로 읽는다 — 엉뚱한 연도로 가는 것보다 낫다.
+    expect(resetTarget("year", "망가진 값", F)).toBe(null);
+  });
+
+  it("연도가 아닌 열은 '지금'과 무관하다 — 대조군", () => {
+    expect(resetTarget("second", "망가진 값", F)).toBe(0);
+  });
+
+  it("instantModel을 지나서도 같다 — 기계가 부르는 경로", () => {
+    expect(instantModel.resetTarget("second", NOW, F)).toBe(0);
+    expect(instantModel.resetTarget("year", NOW, F)).toBe(2031);
   });
 });

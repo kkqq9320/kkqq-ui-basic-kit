@@ -203,7 +203,7 @@
  * 1개로 정해지면 ±2가 화면 밖인데도 `aria-hidden`이 안 붙습니다 — **정해질 때 같이
  * 고쳐야 합니다.** 실험 변형에만 있는 어긋남이라 데모에서만 보입니다. */
 .date-wheel-column { --date-wheel-rows-h: 150px; --date-wheel-rest: -30px; }
-.date-wheel-column { width: 100%; min-width: 0; height: calc(var(--date-wheel-rows-h) + 62px); display: grid; grid-template-rows: 30px var(--date-wheel-rows-h) 30px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--line) 82%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--surface-soft) 78%, transparent); outline: none; touch-action: none; user-select: none; transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease; }
+.date-wheel-column { width: 100%; min-width: 0; height: calc(var(--date-wheel-rows-h) + 62px); display: grid; grid-template-rows: 30px var(--date-wheel-rows-h) 30px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--line) 82%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--surface-soft) 78%, transparent); outline: none; touch-action: none; user-select: none; -webkit-touch-callout: none; transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease; }
 /* 진입 시차 — 열마다 다른 것은 **이것 하나뿐**입니다. `animation-delay`를 별도 규칙으로
  * 주면 그 규칙이 아래 이동 규칙보다 특이도가 높아져 **커밋 프레임의 슬라이드에까지**
  * 지연이 붙습니다. 커스텀 프로퍼티로 주면 진입 규칙이 하나로 유지돼 그 문제가 없습니다.
@@ -246,7 +246,7 @@
  * ⚠️ **`:`가 열 **안쪽**에 있는 것은 `.date-wheel-column`이 `overflow: hidden`이라
  * 그렇습니다** — 간격(6px)으로 내보내면 잘립니다. 폭이 아주 좁으면 가운데 정렬된 숫자와
  * 가까워질 수 있어 **실기기 확인 항목**입니다. */
-.date-wheel-column[data-unit="minute"], .date-wheel-column[data-unit="second"] { position: relative; }
+.date-wheel-column { position: relative; }
 .date-wheel-column:is([data-unit="minute"], [data-unit="second"])::before {
   content: ":"; position: absolute; z-index: 1; left: 2px; top: calc(30px + var(--date-wheel-rows-h) / 2);
   transform: translateY(-50%); color: var(--muted); font-size: var(--font-size-control); font-weight: 700; line-height: 1; pointer-events: none;
@@ -289,6 +289,16 @@
 .date-wheel-values button.selected { color: #fff; background: var(--accent); box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 24%, transparent); font-weight: 800; transform: scale(1.025); }
 .date-wheel-column:is(.moving-next, .moving-previous) .date-wheel-values button.selected { animation: date-wheel-selected-pop 230ms cubic-bezier(.18, 1.15, .35, 1); }
 .date-wheel-values button:disabled { color: transparent; cursor: default; }
+
+/* 🔴 **길게 누르는 동안 보이는 표시**(오너 리포트 4번). 없으면 아무도 이 기능을 못 찾고,
+ * 찾은 사람도 "얼마나 더 눌러야 하나"를 모릅니다 — 2초는 피드백 없이 기다리기에 깁니다.
+ *
+ * 열 바닥의 2px 막대가 임계 시간에 맞춰 자랍니다. **애니메이션 길이는 컴포넌트의
+ * `DATE_WHEEL_HOLD_MS`와 같아야 합니다** — 어긋나면 막대가 다 찼는데 아직 안 걸리거나,
+ * 걸렸는데 막대가 덜 찬 채로 사라집니다. 그래서 그 값을 여기 적어 둡니다(2000ms).
+ * ⚠️ 한쪽만 바꾸면 조용히 거짓말하는 표시가 됩니다. */
+.date-wheel-column.holding::after { content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--accent); border-radius: 0 2px 2px 0; animation: date-wheel-hold 2000ms linear forwards; }
+@keyframes date-wheel-hold { to { width: 100%; } }
 
 /* 액션 행은 팝오버 바닥에 **붙습니다.**
  *
@@ -346,4 +356,7 @@
   .date-wheel-values,
   .date-wheel-column:is(.moving-next, .moving-previous) .date-wheel-values,
   .date-wheel-column:is(.moving-next, .moving-previous) .date-wheel-values button.selected { animation: none; transition: none; }
+  /* ⚠️ **누름 표시는 장식이 아니라 진행 상태입니다** — 여기서 지우면 2초를 아무 신호 없이
+   * 기다리게 됩니다. 움직임만 없애고 **표시는 남깁니다**(누르는 순간 가득 찬 막대). */
+  .date-wheel-column.holding::after { width: 100%; animation: none; }
 }
