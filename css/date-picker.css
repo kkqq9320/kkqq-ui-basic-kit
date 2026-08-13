@@ -342,7 +342,7 @@
  * `DATE_WHEEL_HOLD_MS`와 같아야 합니다** — 어긋나면 막대가 다 찼는데 아직 안 걸리거나,
  * 걸렸는데 막대가 덜 찬 채로 사라집니다. 그래서 그 값을 여기 적어 둡니다(2000ms).
  * ⚠️ 한쪽만 바꾸면 조용히 거짓말하는 표시가 됩니다. */
-.date-wheel-column.holding::after { content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--accent); border-radius: 0 2px 2px 0; animation: date-wheel-hold 2000ms linear forwards; }
+.date-wheel-column.holding::after { content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--accent); border-radius: 0 2px 2px 0; animation: date-wheel-hold 700ms linear forwards; }
 @keyframes date-wheel-hold { to { width: 100%; } }
 
 /* 액션 행은 팝오버 바닥에 **붙습니다.**

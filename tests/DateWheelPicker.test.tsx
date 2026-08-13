@@ -3208,7 +3208,7 @@ describe("DateWheelPicker 단축키", () => {
     const heading = screen.getByRole("dialog", { name: "거래 날짜 선택" }).querySelector(".date-wheel-heading span");
     // 오너 리포트 4번으로 "길게 눌러 초기화"가 들어왔다 — 그 제스처는 화면에 다른 단서가
     // 하나도 없어서 이 줄이 유일한 발견 경로다(진행 막대는 이미 누른 사람에게만 보인다).
-    expect(heading?.textContent).toBe("휠·스와이프·방향키·숫자 입력 · 길게 눌러 초기화 · Ctrl+; 오늘");
+    expect(heading?.textContent).toBe("휠·스와이프·방향키·숫자 입력 · 가운데 두 번 탭하면 초기화 · Ctrl+; 오늘");
   });
 
   // 리뷰 Finding 4 — title은 마우스 hover에만 뜬다. 단축키가 필요한 사람(키보드
@@ -5504,7 +5504,10 @@ describe("시각 묶음 경계 여백 (오너 리포트 5번)", () => {
 // 제스처가 **± 버튼이 아니라 행**인 것은 오너 결정이다: ± 버튼에 걸면 그 버튼이 나중에
 // "꾹 눌러 연속 증감"을 가질 수 없게 되고, 그건 되돌릴 수 없는 문이다.
 describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () => {
-  const HOLD_MS = 2000;
+  // 오너 리포트 5차로 2000 → 700ms. 소스의 `DATE_WHEEL_HOLD_MS`와 같은 수여야 하고,
+  // 아래 "임계 전에 떼면"은 이 값에서 400을 빼므로 임계가 바뀌면 그 검사가 먼저 깨집니다 —
+  // 실제로 깨져서 알았습니다. 그게 이 상수를 검사에 둔 값어치입니다.
+  const HOLD_MS = 700;
 
   const openTime = (value: string, onChange = vi.fn()) => {
     render(<DateWheelPicker ariaLabel="거래 시각" value={value} fields={TIME_FIELDS} onChange={onChange} />);
@@ -5530,7 +5533,7 @@ describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () =
     const onChange = openTime("2026-08-12T15:07:41");
     const row = rowOf("초", 1);   // 한 칸 아래 행
     pointer("pointerDown", row, { pointerId: 2, clientY: 100, button: 0, isPrimary: true });
-    act(() => { vi.advanceTimersByTime(HOLD_MS - 400); });
+    act(() => { vi.advanceTimersByTime(HOLD_MS - 300); });
     pointer("pointerUp", row, { pointerId: 2, clientY: 100 });
     fireEvent.click(row);
     expect(onChange).toHaveBeenLastCalledWith("2026-08-12T15:07:42");
@@ -5748,5 +5751,99 @@ describe("팝오버 바닥 폭 (오너 리포트: 데스크톱에서 답답함)"
     expect(datePickerCssSource).toContain(".date-wheel-popover { position: fixed; z-index: 450; overflow-y: auto; padding: 12px;");
     expect(datePickerCssSource).toContain('.date-wheel-column[data-unit="hour"]:not(:first-child) { margin-left: 8px; }');
     expect(datePickerCssSource).toContain('.date-wheel-column:is([data-unit="minute"], [data-unit="second"]) { margin-left: 6px; }');
+  });
+});
+
+// ── 오너 리포트 5차 — 더블탭으로도 초기화, 그리고 홀드가 너무 느리다 ─────────────
+//
+// "지금 홀드로 0이나 1로 설정하는 게 너무 느린데" → 2000ms를 700ms로.
+// "더블탭으로 0이나 1로 할 수 있게 해" → **가운데(선택된) 행**을 두 번 탭하면 초기화.
+//
+// 🔴 **왜 가운데 행만인가.** 오프셋 행을 연달아 탭하는 것은 **이미 뜻이 있는 조작**입니다 —
+// 여러 칸을 빠르게 움직이는 방법이고, 거기에 더블탭을 얹으면 그 조작이 사라집니다.
+// 반면 **가운데 행 탭은 지금도 아무 일도 안 합니다**(자기 자신으로 이동 = 무변화).
+// 비어 있는 제스처라 뺏을 것이 없습니다.
+describe("DateWheelPicker 더블탭 초기화 (오너 리포트 5차)", () => {
+  const openTime = (value: string, onChange = vi.fn()) => {
+    render(<DateWheelPicker ariaLabel="거래 시각" value={value} fields={TIME_FIELDS} onChange={onChange} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    return onChange;
+  };
+  const centre = (unitLabel: string) => {
+    const column = screen.getByRole("group", { name: (name: string) => name.startsWith(unitLabel) });
+    return rowAt(column, 0);
+  };
+
+  it("가운데 행을 두 번 탭하면 그 열이 초기화된다", () => {
+    vi.useFakeTimers();
+    const onChange = openTime("2026-08-12T15:07:41");
+    fireEvent.click(centre("초"));
+    fireEvent.click(centre("초"));
+    expect(onChange).toHaveBeenLastCalledWith("2026-08-12T15:07:00");
+  });
+
+  it("연도는 지금 연도로 간다 — 홀드와 같은 규칙", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2031-05-08T15:00:00Z"));   // = Asia/Seoul 2031-05-09
+    const onChange = openTime("2026-08-12T15:07:41");
+    fireEvent.click(centre("연도"));
+    fireEvent.click(centre("연도"));
+    expect(onChange).toHaveBeenLastCalledWith("2031-08-12T15:07:41");
+  });
+
+  /* ⚠️ **`not.toHaveBeenCalled()`로 쓰면 안 됩니다.** 가운데 행 탭은 화면상 아무 일도
+   * 안 하지만 `onChange`는 **같은 값으로 한 번 불립니다**(`applyShift(unit, 0)` →
+   * `commitShift`가 값이 같아도 알립니다 — 실측). 그래서 "초기화가 안 걸렸다"는
+   * **값으로** 봐야 합니다. 호출 수로 쓰면 오늘도 빨간, 못 통과하는 검사가 됩니다. */
+  it("한 번만 탭하면 초기화가 안 걸린다", () => {
+    vi.useFakeTimers();
+    const onChange = openTime("2026-08-12T15:07:41");
+    fireEvent.click(centre("초"));
+    expect(onChange).not.toHaveBeenCalledWith("2026-08-12T15:07:00");
+  });
+
+  it("느리게 두 번 탭하면 더블탭이 아니다", () => {
+    vi.useFakeTimers();
+    const onChange = openTime("2026-08-12T15:07:41");
+    fireEvent.click(centre("초"));
+    act(() => { vi.advanceTimersByTime(400); });
+    fireEvent.click(centre("초"));
+    expect(onChange).not.toHaveBeenCalledWith("2026-08-12T15:07:00");
+  });
+
+  it("다른 열을 이어서 탭하면 더블탭이 아니다 — 열마다 따로 센다", () => {
+    vi.useFakeTimers();
+    const onChange = openTime("2026-08-12T15:07:41");
+    fireEvent.click(centre("초"));
+    fireEvent.click(centre("분"));
+    expect(onChange).not.toHaveBeenCalledWith("2026-08-12T15:07:00");
+    expect(onChange).not.toHaveBeenCalledWith("2026-08-12T15:00:41");
+  });
+
+  /* 🔴 **오프셋 행 연타는 그대로 여러 칸 이동입니다.** 이게 깨지면 더블탭이 기존 조작을
+   * 먹은 것이고, 그건 이 변경이 하면 안 되는 유일한 일입니다. */
+  it("오프셋 행을 연달아 탭하면 초기화가 아니라 여러 칸 이동이다", () => {
+    vi.useFakeTimers();
+    const onChange = vi.fn();
+    const { rerender } = render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:07:41" fields={TIME_FIELDS} onChange={onChange} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    const column = () => screen.getByRole("group", { name: (name: string) => name.startsWith("초") });
+    fireEvent.click(rowAt(column(), 1));
+    expect(onChange).toHaveBeenLastCalledWith("2026-08-12T15:07:42");
+    rerender(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:07:42" fields={TIME_FIELDS} onChange={onChange} />);
+    fireEvent.click(rowAt(column(), 1));
+    expect(onChange).toHaveBeenLastCalledWith("2026-08-12T15:07:43");
+  });
+
+  /* "이미 초기값이면 아무 일도" 검사는 여기 두지 않습니다 — 가운데 행 탭이 어차피 같은
+   * 값으로 `onChange`를 부르므로 **초기화가 걸렸는지와 구별되지 않습니다.** 그 계약은
+   * 홀드 쪽 검사("이미 그 값이면 아무 일도 안 일어난다")가 이미 지킵니다. */
+});
+
+describe("길게 누르기 임계 (오너 리포트 5차 — 너무 느리다)", () => {
+  it("700ms다 — 2초는 오너가 실제로 눌러 보고 느리다고 했다", () => {
+    // 소스와 CSS가 **같은 수**를 써야 합니다. 진행 막대가 임계보다 길거나 짧으면
+    // 다 찼는데 안 걸리거나 걸렸는데 덜 찬 채로 사라집니다 — 조용히 거짓말하는 표시입니다.
+    expect(datePickerCssSource).toContain("animation: date-wheel-hold 700ms linear forwards;");
   });
 });
