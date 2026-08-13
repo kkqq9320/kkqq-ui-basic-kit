@@ -128,3 +128,32 @@ describe("토큰 묶음", () => {
     expect(THEME_TOKENS.map((token) => token.name)).toContain(name);
   });
 });
+
+/* 🔴 **대비 쌍은 함께 노출되거나 함께 감춰집니다**(오너 결정 2026-08-13).
+ *
+ * 한동안 `--accent-text`는 편집기에 있는데 그 글자가 **얹히는 바탕**
+ * (`--segmented-chip`)은 없었습니다. 사용자가 글자를 어둡게 바꾸면 칩 위에서 안 읽히는데
+ * **바탕을 따라 조정할 방법이 없는** 상태였습니다 — 편집기가 반쪽만 준 셈입니다.
+ *
+ * 이 검사는 값이 아니라 **노출 여부의 짝**을 봅니다. 둘 중 하나만 목록에서 빠지면
+ * 빨개집니다. (값이 실제로 대비를 지키는지는 `tests/segmentedControl.test.tsx`가
+ * 기본값에 대해 따로 잽니다 — 사용자가 바꾼 값까지는 어떤 검사도 못 지킵니다.)
+ */
+describe("대비 쌍은 함께 노출된다", () => {
+  const PAIRS: Array<[string, string]> = [
+    ["--accent-text", "--segmented-chip"],   // 글자와 그 글자가 얹히는 면
+  ];
+
+  it("한쪽만 편집기에 있는 쌍이 없다", () => {
+    for (const [text, surface] of PAIRS) {
+      // 전제 — 이름이 하나도 안 잡히면 아래가 공허합니다.
+      expect(exposed.length).toBeGreaterThan(5);
+      expect(exposed.includes(text)).toBe(exposed.includes(surface));
+    }
+  });
+
+  it("세그먼트의 두 면이 둘 다 편집기에 있다", () => {
+    expect(exposed).toContain("--segmented-track");
+    expect(exposed).toContain("--segmented-chip");
+  });
+});
