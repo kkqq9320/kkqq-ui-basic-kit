@@ -19,3 +19,4 @@ export { isPrimaryButton, dropdownViewportSpace, shouldOpenDropdownAbove, onView
 export { ShortcutProvider, useShortcutRegistry, type ShortcutAction, type ShortcutProviderProps, type ShortcutRegistry } from "./ShortcutProvider";
 export { ShortcutSettings, displayCombo, type ShortcutSettingsProps } from "./ShortcutSettings";
 export { BARE_KEY_SCOPE_ATTR, KIT_RESERVED, SIDEBAR_TOGGLE_ID, findConflict, formatCombo, normalizeCombo, parseCombo, shouldTrigger, sidebarToggleAction, type Combo, type Conflict, type SidebarToggleActionOptions } from "./shortcuts";
+export { createShortcutStorage, type ShortcutStorage, type ShortcutBindings, type ShortcutBackup, type ParsedShortcutBindings } from "./shortcutStorage";
