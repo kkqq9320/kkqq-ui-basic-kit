@@ -107,6 +107,10 @@ const NATIVE_EDIT_CODES = new Set(["KeyA", "KeyC", "KeyV", "KeyX", "KeyZ", "KeyY
  * 집합**입니다 — UA가 키보드 동작을 주는 폼 요소. 그래서 `type`을 세지 않고 요소로
  * 판정합니다(새 `input` type이 생겨도 자동으로 안전한 쪽으로 떨어집니다).
  *
+ * `type`도 `disabled`도 안 보는 것이 맞는지는 쟀습니다 — `type="hidden"`과 `disabled`
+ * 입력은 `focus()`를 불러도 포커스가 안 걸려 `activeElement`가 될 수 없습니다.
+ * `readonly` 텍스트 입력은 걸리지만 규칙 4가 이미 잡습니다.
+ *
  * ⚠️ **`<button>`·`<a href>`·`<summary>`는 일부러 뺐습니다.** 이들이 먹는 키는
  * `Enter`·`Space`뿐이고 **값이 아니라 활성화**입니다. 여기까지 막으면 카드 그리드에서
  * `j`/`k`를 쓰라고 만든 허용 구역(§2.2)이 제 일을 못 합니다 — 카드가 보통 `<button>`
