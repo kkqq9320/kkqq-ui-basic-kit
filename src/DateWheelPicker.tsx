@@ -291,7 +291,20 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 모델은 전역 설정을 안 읽습니다(`src/model/instant.ts`는 아무것도 import 하지
   // 않는 것이 계약입니다) — 기계가 읽어서 인자로 내려보냅니다. 매 렌더 새 객체를
   // 만들면 모델 호출이 달라 보이므로 묶습니다.
-  const hourDisplay = useMemo<HourDisplay>(() => ({ format: hourFormat, am: labels.meridiem.am, pm: labels.meridiem.pm }), [hourFormat, labels.meridiem.am, labels.meridiem.pm]);
+  /* 🔴 `?? DEFAULT`가 필요한 이유 — `hintNow`가 이미 같은 자리에 검사를 갖고 있습니다.
+   * 병합이 `{ ...DEFAULT, ...labelOverrides }`라, override가 이 키를 **명시적으로**
+   * `undefined`로 주면 기본값으로 떨어지는 게 아니라 **덮어씁니다**(`Partial<…>`가
+   * 타입으로 허용하고, 이 저장소 tsconfig에 `exactOptionalPropertyTypes`가 없습니다).
+   *
+   * `hintNow`는 값이라 `?? labels.hint` 하나로 끝났는데 여기는 **객체**라, 없으면
+   * 아래 의존성 배열의 `labels.meridiem.am`이 곧바로 터집니다 — 의존성 배열은 본문보다
+   * **먼저** 평가되므로 24시간제에서도, 날짜 전용 픽커에서도, 매 렌더 크래시입니다.
+   *
+   * ⚠️ 이것이 누수 방지를 약화시키지 않습니다: 타입이 `am`·`pm`을 **함께** 요구하므로
+   * "한쪽만 한국어"인 상태는 여전히 만들 수 없습니다. 여기서 닫는 것은 명시적
+   * `undefined` 구멍 하나입니다. */
+  const meridiemLabels = labels.meridiem ?? DEFAULT_DATE_WHEEL_LABELS.meridiem;
+  const hourDisplay = useMemo<HourDisplay>(() => ({ format: hourFormat, am: meridiemLabels.am, pm: meridiemLabels.pm }), [hourFormat, meridiemLabels.am, meridiemLabels.pm]);
   const hasTimeUnit = model.family(fields) !== "date";
   const todayLabel = hasTimeUnit ? labels.now : labels.today;
   // hint의 짝 — todayLabel과 같은 기준(hasTimeUnit)으로 고릅니다(2b-4). `hintNow`는
@@ -1751,7 +1764,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
             const pressed = meridiem === half;
             // 반대 절반으로 못 가면(경계가 통째로 막았으면) 그 버튼은 열의 ± 버튼과
             // **같은 규칙으로** disabled입니다 — `shifted(...) === null`이 그 판정입니다.
-            return <button type="button" tabIndex={-1} className={pressed ? "selected" : ""} aria-pressed={pressed} aria-keyshortcuts={half === "am" ? "a" : "p"} disabled={!pressed && meridiemShift === null} onClick={() => { setTyping(null); if (!pressed) flipMeridiem(); }} key={half}>{half === "am" ? labels.meridiem.am : labels.meridiem.pm}</button>;
+            return <button type="button" tabIndex={-1} className={pressed ? "selected" : ""} aria-pressed={pressed} aria-keyshortcuts={half === "am" ? "a" : "p"} disabled={!pressed && meridiemShift === null} onClick={() => { setTyping(null); if (!pressed) flipMeridiem(); }} key={half}>{half === "am" ? meridiemLabels.am : meridiemLabels.pm}</button>;
           })}
         </div>
       )}
