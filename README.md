@@ -752,13 +752,57 @@ const [overrides, setOverrides] = useState<Record<string, string | null>>({});
 
 사용자가 조합을 직접 바꾸게 하려면 `ShortcutSettings`를 띄우세요 — 녹음기이자
 충돌 검사기입니다(같은 조합을 다른 액션에, 또는 킷 컴포넌트가 이미 쓰는 조합에
-걸려고 하면 등록을 막고 이유를 보여 줍니다):
+걸려고 하면 등록을 막고 이유를 보여 줍니다). 위 예시처럼 `overrides`를 `useState`로만
+들고 있으면 **새로고침하면 사라집니다** — 남게 하려면 `onChange`로 직접 저장하거나,
+아래처럼 킷에게 저장을 맡기세요:
 
 ```tsx
 <ShortcutSettings
   onChange={(id, combo) => setOverrides((current) => ({ ...current, [id]: combo }))}
 />
 ```
+
+#### 저장 — 킷이 맡거나(`storage`), 앱이 맡거나(`overrides`)
+
+**둘 다 옵트인입니다.** 아무것도 안 넘기면 지금까지와 같습니다 — `defaultCombo`만
+쓰고 저장소는 전혀 안 건드립니다.
+
+**킷이 저장하게 하려면(uncontrolled)** — `overrides` 대신 `storage`를 넘기세요.
+그러면 `ShortcutSettings`에 `onChange`를 안 넘겨도 녹음·지우기가 바로 저장됩니다:
+
+```tsx
+import { ShortcutProvider, ShortcutSettings, createShortcutStorage, sidebarToggleAction } from "kkqq-ui-basic-kit";
+
+const shortcutStorage = createShortcutStorage();   // localStorage, 키 "shortcutBindings"
+
+<ShortcutProvider
+  actions={[sidebarToggleAction(() => setCollapsed((value) => !value), { defaultCombo: "Ctrl+Backslash" })]}
+  storage={shortcutStorage}
+>
+  <AppShell>
+    …
+    <ShortcutSettings />
+  </AppShell>
+</ShortcutProvider>
+```
+
+킷이 마운트 때 `storage.read()`로 채우고, 녹음·지우기는 `registry.setBinding`을 거쳐
+`storage.write`로 저장됩니다. 다른 탭에서 바꾼 값도 `storage.subscribe`로 따라옵니다.
+
+**앱이 저장하게 하려면(controlled)** — 위 첫 예시처럼 `overrides`를 넘기세요. 그러면
+킷은 **저장소를 전혀 건드리지 않습니다**(`storage`를 같이 넘겨도 완전히 무시됩니다) —
+서버 동기화나 다른 저장 방식을 쓰고 싶을 때 이쪽입니다.
+
+⚠️ **`onChange`도 없고 `storage`도 없으면** `ShortcutSettings`에서 녹음해도 저장할
+곳이 없어 화면이 안 바뀝니다 — 개발 중이라면 콘솔에 경고가 뜹니다. 배포 전에 둘 중
+하나는 반드시 넘기세요.
+
+`createShortcutStorage(options?: { key?: string })`가 저장소를 만듭니다. 백업/복원이
+필요하면 `serialize()`/`parse(input)`을 쓰세요 — `ThemeColorEditor`의
+`palette.serialize`/`palette.parse`와 같은 모양입니다(버전 붙은 봉투, 모르는 액션
+id나 형식에 안 맞는 값은 버리고 이름을 `dropped`에 남김). **`null`과 "키 없음"은
+다릅니다** — `null`은 사용자가 그 액션의 조합을 지운 것이고, 키가 아예 없는 것은
+`defaultCombo`를 쓴다는 뜻입니다.
 
 **맨 키(수식어 없는 키) 단축키를 쓰려면 `data-kkqq-shortcut-scope`가 필요합니다.**
 수식어(Ctrl·Alt·Meta) 조합은 어디서나 트리거되지만, 맨 키는 기본적으로

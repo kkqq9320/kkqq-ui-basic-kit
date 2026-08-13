@@ -33,13 +33,27 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.7.0
 - **`parseCombo` · `formatCombo` · `normalizeCombo` · `findConflict` ·
   `shouldTrigger` · `BARE_KEY_SCOPE_ATTR` · `KIT_RESERVED` · `displayCombo`** —
   조합 표기·매칭·충돌 검사의 나머지 공개 API.
-- **`css/shortcuts.css`** — `.kkqq-shortcuts` 뿌리 아래로만 선택자가 있어, 안 쓰는
-  프로젝트에는 바이트 말고는 영향이 없습니다.
+- **`createShortcutStorage(options?)` · `ShortcutStorage` · `ShortcutBindings` ·
+  `ShortcutBackup` · `ParsedShortcutBindings`**(Task 7, 저장) — 단축키 덮어쓰기를
+  `localStorage`(기본 키 `shortcutBindings`)에 **버전 붙은 봉투**로 저장합니다.
+  `write`/`read`는 절대 던지지 않고 `boolean`/`{}`로 실패를 알리고, 빈 맵을 쓰면
+  저장된 키 자체를 지웁니다. `null`(사용자가 지움)과 키 없음(기본값을 씀)은 왕복
+  에서 섞이지 않습니다. `serialize`/`parse`는 `ThemeColorEditor`의 팔레트와 같은
+  모양(모르는 액션 id·형식에 안 맞는 값은 버리고 이름을 `dropped`에 남김)입니다.
+- **`ShortcutProvider`의 `storage` prop · `ShortcutRegistry.setBinding`**(Task 7) —
+  `overrides` 대신 `storage`를 넘기면 킷이 uncontrolled로 저장소를 직접 읽고 쓰고,
+  다른 탭의 변경도 구독합니다. `overrides`를 넘기면(controlled) `storage`는 완전히
+  무시되고 킷은 저장소를 전혀 안 건드립니다 — 어느 쪽도 안 넘기면 지금까지와 같이
+  `defaultCombo`만 쓰고 저장소 접근은 0입니다.
+- **`ShortcutSettings`의 `onChange`가 선택이 됨**(Task 7) — 없으면
+  `registry.setBinding`으로 커밋합니다(`ShortcutProvider`가 `storage`를 받았을 때만
+  실제로 저장됩니다). 둘 다 없으면 저장할 곳이 없다는 뜻이라 조용히 넘어가지 않고
+  콘솔에 경고를 남깁니다.
 - **데모에 조합 예시**(`demo/main.tsx`) — 사이드바 접기/펴기가 `Ctrl + \`에 걸려
-  있고, 앱이 `defaultCombo`로 그 값을 준 코드가 그대로 보입니다(`overrides`는
-  **사용자가 바꾼 것만** 담는 자리입니다). `ShortcutSettings`도 실제로 띄워 눌러 볼
-  수 있고, `.workspace`에 `data-kkqq-shortcut-scope`를 붙여 맨 키 허용 구역의 예시도
-  하나 보여 줍니다.
+  있고, 앱이 `defaultCombo`로 그 값을 준 코드가 그대로 보입니다. 이제 저장소도
+  킷이 맡습니다(`storage={createShortcutStorage()}`) — **새로고침해도 재녹음한
+  조합이 남고**, 다른 탭에서 바꿔도 따라옵니다. `.workspace`에
+  `data-kkqq-shortcut-scope`를 붙여 맨 키 허용 구역의 예시도 하나 보여 줍니다.
 
 ### 고친 것
 
@@ -50,12 +64,14 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.7.0
 
 - **안 쓰면 아무 화면도 안 바뀝니다.** `ShortcutProvider`를 렌더하지 않는 기존
   프로젝트는 이번 릴리스로 달라지는 것이 없습니다.
-- **`defaultCombo`가 없는 액션은 `overrides`를 안 주면 조용히 아무 키에도 안
-  걸립니다.** 데모처럼 조합을 앱이 정해야 하고, 안 정하면 "켰는데 안 되는데요"가
+- **`defaultCombo`가 없는 액션은 `overrides`·`storage`를 안 주면 조용히 아무 키에도
+  안 걸립니다.** 데모처럼 조합을 앱이 정해야 하고, 안 정하면 "켰는데 안 되는데요"가
   됩니다 — 문서가 아니라 설계가 그렇게 되어 있습니다.
 - **맨 키 단축키는 `data-kkqq-shortcut-scope`가 붙은 컨테이너 안에서만** 포커스가
   `<body>`가 아니어도 트리거됩니다. 수식어(Ctrl·Alt·Meta) 조합은 이 표식과
   무관하게 어디서나 트리거됩니다.
+- **데모의 단축키 패널이 이제 새로고침해도 조합을 기억합니다** — 전에는 `useState`
+  뿐이라 새로고침하면 초기화됐습니다.
 
 ---
 
