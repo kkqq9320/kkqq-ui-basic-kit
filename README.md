@@ -797,6 +797,13 @@ const shortcutStorage = createShortcutStorage();   // localStorage, 키 "shortcu
 곳이 없어 화면이 안 바뀝니다 — 개발 중이라면 콘솔에 경고가 뜹니다. 배포 전에 둘 중
 하나는 반드시 넘기세요.
 
+⚠️ **이것과 "저장소가 막혔다"(프라이빗 모드·용량 초과)는 다른 사건입니다** —
+`storage`를 제대로 넘겼는데도 브라우저가 저장을 막으면, `ShortcutSettings`는 위
+경고(배선 누락) 대신 화면에 안내를 띄웁니다. 조합은 이번 방문에서는 계속 쓸 수
+있지만 새로고침하면 사라집니다. 두 실패를 직접 구분하고 싶으면
+`useShortcutRegistry()`가 주는 `registry.canPersist`를 보세요 — uncontrolled고
+`storage`가 있을 때만 참입니다.
+
 `createShortcutStorage(options?: { key?: string })`가 저장소를 만듭니다. 백업/복원이
 필요하면 `serialize()`/`parse(input)`을 쓰세요 — `ThemeColorEditor`의
 `palette.serialize`/`palette.parse`와 같은 모양입니다(버전 붙은 봉투). **킷은 액션

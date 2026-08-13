@@ -358,4 +358,72 @@ describe("onChange도 storage도 없을 때", () => {
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   });
+
+  /* ⚠️ **전체 리뷰 Important 2.** `DateWheelPicker`의 `fields` 오배선 경고 선례는
+   * `importMetaEnv?.DEV` 가드**와** 인스턴스별 중복 억제 ref를 같이 씁니다 — 같은
+   * 원인으로 반복 호출되는 경고가 조작마다(여기서는 녹음마다) 다시 찍히면 신호가
+   * 아니라 소음이기 때문입니다(`tests/DateWheelPicker.test.tsx`의 "같은 fields로
+   * 여러 번 리렌더해도 경고는 한 번만"이 그 계약을 잽니다). 여기는 그 가드가
+   * 없어서, 지금은 배선 안 된 앱이 녹음·지우기를 할 때마다(프로덕션 빌드에서도)
+   * 매번 콘솔에 찍힙니다. */
+  it("배선 누락 경고는 여러 번 녹음해도 한 번만 뜬다 — DateWheelPicker 선례 (전체 리뷰 Important 2)", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<ShortcutProvider actions={ACTIONS}><ShortcutSettings /></ShortcutProvider>);
+
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "KeyJ", ctrlKey: true });
+    record("백업 페이지로 이동");
+    fireEvent.keyDown(document, { code: "KeyK", ctrlKey: true });
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+});
+
+/* ⚠️ **전체 리뷰 Important 2.** `commit`이 `registry.setBinding`의 `false`를 전부
+ * "저장할 곳이 없습니다"로 번역하고 있었습니다. 하지만 `storage`가 있는데
+ * `storage.write`가 막힌 경우(프라이빗 모드·용량 초과)는 배선 문제가 아니라
+ * **저장소가 막힌 것**이고, 이미 배선한 앱이 배선하라는 잘못된 경고를 받습니다 —
+ * 그리고 이 경로는 `setOwnOverrides`가 이미 돌아 화면 상태가 바뀐 뒤이므로
+ * "아무것도 안 했다"도 거짓입니다. `registry.canPersist`로 이 둘을 미리 구분합니다. */
+describe("storage가 있어도 write가 막히면 (전체 리뷰 Important 2)", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("배선 누락 경고(console.warn)를 내지 않는다 — 배선은 돼 있다", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const storage = createShortcutStorage({ key: "test:settings-write-blocked" });
+    render(<ShortcutProvider actions={ACTIONS} storage={storage}><ShortcutSettings /></ShortcutProvider>);
+
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "KeyJ", ctrlKey: true });
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("배선 누락 안내와는 다른 문구로 저장 실패를 알린다", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
+    const storage = createShortcutStorage({ key: "test:settings-write-blocked2" });
+    render(<ShortcutProvider actions={ACTIONS} storage={storage}><ShortcutSettings /></ShortcutProvider>);
+
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "KeyJ", ctrlKey: true });
+
+    // "저장할 곳이 없습니다"(배선 누락 문구)와는 달라야 합니다 — storage는 있으므로
+    // 그 문구가 뜨면 사용자가 잘못 이해합니다.
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).not.toContain("저장할 곳이 없습니다");
+  });
+
+  // 대조군 — 막지 않으면 평소처럼 storage에 저장되고 실패 안내는 없다.
+  it("대조군 — 막지 않으면 실패 안내 없이 저장된다", () => {
+    const storage = createShortcutStorage({ key: "test:settings-write-ok" });
+    render(<ShortcutProvider actions={ACTIONS} storage={storage}><ShortcutSettings /></ShortcutProvider>);
+
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "KeyJ", ctrlKey: true });
+
+    expect(screen.queryByRole("alert")).toBe(null);
+    expect(storage.read()).toEqual({ toggle: "Ctrl+KeyJ" });
+  });
 });

@@ -49,7 +49,13 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.7.0
 - **`ShortcutSettings`의 `onChange`가 선택이 됨**(Task 7) — 없으면
   `registry.setBinding`으로 커밋합니다(`ShortcutProvider`가 `storage`를 받았을 때만
   실제로 저장됩니다). 둘 다 없으면 저장할 곳이 없다는 뜻이라 조용히 넘어가지 않고
-  콘솔에 경고를 남깁니다.
+  콘솔에 경고를 남깁니다(인스턴스당 한 번, 개발 모드에서만). **저장소가 있는데
+  막힌 경우**(프라이빗 모드·용량 초과)는 다른 사건으로 다룹니다 — 콘솔 경고 대신
+  화면에 안내가 뜹니다.
+- **`ShortcutRegistry.canPersist`** — `setBinding`이 실제로 저장할 자리가 있는지
+  미리 알려줍니다(uncontrolled고 `storage`가 있을 때만 참). `setBinding`의
+  반환값(`false`)만으로는 "저장할 곳이 없다"와 "저장소가 막혔다"를 못 가리므로
+  `ShortcutSettings`가 이걸로 둘을 구분합니다.
 - **`ShortcutRegistry.restoreBindings(bindings)`** — 백업에서 파싱한 맵을 통째로
   커밋합니다. `setBinding`을 항목마다 루프로 부르는 것과 달리 `storage.write`를
   한 번만 부르고, `storage.write`를 직접 부르는 것과 달리 이 탭의 화면 상태도 함께

@@ -36,10 +36,25 @@ export type ShortcutProviderProps = {
 export type ShortcutRegistry = {
   actions: ShortcutAction[];
   bindingOf(id: string): string | null;
-  /** 사용자가 조합을 바꿀 때(녹음·지우기) `ShortcutSettings`가 부릅니다. controlled
-   *  (`overrides` 있음)이거나 `storage`가 없으면 저장할 곳이 없다는 뜻이라 **아무것도
-   *  안 하고 `false`를 돌려줍니다** — 그 경우 앱이 `ShortcutSettings`의 `onChange`로
-   *  직접 처리해야 합니다. */
+  /** `setBinding`·`restoreBindings`가 실제로 뭔가를 저장할 자리가 있는지 — uncontrolled
+   *  (`overrides` 없음)이고 `storage`가 있을 때만 참입니다.
+   *
+   *  ⚠️ **`setBinding`의 반환값(`false`)만으로는 "저장할 곳이 없다"(배선 누락)와
+   *  "저장이 실패했다"(`storage`는 있는데 `storage.write`가 막힘 — 프라이빗 모드·
+   *  용량 초과)를 못 가립니다. 둘 다 `false`를 돌려주기 때문입니다.** `canPersist`를
+   *  먼저 보면 그 둘을 구분할 수 있습니다 — `ShortcutSettings`가 이걸로 서로 다른
+   *  문구를 냅니다(전체 리뷰 Important 2). */
+  canPersist: boolean;
+  /** 사용자가 조합을 바꿀 때(녹음·지우기) `ShortcutSettings`가 부릅니다.
+   *
+   *  - `canPersist`가 거짓이면(controlled이거나 `storage`가 없음) **정말로 아무것도
+   *    안 하고** `false`를 돌려줍니다 — 앱이 `ShortcutSettings`의 `onChange`로 직접
+   *    처리해야 한다는 뜻입니다.
+   *  - `canPersist`가 참인데 `storage.write`가 실패하면(프라이빗 모드·용량 초과)도
+   *    `false`를 돌려주지만, 이때는 **이미 화면 상태를 갱신한 뒤**입니다 —
+   *    `themeTokens`/`ThemeColorEditor`와 같은 관용으로, 저장이 막혀도 이 탭에서는
+   *    계속 조합을 고를 수 있어야 하기 때문입니다. "아무것도 안 하고"는 이 경우
+   *    거짓입니다(전체 리뷰 Important 2 — 이전 문서는 두 경우를 구분하지 않았습니다). */
   setBinding(id: string, combo: string | null): boolean;
   /** 백업에서 복원한 맵(`storage.parse(input)?.backup.bindings`)을 통째로 커밋합니다
    *  — `setBinding`을 항목마다 루프로 부르는 대신입니다. 저장(`storage.write`)과 이
@@ -49,7 +64,7 @@ export type ShortcutRegistry = {
   restoreBindings(bindings: ShortcutBindings): boolean;
 };
 
-const ShortcutContext = createContext<ShortcutRegistry>({ actions: [], bindingOf: () => null, setBinding: () => false, restoreBindings: () => false });
+const ShortcutContext = createContext<ShortcutRegistry>({ actions: [], bindingOf: () => null, canPersist: false, setBinding: () => false, restoreBindings: () => false });
 
 export function useShortcutRegistry(): ShortcutRegistry {
   return useContext(ShortcutContext);
@@ -182,7 +197,7 @@ export function ShortcutProvider({ actions, overrides, storage, children }: Shor
       updateOwnOverrides(bindings);
       return ok;
     }
-    return { actions, bindingOf, setBinding, restoreBindings };
+    return { actions, bindingOf, canPersist: !controlled && !!storage, setBinding, restoreBindings };
   }, [actions, effectiveOverrides, controlled, storage]);
 
   // 리스너를 다시 걸지 않으려고 ref로 최신값을 봅니다 — 액션 배열이 매 렌더 새 참조여도

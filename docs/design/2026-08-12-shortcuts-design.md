@@ -487,17 +487,39 @@ export function createShortcutStorage(options?: { key?: string }): ShortcutStora
 | `storage`만(`overrides` 없음) | **uncontrolled** — 킷이 소유 | 마운트 때 `storage.read()`, 다른 탭 변경은 `storage.subscribe`, 커밋은 `registry.setBinding` → `storage.write` |
 | 둘 다 없음 | 지금까지와 같음 | **0** — `defaultCombo`만 씁니다(§8의 옵트인 보장) |
 
-`ShortcutRegistry`에 `setBinding(id, combo): boolean`이 더해졌습니다. controlled이거나
-`storage`가 없으면 아무것도 안 하고 `false`를 돌려줍니다 — 그 뜻은 "앱이
-`ShortcutSettings`의 `onChange`로 직접 처리해야 한다"입니다. `ShortcutSettings`의
-`onChange`는 이제 **선택**입니다: 있으면 그걸 부르고(앱 소유), 없으면
-`registry.setBinding`에 맡깁니다. **`onChange`도 없고 `setBinding`도 저장할 곳이
-없으면**(Provider에 `overrides`도 `storage`도 없는 상태) 조용히 넘어가지 않고
-`console.warn`으로 알립니다 — `DateWheelPicker`가 `fields` 오배선을 알리는 것과 같은
-선례입니다. 화면의 `role="alert"` 안내로 하지 않은 이유는, 이건 런타임 상태(조합
-충돌 등)가 아니라 **배선 누락**이라 사용자가 아니라 개발자가 고칠 문제이기
-때문입니다 — 실제 배포에서는 둘 중 하나가 항상 있어야 하므로 개발 중에만 마주칠
-것으로 기대합니다.
+`ShortcutRegistry`에 `setBinding(id, combo): boolean`이 더해졌습니다.
+
+⚠️ **`setBinding`의 `false`는 두 가지 서로 다른 사건을 가리킬 수 있습니다(전체 리뷰
+Important 2) — 이 문서가 예전에 그 둘을 하나로 뭉뚱그렸습니다.**
+
+1. **저장할 곳이 없다(배선 누락)** — controlled(`overrides` 있음)이거나 `storage`가
+   없으면 **정말로 아무것도 안 하고** `false`를 돌려줍니다. `ShortcutRegistry
+   .canPersist`가 이 판정과 정확히 같습니다 — uncontrolled고 `storage`가 있을
+   때만 참입니다.
+2. **저장이 실패했다(저장소가 막힘)** — `canPersist`가 참인데(즉 배선은 됐는데)
+   `storage.write`가 실패하면(프라이빗 모드·용량 초과) `setBinding`도 `false`를
+   돌려주지만, 이때는 **`setOwnOverrides`가 이미 돌아 화면 상태를 바꾼 뒤**입니다
+   — themeTokens/`ThemeColorEditor`와 같은 관용으로, 저장이 막혀도 이 탭에서는
+   계속 조합을 고를 수 있어야 하기 때문입니다(§7.1). "아무것도 안 하고"는 이
+   경우 거짓입니다.
+
+`setBinding`의 반환값만으로는 이 둘을 못 가립니다 — 둘 다 `false`이기 때문입니다.
+그래서 `canPersist`를 먼저 봅니다. `ShortcutSettings`의 `onChange`는 이제 **선택**
+입니다: 있으면 그걸 부르고(앱 소유), 없으면 `registry.canPersist`/`setBinding`에
+맡깁니다.
+
+- **`canPersist`가 거짓이면**(1번, 배선 누락) 조용히 넘어가지 않고 `console.warn`으로
+  알립니다 — `DateWheelPicker`가 `fields` 오배선을 알리는 것과 같은 선례이고, 그
+  선례의 나머지 절반(`import.meta.env?.DEV` 가드·인스턴스별 중복 억제 ref)까지
+  그대로 따릅니다. 가드가 없으면 프로덕션 빌드에서도(그리고 `import.meta.env` 자체가
+  없는 번들러에서는 `TypeError`까지) 녹음·지우기마다 찍힙니다. 화면의 `role="alert"`
+  안내로 하지 않은 이유는, 이건 런타임 상태(조합 충돌 등)가 아니라 **배선 누락**이라
+  사용자가 아니라 개발자가 고칠 문제이기 때문입니다 — 실제 배포에서는 배선이 항상
+  있어야 하므로 개발 중에만 마주칠 것으로 기대합니다.
+- **`canPersist`가 참인데 `setBinding`이 실패하면**(2번, 저장소가 막힘) 다른
+  경로입니다 — 이건 개발자가 고칠 배선 문제가 아니라 **사용자가 알아야 할 런타임
+  실패**(다음에 열면 이 조합이 사라져 있을 수 있음)이므로 `console.warn`이 아니라
+  화면의 `role="alert"` 안내로 냅니다.
 
 값 검증(정규화·`UNBINDABLE_CODES`)은 `bindingOf`와 녹음기(`ShortcutSettings`) 두
 곳뿐이고 `setBinding`은 그 위에 저장 배선만 얹습니다 — 세 번째 검증 지점을 만들면
