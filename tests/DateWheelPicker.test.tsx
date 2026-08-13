@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DateWheelPicker, DEFAULT_DATE_WHEEL_LABELS, type DateWheelLabels, type DateWheelUnit } from "../src/DateWheelPicker";
 import { instantModel, type WheelUnit } from "../src/model/instant";
-import { setHourFormat } from "../src/settings";
+import { setHourFormat, getWheelRowsPerSide, setWheelRowsPerSide } from "../src/settings";
 import { Dialog } from "../src/Dialog";
 import datePickerCssSource from "../css/date-picker.css?raw";
 import tokensCssSource from "../css/tokens.css?raw";
@@ -22,7 +22,7 @@ import tokensCssSource from "../css/tokens.css?raw";
 // 전체가 공유하는 하나의 객체라 그 뒤 테스트로 샌다(전체 브랜치 리뷰 F-2 지적).
 // `hourFormat`은 모듈 스코프 전역이라(설계 스펙 §11) 검사 사이에 샌다 — 3단계
 // 블록 하나가 12시간제로 두고 끝나면 그 뒤 스위트 전체가 12시간제로 돈다.
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); setHourFormat("24"); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); setHourFormat("24"); setWheelRowsPerSide(1); });
 
 /**
  * 트리거가 빈 자리를 채우는 문자 — **U+2012 FIGURE DASH**. 밑줄이 아니다(설계 스펙 §4.5).
@@ -53,6 +53,19 @@ const FILL = "\u2012";
  * 고정한다. 이름을 여기서 완전 일치로 검사하면 안 되는 이유도 같다: 이름이 안 맞아 쿼리가
  * 던지는 것은 **단언 실패가 아니라 쿼리 실패**라, 엉뚱한 테스트가 엉뚱한 줄에서 죽는다.
  */
+/** 열의 행을 **선택된 행 기준 오프셋**으로 찾는다.
+ *
+ * 🔴 예전에는 절대 인덱스를 썼다(`[4]` = 오프셋 +1). 행이 늘 일곱이라 성립하던 것인데,
+ * 오너 리포트 6번으로 **위아래 행 수가 전역 설정**이 되면서(기본 1 → 다섯 행) 그 숫자가
+ * 통째로 틀렸다. 인덱스를 하나씩 고쳐 두면 설정을 바꿀 때마다 또 틀린다 —
+ * `.selected`에서 세면 행 수와 무관하게 같은 행을 가리킨다. */
+function rowAt(column: Element, offset: number) {
+  const rows = [...column.querySelectorAll(".date-wheel-values button")];
+  const centre = rows.findIndex((row) => row.classList.contains("selected"));
+  expect(centre).toBeGreaterThan(-1);
+  return rows[centre + offset] as HTMLElement;
+}
+
 function fieldOf(name: string) {
   return screen.getByRole("button", { name: (accessibleName: string) => accessibleName === name || accessibleName.startsWith(`${name}, `) });
 }
@@ -222,7 +235,8 @@ describe("DateWheelPicker", () => {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={onChange} />);
 
     fireEvent.click(fieldOf("거래 날짜"));
-    expect(screen.getByRole("group", { name: "연도 2026" }).querySelectorAll(".date-wheel-values button")).toHaveLength(7);
+    // 행 수는 이제 전역 설정에서 나온다: 보이는 2n+1 + 프리로드 둘 = 2n+3(기본 n=1 → 5).
+    expect(screen.getByRole("group", { name: "연도 2026" }).querySelectorAll(".date-wheel-values button")).toHaveLength(2 * getWheelRowsPerSide() + 3);
 
     const yearPrevious = screen.getByRole("button", { name: "연도 이전" });
     fireEvent.pointerDown(yearPrevious, { pointerId: 1, clientY: 10 });
@@ -733,7 +747,7 @@ describe("DateWheelPicker 스와이프", () => {
   it("움직임 없는 탭은 포인터 캡처를 걸지 않는다", () => {
     const { year } = openWheel();
     const calls = countCaptures(year);
-    const row = [...year.querySelectorAll(".date-wheel-values button")][4];
+    const row = rowAt(year, 1);
     pointer("pointerDown", row, { pointerId: 2, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerUp", row, { pointerId: 2, clientY: 100 });
     expect(calls).toEqual([]);
@@ -744,7 +758,7 @@ describe("DateWheelPicker 스와이프", () => {
   it("캡처는 누를 때가 아니라 슬롭을 넘긴 첫 move에서 걸린다", () => {
     const { year } = openWheel();
     const calls = countCaptures(year);
-    const row = [...year.querySelectorAll(".date-wheel-values button")][4];
+    const row = rowAt(year, 1);
     pointer("pointerDown", row, { pointerId: 2, clientY: 100, buttons: 1, button: 0 });
     const afterDown = calls.length;
     pointer("pointerMove", row, { pointerId: 2, clientY: 120, buttons: 1 });
@@ -756,7 +770,7 @@ describe("DateWheelPicker 스와이프", () => {
   it("슬롭 아래로 흔들린 move는 캡처를 걸지 않는다", () => {
     const { year } = openWheel();
     const calls = countCaptures(year);
-    const row = [...year.querySelectorAll(".date-wheel-values button")][4];
+    const row = rowAt(year, 1);
     pointer("pointerDown", row, { pointerId: 2, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerMove", row, { pointerId: 2, clientY: 105, buttons: 1 });
     pointer("pointerMove", row, { pointerId: 2, clientY: 108, buttons: 1 });
@@ -768,7 +782,7 @@ describe("DateWheelPicker 스와이프", () => {
   it("한 제스처에서 캡처는 한 번만 건다", () => {
     const { year } = openWheel();
     const calls = countCaptures(year);
-    const row = [...year.querySelectorAll(".date-wheel-values button")][4];
+    const row = rowAt(year, 1);
     pointer("pointerDown", row, { pointerId: 2, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerMove", row, { pointerId: 2, clientY: 120, buttons: 1 });
     pointer("pointerMove", row, { pointerId: 2, clientY: 140, buttons: 1 });
@@ -797,7 +811,7 @@ describe("DateWheelPicker 스와이프", () => {
   // (pointerup/cancel의 rAF). 그래서 위 두 줄 사이에 빈틈이 생기지 않는다.
   it("행 위에서 3px 흔들려도 그 행이 선택된다", () => {
     const { onChange, year } = openWheel();
-    const row = [...year.querySelectorAll(".date-wheel-values button")][4];   // 오프셋 +1 = 2027
+    const row = rowAt(year, 1);   // 오프셋 +1 = 2027
     onChange.mockClear();
     pointer("pointerDown", row, { pointerId: 2, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerMove", row, { pointerId: 2, clientY: 103, buttons: 1 });   // 손떨림
@@ -810,7 +824,7 @@ describe("DateWheelPicker 스와이프", () => {
   // **오너가 실제로 걸린 거리**를 따로 못 박는다.
   it("행 위에서 8px 흔들려도 그 행이 선택된다", () => {
     const { onChange, year } = openWheel();
-    const row = [...year.querySelectorAll(".date-wheel-values button")][4];
+    const row = rowAt(year, 1);
     onChange.mockClear();
     pointer("pointerDown", row, { pointerId: 2, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerMove", row, { pointerId: 2, clientY: 108, buttons: 1 });
@@ -826,7 +840,7 @@ describe("DateWheelPicker 스와이프", () => {
   // 행 값(2027)이 뒤에 하나 더 붙어 실패 메시지가 그것을 그대로 보여준다.
   it("18px을 넘겨 끌면 스와이프이고, 뒤따르는 클릭은 삼켜진다", () => {
     const { onChange, year } = openWheel();
-    const row = [...year.querySelectorAll(".date-wheel-values button")][4];
+    const row = rowAt(year, 1);
     onChange.mockClear();
     pointer("pointerDown", row, { pointerId: 2, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerMove", row, { pointerId: 2, clientY: 120, buttons: 1 });
@@ -847,7 +861,7 @@ describe("DateWheelPicker 스와이프", () => {
   // 등가라서가 아니라 **미도달**이었다. 도달하는 제스처를 여기서 쓴다.)
   it("멀리 끌었다가 되돌아와 놓으면, 그것은 여전히 스와이프다", () => {
     const { onChange, year } = openWheel();
-    const row = [...year.querySelectorAll(".date-wheel-values button")][4];
+    const row = rowAt(year, 1);
     onChange.mockClear();
     pointer("pointerDown", row, { pointerId: 2, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerMove", row, { pointerId: 2, clientY: 125, buttons: 1 });   // 25px — 스와이프다
@@ -879,7 +893,7 @@ describe("DateWheelPicker 스와이프", () => {
   it("무장된 열에서, 누른 그 행을 클릭하면 값이 바뀐다", () => {
     const { onChange, year } = openWheel();
     fireEvent.click(screen.getByRole("button", { name: "연도 이전" }));   // 이 열을 무장시킨다
-    const row = [...year.querySelectorAll(".date-wheel-values button")][4];   // 오프셋 +1 = 2027
+    const row = rowAt(year, 1);   // 오프셋 +1 = 2027
     onChange.mockClear();
     pointer("pointerDown", row, { pointerId: 3, clientY: 100, buttons: 1, button: 0 });
     fireEvent.click(row);
@@ -898,7 +912,7 @@ describe("DateWheelPicker 스와이프", () => {
   it("무장 해제는 행 노드를 갈아치우지 않는다", () => {
     const { year } = openWheel();
     fireEvent.click(screen.getByRole("button", { name: "연도 이전" }));
-    const row = [...year.querySelectorAll(".date-wheel-values button")][4];
+    const row = rowAt(year, 1);
     pointer("pointerDown", row, { pointerId: 3, clientY: 100, buttons: 1, button: 0 });
     expect(row.isConnected).toBe(true);
   });
@@ -4012,8 +4026,18 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   /* 그리고 **토큰 둘이 짝을 이룬다**는 것을 따로 못 박습니다 — 이 라운드에서 새로 생긴
    * 계약이고, 하나만 고치면 선택된 행이 창 가운데에서 벗어납니다. 기본값은 지금까지와
    * 같은 5행(150px)/−30px입니다("새 축은 기본값이 지금과 같음", PRINCIPLES §14). */
-  it("휠 창 높이와 정지 위치는 한 벌로 선언된다 — 기본은 5행", () => {
-    expect(datePickerCssSource).toContain(".date-wheel-column { --date-wheel-rows-h: 150px; --date-wheel-rest: -30px; }");
+  /* 🔴 창 높이는 이제 **행 수에서 파생**됩니다(오너 리포트 6번). 리터럴 150px이 아니라
+   * `--date-wheel-rows`에서 계산되고, 그 값은 전역 설정이 정해 컴포넌트가 인라인으로
+   * 얹습니다. 그리고 **행 수가 함께 따라오므로 정지 위치는 n과 무관하게 −30px**입니다 —
+   * 실험 단계(행은 일곱 고정, 창만 축소)에서 −60px이 필요했던 것이 여기서 사라집니다. */
+  it("휠 창 높이는 행 수에서 파생되고, 정지 위치는 n과 무관하게 한 행이다", () => {
+    expect(datePickerCssSource).toContain(".date-wheel-column { --date-wheel-rows-h: calc((var(--date-wheel-rows, 1) * 2 + 1) * 30px); --date-wheel-rest: -30px; }");
+  });
+
+  it("값 컨테이너도 같은 수에서 나온다 — 보이는 2n+1에 프리로드 둘", () => {
+    // `repeat()`의 개수에는 var()를 못 쓰므로 grid-auto-rows로 간다. 리터럴 repeat(7,…)이
+    // 돌아오면 설정을 바꿔도 행이 일곱에 머물러 조용히 어긋난다.
+    expect(datePickerCssSource).toContain("height: calc((var(--date-wheel-rows, 1) * 2 + 3) * 30px); display: grid; grid-auto-rows: 30px;");
   });
 
   it("창 높이와 정지 위치를 쓰는 자리 셋이 리터럴로 되돌아가지 않는다", () => {
@@ -5047,8 +5071,9 @@ describe("DateWheelPicker 12시간제 (3단계)", () => {
     fireEvent.click(fieldOf("거래 시각"));
 
     const hour = screen.getByRole("group", { name: "시 오전 11" });
+    // 기본 설정(위아래 1줄)에서는 프리로드 둘을 포함해 다섯 행이다.
     const rows = [...hour.querySelectorAll(".date-wheel-values button")].map((row) => row.textContent);
-    expect(rows).toEqual(["08", "09", "10", "11", "12", "01", "02"]);
+    expect(rows).toEqual(["09", "10", "11", "12", "01"]);
   });
 
   it("열의 접근성 이름에는 절반이 남는다 — 스크린리더에는 버튼이 안 보인다", () => {
@@ -5488,7 +5513,7 @@ describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () =
   };
   const rowOf = (unitLabel: string, offset: number) => {
     const column = screen.getByRole("group", { name: (name: string) => name.startsWith(unitLabel) });
-    return column.querySelectorAll(".date-wheel-values button")[offset + 3] as HTMLElement;
+    return rowAt(column, offset);
   };
 
   it("초 열의 행을 2초 누르면 초가 0이 된다", () => {
@@ -5593,5 +5618,59 @@ describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () =
     pointer("pointerDown", step, { pointerId: 9, clientY: 100, button: 0, isPrimary: true });
     act(() => { vi.advanceTimersByTime(HOLD_MS); });
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+// ── 오너 리포트 6번 — 위아래 보이는 행 수는 킷 전역 설정이다 (기본 1, 최대 4) ────
+describe("DateWheelPicker 휠 행 수 설정 (오너 리포트 6번)", () => {
+  const openYear = () => {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    return screen.getByRole("group", { name: "연도 2026" });
+  };
+
+  it("기본은 위아래 1줄이다 — 오너 결정(지금까지의 2에서 바뀐 값)", () => {
+    const year = openYear();
+    // 보이는 3 + 프리로드 2 = 5
+    expect(year.querySelectorAll(".date-wheel-values button")).toHaveLength(5);
+  });
+
+  it("4로 올리면 열한 행이 된다 — 보이는 9 + 프리로드 2", () => {
+    setWheelRowsPerSide(4);
+    expect(openYear().querySelectorAll(".date-wheel-values button")).toHaveLength(11);
+  });
+
+  /* 🔴 **프리로드 행은 접근성 트리에서 빠져야 합니다** — 화면에 없는 값입니다.
+   * 실험 단계에서는 이 판정이 상수 3에 박혀 있어, 행 수를 줄이면 화면 밖 행이 트리에
+   * 남는 어긋남이 있었습니다. 이제 같은 수에서 나오므로 갈라질 자리가 없습니다. */
+  it("바깥 한 줄씩만 aria-hidden이다 — 행 수가 몇이든", () => {
+    for (const rows of [1, 2, 4] as const) {
+      cleanup();
+      setWheelRowsPerSide(rows);
+      const hidden = [...openYear().querySelectorAll(".date-wheel-values button")].map((row) => row.getAttribute("aria-hidden") === "true");
+      expect(hidden).toEqual([true, ...Array(rows * 2 + 1).fill(false), true]);
+    }
+  });
+
+  it("선택된 행은 언제나 한가운데다 — 행 수가 몇이든", () => {
+    for (const rows of [1, 2, 3, 4] as const) {
+      cleanup();
+      setWheelRowsPerSide(rows);
+      const all = [...openYear().querySelectorAll(".date-wheel-values button")];
+      expect(all.findIndex((row) => row.classList.contains("selected"))).toBe(rows + 1);
+    }
+  });
+
+  it("설정을 바꾸면 이미 떠 있는 픽커가 따라 바뀐다 — 구독이 실제로 돈다", () => {
+    const year = openYear();
+    expect(year.querySelectorAll(".date-wheel-values button")).toHaveLength(5);
+    act(() => setWheelRowsPerSide(3));
+    expect(screen.getByRole("group", { name: "연도 2026" }).querySelectorAll(".date-wheel-values button")).toHaveLength(9);
+  });
+
+  it("컴포넌트가 행 수를 CSS에 내려보낸다 — 창 높이가 그 값에서 나온다", () => {
+    setWheelRowsPerSide(3);
+    openYear();
+    expect(document.querySelector(".date-wheel-columns")?.getAttribute("style")).toContain("--date-wheel-rows: 3");
   });
 });

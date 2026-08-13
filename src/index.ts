@@ -21,4 +21,4 @@ export { ShortcutSettings, displayCombo, type ShortcutSettingsProps } from "./Sh
 export { BARE_KEY_SCOPE_ATTR, KIT_RESERVED, SIDEBAR_TOGGLE_ID, findConflict, formatCombo, normalizeCombo, parseCombo, shouldTrigger, sidebarToggleAction, type Combo, type Conflict, type SidebarToggleActionOptions } from "./shortcuts";
 export { createShortcutStorage, type ShortcutStorage, type ShortcutBindings, type ShortcutBackup, type ParsedShortcutBindings } from "./shortcutStorage";
 /* 킷 전역 설정 — 앱이 설정 화면을 붙일 자리라 공개 API입니다(설계 스펙 §11). */
-export { getHourFormat, setHourFormat, subscribeHourFormat, type HourFormat } from "./settings";
+export { getHourFormat, setHourFormat, subscribeHourFormat, getWheelRowsPerSide, setWheelRowsPerSide, subscribeWheelRowsPerSide, type HourFormat, type WheelRowsPerSide } from "./settings";

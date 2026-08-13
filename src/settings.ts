@@ -56,3 +56,36 @@ export function subscribeHourFormat(listener: () => void): () => void {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
 }
+
+/* ---- 휠에 위아래로 보이는 행 수 ------------------------------------------ */
+
+/** 선택된 값의 **위아래로 각각 몇 줄**을 보여 줄지. 1이면 3줄(위 1 · 선택 · 아래 1),
+ *  4면 9줄입니다. 오너 결정(2026-08-13): **기본 1, 최대 4.** */
+export type WheelRowsPerSide = 1 | 2 | 3 | 4;
+
+/** 🔴 **기본값이 1인 것은 오너가 실기기에서 정한 것이고, 이 저장소의 "새 축은 기본값이
+ *  지금과 같음" 규칙(PRINCIPLES §14)을 의도적으로 깬 자리입니다.** 지금까지는 2였으므로
+ *  **핀을 올리는 소비자는 다른 휠을 봅니다** — 미출시 노트에 "눈으로 볼 것"으로 적힙니다. */
+let wheelRowsPerSide: WheelRowsPerSide = 1;
+
+/** ⚠️ **구독자 집합이 설정마다 따로입니다.** 하나로 합치면 시간 형식을 바꿀 때 행 수를
+ *  읽는 컴포넌트까지 전부 다시 그립니다 — `useSyncExternalStore`가 이 집합을 그대로
+ *  쓰기 때문입니다. 검사가 둘이 서로 간섭하지 않는 것을 고정합니다. */
+const rowsListeners = new Set<() => void>();
+
+export function getWheelRowsPerSide(): WheelRowsPerSide {
+  return wheelRowsPerSide;
+}
+
+export function setWheelRowsPerSide(next: WheelRowsPerSide): void {
+  if (next === wheelRowsPerSide) return;
+  wheelRowsPerSide = next;
+  for (const listener of [...rowsListeners]) {
+    try { listener(); } catch { /* 무시 — 알림은 계속 돕니다 */ }
+  }
+}
+
+export function subscribeWheelRowsPerSide(listener: () => void): () => void {
+  rowsListeners.add(listener);
+  return () => { rowsListeners.delete(listener); };
+}
