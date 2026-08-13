@@ -752,13 +752,93 @@ const [overrides, setOverrides] = useState<Record<string, string | null>>({});
 
 사용자가 조합을 직접 바꾸게 하려면 `ShortcutSettings`를 띄우세요 — 녹음기이자
 충돌 검사기입니다(같은 조합을 다른 액션에, 또는 킷 컴포넌트가 이미 쓰는 조합에
-걸려고 하면 등록을 막고 이유를 보여 줍니다):
+걸려고 하면 등록을 막고 이유를 보여 줍니다). 위 예시처럼 `overrides`를 `useState`로만
+들고 있으면 **새로고침하면 사라집니다** — 남게 하려면 `onChange`로 직접 저장하거나,
+아래처럼 킷에게 저장을 맡기세요:
 
 ```tsx
 <ShortcutSettings
   onChange={(id, combo) => setOverrides((current) => ({ ...current, [id]: combo }))}
 />
 ```
+
+#### 저장 — 킷이 맡거나(`storage`), 앱이 맡거나(`overrides`)
+
+**둘 다 옵트인입니다.** 아무것도 안 넘기면 지금까지와 같습니다 — `defaultCombo`만
+쓰고 저장소는 전혀 안 건드립니다.
+
+**킷이 저장하게 하려면(uncontrolled)** — `overrides` 대신 `storage`를 넘기세요.
+그러면 `ShortcutSettings`에 `onChange`를 안 넘겨도 녹음·지우기가 바로 저장됩니다:
+
+```tsx
+import { ShortcutProvider, ShortcutSettings, createShortcutStorage, sidebarToggleAction } from "kkqq-ui-basic-kit";
+
+const shortcutStorage = createShortcutStorage();   // localStorage, 키 "shortcutBindings"
+
+<ShortcutProvider
+  actions={[sidebarToggleAction(() => setCollapsed((value) => !value), { defaultCombo: "Ctrl+Backslash" })]}
+  storage={shortcutStorage}
+>
+  <AppShell>
+    …
+    <ShortcutSettings />
+  </AppShell>
+</ShortcutProvider>
+```
+
+킷이 마운트 때 `storage.read()`로 채우고, 녹음·지우기는 `registry.setBinding`을 거쳐
+`storage.write`로 저장됩니다. 다른 탭에서 바꾼 값도 `storage.subscribe`로 따라옵니다.
+
+⚠️ **`storage`는 안정적인 참조여야 합니다** — 위 예시처럼 컴포넌트 **밖**에서 한 번만
+`createShortcutStorage()`를 부르세요. JSX 안에서 `storage={createShortcutStorage()}`
+처럼 매 렌더 새로 만들면, `ShortcutProvider`가 그 참조 변화를 "다른 저장소로
+바뀌었다"로 읽어 매 렌더마다 다시 구독합니다(전체 리뷰 Minor 8 — `window`의
+`storage` 리스너가 붙었다 떨어졌다를 반복합니다).
+
+**앱이 저장하게 하려면(controlled)** — 위 첫 예시처럼 `overrides`를 넘기세요. 그러면
+킷은 **저장소를 전혀 건드리지 않습니다**(`storage`를 같이 넘겨도 완전히 무시됩니다) —
+서버 동기화나 다른 저장 방식을 쓰고 싶을 때 이쪽입니다.
+
+⚠️ **`onChange`도 없고 `storage`도 없으면** `ShortcutSettings`에서 녹음해도 저장할
+곳이 없어 화면이 안 바뀝니다 — 개발 중이라면 콘솔에 경고가 뜹니다. 배포 전에 둘 중
+하나는 반드시 넘기세요.
+
+⚠️ **이것과 "저장소가 막혔다"(프라이빗 모드·용량 초과)는 다른 사건입니다** —
+`storage`를 제대로 넘겼는데도 브라우저가 저장을 막으면, `ShortcutSettings`는 위
+경고(배선 누락) 대신 화면에 안내를 띄웁니다. 조합은 이번 방문에서는 계속 쓸 수
+있지만 새로고침하면 사라집니다. 두 실패를 직접 구분하고 싶으면
+`useShortcutRegistry()`가 주는 `registry.canPersist`를 보세요 — uncontrolled고
+`storage`가 있을 때만 참입니다.
+
+`createShortcutStorage(options?: { key?: string })`가 저장소를 만듭니다. 백업/복원이
+필요하면 `serialize()`/`parse(input)`을 쓰세요 — `ThemeColorEditor`의
+`palette.serialize`/`palette.parse`와 같은 모양입니다(버전 붙은 봉투). **킷은 액션
+id를 모릅니다**(§3.3 — 액션은 앱의 것이고 킷은 안을 보지 않습니다)**, 그래서
+`parse`는 액션 id를 근거로 아무것도 버리지 않습니다.** 버리는 것은 **값**뿐입니다 —
+문자열도 `null`도 아니거나, 문자열인데 `normalizeCombo`가 거부하면 그 값의 id를
+`dropped`에 남기고 뺍니다(전체 리뷰 Important 1 — 이 문단이 예전에 "모르는 액션
+id나 형식에 안 맞는 값은 버리고"라고 적어, 마치 킷이 액션 목록과 대조해 모르는 id를
+버리는 것처럼 읽혔습니다. `createShortcutStorage`는 액션 목록을 받는 자리 자체가
+없습니다). **`null`과 "키 없음"은 다릅니다** — `null`은 사용자가 그 액션의 조합을
+지운 것이고, 키가 아예 없는 것은 `defaultCombo`를 쓴다는 뜻입니다.
+
+**백업을 복원하려면 `registry.restoreBindings(bindings)`를 쓰세요** — `useShortcutRegistry()`로
+꺼낸 레지스트리에 있고, `setBinding`과 같은 경계입니다(uncontrolled에서만 동작하고,
+controlled거나 `storage`가 없으면 아무것도 안 하고 `false`를 돌려줍니다):
+
+```tsx
+const registry = useShortcutRegistry();
+
+const parsed = shortcutStorage.parse(JSON.parse(text));
+if (!parsed) return alert("이 파일은 단축키 백업이 아닙니다");
+if (parsed.dropped.length) alert(`이 버전이 모르는 조합 ${parsed.dropped.length}개는 뺐습니다`);
+registry.restoreBindings(parsed.backup.bindings);   // 저장과 이 탭의 화면 갱신을 함께 합니다
+```
+
+⚠️ **`setBinding`을 항목마다 루프로 불러 복원을 흉내 내지 마세요** — 한 번에 여러
+항목을 커밋하려면 `restoreBindings`를 쓰세요. 그리고 `shortcutStorage.write(bindings)`를
+직접 부르지도 마세요 — 저장은 되지만 이 탭의 화면 상태는 낡습니다(`subscribe`는
+다른 탭의 변경만 받습니다). `restoreBindings`는 그 둘을 함께 합니다.
 
 **맨 키(수식어 없는 키) 단축키를 쓰려면 `data-kkqq-shortcut-scope`가 필요합니다.**
 수식어(Ctrl·Alt·Meta) 조합은 어디서나 트리거되지만, 맨 키는 기본적으로

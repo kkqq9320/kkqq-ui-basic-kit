@@ -1,6 +1,7 @@
 # 단축키 — 설계 스펙 (오너 항목 #5)
 
-**2026-08-12 · 상태: 설계 확정, 구현 전 · 저장 한 절은 의도적으로 비어 있음(§7)**
+**2026-08-12 · 상태: 구현 완료(Task 1~7, 2026-08-13) · §7(저장)도 채워짐 —
+`src/shortcutStorage.ts`가 실제 구현체입니다**
 
 ---
 
@@ -22,7 +23,7 @@
 | 트리거 규칙(§2) | ● | |
 | 충돌 검사(§5) | ● | |
 | 설정 UI(§6) | ● | |
-| 사용자 덮어쓰기 저장 | ● (§7) | |
+| 사용자 덮어쓰기 저장 | ● 옵트인(`storage`, §7) | ● 옵트인(`overrides`, §7.3) |
 | **액션 목록과 그 핸들러** | | ● |
 | **기본 조합** | | ● (§3.2) |
 | 맨 키 허용 구역 표시 | | ● (§2 규칙 3) |
@@ -401,45 +402,188 @@ src/DateWheelPicker.tsx  handleShortcut   event.key === "Delete" && allowClear
 
 ---
 
-## 7. 저장 — **이 절은 의도적으로 비어 있습니다**
+## 7. 저장 — `src/shortcutStorage.ts` (Task 7, 2026-08-13)
 
-**킷의 `themeTokens` 저장이 지금 개편 중입니다**(2026-08-12, 별도 세션,
-`feat/theme-palette`). 오너 확인: 지금 들어 있는 구현이 아니라 **개편 방향이 맞습니다.**
-따라서 이 스펙은 저장의 **구현체를 정하지 않습니다.**
+**본 트리에서 테마 팔레트 개편(PR #38)이 먼저 끝났고**, 이 절이 기다리던 것이
+정확히 그 결과였습니다 — `createThemePalette(groups)`가 토큰 목록을 한 번만 묶고,
+`serialize`/`parse`가 **버전 붙은 봉투**를 옮기고, `ThemeColorEditor`의 `overrides`
+prop이 킷의 저장 접근을 완전히 끄는 경계였습니다. 아래는 그 모양을 그대로 따라
+단축키 덮어쓰기에 얹은 결과입니다 — §7.1이 그 계약, §7.2가 저장 모양의 세부(테마
+저장과 달라진 지점), §7.3이 킷/앱 소유 경계입니다.
 
-### 7.1 단축키 모듈이 저장에 요구하는 것 — 이것만 고정합니다
+### 7.1 저장소 계약 — `createShortcutStorage`
 
-```
-readOverrides()  : { [actionId: string]: string | null }   // 사용자가 바꾼 것만
-writeOverrides(next)                                        // 통째로 씀
-subscribe(fn)                                               // 다른 탭·다른 화면의 변경
+```ts
+export type ShortcutBindings = Record<string, string | null>;
+export type ShortcutBackup = { version: 1; bindings: ShortcutBindings };
+export type ParsedShortcutBindings = { backup: ShortcutBackup; dropped: string[] };
+
+export type ShortcutStorage = {
+  read(): ShortcutBindings;
+  write(next: ShortcutBindings): boolean;
+  subscribe(listener: (next: ShortcutBindings) => void): () => void;
+  serialize(bindings?: ShortcutBindings): ShortcutBackup;
+  parse(input: unknown): ParsedShortcutBindings | null;
+};
+
+export function createShortcutStorage(options?: { key?: string }): ShortcutStorage;
 ```
 
 **덮어쓰기만 담습니다. 기본값은 코드에 있습니다**(§3.1의 `defaultCombo`). 이러면
-"기본 조합을 바꿨더니 이미 저장한 사용자만 옛 조합에 갇힌다"가 **구조적으로** 안 생깁니다.
+"기본 조합을 바꿨더니 이미 저장한 사용자만 옛 조합에 갇힌다"가 **구조적으로** 안 생깁니다
+— `ShortcutProvider`(§7.3)의 `setBinding`은 `defaultCombo`와 같은 값이라도 덮어쓰기
+맵에서 지우지 않습니다. 녹음·지우기 자체가 이미 "사용자가 방금 바꿨다"는 사실이기
+때문입니다.
 
-`string | null`에서 `null`은 *"이 액션은 조합 없음"*이고, **키 자체가 없는 것**은
-*"기본값을 쓴다"*입니다. 이 둘은 다릅니다 — 사용자가 기본 조합을 **지운** 상태를
-표현할 수 있어야 합니다.
+`string | null`에서 `null`은 *"사용자가 이 액션의 조합을 지웠다"*이고, **키 자체가
+없는 것**은 *"기본값을 쓴다"*입니다. 이 둘은 왕복(저장 → 읽기)에서 안 섞여야 합니다
+— `tests/shortcutStorage.test.ts`의 `describe("null과 키 없음")`이 이것을 못박습니다
+(뮤테이션 확인: `cleanValue`의 `value === null` 분기를 지우면 그 왕복 테스트가 빨개짐).
 
-### 7.2 관측된 방향 (계약 아님)
+계약 나머지는 `themePalette.ts`와 같은 이유로 같은 모양입니다:
 
-개편 브랜치의 커밋 `52ab012`가 *"a versioned envelope for backing colours up and
-restoring them"*입니다. 저장이 맨 JSON이 아니라 **버전 붙은 봉투**로 갑니다.
-§7.1의 함수 셋은 그 위에 그대로 얹힙니다.
+- **`write`는 절대 던지지 않고 `boolean`을 돌려줍니다.** 저장소가 막힌 환경(프라이빗
+  모드·용량 초과)에서 설정 화면이 죽지 않습니다. `read`도 던지지 않고 실패하면 `{}`.
+- ⚠️ **`write(next)`의 `next`는 저장소의 덮어쓰기 전체입니다. 패치가 아닙니다** —
+  `write({a})` 뒤에 `write({b})`를 부르면 저장에는 `b`만 남고 `a`는 지워집니다
+  (`ThemeColorEditor`의 `overrides` prop과 같은 계약). 이전까지 이 계약은 "빈 맵을
+  쓰면 지운다"는 특례로만 테스트됐고, 일반 경로(`write({a})` → `write({b})`가 `a`를
+  실제로 지운다)는 문서에도 테스트에도 없었습니다(전체 리뷰 Important 3) —
+  `describe("write는 통째 교체다")`가 이제 그 경로를 직접 잽니다. 항목 하나만 바꾸고
+  싶은 호출자는 `read()`로 전체를 먼저 읽어 병합해야 합니다 — `ShortcutProvider
+  .setBinding`이 그 패턴입니다.
+- **빈 맵을 쓰면 저장된 키 자체를 지웁니다** — 빈 봉투를 남기지 않습니다(`themeTokens`의
+  `writeTokenOverrides` 선례). 뮤테이션 확인: 이 분기를 지우면
+  `describe("빈 맵을 쓰면 키를 지운다")`가 빨개짐.
+- **`parse`는 버린 액션 id를 `dropped`에 남깁니다.** 버릴 것: 봉투가 아닌 입력(→
+  `null`), `string`도 `null`도 아닌 값, `normalizeCombo`가 거부하는 문자열. 조용히
+  버리면 사용자는 조합이 왜 안 돌아왔는지 알 방법이 없습니다(`themePalette.parse`와
+  같은 이유). 뮤테이션 확인: `dropped.push` 호출을 지우면
+  `describe("parse")`의 관련 테스트가 빨개짐.
+- **`subscribe`는 다른 탭·다른 창의 변경만 받습니다** — 같은 탭 안의 변경으로는 브라우저의
+  `storage` 이벤트 자체가 안 옵니다(호출자가 이미 알고 있으므로 문제가 아닙니다). 다른
+  키의 이벤트는 무시하고, 해지 함수를 돌려줍니다.
+- 기본 저장 키는 `shortcutBindings`입니다 — `themeTokens.ts`의 `storageKey`
+  (`themeColors:${theme}`)와 같은 관례(킷 네임스페이스 접두어 없이 도메인 이름)를
+  따르되, 테마 같은 변형이 없어 접미사가 없습니다.
 
-⚠️ **이건 진행 중인 남의 브랜치를 읽은 것이지 계약이 아닙니다.** 개편이 끝난 뒤
-그 API를 보고 어댑터를 씁니다. 구현 계획에서 **저장은 마지막 Task**입니다.
+### 7.2 저장 모양 — `themeTokens`와 다른 지점
 
-### 7.3 저장 주인이 바뀌면 다시 열리는 것
+⚠️ **`themeTokens.ts`는 저장소에 맨 맵을 넣고, 버전 붙은 봉투는 `serialize`/`parse`
+(백업 내보내기 전용)에서만 등장합니다.** 단축키는 다릅니다 — **저장소 자체**가
+봉투입니다(`localStorage`에 그대로 `{ version: 1, bindings: {...} }`가 들어갑니다).
+이 갈림은 실수가 아니라 §7.1이 처음부터 요구한 것입니다 — "맨 맵을 저장하지
+마세요"가 §7.1의 조건이었습니다. 맨 맵으로 시작했다면, 나중에 백업/복원처럼 봉투
+모양이 필요해질 때 옛 사용자의 저장값(버전 없는 맨 맵)을 읽어 주는 마이그레이션이
+따로 필요했을 것입니다 — 처음부터 봉투로 시작하면 그 문제 자체가 없습니다.
 
-인계 문서는 #5에 대해 **"저장 위치는 localStorage, 킷이 맡음"**을 정해진 것으로
-적고 있습니다. 개편이 저장 주인을 앱이나 서버로 옮기면 **그 결정이 같이 열립니다.**
-그때 다시 볼 절은 §1의 표 한 줄과 §6뿐이고, §2~§5는 영향받지 않습니다.
+⚠️ **`version: 2` 이상의 봉투를 만났을 때의 방침이 아직 없습니다**(전체 리뷰
+Minor 7). 지금 `parse`는 `envelope.version !== 1`이면 무조건 `null`을 돌려주고,
+`read`는 `parse`가 `null`이면 `{}`로 접습니다 — 즉 **미래 버전의 봉투는 "저장된 게
+없다"로 읽힙니다.** 그리고 그 상태에서 사용자가 조합을 하나라도 바꾸면
+`write`(§7.1 — 통째 교체)가 `{ version: 1, bindings: next }`를 그 자리에 그대로
+씁니다. `next`는 `{}`(§7.3에서 마운트 때 읽은 값)에서 시작했으므로, **v2 봉투가
+v1으로 조용히 강등되면서 v2가 들고 있던, v1이 모르는 필드는 전부 사라집니다.**
+§7.2가 봉투를 처음부터 채택한 이유가 정확히 이런 미래 마이그레이션을 위해서였는데,
+그 마이그레이션 경로 자체는 아직 없습니다 — 지금은 킷이 v1만 내보내므로 실제로
+v2 봉투를 만날 방법이 없어 관측되지 않을 뿐입니다. 킷이 v2를 내보내기 시작하는
+시점에는 `parse`가 최소한 "이 저장소는 이 킷 버전보다 새 것을 들고 있다"를 구분해
+`read`가 `{}`로 뭉개기 전에 신호를 낼 방법을 마련해야 합니다(예: 알려진 버전보다
+높으면 `dropped`가 아니라 별도 신호로 알리기, 또는 `write`가 낯선 필드를 보존한 채
+버전만 올리기) — 어느 쪽을 고를지는 실제로 v2가 필요해질 때의 판단이고, 지금
+코드를 바꾸지는 않습니다.
 
-경계선은 이미 킷 안에 있습니다: `src/Sidebar.tsx:9`가 *"localStorage 저장 같은 정책은"*
-앱 몫이라고 적어 둔 반면 `themeTokens`는 킷이 저장을 맡습니다. **킷이 소유한 설정은
-킷이, 앱의 UI 상태는 앱이** — 단축키 바인딩은 전자입니다.
+### 7.3 저장 주인 — `ShortcutProvider`의 `overrides` / `storage`
+
+`ThemeColorEditor`의 `overrides` prop과 같은 경계를 그대로 씁니다:
+
+| `ShortcutProvider`에 넘긴 것 | 상태 | 저장소 접근 |
+|---|---|---|
+| `overrides` (값이 있음, `{}` 포함) | **controlled** — 앱이 소유 | **0** — 킷은 절대 안 건드립니다. `storage`도 같이 넘기면 완전히 무시됩니다 |
+| `storage`만(`overrides` 없음) | **uncontrolled** — 킷이 소유 | 마운트 때 `storage.read()`, 다른 탭 변경은 `storage.subscribe`, 커밋은 `registry.setBinding` → `storage.write` |
+| 둘 다 없음 | 지금까지와 같음 | **0** — `defaultCombo`만 씁니다(§8의 옵트인 보장) |
+
+`ShortcutRegistry`에 `setBinding(id, combo): boolean`이 더해졌습니다.
+
+⚠️ **`setBinding`의 `false`는 두 가지 서로 다른 사건을 가리킬 수 있습니다(전체 리뷰
+Important 2) — 이 문서가 예전에 그 둘을 하나로 뭉뚱그렸습니다.**
+
+1. **저장할 곳이 없다(배선 누락)** — controlled(`overrides` 있음)이거나 `storage`가
+   없으면 **정말로 아무것도 안 하고** `false`를 돌려줍니다. `ShortcutRegistry
+   .canPersist`가 이 판정과 정확히 같습니다 — uncontrolled고 `storage`가 있을
+   때만 참입니다.
+2. **저장이 실패했다(저장소가 막힘)** — `canPersist`가 참인데(즉 배선은 됐는데)
+   `storage.write`가 실패하면(프라이빗 모드·용량 초과) `setBinding`도 `false`를
+   돌려주지만, 이때는 **`setOwnOverrides`가 이미 돌아 화면 상태를 바꾼 뒤**입니다
+   — themeTokens/`ThemeColorEditor`와 같은 관용으로, 저장이 막혀도 이 탭에서는
+   계속 조합을 고를 수 있어야 하기 때문입니다(§7.1). "아무것도 안 하고"는 이
+   경우 거짓입니다.
+
+`setBinding`의 반환값만으로는 이 둘을 못 가립니다 — 둘 다 `false`이기 때문입니다.
+그래서 `canPersist`를 먼저 봅니다. `ShortcutSettings`의 `onChange`는 이제 **선택**
+입니다: 있으면 그걸 부르고(앱 소유), 없으면 `registry.canPersist`/`setBinding`에
+맡깁니다.
+
+- **`canPersist`가 거짓이면**(1번, 배선 누락) 조용히 넘어가지 않고 `console.warn`으로
+  알립니다 — `DateWheelPicker`가 `fields` 오배선을 알리는 것과 같은 선례이고, 그
+  선례의 나머지 절반(`import.meta.env?.DEV` 가드·인스턴스별 중복 억제 ref)까지
+  그대로 따릅니다. 가드가 없으면 프로덕션 빌드에서도(그리고 `import.meta.env` 자체가
+  없는 번들러에서는 `TypeError`까지) 녹음·지우기마다 찍힙니다. 화면의 `role="alert"`
+  안내로 하지 않은 이유는, 이건 런타임 상태(조합 충돌 등)가 아니라 **배선 누락**이라
+  사용자가 아니라 개발자가 고칠 문제이기 때문입니다 — 실제 배포에서는 배선이 항상
+  있어야 하므로 개발 중에만 마주칠 것으로 기대합니다.
+- **`canPersist`가 참인데 `setBinding`이 실패하면**(2번, 저장소가 막힘) 다른
+  경로입니다 — 이건 개발자가 고칠 배선 문제가 아니라 **사용자가 알아야 할 런타임
+  실패**(다음에 열면 이 조합이 사라져 있을 수 있음)이므로 `console.warn`이 아니라
+  화면의 `role="alert"` 안내로 냅니다.
+
+값 검증(정규화·`UNBINDABLE_CODES`)은 `bindingOf`와 녹음기(`ShortcutSettings`) 두
+곳뿐이고 `setBinding`은 그 위에 저장 배선만 얹습니다 — 세 번째 검증 지점을 만들면
+셋이 갈릴 여지가 생기므로 일부러 안 만들었습니다.
+
+⚠️ **`setBinding`은 병합 베이스로 렌더 스코프의 값이 아니라 ref를 씁니다**(전체 리뷰
+Important 5-가). 같은 이벤트 핸들러 안에서(리렌더 없이) 여러 번 부르면, 렌더 스코프의
+`effectiveOverrides`는 그 호출들 내내 이 렌더가 시작할 때의 값에 고정돼 있어 나중
+호출이 앞선 호출을 덮어씁니다 — `ownOverridesRef`는 `setBinding`이 부를 때마다 그
+자리에서 동기로 갱신되므로 이 문제가 없습니다. 뮤테이션 확인: 병합 베이스를
+`ownOverridesRef.current` 대신 `effectiveOverrides`로 되돌리면
+"setBinding을 같은 act 안에서 두 번 연달아 불러도 둘 다 남는다"가 빨개짐.
+
+**`ShortcutRegistry.restoreBindings(bindings): boolean`**이 더해졌습니다(전체 리뷰
+Important 5-나) — 백업에서 `parse`한 맵을 통째로 커밋하는 길입니다.
+`themePalette.applyBackup`과 같은 자리지만, 팔레트는 라이트·다크 두 저장소를 따로
+갖고 있어 `write`만 하고 `:root` 적용은 넘긴 테마에만 하는 반면, 단축키는 저장소가
+하나뿐이라 `write`와 이 탭의 화면 상태 갱신을 둘 다 이 함수가 합니다.
+`storage.write(bindings)`를 호출자가 직접 부르면 저장은 되지만 이 탭의 화면은
+낡습니다 — `subscribe`는 설계상 같은 탭 안의 변경을 안 받기 때문입니다(§7.1).
+`setBinding`을 항목마다 루프로 부르는 방법도 있었지만, 위 5-가가 고쳐지기 전에는
+마지막 항목만 남았고 고쳐진 지금도 항목 수만큼 `storage.write`를 반복해 부르는
+낭비가 있습니다 — `restoreBindings`는 한 번만 씁니다. `setBinding`과 같은 경계 —
+controlled이거나 `storage`가 없으면 아무것도 안 하고 `false`를 돌려줍니다.
+
+인계 문서가 §5(이 항목)에 대해 적어 둔 *"저장 위치는 localStorage, 킷이 맡음"*은
+**더 이상 유일한 답이 아닙니다** — 킷이 맡을 수도(위 표 2행), 앱이 맡을 수도(1행)
+있고 어느 쪽도 기본값이 강제되지 않습니다(3행 — 안 쓰면 아무 저장도 안 일어남).
+저장 주인이 서버로 더 옮겨가도 이 표의 구조 자체는 안 바뀝니다 — `overrides`를
+서버에서 읽어 온 값으로 채우면 그대로 controlled입니다.
+
+경계선은 이미 킷 안에 있습니다: `src/Sidebar.tsx`의 머리말 주석이 *"localStorage 저장
+같은 정책은"* 앱 몫이라고 적어 둔 반면 `themeTokens`·`shortcutStorage`는 킷이 저장을
+맡을 **수 있는** 자리입니다. **킷이 소유한 설정은 킷이 옵트인으로, 앱의 UI 상태는
+앱이** — 단축키 바인딩은 전자이고, 어느 쪽이 실제로 쥐는지는 앱이 `overrides`/
+`storage` 중 무엇을 넘기느냐로 정해집니다.
+
+⚠️ **"매 렌더 결정됩니다"는 원래 여기 있던 문장인데, `controlled` 판정과 `ownOverrides`의
+데이터를 섞어 읽으면 틀린 문장입니다(전체 리뷰 Important 4).** `controlled` 판정
+자체(`overrides !== undefined`)는 정확히 매 렌더 새로 평가됩니다. 하지만 uncontrolled일
+때 킷이 들고 있는 사본(`ownOverrides`)은 그렇지 않습니다 — `useState` 초기화 함수는
+마운트에 한 번만 돌므로, **`controlled` 여부나 `storage` 참조가 바뀔 때만** 저장소에서
+다시 채웁니다(`ThemeColorEditor`의 `loadedTheme` 패턴과 같은 자리). 이전에는 이 재읽기
+자체가 없어서, controlled로 마운트한 뒤 uncontrolled로 바뀌거나 `storage`를 다른
+저장소로 바꿔도 `ownOverrides`가 마운트 당시 값에 갇힌 채 남았습니다 — 저장소에 값이
+있어도 전부 `defaultCombo`로 보였고, 그 뒤 첫 `setBinding`이 그 저장된 값을 통째로
+지웠습니다. 뮤테이션 확인: 위 재읽기 분기를 지우면
+`describe("controlled → uncontrolled 전환")`이 빨개짐.
 
 ---
 
@@ -451,6 +595,7 @@ restoring them"*입니다. 저장이 맨 JSON이 아니라 **버전 붙은 봉�
 |---|---|---|
 | JS 코드 | **아마 빠짐 — 소비자 번들러에 달렸습니다** | `package.json:13`의 `"sideEffects": ["*.css"]`가 표준 신호이고 **킷이 할 수 있는 전부**입니다. 아래 참고 |
 | `document` 리스너 | 0개 | 리스너가 `ShortcutProvider`의 effect 안에만 삽니다 |
+| `window` `storage` 리스너 | 0개 | Task 7이 붙인 것 — `storage`를 uncontrolled로 넘겼을 때만 `storage.subscribe`가 부착됩니다(§7.3). `overrides`가 있거나(controlled) `storage`가 없으면 0개, `ShortcutProvider`를 아예 안 쓰면 물론 0개입니다. 이 줄이 §8 표에 없던 것이 전체 리뷰 Minor 8입니다 — Task 7이 `document` 리스너 칸만 재고 이 축을 표에 안 더했습니다 |
 | CSS | **바이트는 냅니다** | `css/index.css`가 열한 개를 `@import`하는 통번들입니다 |
 
 ⚠️ **JS 칸만 검사로 못박을 수 없습니다.** 나머지 둘은 킷 안에서 재지지만, "번들에서
@@ -473,12 +618,14 @@ restoring them"*입니다. 저장이 맨 JSON이 아니라 **버전 붙은 봉�
 
 | 파일 | 맡는 것 | 왜 갈라두나 |
 |---|---|---|
-| `src/shortcuts.ts` | 조합 파싱·직렬화·정규화, 매칭, **규칙 일곱**, §7.1 이음매 | React가 없어서 규칙을 단독으로 빨갛게 만들 수 있습니다 |
-| `src/ShortcutProvider.tsx` | 액션 등록, 리스너 수명 | 마운트 문제와 규칙을 안 섞습니다 |
-| `src/ShortcutSettings.tsx` | 설정 UI·녹음기·충돌 표시 | 그리기만. 판정은 위에서 가져옵니다 |
+| `src/shortcuts.ts` | 조합 파싱·직렬화·정규화, 매칭, **규칙 일곱** | React가 없어서 규칙을 단독으로 빨갛게 만들 수 있습니다 |
+| `src/shortcutStorage.ts` | §7.1 저장소 계약(`createShortcutStorage`) — 봉투·왕복·`dropped` | React도 `ShortcutProvider`도 없어서 저장 로직을 단독으로 빨갛게 만들 수 있고, `themePalette.ts`처럼 다른 소비자(백업 UI 등)가 `ShortcutProvider` 없이도 가져다 쓸 수 있습니다 |
+| `src/ShortcutProvider.tsx` | 액션 등록, 리스너 수명, `storage`/`overrides` 경계(§7.3), `setBinding` | 마운트 문제와 규칙을 안 섞습니다 |
+| `src/ShortcutSettings.tsx` | 설정 UI·녹음기·충돌 표시, `onChange`/`setBinding` 커밋 선택 | 그리기만. 판정은 위에서 가져옵니다 |
 | `css/shortcuts.css` | `.kkqq-shortcuts` 아래 전부 | §8 |
 
-`src/index.ts`에 줄이 하나 늘어납니다.
+`src/index.ts`에 줄이 **두 개** 늘어납니다 — `ShortcutProvider`/`ShortcutSettings`
+계열(Task 6까지)과 `shortcutStorage.ts`의 export 한 줄(Task 7).
 
 ---
 
@@ -505,6 +652,12 @@ restoring them"*입니다. 저장이 맨 JSON이 아니라 **버전 붙은 봉�
 7. **§2.4가 실제로 막는다** — 트리거된 뒤 그 이벤트의 `defaultPrevented`가 참이다.
    대조군: 트리거되지 **않은** 조합에서는 거짓이다. 이 둘이 같이 있어야 §2.4의 표
    두 줄이 증명됩니다.
+8. **`ShortcutProvider`가 언마운트되면 `storage.subscribe`가 돌려준 해지 함수가
+   실제로 불린다**(전체 리뷰 Minor 8) — 3번이 `document`의 keydown 리스너만 재고
+   `window`의 `storage` 리스너는 안 재고 있었습니다. `spyStorage()`의 `subscribe`가
+   `vi.fn()` 해지 함수를 돌려주게 하고, 언마운트 후 그 스파이가 불렸는지를 봅니다
+   (`window.addEventListener`를 직접 스파이하면 React 자신의 다른 리스너까지 섞여
+   잡음이 됩니다).
 
 > ⚠️ 이 저장소의 규칙: **고침을 빼고 실제로 빨개지는 것을 본 검사만 인정합니다.**
 > 그리고 **뮤테이션 전에 커밋하세요** — `git checkout --`이 미커밋 수정을 날립니다.
@@ -534,7 +687,6 @@ restoring them"*입니다. 저장이 맨 JSON이 아니라 **버전 붙은 봉�
 ### 미결
 
 - 허용 표식의 이름과 모양(`data-…`). §2 규칙 3의 의미는 정해졌고 표기만 남았습니다.
-- 저장 구현체 — §7. **개편이 끝난 뒤.**
 
 ---
 

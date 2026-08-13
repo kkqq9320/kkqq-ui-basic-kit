@@ -1,10 +1,31 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useShortcutRegistry } from "./ShortcutProvider";
 import { beginRecording, comboFromEvent, endRecording, findConflict, formatCombo, UNBINDABLE_CODES } from "./shortcuts";
 
 export type ShortcutSettingsProps = {
-  onChange(id: string, combo: string | null): void;
+  /** 있으면 이 함수로 커밋합니다(앱이 소유) — 지금까지의 동작입니다. **없으면**
+   *  `registry.setBinding`으로 커밋합니다 — `ShortcutProvider`가 `storage`를 받은
+   *  uncontrolled일 때만 실제로 저장됩니다(`registry.canPersist`가 그 조건을 봅니다).
+   *
+   *  **`onChange`도 없고 저장할 곳도(`canPersist`) 없으면**(즉 Provider에 `overrides`도
+   *  `storage`도 없으면) 저장할 곳이 어디에도 없다는 뜻입니다. 그 자리에서 조용히
+   *  아무 일도 안 하면 사용자는 "녹음했는데 왜 안 남지"를 새로고침 전까지 모릅니다
+   *  — 그래서 `console.warn`으로 개발자에게 알립니다(`DateWheelPicker`가 `fields`
+   *  오배선을 알리는 것과 같은 선례 — `importMetaEnv?.DEV` 가드와 인스턴스별 중복
+   *  억제까지 그대로 따릅니다). 화면에 뜨는 `role="alert"` 안내로는 안 했습니다
+   *  — 이건 런타임 상태(조합 충돌 등)가 아니라 **배선 누락**이라 사용자가 아니라
+   *  개발자가 고칠 문제이기 때문입니다. 실제 배포에서는 둘 중 하나가 항상 있어야
+   *  하므로, 이 경고는 개발 중에만 마주칠 것으로 기대합니다.
+   *
+   *  ⚠️ **배선은 됐는데 `storage.write`가 막힌 경우(프라이빗 모드·용량 초과)는 다른
+   *  경로입니다** — `registry.canPersist`는 참인데 `registry.setBinding`이 `false`를
+   *  돌려줍니다. 이건 배선 누락이 아니라 **런타임 저장 실패**라 사용자가 알아야 할
+   *  일이고(다음에 열면 이 조합이 사라져 있을 수 있음), 그래서 `console.warn`이 아니라
+   *  화면의 `role="alert"` 안내로 냅니다(전체 리뷰 Important 2 — 이전에는 `setBinding`의
+   *  `false`를 전부 "저장할 곳이 없다"로 번역해, 이미 배선한 앱이 저장소가 막혔을
+   *  때도 배선하라는 경고를 받았습니다). */
+  onChange?(id: string, combo: string | null): void;
   className?: string;
 };
 
@@ -31,6 +52,38 @@ export function ShortcutSettings({ onChange, className }: ShortcutSettingsProps)
   const registry = useShortcutRegistry();
   const [recording, setRecording] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  // `DateWheelPicker`의 `fields` 오배선 경고와 같은 선례를 그대로 따릅니다(전체 리뷰
+  // Important 2) — `import.meta.env`는 Vite 전용 확장이라 그 자리가 아예 없는
+  // 번들러도 있습니다. `?.` 없이 `.DEV`를 읽으면 그 자리에서 `TypeError`를 던지므로
+  // (이 킷은 `exports["."]`가 소스를 그대로 내보내 소비자의 번들러를 그대로 탑니다),
+  // 옵셔널 체이닝이 "던지지 않는다"는 목적이 실제로 성립하는 데 필수입니다.
+  const importMetaEnv = (import.meta as { env?: { DEV?: boolean } }).env;
+  // 배선 누락 경고를 인스턴스당 한 번만 냅니다 — 녹음·지우기마다 매번 찍히면 신호가
+  // 아니라 소음입니다(`DateWheelPicker`의 `warnedFieldsRef`와 같은 이유). 여기서는
+  // 원인이 하나뿐이라(Provider에 overrides도 storage도 없음) fields처럼 시그니처를
+  // 따로 둘 필요 없이 불리언 하나로 충분합니다.
+  const warnedUnwiredRef = useRef(false);
+
+  /** `onChange`(앱 소유)가 있으면 그걸 부르고 끝입니다. 없으면 `registry.setBinding`에
+   *  맡기되, 실패를 두 가지로 구분합니다(전체 리뷰 Important 2) —
+   *  `registry.canPersist`가 거짓이면 저장할 곳 자체가 없는 배선 누락(`console.warn`,
+   *  개발자용), 참인데 `setBinding`이 실패하면 저장소가 막힌 런타임 문제(화면
+   *  `role="alert"` 안내, 사용자용)입니다. 위 `ShortcutSettingsProps.onChange` 문서
+   *  참고. */
+  function commit(id: string, combo: string | null) {
+    if (onChange) { onChange(id, combo); return; }
+    if (!registry.canPersist) {
+      if (importMetaEnv?.DEV && !warnedUnwiredRef.current) {
+        warnedUnwiredRef.current = true;
+        console.warn("ShortcutSettings: 이 조합을 저장할 곳이 없습니다 — onChange를 넘기거나 ShortcutProvider에 storage를 넘기세요.");
+      }
+      return;
+    }
+    if (!registry.setBinding(id, combo)) {
+      setMessage("이 조합을 저장하지 못했습니다 — 브라우저가 저장소를 막았거나 용량이 찼습니다. 이번 방문에서는 계속 쓸 수 있지만 새로고침하면 사라집니다.");
+    }
+  }
 
   useEffect(() => {
     if (!recording) return;
@@ -61,7 +114,7 @@ export function ShortcutSettings({ onChange, className }: ShortcutSettingsProps)
         return;
       }
       setMessage(null);
-      onChange(recording!, text);
+      commit(recording!, text);
       setRecording(null);
     }
     document.addEventListener("keydown", handleKeyDown, true);
@@ -69,6 +122,8 @@ export function ShortcutSettings({ onChange, className }: ShortcutSettingsProps)
       document.removeEventListener("keydown", handleKeyDown, true);
       endRecording();
     };
+    // commit은 registry·onChange만 읽으므로 의존성은 그대로입니다 — 이 둘이 바뀌면
+    // effect가 다시 걸려 최신 commit을 새로 캡처합니다.
   }, [recording, registry, onChange]);
 
   return (
@@ -95,7 +150,7 @@ export function ShortcutSettings({ onChange, className }: ShortcutSettingsProps)
               >
                 {recording === item.id ? `${item.label} — 조합을 누르세요` : `${item.label} ${bound ? displayCombo(bound) : "없음"}`}
               </button>
-              <button className="kkqq-shortcuts__clear secondary-button" type="button" onClick={() => { setMessage(null); onChange(item.id, null); }}>지우기</button>
+              <button className="kkqq-shortcuts__clear secondary-button" type="button" onClick={() => { setMessage(null); commit(item.id, null); }}>지우기</button>
             </li>
           );
         })}
