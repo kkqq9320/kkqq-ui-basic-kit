@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ShortcutProvider, type ShortcutAction } from "../src/ShortcutProvider";
 import { ShortcutSettings, displayCombo } from "../src/ShortcutSettings";
 import { isRecording } from "../src/shortcuts";
+import { createShortcutStorage } from "../src/shortcutStorage";
 
 const cssModules = import.meta.glob("../css/*.css", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 const SHORTCUT_CSS = cssModules["../css/shortcuts.css"];
@@ -28,6 +29,7 @@ const INDEX_CSS = cssModules["../css/index.css"];
 afterEach(() => {
   cleanup();
   expect(isRecording()).toBe(false);
+  localStorage.clear();
 });
 
 const ACTIONS: ShortcutAction[] = [
@@ -250,5 +252,110 @@ describe("CSS는 자기 뿌리 밖으로 안 나간다 (스펙 §8)", () => {
 
   it("통번들이 이 파일을 싣는다", () => {
     expect(INDEX_CSS).toContain('@import "./shortcuts.css";');
+  });
+});
+
+/* Task 7 — onChange가 선택이 됐습니다. 없으면 registry.setBinding으로 커밋합니다
+ * (ShortcutProvider가 storage를 받은 uncontrolled일 때만 실제로 저장됩니다). */
+describe("onChange 없이 storage로 커밋한다", () => {
+  it("녹음한 조합이 storage에 저장된다", () => {
+    const storage = createShortcutStorage({ key: "test:settings-record" });
+    render(
+      <ShortcutProvider actions={ACTIONS} storage={storage}>
+        <ShortcutSettings />
+      </ShortcutProvider>,
+    );
+
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "KeyJ", ctrlKey: true });
+
+    expect(storage.read()).toEqual({ toggle: "Ctrl+KeyJ" });
+  });
+
+  it("저장된 값이 화면에도 바로 반영된다 — 버튼 문구가 새 조합으로 바뀐다", () => {
+    const storage = createShortcutStorage({ key: "test:settings-record2" });
+    render(
+      <ShortcutProvider actions={ACTIONS} storage={storage}>
+        <ShortcutSettings />
+      </ShortcutProvider>,
+    );
+
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "KeyJ", ctrlKey: true });
+
+    expect(screen.getByRole("button", { name: /사이드바 접기 Ctrl \+ J/ })).toBeTruthy();
+  });
+
+  it("지우기도 storage에 반영된다", () => {
+    const storage = createShortcutStorage({ key: "test:settings-clear" });
+    storage.write({ backup: "Ctrl+KeyB" });
+    render(
+      <ShortcutProvider actions={ACTIONS} storage={storage}>
+        <ShortcutSettings />
+      </ShortcutProvider>,
+    );
+
+    const clearButtons = screen.getAllByRole("button", { name: "지우기" });
+    fireEvent.click(clearButtons[1]); // "백업 페이지로 이동"
+
+    expect(storage.read()).toEqual({ backup: null });
+  });
+
+  // 대조군 — onChange가 있으면 여전히 그쪽이 이깁니다(앱이 소유). storage가 있어도
+  // 무시됩니다. 이게 없으면 "언제나 registry.setBinding을 부르는" 구현으로도
+  // 위 셋이 통과합니다.
+  it("대조군 — onChange가 있으면 storage 대신 그걸 부른다", () => {
+    const storage = createShortcutStorage({ key: "test:settings-onchange-wins" });
+    const onChange = vi.fn();
+    render(
+      <ShortcutProvider actions={ACTIONS} storage={storage}>
+        <ShortcutSettings onChange={onChange} />
+      </ShortcutProvider>,
+    );
+
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "KeyJ", ctrlKey: true });
+
+    expect(onChange).toHaveBeenCalledWith("toggle", "Ctrl+KeyJ");
+    expect(storage.read()).toEqual({});
+  });
+});
+
+/* onChange도 없고 storage도 없으면 저장할 곳이 없습니다 — 조용히 넘어가지 않고
+ * console.warn으로 개발자에게 알립니다(ShortcutSettingsProps.onChange 문서 참고). */
+describe("onChange도 storage도 없을 때", () => {
+  it("조용히 넘어가지 않고 console.warn을 부른다", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<ShortcutProvider actions={ACTIONS}><ShortcutSettings /></ShortcutProvider>);
+
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "KeyJ", ctrlKey: true });
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it("바인딩은 바뀌지 않는다 — 버튼 문구가 그대로다", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<ShortcutProvider actions={ACTIONS}><ShortcutSettings /></ShortcutProvider>);
+
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "KeyJ", ctrlKey: true });
+
+    expect(screen.getByRole("button", { name: "사이드바 접기 없음" })).toBeTruthy();
+    vi.restoreAllMocks();
+  });
+
+  // 대조군 — storage가 있으면 같은 조작이 warn 없이 저장된다.
+  it("대조군 — storage가 있으면 warn 없이 저장된다", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const storage = createShortcutStorage({ key: "test:settings-no-warn" });
+    render(<ShortcutProvider actions={ACTIONS} storage={storage}><ShortcutSettings /></ShortcutProvider>);
+
+    record("사이드바 접기");
+    fireEvent.keyDown(document, { code: "KeyJ", ctrlKey: true });
+
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
