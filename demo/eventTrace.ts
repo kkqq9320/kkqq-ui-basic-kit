@@ -628,10 +628,25 @@ function startSwipeTrace(column: Element) {
   let plateauRun = 0;
   let lastOff = "";
   let raf = 0;
+  let lastFrameAt = 0;
+  let worstFrameGap = 0;
+  let worstFrameAt = 0;
+  let framesOver32 = 0;
 
   append("swipe start — 매 프레임 샘플링(값이 바뀐 프레임만 남깁니다)");
 
   const tick = () => {
+    /* 🔴 **드래그 중의 프레임 간격** — 오너: "전체적으로 안드로이드에서 엄청 버벅대네."
+     * `slide`는 커밋 **뒤** 애니메이션만 봅니다. 손가락이 닿아 있는 동안은 이 루프가
+     * 유일한 눈이고, 지금까지는 **총 프레임 수만** 남겼습니다. 캡처에서 손으로 세어 보면
+     * 같은 기기가 20fps에서 90fps까지 흔들렸는데, 그 수를 트레이스가 직접 말해야 합니다. */
+    const now = performance.now();
+    if (lastFrameAt > 0) {
+      const gap = now - lastFrameAt;
+      if (gap > worstFrameGap) { worstFrameGap = gap; worstFrameAt = frames; }
+      if (gap > 32) framesOver32 += 1;
+    }
+    lastFrameAt = now;
     frames += 1;
     const values = readValuesEl(column);
     if (values) {
@@ -653,7 +668,10 @@ function startSwipeTrace(column: Element) {
   swipeStop = () => {
     cancelAnimationFrame(raf);
     swipeStop = null;
-    append(`swipe end   frames=${frames} changed=${changed} commits(gen)=${generation} maxSameOffRun=${plateauMax}`);
+    const held = Math.round(performance.now() - started);
+    const fps = held > 0 ? Math.round((frames / held) * 1000) : 0;
+    append(`swipe end   frames=${frames} in ${held}ms (~${fps}fps)  🔎최대프레임간격=${Math.round(worstFrameGap)}ms(f${worstFrameAt})  32ms초과=${framesOver32}  changed=${changed} commits(gen)=${generation} maxSameOffRun=${plateauMax}`);
+    append("  읽는 법: 드래그 중 fps입니다. 120Hz 기기면 정상이 ~120이고, 60 아래로 내려가면 손끝에서 '버벅'으로 느껴집니다. `slide`(커밋 뒤 애니메이션)와 따로 보세요 — 둘 중 어디가 느린지가 고칠 자리를 가릅니다.");
     append("  읽는 법: 같은 off가 연달아 여러 프레임이면 노치 끝의 죽는 구간(A). drag가 Y→N→Y로 깜빡이며 anim이 0→1→0이고 at이 210에 못 미치면 잘린 애니메이션(B).");
   };
 }
