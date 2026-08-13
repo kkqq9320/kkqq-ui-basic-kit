@@ -53,6 +53,21 @@ describe("null과 키 없음", () => {
   });
 });
 
+/* ⚠️ **전체 리뷰 Important 3.** 위 describe는 "빈 맵" 특례만 잽니다 — write가 병합
+ * (`{ ...read(), ...next }`)으로 바뀌어도 그 테스트들은 그대로 초록입니다(빈 맵과
+ * 병합해도 결과가 빈 맵과 똑같으므로). `write`가 실제로 **통째 교체**인지는 이전
+ * 값이 있는 일반 경로에서만 드러납니다. */
+describe("write는 통째 교체다 — 패치가 아니다", () => {
+  it("write({a}) 뒤 write({b})를 부르면 a는 사라지고 b만 남는다", () => {
+    const storage = createShortcutStorage({ key: "test:whole-replace" });
+    storage.write({ a: "Ctrl+KeyA" });
+
+    storage.write({ b: "Ctrl+KeyB" });
+
+    expect(storage.read()).toEqual({ b: "Ctrl+KeyB" });
+  });
+});
+
 describe("빈 맵을 쓰면 키를 지운다", () => {
   it("먼저 값을 쓰고 빈 맵으로 다시 쓰면 저장된 항목 자체가 사라진다", () => {
     const storage = createShortcutStorage({ key: "test:clear" });

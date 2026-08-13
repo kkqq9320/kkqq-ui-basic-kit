@@ -31,7 +31,15 @@ export type ShortcutStorage = {
    *  돌려줍니다. */
   read(): ShortcutBindings;
   /** 저장에 성공하면 `true`. 저장소가 막혀 있으면 `false`이고 **예외를 던지지
-   *  않습니다.** 빈 맵을 주면 저장된 키 자체를 지웁니다 — 빈 봉투를 남기지
+   *  않습니다.**
+   *
+   *  ⚠️ **`next`는 저장소의 덮어쓰기 전체입니다. 패치가 아닙니다** — `write({a})` 뒤에
+   *  `write({b})`를 부르면 저장에는 `b`만 남고 `a`는 지워집니다(`ThemeColorEditor`의
+   *  `overrides` prop과 같은 계약, 전체 리뷰 Important 3). 항목 하나만 바꾸고 싶은
+   *  호출자는 먼저 `read()`(또는 들고 있는 사본)로 전체를 읽어 병합한 뒤 넘겨야
+   *  합니다 — `ShortcutProvider.setBinding`이 그 패턴입니다.
+   *
+   *  빈 맵을 주면 저장된 키 자체를 지웁니다 — 빈 봉투를 남기지
    *  않습니다(themeTokens의 `writeTokenOverrides`와 같은 선례). */
   write(next: ShortcutBindings): boolean;
   /** 다른 탭·다른 창에서 이 저장소가 바뀌면(`storage` 이벤트) 불립니다. **같은 탭

@@ -444,6 +444,14 @@ export function createShortcutStorage(options?: { key?: string }): ShortcutStora
 
 - **`write`는 절대 던지지 않고 `boolean`을 돌려줍니다.** 저장소가 막힌 환경(프라이빗
   모드·용량 초과)에서 설정 화면이 죽지 않습니다. `read`도 던지지 않고 실패하면 `{}`.
+- ⚠️ **`write(next)`의 `next`는 저장소의 덮어쓰기 전체입니다. 패치가 아닙니다** —
+  `write({a})` 뒤에 `write({b})`를 부르면 저장에는 `b`만 남고 `a`는 지워집니다
+  (`ThemeColorEditor`의 `overrides` prop과 같은 계약). 이전까지 이 계약은 "빈 맵을
+  쓰면 지운다"는 특례로만 테스트됐고, 일반 경로(`write({a})` → `write({b})`가 `a`를
+  실제로 지운다)는 문서에도 테스트에도 없었습니다(전체 리뷰 Important 3) —
+  `describe("write는 통째 교체다")`가 이제 그 경로를 직접 잽니다. 항목 하나만 바꾸고
+  싶은 호출자는 `read()`로 전체를 먼저 읽어 병합해야 합니다 — `ShortcutProvider
+  .setBinding`이 그 패턴입니다.
 - **빈 맵을 쓰면 저장된 키 자체를 지웁니다** — 빈 봉투를 남기지 않습니다(`themeTokens`의
   `writeTokenOverrides` 선례). 뮤테이션 확인: 이 분기를 지우면
   `describe("빈 맵을 쓰면 키를 지운다")`가 빨개짐.
