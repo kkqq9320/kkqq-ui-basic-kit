@@ -16,3 +16,6 @@ export { AutoGrowTextarea, type AutoGrowTextareaProps } from "./AutoGrowTextarea
 export { PageHeader, SummaryGrid, SummaryCard, PanelGrid, Panel, FieldGrid, DismissibleDetails, type GridJustify } from "./PageChrome";
 export { PopupDepthContext, useBackToClose, useEscapeToClose, useScrollDirectionHidden, useVisualViewportBox, useVirtualKeyboard, useVirtualKeyboardOpen, type VisualViewportBox, type VirtualKeyboard } from "./hooks";
 export { isPrimaryButton, dropdownViewportSpace, shouldOpenDropdownAbove, onViewportChange, captureScrollSnapshot, restoreFocusWithoutScroll, type ScrollSnapshot } from "./positioning";
+export { ShortcutProvider, useShortcutRegistry, type ShortcutAction, type ShortcutProviderProps, type ShortcutRegistry } from "./ShortcutProvider";
+export { ShortcutSettings, displayCombo, type ShortcutSettingsProps } from "./ShortcutSettings";
+export { BARE_KEY_SCOPE_ATTR, KIT_RESERVED, SIDEBAR_TOGGLE_ID, findConflict, formatCombo, normalizeCombo, parseCombo, shouldTrigger, sidebarToggleAction, type Combo, type Conflict, type SidebarToggleActionOptions } from "./shortcuts";

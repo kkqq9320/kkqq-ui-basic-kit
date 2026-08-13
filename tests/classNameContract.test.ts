@@ -45,6 +45,54 @@ const components = Object.entries(sources).flatMap(([path, source]) =>
   exportedComponents(source).map((component) => ({ ...component, path: path.replace("../src/", "") })),
 );
 
+/** `export function Name(...)`부터, 함수 본문의 짝 맞는 `{ ... }` 끝까지를 통째로
+ * 뗍니다. `exportedComponents`는 시그니처(괄호 안)만 떼는데, 이건 몸통까지 봐야
+ * 하는 `NO_OWN_DOM` 검사 전용입니다. */
+function componentBody(source: string, name: string): string {
+  const marker = `export function ${name}(`;
+  const start = source.indexOf(marker);
+  if (start === -1) return "";
+  let i = start + marker.length - 1; // '(' 위치
+  let depth = 0;
+  for (; i < source.length; i += 1) {
+    if (source[i] === "(") depth += 1;
+    else if (source[i] === ")") {
+      depth -= 1;
+      if (depth === 0) { i += 1; break; }
+    }
+  }
+  const braceStart = source.indexOf("{", i);
+  if (braceStart === -1) return "";
+  let bodyDepth = 0;
+  let end = source.length;
+  for (let j = braceStart; j < source.length; j += 1) {
+    if (source[j] === "{") bodyDepth += 1;
+    else if (source[j] === "}") {
+      bodyDepth -= 1;
+      if (bodyDepth === 0) { end = j; break; }
+    }
+  }
+  return source.slice(braceStart, end + 1);
+}
+
+/** JSX에서 소문자로 시작하는 태그(`<div`, `<span>`, `<input/>`처럼 host 엘리먼트,
+ * 즉 자기 DOM 노드)를 찾습니다. 대문자로 시작하는 건 컴포넌트나 컨텍스트
+ * (`<Foo>`, `<ShortcutContext.Provider>`)라 자기 DOM이 아닙니다. */
+const OWN_DOM_TAG = /<[a-z][\w-]*[\s/>]/;
+
+/* 이 규칙의 근거(위 파일 머리말)는 "CSS 속성을 prop으로 하나씩 따라가는 방식은
+ * 수렴하지 않는다" — 즉 **자기 DOM을 렌더하는** 컴포넌트가 대상입니다. 여기 올릴 이름은
+ * 자기 DOM 노드가 하나도 없는 컴포넌트뿐입니다(className을 받아도 붙일 자리가 없음).
+ * `tests/pageChrome.test.tsx`가 "실제로 붙음"을 렌더로 짝지어 검사하는데, 그 파일은
+ * DOM을 렌더하는 컴포넌트만 손으로 골라 import합니다 — 여기 이름을 추가하려면 그 전제
+ * (DOM이 없다)가 참인지 먼저 확인하세요.
+ *
+ * - `ShortcutProvider`(src/ShortcutProvider.tsx): `<Context.Provider>{children}</Context.Provider>`
+ *   만 렌더합니다. 감싸는 `<div>`를 추가해 className을 붙일 수는 있지만, 그러면 이 킷을
+ *   쓰는 모든 앱에 새 DOM 노드가 하나씩 생깁니다 — 스펙 §8("안 쓰면 영향 0")과 Task 3의
+ *   구현을 어기는 변경이라 하지 않습니다. */
+const NO_OWN_DOM = new Set(["ShortcutProvider"]);
+
 describe("내보내는 컴포넌트는 전부 className을 받는다", () => {
   // 전제 — 파싱이 0건이면 아래 단언이 **공허하게** 통과합니다.
   it("컴포넌트를 실제로 찾아냈다", () => {
@@ -55,7 +103,24 @@ describe("내보내는 컴포넌트는 전부 className을 받는다", () => {
   /* **exhaustive 형태입니다** — 빠진 것을 전부 나열해 비교합니다. `every(...)`로 쓰면
    * 실패가 "false"라고만 말하고 어느 컴포넌트인지는 안 알려줍니다. */
   it("빠진 컴포넌트가 없다", () => {
-    const missing = components.filter((component) => !component.signature.includes("className"));
+    const missing = components.filter((component) => !component.signature.includes("className") && !NO_OWN_DOM.has(component.name));
     expect(missing.map((component) => `${component.name} (${component.path})`)).toEqual([]);
+  });
+
+  /* NO_OWN_DOM의 근거("자기 DOM 노드가 없다")가 주석으로만 적혀 있으면 아무도 다시
+   * 재지 않습니다 — 이 저장소가 이미 그 모양으로 값을 치른 적이 있습니다("주석에 적은
+   * 것은 아무도 다시 재지 않는다"). 그래서 예외로 오른 이름 각각의 소스를 파싱해,
+   * 자기 DOM 태그를 실제로 안 그리는지 여기서 다시 잽니다. 나중에 DOM을 그리는
+   * 컴포넌트가 예외에 오르면(예: Task 5의 ShortcutSettings — 실제로 DOM을 그리므로
+   * 예외 대상이 아닙니다) 여기서 빨개집니다. */
+  it("NO_OWN_DOM 예외는 실제로 자기 DOM 태그를 그리지 않는다", () => {
+    for (const name of NO_OWN_DOM) {
+      const component = components.find((candidate) => candidate.name === name);
+      expect(component, `${name}이 컴포넌트 목록에서 안 잡힘 — 이름을 확인하세요`).toBeTruthy();
+      const source = sources[`../src/${component!.path}`];
+      const body = componentBody(source, name);
+      expect(body, `${name}의 함수 본문을 못 찾음`).not.toBe("");
+      expect(OWN_DOM_TAG.test(body), `${name}이 자기 DOM 태그를 그리는데 NO_OWN_DOM에 올라 있음`).toBe(false);
+    }
   });
 });
