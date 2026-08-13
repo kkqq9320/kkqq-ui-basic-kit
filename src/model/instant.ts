@@ -24,6 +24,65 @@ export const UNIT_LADDER = ["year", "month", "day", "hour", "minute", "second"] 
  *  그대로 유지하기 때문입니다 — 이 상수가 그 호출들의 암묵적 계약입니다. */
 const DEFAULT_FIELDS: WheelUnit[] = ["year", "month", "day"];
 
+/** 시(時)를 어떻게 **읽을지** — 24시간제(`15`)인지 12시간제(`오후 03`)인지.
+ *  설계 스펙 §7·§11. `src/settings.ts`가 이 이름을 다시 내보내고, 전역 설정 값이
+ *  그 타입입니다 — 정의가 여기 있는 이유는 이것이 **값을 읽는 방식**이라 모델의
+ *  어휘이고, 모델은 아무것도 import 하지 않기 때문입니다(위 헤더 주석). */
+export type HourFormat = "12" | "24";
+
+/** 시 열·시 세그먼트를 그릴 때 필요한 전부. **오전/오후 문자열이 인자로 들어옵니다** —
+ *  `weekdays`가 이미 같은 방식이고, 이 모듈은 한국어를 모릅니다. 스펙 §10이
+ *  "`AM`/`PM`으로 바꾸면 폭이 달라진다"고 소비자에게 경고하는 것 자체가 **바꿀 수
+ *  있어야 한다**는 뜻입니다. */
+export type HourDisplay = { format: HourFormat; am: string; pm: string };
+
+/** 기본은 24시간제 — 안 넘기면 지금까지와 **글자 하나도** 다르지 않습니다. 그래서
+ *  오전/오후 문자열이 빈 문자열인 것이 맞습니다: `format: "24"`에서는 읽히지 않습니다. */
+const DEFAULT_HOUR_DISPLAY: HourDisplay = { format: "24", am: "", pm: "" };
+
+/**
+ * 24시간 값 하나를 **12시간제로 읽은 글자**로. 값은 안 바뀝니다 — 스펙 §7의 핵심이
+ * "시 열은 24칸 그대로이고 라벨만 바뀐다"입니다.
+ *
+ * `0 → 12`, `12 → 12`가 이 함수의 전부입니다. `h % 12`만 쓰면 자정과 정오가 둘 다
+ * `00`이 되어, 12시간제에 존재하지 않는 시각이 화면에 나옵니다.
+ */
+export function twelveHourText(hour24: number, display: HourDisplay): string {
+  const reading = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return `${hour24 < 12 ? display.am : display.pm} ${pad(reading, 2)}`;
+}
+
+/** 오전/오후 조작이 **존재하는가**, 그리고 지금 값은 어느 절반인가(3단계, 스펙 §7).
+ *
+ *  시 열이 없는 픽커에는 이 조작 자체가 없으므로 `null`입니다 — 그래서 존재 여부와
+ *  절반 판정을 한 함수가 답합니다. **기계가 `fields.includes("hour")`나
+ *  `parts.hour < 12`를 직접 쓰지 않게 하는 것이 목적입니다**: 2b-4의 F-4에서
+ *  `hasTimeUnit`이 정확히 그 이유로 `model.family`로 옮겨졌고(§3.2 "기계는 단위가
+ *  무엇인지 모릅니다"), 여기가 같은 자리입니다. 정오가 오후의 시작이라는 것도
+ *  값 규칙이라 여기 있습니다. */
+export function meridiemOf(value: string, fields: WheelUnit[]): "am" | "pm" | null {
+  if (!fields.includes("hour")) return null;
+  const parts = parseValue(value, fields);
+  if (!parts) return null;
+  return parts.hour < 12 ? "am" : "pm";
+}
+
+/** 오전↔오후 한 번에 넘어가기가 시 열에서 몇 칸 이동인가(3단계, 스펙 §7).
+ *
+ *  🔴 **자리올림 없음 규칙의 유일한 예외가 여기입니다.** 오전↔오후는 독립된 값이
+ *  아니라 시(時)라는 한 숫자의 **다른 절반**이라, 그 조작은 곧 시 값을 ±12 옮기는
+ *  일입니다. 그래도 열 밖으로는 안 샙니다 — `shiftDateValue`가 시 열 안에서
+ *  순환하므로 **날짜는 그대로**입니다(오후 11시 → 오전 11시, 전날이 되지 않습니다).
+ *
+ *  부호가 있는 이유는 화면입니다: 열은 오전 00…11 다음에 오후 12…23이 오는 24칸이라,
+ *  오후로 갈 때는 아래로, 오전으로 되돌릴 때는 위로 도는 것이 눈에 맞습니다. */
+export const MERIDIEM_NOTCHES = 12;
+
+/** 오전/오후가 움직이는 열. **이름이 모델에 있는 이유는 §3.2입니다** — 기계는 어느
+ *  열인지 이 상수로 지목할 뿐, "시가 24칸이다"·"정오가 오후의 시작이다"·"±12다"를
+ *  알지 않습니다. 그 셋은 전부 위 함수·상수가 답합니다. */
+export const MERIDIEM_UNIT: WheelUnit = "hour";
+
 /** 그 단위가 시작하는 최소값. 월·일만 1이고 나머지(연·시·분·초)는 0입니다. */
 export function unitFloor(unit: WheelUnit) {
   return unit === "month" || unit === "day" ? 1 : 0;
@@ -343,20 +402,30 @@ function maxDigits(unit: WheelUnit) {
 
 /** 한 자리만으로 확정되는 최소값 — 두 자리가 시작될 수 없는 첫 숫자.
  *  월 2(13~19가 없음) · 일 4(40~49가 없음) · 시 3(24~29가 없음) · 분·초 6(60~69가 없음). */
-function soloFloor(unit: WheelUnit) {
+function soloFloor(unit: WheelUnit, hourFormat: HourFormat = "24") {
   if (unit === "month") return 2;
   if (unit === "day") return 4;
-  if (unit === "hour") return 3;
+  // 12시간제에서는 상한이 12라 20~23이 없습니다 — 그래서 2부터 기다릴 이유가
+  // 사라집니다(3단계, 스펙 §7). 24시간제는 그대로 3입니다.
+  if (unit === "hour") return hourFormat === "12" ? 2 : 3;
   return 6;   // minute, second
 }
 
 /** 자릿수 판정용 상한. 문맥이 없으므로 일은 31로 넉넉히 잡고,
  *  말일 자르기는 값 설정 쪽(`withUnitValue`)이 따로 합니다 — 지금과 같은 분담입니다. */
-function typingCeiling(unit: WheelUnit) {
+function typingCeiling(unit: WheelUnit, hourFormat: HourFormat = "24") {
   if (unit === "month") return 12;
   if (unit === "day") return 31;
-  if (unit === "hour") return 23;
+  if (unit === "hour") return hourFormat === "12" ? 12 : 23;
   return 59;   // minute, second
+}
+
+/** 타이핑이 받는 최소값. `unitFloor`와 **일부러 다른 함수**입니다 — `unitFloor`는 열의
+ *  값 범위(시는 0)이고 이것은 **친 숫자의 범위**입니다. 12시간 읽기에는 0이 없고 12가
+ *  그 자리를 대신합니다(3단계, 스펙 §7). `unitFloor`를 건드리면 `shiftDateValue`의
+ *  순환까지 12시간제를 알게 되는데, 열은 24칸 그대로여야 합니다. */
+function typingFloor(unit: WheelUnit, hourFormat: HourFormat = "24") {
+  return unit === "hour" && hourFormat === "12" ? 1 : unitFloor(unit);
 }
 
 export type TypingStep = {
@@ -374,7 +443,7 @@ const DONE = (commit: number): TypingStep => ({ digits: "", commit, advance: tru
 /** 버퍼에 숫자 하나를 더한 결과. `digit`은 "0"~"9" 한 글자여야 합니다.
  *  인자가 `DateWheelUnit`이 아니라 `WheelUnit`인 것은 의도입니다 — 이 함수는 시·분·초로도
  *  불립니다. `DateWheelUnit`(3단위)은 `WheelUnit`의 부분집합이라 기존 호출부는 그대로 통과합니다. */
-export function typeDigit(unit: WheelUnit, buffer: string, digit: string): TypingStep {
+export function typeDigit(unit: WheelUnit, buffer: string, digit: string, hourFormat: HourFormat = "24"): TypingStep {
   if (unit === "year") {
     const next = buffer + digit;
     return next.length >= maxDigits(unit) ? DONE(Number(next)) : WAIT(next);
@@ -382,15 +451,17 @@ export function typeDigit(unit: WheelUnit, buffer: string, digit: string): Typin
 
   if (buffer === "") {
     // 두 자리가 시작될 수 없는 숫자면 기다릴 이유가 없습니다.
-    return Number(digit) >= soloFloor(unit) ? DONE(Number(digit)) : WAIT(digit);
+    return Number(digit) >= soloFloor(unit, hourFormat) ? DONE(Number(digit)) : WAIT(digit);
   }
 
   const combined = Number(buffer + digit);
-  // 하한은 unitFloor입니다 — 월·일은 1(0월·0일이 없음)이지만 시·분·초는 0(0시가 있음).
-  if (combined >= unitFloor(unit) && combined <= typingCeiling(unit)) return DONE(combined);
-  // 두 자리 조합이 애초에 존재하지 않는 수입니다(월 13, 일 39). 첫 자리를 버리고
-  // 이 숫자를 새 입력의 첫 자리로 다시 읽습니다 — 네이티브가 이렇게 합니다.
-  return typeDigit(unit, "", digit);
+  // 하한은 typingFloor입니다 — 월·일은 1(0월·0일이 없음), 시·분·초는 0, 다만
+  // **12시간제의 시만 1**입니다(12시간 읽기에 0이 없습니다).
+  if (combined >= typingFloor(unit, hourFormat) && combined <= typingCeiling(unit, hourFormat)) return DONE(combined);
+  // 두 자리 조합이 애초에 존재하지 않는 수입니다(월 13, 일 39, **12시간제의 시 15**).
+  // 첫 자리를 버리고 이 숫자를 새 입력의 첫 자리로 다시 읽습니다 — 네이티브가 이렇게
+  // 합니다. 스펙 §7이 12시간제의 `15` → `5`를 "월 열이 13에 하는 것과 같다"고 적은 자리입니다.
+  return typeDigit(unit, "", digit, hourFormat);
 }
 
 /**
@@ -402,12 +473,23 @@ export function typeDigit(unit: WheelUnit, buffer: string, digit: string): Typin
  *
  * 인자가 `WheelUnit`인 이유는 `typeDigit`과 같습니다 — 시·분·초로도 불립니다.
  */
-export function flushBuffer(unit: WheelUnit, buffer: string): number | null {
+export function flushBuffer(unit: WheelUnit, buffer: string, hourFormat: HourFormat = "24"): number | null {
   if (!buffer) return null;
   const typed = Number(buffer);
   if (unit === "year") return buffer.length <= 2 ? 2000 + typed : typed;
-  // 0월·0일은 없지만 0시·0분·0초는 있습니다.
-  return typed >= unitFloor(unit) ? typed : null;
+  // 0월·0일은 없지만 0시·0분·0초는 있습니다. **12시간제의 시만 1부터**이고, 위쪽도
+  // 함께 봅니다 — `typeDigit`이 12를 넘는 버퍼를 만들지는 않지만, 이 함수는 버퍼를
+  // 받는 입구가 하나 더 있는 것처럼 방어합니다(그게 이 함수의 자리입니다).
+  return typed >= typingFloor(unit, hourFormat) && typed <= typingCeiling(unit, hourFormat) ? typed : null;
+}
+
+/** 친 숫자를 값으로. **친 것은 12시간 읽기이지 값이 아닙니다**(3단계, 스펙 §7) —
+ *  어느 절반인지는 지금 값이 정합니다(오후에 `3`을 치면 15시). `12`가 특별한 이유는
+ *  `twelveHourText`의 `0 → 12`와 같습니다: 12시간 읽기에 0이 없어 12가 그 자리를
+ *  대신하므로, 되돌릴 때 오전 12는 0시입니다. */
+export function hourFromTwelve(reading: number, half: "am" | "pm"): number {
+  const base = reading % 12;   // 12 → 0
+  return half === "am" ? base : base + 12;
 }
 
 /** 연도를 다루면서 0~99를 1900년대로 옮기지 않는 안전한 말일 계산.
@@ -564,13 +646,17 @@ function weekdayIndex(year: number, month: number, day: number): number {
  * 일 두 자리 + 요일), **시·분·초는 두 자리 숫자만입니다** — 일 열의 요일 같은
  * 부가 표시가 없습니다.
  */
-export function dateWheelLabel(value: string, unit: DateWheelUnit, weekdays: string[], fields: WheelUnit[] = DEFAULT_FIELDS): string {
+export function dateWheelLabel(value: string, unit: DateWheelUnit, weekdays: string[], fields: WheelUnit[] = DEFAULT_FIELDS, hour: HourDisplay = DEFAULT_HOUR_DISPLAY): string {
   const parts = parseValue(value, fields);
   if (!parts) return "";
   if (unit === "year") return String(parts.year);
   if (unit === "month") return pad(parts.month, 2);
   if (unit === "day") return `${pad(parts.day, 2)} ${weekdays[weekdayIndex(parts.year, parts.month, parts.day)]}`;
-  return pad(parts[unit], 2);   // hour, minute, second
+  // 12시간제는 **시 열만** 건드립니다(3단계, 스펙 §7). 분·초는 어느 형식에서도 두 자리
+  // 숫자 그대로입니다 — 그리고 시 열의 **칸 수는 여기서 안 바뀝니다.** 이 함수는 한 값을
+  // 글자로 옮길 뿐이고, 열이 24칸이라는 것은 `shift`/`unitCeiling`이 정합니다.
+  if (unit === "hour" && hour.format === "12") return twelveHourText(parts.hour, hour);
+  return pad(parts[unit], 2);   // hour(24시간제), minute, second
 }
 
 /**
@@ -644,16 +730,27 @@ const TRIGGER_TIME_UNITS: WheelUnit[] = ["hour", "minute", "second"];
  * 컴포넌트는 이미 유효성을 확인한 값만 이 함수에 넘깁니다(`hasDateValue`/
  * `baseValue`).
  */
-export function dateTriggerParts(source: string, fields: DateWheelUnit[], typing: { unit: DateWheelUnit; digits: string } | null): DateTriggerPart[] {
+export function dateTriggerParts(source: string, fields: DateWheelUnit[], typing: { unit: DateWheelUnit; digits: string } | null, hour: HourDisplay = DEFAULT_HOUR_DISPLAY): DateTriggerPart[] {
   const parsed = parseValue(source, fields);
   if (!parsed) return [];
   const values: UnitParts = parsed;   // 아래 중첩 함수로 좁혀진 타입을 넘기려면 새 바인딩이 필요합니다 — TS는 중첩 함수 클로저까지 좁히지 않습니다.
 
+  /* 12시간제에서 시 세그먼트 앞에 붙는 것(3단계, 스펙 §10). **오전/오후는 시
+   * 세그먼트 **안**입니다** — 별도 조각(`unit: null`)으로 쪼개지 않습니다. 구두점이
+   * 아니라 **값의 절반**이라, 쪼개면 세그먼트를 클릭했을 때 무엇이 활성이 되는지와
+   * 활성 표시가 갈라집니다. 자리 지키기(U+2012)는 **숫자 자리에만** 적용되므로
+   * 접두사는 버퍼가 살아 있는 동안에도 그대로 남습니다 — 폭이 그만큼 안 흔들립니다. */
+  const meridiemPrefix = (unit: WheelUnit) =>
+    unit === "hour" && hour.format === "12" ? `${values.hour < 12 ? hour.am : hour.pm} ` : "";
+
   function segment(unit: WheelUnit): DateTriggerPart {
     // 자릿수는 unitDigits(unit)에서 읽습니다 — 연도만 4, 나머지(월·일·시·분·초)는
     // 전부 2입니다.
-    const text = pad(values[unit], unitDigits(unit));
-    return { unit, text: typing?.unit === unit && typing.digits ? typing.digits.padEnd(unitDigits(unit), DATE_WHEEL_FILL) : text };
+    const digits = unit === "hour" && hour.format === "12"
+      ? pad(values.hour % 12 === 0 ? 12 : values.hour % 12, 2)
+      : pad(values[unit], unitDigits(unit));
+    const shown = typing?.unit === unit && typing.digits ? typing.digits.padEnd(unitDigits(unit), DATE_WHEEL_FILL) : digits;
+    return { unit, text: `${meridiemPrefix(unit)}${shown}` };
   }
 
   const dateFields = fields.filter((unit) => TRIGGER_DATE_UNITS.includes(unit));
@@ -693,10 +790,17 @@ export type WheelModel = {
   keyLength(fields: DateWheelUnit[]): number;
   shift(value: string, unit: DateWheelUnit, direction: number, fields?: WheelUnit[]): string;
   setUnit(value: string, unit: DateWheelUnit, amount: number, fields?: WheelUnit[]): string;
-  label(value: string, unit: DateWheelUnit, weekdays: string[], fields?: WheelUnit[]): string;
-  triggerParts(source: string, fields: DateWheelUnit[], typing: { unit: DateWheelUnit; digits: string } | null): DateTriggerPart[];
-  typeDigit(unit: DateWheelUnit, buffer: string, digit: string): TypingStep;
-  flushBuffer(unit: DateWheelUnit, buffer: string): number | null;
+  /* `hour`는 3단계에서 붙었습니다(스펙 §7·§10) — 안 넘기면 24시간제로, 지금까지와
+   * 글자 하나도 다르지 않습니다. **모델은 전역 설정을 읽지 않습니다**: 기계가
+   * 구독해서 읽고 인자로 내려보냅니다(이 파일은 아무것도 import 하지 않습니다). */
+  label(value: string, unit: DateWheelUnit, weekdays: string[], fields?: WheelUnit[], hour?: HourDisplay): string;
+  triggerParts(source: string, fields: DateWheelUnit[], typing: { unit: DateWheelUnit; digits: string } | null, hour?: HourDisplay): DateTriggerPart[];
+  /* `hourFormat`은 3단계에서 붙었습니다(스펙 §7) — 12시간제면 시 열의 타이핑 상한이
+   * 12이고, 그때 확정되는 수는 **값이 아니라 12시간 읽기**입니다. 그것을 값으로
+   * 되돌리는 것이 `hourFromTwelve`입니다. 안 넘기면 24시간제로, 지금까지와 같습니다. */
+  typeDigit(unit: DateWheelUnit, buffer: string, digit: string, hourFormat?: HourFormat): TypingStep;
+  flushBuffer(unit: DateWheelUnit, buffer: string, hourFormat?: HourFormat): number | null;
+  hourFromTwelve(reading: number, half: "am" | "pm"): number;
   now(timeZone: string, fields?: WheelUnit[]): string;
   // 값 지식 둘이 기계(DateWheelPicker.tsx)에 남아 있었습니다(설계 스펙 §1단계 측정·
   // §12) — min/max 접두 비교(rangeKey/outOfRange/clampToRange)와 commitToday의 값
@@ -715,6 +819,9 @@ export type WheelModel = {
    *  기계는 그걸 다시 손으로 베껴 쓴 것입니다) — 여기로 노출해 기계가
    *  모델에 묻게 합니다. */
   family(fields: WheelUnit[]): ValueFamily;
+  /** 오전/오후 조작이 존재하는가 + 지금 어느 절반인가(3단계, 스펙 §7). 시 열이 없으면
+   *  `null` — `family`와 같은 이유로 여기 있습니다(기계가 단위 이름을 알지 않게). */
+  meridiem(value: string, fields: WheelUnit[]): "am" | "pm" | null;
 };
 
 /* 기계가 이 객체 하나만 보고 돌게 하는 것이 목적입니다. 기간(duration) 모델이
@@ -734,9 +841,11 @@ export const instantModel: WheelModel = {
   triggerParts: dateTriggerParts,
   typeDigit,
   flushBuffer,
+  hourFromTwelve,
   now: todayIn,
   outOfRange,
   clampToRange,
   parts: parseValue,
   family: familyOf,
+  meridiem: meridiemOf,
 };

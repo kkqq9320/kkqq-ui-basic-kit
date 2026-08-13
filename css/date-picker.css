@@ -140,6 +140,28 @@
 .date-wheel-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 1px 2px 10px; }
 .date-wheel-heading strong { font-size: var(--font-size-control); }
 .date-wheel-heading span { color: var(--muted); font-size: var(--font-size-xs); }
+/* 오전/오후 줄 — 12시간제일 때만 그려집니다(3단계, 설계 스펙 §7).
+ *
+ * **하단 확정 줄(`.date-wheel-actions`)과 일부러 다르게 생겼습니다.** 그쪽은 sticky에
+ * 위쪽 경계선을 두르고 오른쪽으로 붙는 "확정·이동"인데, 여기는 **값의 절반을 고르는
+ * 자리**라 열 바로 위에 붙어 열과 같은 폭 안에서 갈라집니다. 둘이 같은 모양이면
+ * 화면이 그 차이를 말하지 않습니다.
+ *
+ * ⚠️ **크기·위치는 실기기 확인 항목입니다**(스펙 §14의 셋째). 지금 값은 하단 줄의
+ * 높이 토큰을 그대로 빌려 온 것이고, 폰에서 엄지로 눌러 보고 정해야 합니다. */
+.date-wheel-meridiem { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 0 0 8px; }
+.date-wheel-meridiem button { height: var(--compact-action-height); display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: var(--surface); font-size: var(--action-font-size); font-weight: 700; }
+/* 눌린 절반은 **열의 선택된 행과 같은 언어**로 말합니다 — 이 줄이 값의 일부라는 것을
+ * 화면이 그렇게 말합니다(확정 버튼의 `.primary`와 같은 강조를 쓰면 "누르면 확정된다"로
+ * 읽힙니다). */
+.date-wheel-meridiem button.selected { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.date-wheel-meridiem button:disabled { opacity: .38; }
+/* (hover: hover) 가드가 필요한 이유는 이 파일 :54와 같습니다 — 터치 기기는 탭한 요소에
+ * :hover를 다음 탭까지 붙여둡니다. */
+@media (hover: hover) and (pointer: fine) {
+  .date-wheel-meridiem button:not(.selected):not(:disabled):hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+}
+
 .date-wheel-columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 /* fields prop로 열 개수가 줄면(연·월 픽커 등) 트랙 수도 따라갑니다. 열 높이는 그대로입니다. */
 .date-wheel-columns[data-fields="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }

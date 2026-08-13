@@ -10,16 +10,20 @@
  *     절대 다른 컬럼으로 자리올림하지 않습니다
  *   · 데스크톱 휠·화살표는 커서가 있는 컬럼만, 모바일 스와이프·키보드는 활성 컬럼만
  */
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
 import { createPortal } from "react-dom";
 
 import {
   DATE_WHEEL_FILL,
+  MERIDIEM_NOTCHES,
+  MERIDIEM_UNIT,
   instantModel,
   isContiguous,
   type DateWheelUnit,
+  type HourDisplay,
   type WheelUnit,
 } from "./model/instant";
+import { getHourFormat, subscribeHourFormat } from "./settings";
 import { useBackToClose, useEscapeToClose } from "./hooks";
 import { dropdownViewportSpace, focusTriggerOnClick, isPrimaryButton, onViewportChange } from "./positioning";
 
@@ -71,6 +75,25 @@ export type DateWheelLabels = {
    *  일부만 주면 `{ ...DEFAULT.units, ...override.units }` 병합이 나머지를 그 기본값으로
    *  메웁니다 — 그래서 시·분·초 열이 실제로 그려지는 순간에도 `undefined`로 새지 않습니다. */
   units: { year: string; month: string; day: string; hour?: string; minute?: string; second?: string };
+  /** 12시간제(`hourFormat === "12"`)에서 시 앞에 붙는 두 글자 — 트리거와 시 열이 같이
+   *  씁니다(설계 스펙 §7·§10).
+   *
+   *  🔴 **필수이고, 둘을 한 덩어리로 받습니다 — 둘 다 일부러입니다.**
+   *  이 저장소는 이미 같은 모양의 결함을 하나 갖고 있습니다: `units`의 시·분·초가
+   *  **선택**이라, 라벨을 영어로 override 한 소비자가 시각 열을 쓰면 병합
+   *  (`{ ...DEFAULT.units, ...override.units }`)이 한국어 `"시"`를 남겨 열의
+   *  `aria-label`이 `"시 03"`이 됩니다 — 스크린리더에 그대로 나갑니다.
+   *  `meridiem`은 **그려지는 글자**이고, 이 저장소 규칙이 "그려지거나 충돌할 수 있는
+   *  이름만 필수"라 필수가 맞습니다. 그리고 병합이 **통째 교체**(위 `labels` 병합에서
+   *  `units`처럼 따로 펼치지 않습니다)라 한쪽만 영어인 상태가 아예 만들어지지 않습니다.
+   *
+   *  ⚠️ 필수 필드를 더하는 것은 `DateWheelLabels`로 **완전히 타입된 라벨 상수**를 만드는
+   *  소비자의 컴파일을 깹니다(`now`가 같은 이유로 깼습니다) — 미출시분의 BREAKING 목록에
+   *  한 줄로 들어갑니다. `labels` prop 자체는 `Partial<…>`이라 부분 override는 영향 없습니다.
+   *
+   *  ⚠️ **`tabular-nums`의 폭 보장 밖입니다**(스펙 §10) — 한국어는 두 글자로 같지만
+   *  `AM`/`PM`으로 바꾸면 폭이 달라집니다. 라벨을 바꾸는 소비자가 알아야 할 항목입니다. */
+  meridiem: { am: string; pm: string };
 };
 
 export const DEFAULT_DATE_WHEEL_LABELS: DateWheelLabels = {
@@ -89,6 +112,7 @@ export const DEFAULT_DATE_WHEEL_LABELS: DateWheelLabels = {
   // 뒀던 자리다. 그 열들이 이제 실제로 그려지므로(§4의 columns가 fields를 그대로
   // 돌려주고, model.label이 시·분·초를 두 자리 숫자로 낸다) 라벨도 필요하다.
   units: { year: "연도", month: "월", day: "일", hour: "시", minute: "분", second: "초" },
+  meridiem: { am: "오전", pm: "오후" },
 };
 
 /** 양끝 ±3은 보이지 않지만 미리 그려두는 프리로드 행입니다. */
@@ -257,6 +281,17 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 어떻게 생겼는지는 몰라도 된다면서 정작 시·분·초라는 **이름**은 알고
   // 있었던 셈입니다. `model.family`(모델의 `familyOf`를 그대로 노출)로
   // 물어 이 파일에서 시각 단위 이름이 나열되는 자리를 없앱니다.
+  /* 12시간제는 **인스턴스 prop이 아니라 킷 전역 설정**입니다(설계 스펙 §11) —
+   * 한 화면 안에서 어떤 픽커는 12시간제, 어떤 픽커는 24시간제인 것은 설정이 아니라
+   * 사고입니다. `useSyncExternalStore`인 이유: `useEffect` + `useState`로 손수
+   * 구독하면 React 19에서 첫 페인트가 옛 값으로 나가는 tearing이 생깁니다.
+   * 세 번째 인자(서버 스냅샷)도 같은 함수입니다 — 이 값은 서버·클라이언트가 다르지
+   * 않습니다(지속성이 없으므로 언제나 기본 `"24"`에서 시작합니다). */
+  const hourFormat = useSyncExternalStore(subscribeHourFormat, getHourFormat, getHourFormat);
+  // 모델은 전역 설정을 안 읽습니다(`src/model/instant.ts`는 아무것도 import 하지
+  // 않는 것이 계약입니다) — 기계가 읽어서 인자로 내려보냅니다. 매 렌더 새 객체를
+  // 만들면 모델 호출이 달라 보이므로 묶습니다.
+  const hourDisplay = useMemo<HourDisplay>(() => ({ format: hourFormat, am: labels.meridiem.am, pm: labels.meridiem.pm }), [hourFormat, labels.meridiem.am, labels.meridiem.pm]);
   const hasTimeUnit = model.family(fields) !== "date";
   const todayLabel = hasTimeUnit ? labels.now : labels.today;
   // hint의 짝 — todayLabel과 같은 기준(hasTimeUnit)으로 고릅니다(2b-4). `hintNow`는
@@ -640,7 +675,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 값이 유효하지 않은데(빈 값·깨진 값) 버퍼도 없으면 예전 formatDateTrigger와 똑같이
   // placeholder입니다 — 판정도 그때와 같은 validDateValue(model.isValid)입니다.
   const hasDateValue = model.isValid(value, fields);
-  const triggerParts = hasDateValue || resolvedTyping ? model.triggerParts(hasDateValue ? value : baseValue, fields, resolvedTyping) : null;
+  const triggerParts = hasDateValue || resolvedTyping ? model.triggerParts(hasDateValue ? value : baseValue, fields, resolvedTyping, hourDisplay) : null;
 
   /**
    * 트리거의 접근성 이름 — **레이블 뒤에 지금 화면에 보이는 값을 잇습니다**
@@ -881,6 +916,34 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     return shiftedFrom(baseValue, unit, amount);
   }
 
+  /* 오전/오후(3단계, 설계 스펙 §7). 24시간제이거나 시 열이 없으면 `null`이고, 그러면
+   * 버튼 줄 자체를 안 그립니다 — "안 그린다"가 여기 한 값으로 정해집니다.
+   *
+   * **판정은 전부 모델입니다.** 기계는 "시가 24칸이다"도 "정오가 오후의 시작이다"도
+   * "±12다"도 모릅니다(§3.2) — `model.meridiem`이 절반을, `MERIDIEM_NOTCHES`가 이동
+   * 폭을, `MERIDIEM_UNIT`이 어느 열인지를 답합니다. 2b-4의 F-4(기계가 시각 단위
+   * 이름을 직접 나열하던 자리)와 같은 규칙을 처음부터 지키는 것입니다.
+   *
+   * 부호가 있는 이유는 화면입니다: 열이 오전 00…11 → 오후 12…23인 24칸이라, 오후로
+   * 갈 때는 아래로, 오전으로 되돌릴 때는 위로 도는 것이 눈에 맞습니다. 값은 어느
+   * 쪽이든 같습니다(24칸에서 +12와 −12는 같은 자리). */
+  const meridiem = hourFormat === "12" ? model.meridiem(baseValue, fields) : null;
+  const meridiemDirection = meridiem === "am" ? MERIDIEM_NOTCHES : -MERIDIEM_NOTCHES;
+  /* 반대 절반이 경계로 통째로 막혔으면 `null` — 열의 ± 버튼이 `disabled={!shifted(unit, ±1)}`로
+   * 하는 것과 **같은 판정, 같은 함수**입니다. 별도 규칙을 만들지 않습니다. */
+  const meridiemShift = meridiem ? shifted(MERIDIEM_UNIT, meridiemDirection) : null;
+  function flipMeridiem() { applyShift(MERIDIEM_UNIT, meridiemDirection); }
+
+  /* 12시간제에서 **시 열에 친 숫자는 값이 아니라 읽기**입니다(3단계, 스펙 §7) —
+   * 오후에 `3`을 치면 15시입니다. 어느 절반인지는 지금 값이 정하므로, 타이핑 경로
+   * 둘(숫자 키의 즉시 확정, 열을 떠날 때의 버퍼 확정)이 **같은 변환을 지나가야**
+   * 합니다. 하나만 지나가면 "치면 맞는데 Tab으로 떠나면 틀리는" 갈라짐이 됩니다.
+   *
+   * 다른 열과 24시간제에서는 그대로 통과합니다 — 이 함수가 곧 그 조건입니다. */
+  function typedHourToValue(unit: DateWheelUnit, typed: number) {
+    return unit === MERIDIEM_UNIT && meridiem ? model.hourFromTwelve(typed, meridiem) : typed;
+  }
+
   function markColumnMotion(unit: DateWheelUnit, amount: number) {
     if (amount) {
       setColumnMotion((current) => ({
@@ -1040,9 +1103,9 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     setTyping(null);
     const buffer = resolvedTyping;
     if (!buffer?.digits) return null;
-    const amount = model.flushBuffer(buffer.unit, buffer.digits);
+    const amount = model.flushBuffer(buffer.unit, buffer.digits, hourFormat);
     if (amount === null) return null;
-    return commitTyped(buffer.unit, amount);
+    return commitTyped(buffer.unit, typedHourToValue(buffer.unit, amount));
   }
 
   /**
@@ -1232,14 +1295,38 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       setActiveUnit(unit);
       setEditing(true);
       const buffer = resolvedTyping?.unit === unit ? resolvedTyping.digits : "";
-      const step = model.typeDigit(unit, buffer, key);
+      const step = model.typeDigit(unit, buffer, key, hourFormat);
       if (step.commit !== null) {
         setTyping(null);
-        commitTyped(unit, step.commit);
+        commitTyped(unit, typedHourToValue(unit, step.commit));
         if (step.advance) moveColumn(unit, 1);
       } else {
         setTyping({ unit, digits: step.digits });
       }
+      return;
+    }
+
+    /* 오전/오후를 **팝오버 없이** 넘깁니다(3단계, 설계 스펙 §7). 이 컨트롤의 계약이
+     * "숫자를 팝오버 없이 친다"라서, 오전/오후만 팝오버를 열어야 하면 그 계약에
+     * 구멍이 납니다 — 버튼은 이 키의 **눈에 보이는 짝**이지 대체가 아닙니다.
+     * `a`/`p`는 네이티브 시각 필드의 관례를 그대로 가져온 것입니다.
+     *
+     * **활성 세그먼트가 시일 때만**입니다. 분 세그먼트에서 오전/오후는 뜻이 없고,
+     * 네이티브도 그렇습니다.
+     *
+     * **반쯤 친 버퍼는 폐기합니다.** 이 파일의 규칙이 "값을 직접 가리키는 조작 →
+     * 폐기"이고(휠·스와이프·행 클릭·`오늘`·`비우기`), 오전/오후는 값의 절반을 직접
+     * 고르는 일입니다. 확정하면 사용자가 안 끝낸 숫자가 값이 됩니다.
+     *
+     * ⚠️ **한글 입력 상태에서 이 키가 도착하는지는 미검증입니다**(스펙 §14의 넷째).
+     * IME가 먹을 수 있습니다. `event.code`로 물리 키를 보는 우회는 **일부러 안
+     * 썼습니다** — AZERTY에서 `KeyA`는 `q` 자리라, 재보지 않은 함정을 재보지 않은
+     * 함정으로 바꾸는 것이 됩니다. 데모가 오너에게 이 재현을 물어봅니다. */
+    if (meridiem && resolvedActiveUnit === MERIDIEM_UNIT && (key.toLowerCase() === "a" || key.toLowerCase() === "p") && key.length === 1) {
+      event.preventDefault();
+      setEditing(true);
+      setTyping(null);
+      if (meridiem !== (key.toLowerCase() === "a" ? "am" : "pm")) flipMeridiem();
       return;
     }
 
@@ -1642,6 +1729,32 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       {/* 보이는 머리말만 `heading`으로 갈립니다 — 위 `aria-label`과 `triggerName`은 계속
           `ariaLabel`을 씁니다(§11). 안 넘기면 둘이 같은 값이라 지금까지와 동일합니다. */}
       <div className="date-wheel-heading"><strong>{heading ?? ariaLabel}</strong><span>{hintText}</span></div>
+      {/* 오전/오후는 **열이 아니라 버튼**입니다(설계 스펙 §7, 오너 결정). 열로 두면 값이
+          둘뿐인데 `DATE_WHEEL_OFFSETS`가 일곱 행을 그리고, 스와이프 관성도 ±3 프리로드도
+          순환도 뜻이 없어집니다. 그리고 **가장 좁을 때 정확히 한 열을 아낍니다** —
+          날짜+시각 전체가 7열이 될 뻔한 것이 6열로 남습니다.
+
+          **자리는 시 열 근처(열 바로 위)이지 하단 줄이 아닙니다.** `오늘`·`비우기`·`완료`는
+          "확정·이동"인데 오전/오후는 **값의 절반**이라 성격이 다르고, 하단에 섞으면 다른
+          종류가 한 줄에 앉습니다. tests의 "하단 확정 줄에 섞이지 않는다"가 이걸 지킵니다.
+          ⚠️ **버튼의 정확한 위치·크기는 실기기 확인 항목입니다**(스펙 §14).
+
+          `aria-pressed`로 지금 절반을 말합니다 — 버튼은 **표시가 아니라 지름길**이고
+          (시 열 라벨이 이미 `오후 03`으로 절반을 말합니다), 그 값어치는 12칸을 굴리지
+          않고 한 번에 넘기는 것과 `a`/`p` 키의 눈에 보이는 짝이 되는 것입니다.
+
+          `tabIndex={-1}`은 팝오버 안 다른 버튼들과 같습니다 — 이 컨트롤의 포커스 자리는
+          트리거 하나뿐입니다(§6.2). */}
+      {meridiem && (
+        <div className="date-wheel-meridiem">
+          {(["am", "pm"] as const).map((half) => {
+            const pressed = meridiem === half;
+            // 반대 절반으로 못 가면(경계가 통째로 막았으면) 그 버튼은 열의 ± 버튼과
+            // **같은 규칙으로** disabled입니다 — `shifted(...) === null`이 그 판정입니다.
+            return <button type="button" tabIndex={-1} className={pressed ? "selected" : ""} aria-pressed={pressed} aria-keyshortcuts={half === "am" ? "a" : "p"} disabled={!pressed && meridiemShift === null} onClick={() => { setTyping(null); if (!pressed) flipMeridiem(); }} key={half}>{half === "am" ? labels.meridiem.am : labels.meridiem.pm}</button>;
+          })}
+        </div>
+      )}
       <div className="date-wheel-columns" data-fields={columns.length}>
         {/* 열은 **포커스를 받지 않고 키도 받지 않습니다**(설계 스펙 §5·§6.2) — `tabIndex`가
             없고 `onKeyDown`도 없습니다. 활성 표시는 `resolvedActiveUnit`이 붙이는 `.active`
@@ -1651,12 +1764,12 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
 
             `onPointerDown`의 `setActiveUnit(unit)`이 **포인터 경로가 활성 세그먼트를 따라가는
             유일한 길**입니다(열의 `onFocus`가 하던 일). 지우지 마세요. */}
-        {columns.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${model.label(baseValue, unit, labels.weekdays, fields)}`} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {columns.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${model.label(baseValue, unit, labels.weekdays, fields, hourDisplay)}`} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
               컨테이너의 key가 바뀌어 행이 통째로 리마운트되므로 포커스를 둘 수도 없습니다. */}
-          <div className="date-wheel-viewport"><div className="date-wheel-values" key={`${unit}-${motion.sequence}`}>{DATE_WHEEL_OFFSETS.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === 3; const buffered = offset === 0 && resolvedTyping?.unit === unit ? resolvedTyping.digits : null; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={() => rowValue && applyShift(unit, offset)} key={offset}>{buffered ?? (rowValue ? model.label(rowValue, unit, labels.weekdays, fields) : "—")}</button>; })}</div></div>
+          <div className="date-wheel-viewport"><div className="date-wheel-values" key={`${unit}-${motion.sequence}`}>{DATE_WHEEL_OFFSETS.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === 3; const buffered = offset === 0 && resolvedTyping?.unit === unit ? resolvedTyping.digits : null; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={() => rowValue && applyShift(unit, offset)} key={offset}>{buffered ?? (rowValue ? model.label(rowValue, unit, labels.weekdays, fields, hourDisplay) : "—")}</button>; })}</div></div>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.next}`} disabled={!shifted(unit, 1)} onClick={() => applyShift(unit, 1)}><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></button>
         </section>; })}
       </div>
