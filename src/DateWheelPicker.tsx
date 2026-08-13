@@ -10,7 +10,7 @@
  *     절대 다른 컬럼으로 자리올림하지 않습니다
  *   · 데스크톱 휠·화살표는 커서가 있는 컬럼만, 모바일 스와이프·키보드는 활성 컬럼만
  */
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
 import { createPortal } from "react-dom";
 
 import {
@@ -128,6 +128,12 @@ const DATE_WHEEL_HOLD_MS = 500;
  *  있게 해"). 브라우저의 더블클릭 판정과 같은 눈금이고, 이보다 길게 잡으면 **천천히 두 번
  *  누른 것**까지 초기화가 됩니다. */
 const DATE_WHEEL_DOUBLE_TAP_MS = 300;
+
+/** 탭으로 칠 수 있는 손가락 이동. 이보다 크면 끌어당긴 것이라 확정하지 않습니다.
+ *  안드로이드의 슬롭(보통 8dp)보다 넉넉하게 잡습니다 — 이 값이 **작을수록** 브라우저와
+ *  다르게 판단할 위험이 커지는데, 우리는 브라우저보다 **관대해도** 됩니다(브라우저가
+ *  click을 안 만들 때 대신 확정하는 것이 목적이므로). */
+const DATE_WHEEL_TAP_SLOP = 12;
 
 /** 열 하나가 읽히는 최소 폭. 두 자리 숫자 + 일 열의 요일(`12 수`)이 안 잘리는 값이고,
  *  이 아래로 내려가면 오너가 말한 "답답한" 화면이 됩니다. */
@@ -1112,6 +1118,47 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     onChange(next);
   }
 
+  /* 🔴 **팝오버의 버튼들은 브라우저의 `click` 합성에 기대지 않습니다.**
+   *
+   * 오너 실기기 캡처 셋에서 "지금" 탭이 **mousedown·mouseup·click을 하나도 안 만든 채**
+   * 끝났습니다. 계측을 세 번 고쳐 가며 후보를 하나씩 지웠습니다 — 버튼은 안 움직였고
+   * (0px), 손가락 밑을 떠나지도 않았고, 팝오버는 재배치되지 않았고, `touchcancel`도
+   * 없었고, **손가락 이동도 0px**(슬롭이 아님)이며, `touch-action: manipulation`을
+   * 넣어도 계속 났습니다. 기기는 **삼성 인터넷**입니다.
+   *
+   * 남는 읽기는 "브라우저가 그 터치를 제스처로 삼켰다"인데, **그 규칙을 알아낼 필요가
+   * 없습니다** — `pointerup`이 누른 그 버튼 위에서 났고 손가락이 거의 안 움직였으면
+   * 그것이 탭입니다. 뒤따라오는 `click`은 **한 번 삼켜** 두 번 실행되지 않게 합니다
+   * (데스크톱에서는 click이 반드시 오므로 이 억제가 없으면 모든 클릭이 두 번 돕니다).
+   *
+   * ⚠️ 억제 표식은 **다음 pointerdown에서도** 지웁니다 — 터치에서는 click이 아예 안 와서
+   * 표식이 남고, 그러면 그 버튼의 **다음** 진짜 클릭이 삼켜집니다. */
+  const tapStartRef = useRef<{ id: number; x: number; y: number; target: Element } | null>(null);
+  const swallowClickRef = useRef<Element | null>(null);
+
+  function tapActivation(run: () => void) {
+    return {
+      onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => {
+        swallowClickRef.current = null;
+        tapStartRef.current = { id: event.pointerId, x: event.clientX ?? 0, y: event.clientY ?? 0, target: event.currentTarget };
+      },
+      onPointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => {
+        const start = tapStartRef.current;
+        tapStartRef.current = null;
+        if (!start || start.id !== event.pointerId || start.target !== event.currentTarget) return;
+        const dx = (event.clientX ?? start.x) - start.x;
+        const dy = (event.clientY ?? start.y) - start.y;
+        if (Math.sqrt(dx * dx + dy * dy) > DATE_WHEEL_TAP_SLOP) return;
+        swallowClickRef.current = event.currentTarget;
+        run();
+      },
+      onClick: (event: ReactMouseEvent<HTMLButtonElement>) => {
+        if (swallowClickRef.current === event.currentTarget) { swallowClickRef.current = null; return; }
+        run();
+      },
+    };
+  }
+
   function typedHourToValue(unit: DateWheelUnit, typed: number) {
     return unit === MERIDIEM_UNIT && meridiem ? model.hourFromTwelve(typed, meridiem) : typed;
   }
@@ -1923,7 +1970,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
             const pressed = meridiem === half;
             // 반대 절반으로 못 가면(경계가 통째로 막았으면) 그 버튼은 열의 ± 버튼과
             // **같은 규칙으로** disabled입니다 — `shifted(...) === null`이 그 판정입니다.
-            return <button type="button" tabIndex={-1} className={pressed ? "selected" : ""} aria-pressed={pressed} aria-keyshortcuts={half === "am" ? "a" : "p"} disabled={!pressed && meridiemShift === null} onClick={() => { setTyping(null); if (!pressed) flipMeridiem(); }} key={half}>{half === "am" ? meridiemLabels.am : meridiemLabels.pm}</button>;
+            return <button type="button" tabIndex={-1} className={pressed ? "selected" : ""} aria-pressed={pressed} aria-keyshortcuts={half === "am" ? "a" : "p"} disabled={!pressed && meridiemShift === null} {...tapActivation(() => { setTyping(null); if (!pressed) flipMeridiem(); })} key={half}>{half === "am" ? meridiemLabels.am : meridiemLabels.pm}</button>;
           })}
         </div>
       )}
@@ -1949,7 +1996,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
           이 버튼들은 그 단축키의 동등물이므로(title에 단축키를 적어 뒀다), 버퍼를 안 지우면
           같은 뜻의 단축키와 버튼이 다르게 굴며, 남은 버퍼가 이 버튼이 방금 설정한 값을
           나중에(예: 다음 Tab) 도로 덮어쓸 수 있다. */}
-      <div className="date-wheel-actions"><button type="button" tabIndex={-1} title={`${todayLabel} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" onClick={() => { setTyping(null); commitToday(); }}>{todayLabel}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" onClick={() => { setTyping(null); clearedRef.current = true; onChange(""); }}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" aria-keyshortcuts="Enter" onClick={commitAndClose}>{labels.done}</button></div>
+      <div className="date-wheel-actions"><button type="button" tabIndex={-1} title={`${todayLabel} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" {...tapActivation(() => { setTyping(null); commitToday(); })}>{todayLabel}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" {...tapActivation(() => { setTyping(null); clearedRef.current = true; onChange(""); })}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" aria-keyshortcuts="Enter" {...tapActivation(commitAndClose)}>{labels.done}</button></div>
     </div>, document.body)}
   </div>;
 }

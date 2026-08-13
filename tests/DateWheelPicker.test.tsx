@@ -5856,3 +5856,87 @@ describe("길게 누르기 임계와 진행 막대 (오너 리포트 5·6차)", 
     expect(datePickerCssSource).toContain(".date-wheel-column.holding::after { animation: date-wheel-hold 1ms linear 200ms forwards; }");
   });
 });
+
+// ── 팝오버 버튼은 브라우저의 click 합성에 기대지 않습니다 (오너 실기기 결함) ──────
+//
+// 오너 캡처 셋에서 "지금" 탭이 **mousedown·mouseup·click을 하나도 안 만든** 채 끝났습니다.
+// v3까지 붙인 계측이 원인 후보를 하나씩 지웠습니다:
+//   버튼 안 움직임(0px) · 손가락 밑 안 떠남 · 팝오버 재배치 0회 · touchcancel 없음 ·
+//   **손가락이동 0px**(슬롭 아님) · `touch-action: manipulation`을 넣어도 계속 남
+// 남는 것은 "브라우저가 그 터치를 제스처로 삼켰다"이고, 기기는 **삼성 인터넷**입니다.
+//
+// 🔴 **그래서 click을 기다리지 않습니다.** `pointerup`이 같은 버튼 위에서 났고 손가락이
+// 거의 안 움직였으면 그 자리에서 확정합니다 — 브라우저의 합성 규칙을 몰라도 됩니다.
+// 뒤따라오는 click은 한 번 삼켜서 두 번 실행되지 않게 합니다.
+describe("팝오버 버튼은 pointerup에서 확정된다 (오너 실기기 결함)", () => {
+  const openTime = (onChange = vi.fn()) => {
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:07:41" fields={TIME_FIELDS} onChange={onChange} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    return onChange;
+  };
+
+  it("click이 아예 안 와도 지금 버튼이 값을 바꾼다 — 삼성 인터넷에서 실제로 그랬다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2031-05-08T15:00:00Z"));
+    const onChange = openTime();
+    const now = screen.getByRole("button", { name: "지금" });
+    pointer("pointerDown", now, { pointerId: 1, clientX: 10, clientY: 10, button: 0, isPrimary: true });
+    pointer("pointerUp", now, { pointerId: 1, clientX: 10, clientY: 10 });
+    // click은 일부러 안 보냅니다 — 그게 이 결함의 모양입니다.
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("click이 뒤따라와도 두 번 실행되지 않는다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2031-05-08T15:00:00Z"));
+    const onChange = openTime();
+    const now = screen.getByRole("button", { name: "지금" });
+    pointer("pointerDown", now, { pointerId: 2, clientX: 10, clientY: 10, button: 0, isPrimary: true });
+    pointer("pointerUp", now, { pointerId: 2, clientX: 10, clientY: 10 });
+    fireEvent.click(now);
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("손가락이 크게 움직였으면 확정하지 않는다 — 그건 탭이 아니다", () => {
+    vi.useFakeTimers();
+    const onChange = openTime();
+    const now = screen.getByRole("button", { name: "지금" });
+    pointer("pointerDown", now, { pointerId: 3, clientX: 10, clientY: 10, button: 0, isPrimary: true });
+    pointer("pointerUp", now, { pointerId: 3, clientX: 10, clientY: 60 });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("다른 버튼에서 떼면 확정하지 않는다", () => {
+    vi.useFakeTimers();
+    const onChange = openTime();
+    const now = screen.getByRole("button", { name: "지금" });
+    const done = screen.getByRole("button", { name: "완료" });
+    pointer("pointerDown", now, { pointerId: 4, clientX: 10, clientY: 10, button: 0, isPrimary: true });
+    pointer("pointerUp", done, { pointerId: 4, clientX: 10, clientY: 10 });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("오전/오후 버튼도 같다 — 같은 줄에 있는 같은 종류다", () => {
+    vi.useFakeTimers();
+    setHourFormat("12");
+    const onChange = openTime();
+    const am = screen.getByRole("button", { name: "오전" });
+    pointer("pointerDown", am, { pointerId: 5, clientX: 10, clientY: 10, button: 0, isPrimary: true });
+    pointer("pointerUp", am, { pointerId: 5, clientX: 10, clientY: 10 });
+    expect(onChange).toHaveBeenLastCalledWith("2026-08-12T03:07:41");
+  });
+
+  /* ⚠️ **마우스에서 두 번 실행되면 안 됩니다.** 데스크톱은 pointerup 뒤에 click이 반드시
+   * 오므로, 억제가 없으면 모든 클릭이 두 번 돕니다 — 위 "click이 뒤따라와도"가 그 계약을
+   * 잡지만, 마우스 경로도 따로 봅니다(`pointerType`이 갈리는 자리라 회귀가 다릅니다). */
+  it("마우스 클릭도 한 번만 실행된다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2031-05-08T15:00:00Z"));
+    const onChange = openTime();
+    const now = screen.getByRole("button", { name: "지금" });
+    pointer("pointerDown", now, { pointerId: 6, clientX: 10, clientY: 10, button: 0, isPrimary: true, pointerType: "mouse" });
+    pointer("pointerUp", now, { pointerId: 6, clientX: 10, clientY: 10, pointerType: "mouse" });
+    fireEvent.click(now);
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+});
