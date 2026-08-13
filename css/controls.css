@@ -94,19 +94,34 @@ label { display: grid; gap: 6px; align-content: space-between; color: var(--mute
  *
  * ⚠️ 선택 묶음은 앱이 만드는 흔한 모양인데 지금까지 킷에 규칙이 없어서 소비자마다
  * 다시 그렸습니다 — 데모도 그랬고, 그래서 이 겹침이 났습니다. */
+/* ⚠️ **강조색 채움이 아닙니다 — 그건 "행동"의 옷입니다.** 처음엔 `.primary`와 같은
+ * 강조색 채움으로 넣었는데, 오너가 곧바로 겹침을 지적했습니다: "ON 돼 있는 설정에 이
+ * 색상 적용한 건 다른 강조하는(저장·완료·다이얼로그 열기) 이거랑 중복돼서 구분이 안
+ * 되는데." 맞는 지적이고, **킷에서 강조색 채움을 쓰는 자리가 일곱입니다**(`.primary`,
+ * 다이얼로그 확정, 팝오버 완료, 사이드바 활성, 아바타, 배지, 휠의 선택된 행) — 전부
+ * "이걸 하세요 / 여기 있습니다"라는 **행동·위치**의 뜻입니다.
+ *
+ * **선택됨은 행동이 아니라 값입니다.** 그래서 다른 색 계열로 말합니다 — 글자색으로 채우고
+ * 글자를 바탕색으로 뒤집습니다. 강조색과 색상 자체가 달라 헷갈릴 여지가 없고, 대비는
+ * 보통 상태와 정확히 같은 쌍을 뒤집은 것이라 그대로 보장됩니다.
+ *
+ * 📌 **최종 모양은 오너가 실기기에서 고르는 중입니다**(데모의 "ON 버튼 모양" 줄에 시안
+ * 셋). 이 규칙은 그 사이의 기본값이고, 정해지면 이 자리만 바꾸면 됩니다. */
 .secondary-button[aria-pressed="true"],
 .button-row button:not(.primary)[aria-pressed="true"] {
-  color: #fff;
-  border-color: var(--accent);
-  background: var(--accent);
+  color: var(--surface);
+  border-color: var(--text);
+  background: var(--text);
 }
+/* 선택된 채 포커스면 안쪽 링으로 말합니다 — 색 계열을 또 바꾸면 셋째 그림이 생겨
+ * 오히려 못 읽습니다(`.primary:focus-visible`과 같은 처리). */
 .secondary-button[aria-pressed="true"]:focus-visible,
 .button-row button:not(.primary)[aria-pressed="true"]:focus-visible {
-  color: #fff;
-  border-color: var(--accent);
-  background: var(--accent);
+  color: var(--surface);
+  border-color: var(--text);
+  background: var(--text);
   outline: none;
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, #fff 82%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 82%, transparent);
 }
 
 /* 테두리도 배경도 없는 글자 버튼. 바꿀 테두리가 없으므로 글자 자체로 말합니다 —
