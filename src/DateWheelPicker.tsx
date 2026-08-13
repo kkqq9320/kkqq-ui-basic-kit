@@ -1296,6 +1296,30 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       return;
     }
 
+    /* 오전/오후를 **팝오버 없이** 넘깁니다(3단계, 설계 스펙 §7). 이 컨트롤의 계약이
+     * "숫자를 팝오버 없이 친다"라서, 오전/오후만 팝오버를 열어야 하면 그 계약에
+     * 구멍이 납니다 — 버튼은 이 키의 **눈에 보이는 짝**이지 대체가 아닙니다.
+     * `a`/`p`는 네이티브 시각 필드의 관례를 그대로 가져온 것입니다.
+     *
+     * **활성 세그먼트가 시일 때만**입니다. 분 세그먼트에서 오전/오후는 뜻이 없고,
+     * 네이티브도 그렇습니다.
+     *
+     * **반쯤 친 버퍼는 폐기합니다.** 이 파일의 규칙이 "값을 직접 가리키는 조작 →
+     * 폐기"이고(휠·스와이프·행 클릭·`오늘`·`비우기`), 오전/오후는 값의 절반을 직접
+     * 고르는 일입니다. 확정하면 사용자가 안 끝낸 숫자가 값이 됩니다.
+     *
+     * ⚠️ **한글 입력 상태에서 이 키가 도착하는지는 미검증입니다**(스펙 §14의 넷째).
+     * IME가 먹을 수 있습니다. `event.code`로 물리 키를 보는 우회는 **일부러 안
+     * 썼습니다** — AZERTY에서 `KeyA`는 `q` 자리라, 재보지 않은 함정을 재보지 않은
+     * 함정으로 바꾸는 것이 됩니다. 데모가 오너에게 이 재현을 물어봅니다. */
+    if (meridiem && resolvedActiveUnit === MERIDIEM_UNIT && (key.toLowerCase() === "a" || key.toLowerCase() === "p") && key.length === 1) {
+      event.preventDefault();
+      setEditing(true);
+      setTyping(null);
+      if (meridiem !== (key.toLowerCase() === "a" ? "am" : "pm")) flipMeridiem();
+      return;
+    }
+
     if (key === "Backspace") {
       event.preventDefault();
       setEditing(true);

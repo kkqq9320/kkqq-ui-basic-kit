@@ -5169,3 +5169,106 @@ describe("DateWheelPicker 오전/오후 버튼 (3단계)", () => {
     expect(screen.getByRole("button", { name: "PM" }).getAttribute("aria-pressed")).toBe("true");
   });
 });
+
+// ── 3단계 — 시 세그먼트가 `a`/`p`를 받는다 (스펙 §7) ──────────────────────────
+//
+// **팝오버를 안 열고도 되어야 한다.** 이 컨트롤의 계약이 "숫자를 팝오버 없이 친다"라서,
+// 오전/오후만 팝오버를 열어야 하면 그 계약에 구멍이 난다. 버튼은 이 키의 눈에 보이는
+// 짝이지 이 키의 대체가 아니다.
+//
+// **활성 세그먼트가 시일 때만 먹는다** — 네이티브와 같다. 그래서 이 블록은 시가 첫
+// 세그먼트인 시각 전용 픽커를 기본으로 쓰고, 날짜+시각에서 화살표로 시까지 옮겨 가는
+// 경로는 따로 하나 고정한다.
+const TIME_ONLY: WheelUnit[] = ["hour", "minute", "second"];
+
+describe("DateWheelPicker 시 세그먼트의 a/p 키 (3단계)", () => {
+  const typeInto = (value: string, keys: string[], extra: Partial<{ fields: WheelUnit[] }> = {}) => {
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 시각" value={value} fields={extra.fields ?? TIME_ONLY} onChange={onChange} />);
+    const field = fieldOf("거래 시각");
+    field.focus();
+    for (const key of keys) fireEvent.keyDown(field, { key });
+    return { onChange, field };
+  };
+
+  it("대조군: 24시간제에서는 아무 일도 안 한다", () => {
+    const { onChange } = typeInto("03:00:05", ["p"]);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("p는 오후로 넘긴다 — 그리고 팝오버를 열지 않는다", () => {
+    setHourFormat("12");
+    const { onChange, field } = typeInto("03:00:05", ["p"]);
+    expect(onChange).toHaveBeenLastCalledWith("15:00:05");
+    expect(field.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("a는 오전으로 되돌린다", () => {
+    setHourFormat("12");
+    const { onChange } = typeInto("15:00:05", ["a"]);
+    expect(onChange).toHaveBeenLastCalledWith("03:00:05");
+  });
+
+  it("대문자도 같다 — Shift를 눌러도 뜻이 안 바뀐다", () => {
+    setHourFormat("12");
+    const { onChange } = typeInto("03:00:05", ["P"]);
+    expect(onChange).toHaveBeenLastCalledWith("15:00:05");
+  });
+
+  it("이미 그 절반이면 아무 일도 안 한다", () => {
+    setHourFormat("12");
+    const { onChange } = typeInto("15:00:05", ["p"]);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("날짜+시각에서는 화살표로 시까지 간 다음에 먹는다 — 활성 세그먼트가 시일 때만", () => {
+    setHourFormat("12");
+    // 연 → 월 → 일 → 시. 세 번 옮기기 전에는 아무 일도 없어야 한다.
+    const { onChange, field } = typeInto("2026-08-12T03:00:05", ["p"], { fields: TIME_FIELDS });
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "p" });
+    expect(onChange).toHaveBeenLastCalledWith("2026-08-12T15:00:05");
+  });
+
+  it("활성 세그먼트가 시를 지나가면 안 먹는다 — 분에서 오전/오후는 뜻이 없다", () => {
+    setHourFormat("12");
+    const { onChange } = typeInto("03:00:05", ["ArrowRight", "p"]);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("시 열이 없는 픽커에서는 안 먹는다", () => {
+    setHourFormat("12");
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={onChange} />);
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "p" });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  /* 반쯤 친 버퍼는 **폐기**된다. 이 컴포넌트의 규칙이 "값을 직접 가리키는 조작 →
+   * 폐기"이고(휠·스와이프·행 클릭·오늘·비우기가 그렇다), 오전/오후는 값의 절반을
+   * 직접 고르는 일이다. 확정하면 사용자가 안 끝낸 숫자가 값이 되어 버린다. */
+  it("반쯤 친 숫자는 확정하지 않고 버린다", () => {
+    setHourFormat("12");
+    const { onChange, field } = typeInto("03:00:05", ["1"]);   // hour soloFloor(3) 아래라 버퍼로 남는다
+    expect(field.textContent).toContain(FILL);                 // 버퍼가 살아 있다
+    fireEvent.keyDown(field, { key: "p" });
+    expect(onChange).toHaveBeenLastCalledWith("15:00:05");     // 03 → 15. "01"이나 "1x"가 아니다
+    expect(field.textContent).not.toContain(FILL);             // 버퍼가 사라졌다
+  });
+
+  it("Ctrl·Meta가 눌린 p는 건드리지 않는다 — 브라우저 단축키다", () => {
+    setHourFormat("12");
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 시각" value="03:00:05" fields={TIME_ONLY} onChange={onChange} />);
+    const field = fieldOf("거래 시각");
+    field.focus();
+    fireEvent.keyDown(field, { key: "p", ctrlKey: true });
+    fireEvent.keyDown(field, { key: "p", metaKey: true });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
