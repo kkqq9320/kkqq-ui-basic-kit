@@ -1,0 +1,38 @@
+/* 세그먼트 컨트롤 — 값 하나를 몇 개 중에서 고르는 묶음(`SegmentedControl`).
+ *
+ * 🔴 **고른 칸은 강조색으로 통째 채우지 않습니다.** 킷에서 강조색 채움은 일곱 자리가
+ * 이미 "행동·위치"의 뜻으로 씁니다(`.primary` · 다이얼로그 확정 · 팝오버 완료 ·
+ * 사이드바 활성 · 아바타 · 배지 · 휠의 선택된 행). **고름은 행동이 아니라 값**이고,
+ * 같은 옷을 입히면 오너가 실제로 지적한 겹침이 납니다("ON 돼 있는 설정에 이 색상 적용한
+ * 건 다른 강조하는 이거랑 중복돼서 구분이 안 되는데").
+ *
+ * 대신 **구조가 먼저 말합니다** — 묶음이 움푹한 트랙이고 고른 칸만 떠 있는 칩입니다.
+ * 트랙 안에 앉아 있다는 것 자체가 "이 묶음에서 고른 것"을 뜻하므로, 색은 채움이 아니라
+ * **색조**로만 씁니다(오너: "세그먼트 좋은데 컬러감만 좀 주면 되겠다. 지금 컬러감은
+ * 너무 분간이 안 가"). 칩에 강조색 글자 + 옅은 강조색 바탕 + 강조색 테두리를 얹어,
+ * 그림자만 있던 처음보다 확실히 갈리면서도 채워진 행동 버튼과는 다릅니다.
+ *
+ * ⚠️ **트랙 배경과 칩 배경이 서로 다른 토큰이어야 합니다.** 둘이 같으면 떠 있는 느낌이
+ * 사라져 구조가 말하던 것이 통째로 없어집니다 — 처음 시안이 정확히 그래서 "분간이 안
+ * 간다"가 나왔습니다. */
+.segmented { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: color-mix(in srgb, var(--surface-soft) 82%, var(--line)); }
+
+.segmented > button { min-width: var(--segmented-min-width, 56px); height: var(--segmented-height, 30px); display: inline-flex; align-items: center; justify-content: center; padding: 0 10px; border: 1px solid transparent; border-radius: 7px; color: var(--muted); background: transparent; font-size: var(--action-font-size); font-weight: 700; line-height: 1; white-space: nowrap; }
+
+/* 고른 칸 — 떠 있는 칩 + 강조색 **색조**(채움이 아닙니다). */
+.segmented > button[aria-checked="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 42%, transparent); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); box-shadow: 0 1px 3px color-mix(in srgb, #000 24%, transparent); font-weight: 800; }
+
+.segmented > button:disabled { opacity: .45; cursor: not-allowed; }
+
+/* (hover: hover) 가드가 필요한 이유는 이 킷의 다른 컨트롤과 같습니다 — 터치 기기는 탭한
+ * 요소에 :hover를 다음 탭까지 붙여두므로, 가드가 없으면 폰에서 안 고른 칸이 고른 것처럼
+ * 보입니다. 이 컴포넌트는 "지금 무엇이 골라져 있나"가 전부라 그 오독의 대가가 큽니다. */
+@media (hover: hover) and (pointer: fine) {
+  .segmented > button:not([aria-checked="true"]):not(:disabled):hover { color: var(--text); background: color-mix(in srgb, var(--surface) 70%, transparent); }
+}
+
+/* 포커스는 **색 계열을 바꾸지 않고** 안쪽 링으로만 말합니다 — 고름과 포커스가 색으로
+ * 겨루면 둘 다 못 읽습니다(이 킷이 `.secondary-button`에서 실제로 겪은 겹침입니다).
+ * 링이라 고른 칸에도 안 고른 칸에도 같은 방식으로 얹힙니다. */
+.segmented > button:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
+.segmented > button[aria-checked="true"]:focus-visible { box-shadow: inset 0 0 0 2px var(--accent), 0 1px 3px color-mix(in srgb, #000 24%, transparent); }
