@@ -612,6 +612,9 @@ function Demo() {
   /* 성능 격리 모드(오너: "안드로이드에서 엄청 버벅대네") — 데모 페이지의 다시 그리기
    * 비용과 킷의 비용을 **가르기 위한** 스위치입니다. 켜고/끄고 같은 스와이프를 재세요. */
   const [isolate, setIsolate] = useState(false);
+  /* ON(선택됨) 모양 시안 셋 — 오너가 실기기에서 고릅니다. 킷 기본값은 "반전"이고
+   * 나머지 둘은 demo.css가 덮습니다. 정해지면 킷 규칙 하나만 바꾸고 이 실험은 지웁니다. */
+  const [onStyle, setOnStyle] = useState<"invert" | "outline" | "segment">("invert");
   /* 12시간제는 **킷 전역 설정**이라 `useState`로 들고 있으면 안 됩니다(설계 스펙 §11) —
    * 값은 킷 안에 있고 데모는 **구독해서 읽습니다.** 로컬 상태로 흉내 내면 이 화면의
    * 다른 픽커들이 안 따라오는데, 그러면 조작판이 화면과 다른 말을 하는 이 저장소의
@@ -684,6 +687,12 @@ function Demo() {
     document.body.classList.toggle("demo-isolate", isolate);
     return () => document.body.classList.remove("demo-isolate");
   }, [isolate]);
+
+  useEffect(() => {
+    document.body.classList.toggle("on-style-outline", onStyle === "outline");
+    document.body.classList.toggle("on-style-segment", onStyle === "segment");
+    return () => document.body.classList.remove("on-style-outline", "on-style-segment");
+  }, [onStyle]);
 
   // 1초씩 세다 마지막 칸에서 `disabled`를 켭니다. **버튼을 바로 토글하면 안 됩니다** —
   // `DateWheelPicker.tsx:659-665`가 바깥 `pointerdown`에 팝오버를 닫으므로, 누르는 순간
@@ -865,6 +874,17 @@ function Demo() {
                   <div className="demo-setting-choices">
                     {([1, 2, 3, 4] as const).map((rows) => (
                       <button type="button" key={rows} className="secondary-button" aria-pressed={wheelRows === rows} onClick={() => setWheelRowsPerSide(rows)}>{rows}</button>
+                    ))}
+                  </div>
+                </div>
+                {/* 🔴 이 줄 자체가 시안입니다 — 위 세 줄의 ON 버튼이 같이 바뀝니다.
+                    "저장/완료" 같은 강조 버튼과 나란히 놓고 보셔야 하므로, 아래 팝오버를
+                    열어 `완료`(강조색 채움)와 함께 비교해 주세요. */}
+                <div className="demo-setting-row">
+                  <span>ON 버튼 모양 (시안)</span>
+                  <div className="demo-setting-choices">
+                    {([["invert", "반전"], ["outline", "테두리"], ["segment", "세그먼트"]] as const).map(([value, label]) => (
+                      <button type="button" key={value} className="secondary-button" aria-pressed={onStyle === value} onClick={() => setOnStyle(value)}>{label}</button>
                     ))}
                   </div>
                 </div>
