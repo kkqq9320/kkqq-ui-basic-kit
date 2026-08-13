@@ -512,8 +512,20 @@ export function createShortcutStorage(options?: { key?: string }): ShortcutStora
 경계선은 이미 킷 안에 있습니다: `src/Sidebar.tsx`의 머리말 주석이 *"localStorage 저장
 같은 정책은"* 앱 몫이라고 적어 둔 반면 `themeTokens`·`shortcutStorage`는 킷이 저장을
 맡을 **수 있는** 자리입니다. **킷이 소유한 설정은 킷이 옵트인으로, 앱의 UI 상태는
-앱이** — 단축키 바인딩은 전자이고, 어느 쪽이 실제로 쥐는지는 이제 앱이
-`overrides`/`storage` 중 무엇을 넘기느냐로 매 렌더 결정됩니다.
+앱이** — 단축키 바인딩은 전자이고, 어느 쪽이 실제로 쥐는지는 앱이 `overrides`/
+`storage` 중 무엇을 넘기느냐로 정해집니다.
+
+⚠️ **"매 렌더 결정됩니다"는 원래 여기 있던 문장인데, `controlled` 판정과 `ownOverrides`의
+데이터를 섞어 읽으면 틀린 문장입니다(전체 리뷰 Important 4).** `controlled` 판정
+자체(`overrides !== undefined`)는 정확히 매 렌더 새로 평가됩니다. 하지만 uncontrolled일
+때 킷이 들고 있는 사본(`ownOverrides`)은 그렇지 않습니다 — `useState` 초기화 함수는
+마운트에 한 번만 돌므로, **`controlled` 여부나 `storage` 참조가 바뀔 때만** 저장소에서
+다시 채웁니다(`ThemeColorEditor`의 `loadedTheme` 패턴과 같은 자리). 이전에는 이 재읽기
+자체가 없어서, controlled로 마운트한 뒤 uncontrolled로 바뀌거나 `storage`를 다른
+저장소로 바꿔도 `ownOverrides`가 마운트 당시 값에 갇힌 채 남았습니다 — 저장소에 값이
+있어도 전부 `defaultCombo`로 보였고, 그 뒤 첫 `setBinding`이 그 저장된 값을 통째로
+지웠습니다. 뮤테이션 확인: 위 재읽기 분기를 지우면
+`describe("controlled → uncontrolled 전환")`이 빨개짐.
 
 ---
 

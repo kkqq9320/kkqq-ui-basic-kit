@@ -61,6 +61,24 @@ export function ShortcutProvider({ actions, overrides, storage, children }: Shor
   // 초기값 계산에서도 storage.read()를 부르면 안 됩니다.
   const [ownOverrides, setOwnOverrides] = useState<ShortcutBindings>(() => (!controlled && storage ? storage.read() : {}));
 
+  // ⚠️ `useState`의 초기화 함수는 **마운트에 한 번만** 돕니다 — controlled 여부나
+  // `storage` 참조가 나중에 바뀌는 것은 위 줄로 못 잡습니다. `ThemeColorEditor`의
+  // `loadedTheme` 패턴(렌더 중 직전 값과 비교해 바뀌었으면 그 자리에서 다시 읽기)과
+  // 같은 자리를 씁니다 — effect로 하면 리렌더 한 번을 낡은 값으로 그린 뒤에야
+  // 갱신되어(§7.3처럼 매 렌더 결정되는 것과 어긋남) 화면이 한 프레임 깜빡입니다.
+  // (전체 리뷰 Important 4 — 전에는 controlled로 마운트한 뒤 uncontrolled로 바뀌거나
+  // storage 참조가 다른 저장소로 바뀌어도 `ownOverrides`가 마운트 당시 값에 갇혀,
+  // 저장소에 값이 있어도 전부 `defaultCombo`로 보였고 그 뒤 첫 `setBinding`이 그
+  // 저장된 값을 통째로 지웠습니다.)
+  const [loadedOwner, setLoadedOwner] = useState<{ controlled: boolean; storage: ShortcutStorage | undefined }>({ controlled, storage });
+  if (loadedOwner.controlled !== controlled || loadedOwner.storage !== storage) {
+    setLoadedOwner({ controlled, storage });
+    // controlled로 바뀌면 다시 안 읽습니다 — ThemeColorEditor의 loadedTheme과 같은
+    // 이유로, 앱이 이미 overrides로 값을 넘기고 있는데 저장소를 다시 읽으면 그 값을
+    // 덮어써 앱과 갈라집니다. storage가 없어지는 전환도 다시 읽을 곳이 없으므로 건너뜁니다.
+    if (!controlled && storage) setOwnOverrides(storage.read());
+  }
+
   // 다른 탭·다른 창의 변경을 받습니다. controlled거나 storage가 없으면 구독하지
   // 않습니다 — §8의 "storage를 안 넘기면 저장소를 안 건드린다"가 이 effect에도
   // 그대로 적용됩니다.

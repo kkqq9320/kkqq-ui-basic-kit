@@ -340,6 +340,61 @@ describe("저장 — storage prop (스펙 §7)", () => {
     });
   });
 
+  /* ⚠️ **전체 리뷰 Important 4.** `ownOverrides`의 `useState` 초기화 함수는 마운트에
+   * 한 번만 돕니다. controlled로 마운트한 뒤 `overrides`를 빼서 uncontrolled가 되면,
+   * `ownOverrides`는 초기화 당시(controlled라 `{}`)에 갇힌 채 남습니다 — 저장소에
+   * 값이 있어도 전부 `defaultCombo`로 보이는 결함. `ThemeColorEditor`의 `loadedTheme`
+   * 패턴(렌더 중 이전 값과 비교해 다시 읽기)이 이 자리의 선례입니다. */
+  describe("controlled → uncontrolled 전환 (전체 리뷰 Important 4)", () => {
+    it("전환하면 저장소에 있던 조합이 실제로 바인딩된다", () => {
+      const onFire = vi.fn();
+      const storage = createShortcutStorage({ key: "test:transition" });
+      storage.write({ toggle: "Ctrl+KeyZ" });
+      const { rerender } = render(
+        <ShortcutProvider actions={[action({ onFire, defaultCombo: "Ctrl+KeyB" })]} overrides={{}} storage={storage} />,
+      );
+
+      rerender(<ShortcutProvider actions={[action({ onFire, defaultCombo: "Ctrl+KeyB" })]} storage={storage} />);
+
+      press({ code: "KeyZ", ctrlKey: true });
+      expect(onFire).toHaveBeenCalledTimes(1);
+    });
+
+    // 대조군 — 위 테스트만 있으면 "전환하면 늘 defaultCombo가 뜨는" 결함 있는 구현도
+    // "아무 키나 눌러 보면 뭔가는 돈다"로 착각하기 쉽습니다. 옛 defaultCombo가 저장소
+    // 값에 가려 더 이상 뜨지 않는다는 것까지 봐야 "저장소를 실제로 읽었다"가 증명됩니다.
+    it("전환 후에는 옛 defaultCombo가 더 이상 뜨지 않는다 — 저장소 값이 가린다", () => {
+      const onFire = vi.fn();
+      const storage = createShortcutStorage({ key: "test:transition-hides-default" });
+      storage.write({ toggle: "Ctrl+KeyZ" });
+      const { rerender } = render(
+        <ShortcutProvider actions={[action({ onFire, defaultCombo: "Ctrl+KeyB" })]} overrides={{}} storage={storage} />,
+      );
+
+      rerender(<ShortcutProvider actions={[action({ onFire, defaultCombo: "Ctrl+KeyB" })]} storage={storage} />);
+
+      press({ code: "KeyB", ctrlKey: true });
+      expect(onFire).not.toHaveBeenCalled();
+    });
+
+    // 같은 뿌리 — storage 참조를 다른 저장소로 바꿔도 uncontrolled인 채로는 다시
+    // 안 읽던 결함. controlled 여부만이 아니라 storage 참조 자체도 전환 신호입니다.
+    it("uncontrolled인 채로 storage를 다른 저장소로 바꾸면 새 저장소를 다시 읽는다", () => {
+      const onFire = vi.fn();
+      const storageA = createShortcutStorage({ key: "test:swap-a" });
+      const storageB = createShortcutStorage({ key: "test:swap-b" });
+      storageB.write({ toggle: "Ctrl+KeyZ" });
+      const { rerender } = render(
+        <ShortcutProvider actions={[action({ onFire, defaultCombo: "Ctrl+KeyB" })]} storage={storageA} />,
+      );
+
+      rerender(<ShortcutProvider actions={[action({ onFire, defaultCombo: "Ctrl+KeyB" })]} storage={storageB} />);
+
+      press({ code: "KeyZ", ctrlKey: true });
+      expect(onFire).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("다른 탭의 storage 이벤트를 구독해 바인딩을 갱신한다", () => {
     const onFire = vi.fn();
     const storage = createShortcutStorage({ key: "test:cross-tab" });
