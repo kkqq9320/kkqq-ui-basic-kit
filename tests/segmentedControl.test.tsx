@@ -197,16 +197,30 @@ describe("SegmentedControl — 라디오 그룹", () => {
    * ⚠️ 앞서 지운 예외와 성격이 다릅니다 — 그때는 밝기 **순서가 뒤집힌 것**을 그림자로
    * 덮으려던 것이라 근본을 고치자 사라졌고, 여기는 순서가 맞는 상태에서 **매체의 한계**를
    * 다룹니다. 같은 "예외"라도 하나는 증상 가리기였고 하나는 물리입니다. */
-  it("다크는 빛으로 떠 있다고 말한다 — 위 하이라이트와 칩보다 밝은 테두리", () => {
+  it("다크는 빛 테두리로 떠 있다고 말한다", () => {
     expect(segmentedCssSource).toContain('[data-theme="dark"] .segmented > button[aria-checked="true"] {');
-    expect(segmentedCssSource).toContain("inset 0 1px 0 color-mix(in srgb, #fff 9%, transparent)");
     expect(segmentedCssSource).toContain("border-color: color-mix(in srgb, var(--segmented-chip) 88%, #fff);");
   });
 
-  it("다크 포커스가 그 하이라이트를 지우지 않는다", () => {
-    // 포커스 규칙이 뒤에 오므로 짝이 없으면 링이 하이라이트와 그림자를 통째로 덮습니다.
+  /* ⚠️ **위 모서리 하이라이트는 뺐습니다**(오너: "위쪽 하얀색 선이 보이는데 이건 없었으면
+   * 좋겠어"). `inset 0 1px 0`은 **1px짜리 단단한 선**이라 은은한 반사가 아니라 그어 놓은
+   * 흰 줄로 보였습니다 — 흐림이 0이면 그림자가 아니라 선입니다. 테두리가 이미 사방에서
+   * 같은 일을 하므로 신호가 겹쳐 있었고, 눈에 거슬리는 쪽을 뺐습니다.
+   * 다시 들어오면 이 검사가 빨개집니다. */
+  it("다크 칩에 위쪽 흰 선이 없다", () => {
+    /* ⚠️ **주석을 먼저 걷어냅니다.** 처음엔 소스 전체에서 찾았는데, 그 값을 **설명하는
+     * 주석**이 바로 위에 있어서 검사가 자기 설명에 걸려 빨개졌습니다 — 계약을 어긴 것이
+     * 아니라 계약을 적어 둔 글에 걸린 것입니다. `keyConsumers.test.ts`가 같은 이유로
+     * 같은 처리를 합니다. */
+    const declarations = segmentedCssSource.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(declarations).not.toContain("inset 0 1px 0");
+    expect(declarations).toContain("box-shadow");   // 전제 — 다 지워졌으면 위가 공허합니다
+  });
+
+  it("다크 포커스가 그림자를 지우지 않는다", () => {
+    // 포커스 규칙이 뒤에 오므로 짝이 없으면 링이 그림자를 통째로 덮습니다.
     const focusRule = segmentedCssSource.slice(segmentedCssSource.indexOf('[data-theme="dark"] .segmented > button[aria-checked="true"]:focus-visible'));
-    expect(focusRule.slice(0, 260)).toContain("inset 0 1px 0 color-mix(in srgb, #fff 9%, transparent)");
+    expect(focusRule.slice(0, 260)).toContain("0 2px 6px color-mix(in srgb, #000 52%, transparent)");
   });
 
   it("묶음이 움푹한 트랙이고 고른 칸만 떠 있다", () => {
