@@ -18,8 +18,11 @@ export type ShortcutProviderProps = {
    * 없으면 기본값을 쓰고, null이면 사용자가 조합을 **지운** 것입니다(스펙 §7.1).
    * 넘기면 **controlled** — 킷은 저장소를 전혀 건드리지 않습니다(아래 `storage`도
    * 완전히 무시됩니다). 앱이 소유합니다. `ThemeColorEditor`의 `overrides`와 같은
-   * 경계입니다. */
-  overrides?: Record<string, string | null>;
+   * 경계입니다.
+   *
+   * 타입은 `ShortcutBindings`와 같습니다(전체 리뷰 Minor 10 — 전에는 이 자리만
+   * `Record<string, string | null>`을 직접 적어 같은 모양을 이름 없이 반복했습니다). */
+  overrides?: ShortcutBindings;
   /** `overrides` 없이 이것만 넘기면 **uncontrolled** — 킷이 저장소를 직접 읽고
    *  씁니다. 마운트 때 `storage.read()`로 채우고, `storage.subscribe`로 다른
    *  탭·다른 창의 변경을 받고, 아래 `setBinding`이 `storage.write`로 커밋합니다.
