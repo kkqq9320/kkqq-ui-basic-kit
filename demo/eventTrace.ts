@@ -672,10 +672,12 @@ function startSwipeTrace(column: Element) {
  *
  * ⚠️ 휠 행(`.date-wheel-values button`)은 대상이 아닙니다. 그건 스와이프 경로라
  * 이미 swipe 트레이스가 봅니다. 여기가 보는 것은 **팝오버의 버튼 줄**입니다. */
-let tapWatch: { stop: () => void } | null = null;
-
+/* 🔴 **탭마다 독립된 감시자를 둡니다 — 슬롯 하나로 두면 안 됩니다.**
+ * 리포트된 제스처가 바로 **"첫 탭이 안 먹고 두 번째에 된다"**입니다. 슬롯이 하나면
+ * 두 번째 탭이 700ms 안에 들어올 때 첫 감시자를 죽이고, **판정이 안 찍히는 것이 하필
+ * 실패한 그 탭**이 됩니다 — 성공한 두 번째만 남아 "정상"으로 읽힙니다.
+ * 계측기가 재려는 사건을 스스로 지우는 자리라, 슬롯을 없애고 각자 정리하게 둡니다. */
 function startTapTrace(button: Element) {
-  tapWatch?.stop();
   const started = performance.now();
   const popover = button.closest(".date-wheel-popover");
   const startTop = popover instanceof HTMLElement ? popover.scrollTop : -1;
@@ -711,15 +713,10 @@ function startTapTrace(button: Element) {
     append(sawClick
       ? "  읽는 법: click이 났으므로 탭은 도착했습니다 — 값이 안 바뀌었다면 핸들러 쪽입니다(데모의 ── onChange 표식을 보세요)."
       : "  🔴 읽는 법: click이 아예 안 났습니다 — 탭이 먹혔습니다. mousedown막힘=Y면 팝오버의 preventDefault가 1순위, 스크롤Δ≠0이면 스크롤 컨테이너가 1순위입니다.");
-    tapWatch?.stop();
-  }, 700);
-
-  tapWatch = { stop: () => {
-    window.clearTimeout(timer);
     document.removeEventListener("click", onClick, true);
     document.removeEventListener("mousedown", onMouseDown, true);
-    tapWatch = null;
-  } };
+  }, 700);
+  void timer;
 }
 
 /* ── 오너 리포트 1번 전용 프로브: "모바일에서 휠 애니메이션이 버벅인다" ──────────

@@ -5445,3 +5445,29 @@ describe("labels.meridiem을 명시적으로 undefined로 줘도 터지지 않�
     expect(screen.getByRole("button", { name: "오후" }).getAttribute("aria-pressed")).toBe("true");
   });
 });
+
+/* 오너 리포트 5번의 경계 하나 — 날짜 묶음 → 시각 묶음 여백은 **시 열이 첫 열이 아닐
+ * 때만** 붙습니다. `["day","hour","minute"]`처럼 날짜 쪽이 하루만 남아도 경계는 있어야
+ * 하고, `["hour","minute"]`처럼 시각 전용이면 그냥 왼쪽이 비는 것이라 없어야 합니다.
+ * CSS 선택자 하나로 두 경우를 다 맞추는 자리라, 소스로 계약을 고정합니다. */
+describe("시각 묶음 경계 여백 (오너 리포트 5번)", () => {
+  it("시 열이 첫 열이 아닐 때만 여백이 붙는다", () => {
+    expect(datePickerCssSource).toContain('.date-wheel-column[data-unit="hour"]:not(:first-child) { margin-left: 10px; }');
+  });
+
+  it("열이 자기 단위를 마크업으로 말한다 — CSS가 지목할 수 있어야 한다", () => {
+    render(<DateWheelPicker ariaLabel="교차" value="2026-08-12T03:00" fields={["day", "hour", "minute"] as WheelUnit[]} onChange={() => undefined} />);
+    fireEvent.click(fieldOf("교차"));
+    const units = [...document.querySelectorAll(".date-wheel-column")].map((column) => column.getAttribute("data-unit"));
+    expect(units).toEqual(["day", "hour", "minute"]);
+    // 시가 둘째 열이므로 :not(:first-child)에 걸린다 = 경계 여백이 붙는 자리다.
+    expect(units.indexOf("hour")).toBe(1);
+  });
+
+  it("시각 전용 픽커에서는 시가 첫 열이라 여백 대상이 아니다", () => {
+    render(<DateWheelPicker ariaLabel="시각만" value="03:00" fields={["hour", "minute"] as WheelUnit[]} onChange={() => undefined} />);
+    fireEvent.click(fieldOf("시각만"));
+    const units = [...document.querySelectorAll(".date-wheel-column")].map((column) => column.getAttribute("data-unit"));
+    expect(units.indexOf("hour")).toBe(0);
+  });
+});
