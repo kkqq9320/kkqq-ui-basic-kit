@@ -90,12 +90,16 @@ describe("규칙 2·4 — 수식어는 어디서나, 맨 키는 타이핑 중이
     expect(shouldTrigger(keydown({ code: "KeyG" }))).toBe(false);
   });
 
-  it("체크박스는 타이핑 대상이 아니다", () => {
+  /* **"타이핑 대상이 아니다"와 "맨 키를 흘려도 된다"는 다른 말입니다.**
+   * 전에는 이 자리가 체크박스에서 맨 키가 트리거되는 것을 **의도로 못박고** 있었는데,
+   * 그건 규칙 9가 닫은 누수였습니다(§2.6). 체크박스가 타이핑 대상이 아니라는 뜻은
+   * **규칙 5의 양보를 받지 않는다**는 것이고, 그건 `Ctrl+A`로 재야 맞습니다. */
+  it("체크박스는 타이핑 대상이 아니다 — 그래서 Ctrl+A를 양보하지 않는다", () => {
     const { container } = render(<div data-kkqq-shortcut-scope><input type="checkbox" /></div>);
     const checkbox = container.querySelector("input")!;
     checkbox.focus();
     expect(document.activeElement).toBe(checkbox);
-    expect(shouldTrigger(keydown({ code: "KeyG" }))).toBe(true);
+    expect(shouldTrigger(keydown({ code: "KeyA", ctrlKey: true }))).toBe(true);
   });
 
   // 규칙 2의 수식어는 Ctrl·Alt·Meta뿐입니다(스펙 §2 규칙 2) — Shift는 없습니다.
@@ -142,6 +146,107 @@ describe("규칙 3 — 맨 키는 body이거나 허용 구역일 때만", () => 
     button.focus();
     expect(document.activeElement).toBe(button);
     expect(shouldTrigger(keydown({ code: "KeyG" }))).toBe(true);
+  });
+});
+
+/* 규칙 9 — 폼 컨트롤이 네이티브로 먹는 맨 키는 양보합니다(스펙 §2.6).
+ *
+ * **규칙 5와 같은 모양이고 범주만 다릅니다.** 규칙 1은 `defaultPrevented`를 보는데
+ * 네이티브 동작은 아무도 `preventDefault`를 안 부릅니다 — 실브라우저 실측
+ * (2026-08-13, Windows Chrome, 신뢰된 키):
+ *
+ * | 포커스 | 키 | 그냥 두면 | 우리가 preventDefault하면 |
+ * |---|---|---|---|
+ * | `<select>`(닫힘) | `b` | apple → **banana** | **apple** (타입어헤드 죽음) |
+ * | 라디오 그룹 | `ArrowDown` | 1 → **2**, 포커스도 이동 | **1**, 포커스 그대로 |
+ * | `input[type=range]` | `ArrowRight` | 5 → **6** | **5** |
+ *
+ * 셋 다 리스너가 도는 시점의 `defaultPrevented`는 **거짓**이었습니다. 규칙 6이
+ * `preventDefault`를 부르므로, 규칙 9가 없으면 허용 구역 안에서 이 컨트롤들의
+ * 네이티브 동작이 **죽습니다**.
+ *
+ * jsdom은 그 네이티브 동작을 재현하지 않습니다 — 이 파일이 재는 것은 "우리가
+ * 트리거를 안 하는가"뿐이고, "네이티브가 실제로 죽는가"는 위 실측이 맡습니다. */
+describe("규칙 9 — 폼 컨트롤이 먹는 맨 키는 트리거하지 않는다", () => {
+  it("허용 구역 안의 select에서는 트리거되지 않는다", () => {
+    const { container } = render(
+      <div data-kkqq-shortcut-scope>
+        <select><option value="apple">apple</option><option value="banana">banana</option></select>
+      </div>,
+    );
+    const select = container.querySelector("select")!;
+    select.focus();
+    expect(document.activeElement).toBe(select);            // 전제
+    expect(shouldTrigger(keydown({ code: "KeyB" }))).toBe(false);
+  });
+
+  it("허용 구역 안의 라디오에서는 트리거되지 않는다", () => {
+    const { container } = render(<div data-kkqq-shortcut-scope><input type="radio" name="r" /></div>);
+    const radio = container.querySelector("input")!;
+    radio.focus();
+    expect(document.activeElement).toBe(radio);             // 전제
+    expect(shouldTrigger(keydown({ code: "ArrowDown" }))).toBe(false);
+  });
+
+  it("허용 구역 안의 체크박스에서는 트리거되지 않는다", () => {
+    const { container } = render(<div data-kkqq-shortcut-scope><input type="checkbox" /></div>);
+    const checkbox = container.querySelector("input")!;
+    checkbox.focus();
+    expect(document.activeElement).toBe(checkbox);          // 전제
+    expect(shouldTrigger(keydown({ code: "Space" }))).toBe(false);
+  });
+
+  it("허용 구역 안의 range에서는 트리거되지 않는다", () => {
+    const { container } = render(<div data-kkqq-shortcut-scope><input type="range" /></div>);
+    const range = container.querySelector("input")!;
+    range.focus();
+    expect(document.activeElement).toBe(range);             // 전제
+    expect(shouldTrigger(keydown({ code: "ArrowRight" }))).toBe(false);
+  });
+
+  /* **누수는 허용 구역에서만 납니다.** 표식이 없으면 규칙 3이 이미 막으므로, 이
+   * 대조군이 없으면 위 넷은 "구역 밖이라 false"인 것과 구분이 안 됩니다 — 같은
+   * 컨트롤·같은 키로 표식만 뺀 A/B입니다. */
+  it("표식 없는 select는 규칙 3이 이미 막는다 — 누수는 허용 구역에서만 났다", () => {
+    const { container } = render(
+      <div><select><option value="apple">apple</option></select></div>,
+    );
+    const select = container.querySelector("select")!;
+    select.focus();
+    expect(document.activeElement).toBe(select);            // 전제
+    expect(shouldTrigger(keydown({ code: "KeyB" }))).toBe(false);
+  });
+
+  /* **활성화만 하는 요소는 양보하지 않습니다** — 선을 여기 긋는 이유는 §2.6에.
+   * 이 둘이 규칙 9의 대가를 못박습니다: 여기까지 막으면 카드 그리드에서 `j`/`k`를
+   * 쓰라고 만든 허용 구역이 제 일을 못 합니다. */
+  it("허용 구역 안의 버튼에서는 여전히 트리거된다", () => {
+    const { container } = render(<div data-kkqq-shortcut-scope><button type="button">누름</button></div>);
+    const button = container.querySelector("button")!;
+    button.focus();
+    expect(document.activeElement).toBe(button);            // 전제
+    expect(shouldTrigger(keydown({ code: "KeyJ" }))).toBe(true);
+  });
+
+  it("허용 구역 안의 tabindex 요소에서는 여전히 트리거된다", () => {
+    const { container } = render(<div data-kkqq-shortcut-scope><div tabIndex={0}>카드</div></div>);
+    const card = container.querySelector("div[tabindex]") as HTMLElement;
+    card.focus();
+    expect(document.activeElement).toBe(card);              // 전제
+    expect(shouldTrigger(keydown({ code: "KeyJ" }))).toBe(true);
+  });
+
+  // 규칙 9는 **맨 키만** 막습니다 — 수식어 조합은 규칙 2대로 어디서나 트리거됩니다.
+  it("select 안에서도 수식어 조합은 트리거된다", () => {
+    const { container } = render(
+      <div data-kkqq-shortcut-scope>
+        <select><option value="apple">apple</option></select>
+      </div>,
+    );
+    const select = container.querySelector("select")!;
+    select.focus();
+    expect(document.activeElement).toBe(select);            // 전제
+    expect(shouldTrigger(keydown({ code: "KeyB", ctrlKey: true }))).toBe(true);
   });
 });
 

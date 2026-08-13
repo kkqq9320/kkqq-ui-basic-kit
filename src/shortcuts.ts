@@ -79,6 +79,46 @@ const NON_TEXT_INPUT_TYPES = new Set(["button", "checkbox", "color", "file", "hi
  * 유일한 자리이고, 빠뜨리면 조합이 두 번 동작해 **눈에 보입니다.** */
 const NATIVE_EDIT_CODES = new Set(["KeyA", "KeyC", "KeyV", "KeyX", "KeyZ", "KeyY"]);
 
+/** 맨 키를 **네이티브로 먹는** 폼 컨트롤인가(규칙 9 — 스펙 §2.6).
+ *
+ * **규칙 4(타이핑)와 다른 범주입니다. 합치면 안 됩니다.** `checkbox`·`radio`는
+ * `NON_TEXT_INPUT_TYPES`에 **일부러** 들어 있습니다 — 거기 있어야 규칙 5가 그 위에서
+ * `Ctrl+A`를 양보하지 않습니다(체크박스에 전체 선택은 없습니다). 그러니 이들을
+ * "타이핑"으로 옮겨 닫으면 규칙 5가 같이 틀어집니다. 두 질문이 다릅니다 —
+ * *"글자를 넣는 자리인가"*(규칙 4·5)와 *"맨 키를 이미 쓰고 있는가"*(규칙 9).
+ *
+ * **실측(2026-08-13, Windows Chrome, 신뢰된 키).** 리스너가 도는 시점의
+ * `defaultPrevented`는 셋 다 **거짓**이었고 네이티브 동작은 그대로 돌았습니다. 같은
+ * 컨트롤·같은 키로 `preventDefault()`만 붙인 대조군에서는 그 동작이 죽었습니다:
+ *
+ * | 포커스 | 키 | 그냥 두면 | preventDefault하면 |
+ * |---|---|---|---|
+ * | `<select>`(닫힘) | `b` | apple → **banana** | **apple** |
+ * | 라디오 그룹 | `ArrowDown` | 1 → **2**(포커스도 이동) | **1** |
+ * | `input[type=range]` | `ArrowRight` | 5 → **6** | **5** |
+ *
+ * 즉 §2.3과 **같은 모양**입니다 — 규칙 1이 `defaultPrevented`를 보는데 네이티브 동작은
+ * 아무도 `preventDefault`를 안 부릅니다. 다른 점은 실패가 **조용하다**는 것입니다:
+ * §2.3을 빠뜨리면 조합이 두 번 동작해 눈에 띄지만, 여기서는 규칙 6이 네이티브 동작을
+ * **죽여서** 타입어헤드가 그냥 안 먹습니다.
+ *
+ * ⚠️ **`type`이 아니라 요소로 봅니다.** `NATIVE_EDIT_CODES`는 플랫폼·브라우저마다
+ * 달라지는 열린 목록이라 §2.3이 그 위험을 따로 적어 뒀지만, 이쪽은 **HTML이 정한 닫힌
+ * 집합**입니다 — UA가 키보드 동작을 주는 폼 요소. 그래서 `type`을 세지 않고 요소로
+ * 판정합니다(새 `input` type이 생겨도 자동으로 안전한 쪽으로 떨어집니다).
+ *
+ * ⚠️ **`<button>`·`<a href>`·`<summary>`는 일부러 뺐습니다.** 이들이 먹는 키는
+ * `Enter`·`Space`뿐이고 **값이 아니라 활성화**입니다. 여기까지 막으면 카드 그리드에서
+ * `j`/`k`를 쓰라고 만든 허용 구역(§2.2)이 제 일을 못 합니다 — 카드가 보통 `<button>`
+ * 이니까요. **대가는 명시합니다**: 맨 `Enter`·`Space`를 액션에 바인딩하면 허용 구역
+ * 안에서 그 활성화가 죽습니다.
+ *
+ * ⚠️ **`<audio>`·`<video controls>`는 아직 안 쟀습니다** — 같은 부류로 보이지만 이
+ * 킷의 규율은 "잰 것만 적는다"입니다. 스펙 §10-9에 남겨 뒀습니다. */
+function isNativeKeyControl(element: Element | null): boolean {
+  return element instanceof HTMLSelectElement || element instanceof HTMLInputElement;
+}
+
 function isTypingTarget(element: Element | null): boolean {
   if (!element) return false;
   if (element instanceof HTMLElement && element.isContentEditable) return true;
@@ -233,6 +273,7 @@ export function shouldTrigger(event: KeyboardEvent): boolean {
     return true;                                        // 규칙 2
   }
   if (typing) return false;                             // 규칙 4
+  if (isNativeKeyControl(active)) return false;         // 규칙 9 — 스펙 §2.6
   if (!active || active === document.body) return true; // 규칙 3
   return active.closest(`[${BARE_KEY_SCOPE_ATTR}]`) !== null;
 }
