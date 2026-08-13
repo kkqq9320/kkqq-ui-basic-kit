@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DateWheelPicker, DEFAULT_DATE_WHEEL_LABELS, type DateWheelLabels, type DateWheelUnit } from "../src/DateWheelPicker";
 import { instantModel, type WheelUnit } from "../src/model/instant";
+import { setHourFormat } from "../src/settings";
 import { Dialog } from "../src/Dialog";
 import datePickerCssSource from "../css/date-picker.css?raw";
 import tokensCssSource from "../css/tokens.css?raw";
@@ -19,7 +20,9 @@ import tokensCssSource from "../css/tokens.css?raw";
 // nowSpy.mockRestore()/shiftSpy.mockRestore()는 it 본문 맨 끝 줄이라, 그 위 어느
 // expect()든 던지면 건너뛰어져 스파이가 그대로 살아남는다 — instantModel은 파일
 // 전체가 공유하는 하나의 객체라 그 뒤 테스트로 샌다(전체 브랜치 리뷰 F-2 지적).
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
+// `hourFormat`은 모듈 스코프 전역이라(설계 스펙 §11) 검사 사이에 샌다 — 3단계
+// 블록 하나가 12시간제로 두고 끝나면 그 뒤 스위트 전체가 12시간제로 돈다.
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); setHourFormat("24"); });
 
 /**
  * 트리거가 빈 자리를 채우는 문자 — **U+2012 FIGURE DASH**. 밑줄이 아니다(설계 스펙 §4.5).
@@ -4965,6 +4968,91 @@ const _hintNowIsOptional: DateWheelLabels = {
   placeholder: "날짜 선택", hint: "안내", today: "오늘", now: "지금", clear: "비우기", done: "완료",
   previous: "이전", next: "다음", select: "선택", weekdays: ["일", "월", "화", "수", "목", "금", "토"],
   units: { year: "연도", month: "월", day: "일" },
+  // 3단계: `meridiem`은 **필수**다. 그리는 글자이고, 선택으로 두면 영어로
+  // override한 소비자에게 한국어가 새는 자리가 하나 더 생긴다(원장의 `units` 누수와
+  // 정확히 같은 모양) — 그 실수를 되풀이하지 않는다는 계약을 여기서 못 박는다.
+  meridiem: { am: "오전", pm: "오후" },
   // hintNow 없음 — 필수가 되면 여기서 tsc가 터진다.
 };
 void _hintNowIsOptional;
+
+// ── 3단계 — 12시간제는 킷 전역 설정이고, 시 열은 24칸 그대로다 (스펙 §7·§10·§11) ──
+//
+// 이 블록의 검사는 전부 **같은 값, 다른 글자**다. 값을 바꾸는 검사가 하나도 없는
+// 것이 요점이다 — 12시간제는 읽는 방식이지 값이 아니다.
+const TIME_FIELDS: WheelUnit[] = ["year", "month", "day", "hour", "minute", "second"];
+
+describe("DateWheelPicker 12시간제 (3단계)", () => {
+  it("대조군: 기본은 24시간제다 — 설정을 안 건드리면 트리거가 지금과 같다", () => {
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:00:05" fields={TIME_FIELDS} onChange={() => undefined} />);
+    expect(fieldOf("거래 시각").textContent).toBe("2026. 08. 12. 15:00:05");
+  });
+
+  it("설정이 12면 트리거의 시 세그먼트가 오전/오후를 싣는다", () => {
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:00:05" fields={TIME_FIELDS} onChange={() => undefined} />);
+    expect(fieldOf("거래 시각").textContent).toBe("2026. 08. 12. 오후 03:00:05");
+  });
+
+  /* 🔴 이 검사가 이 태스크의 **공허하지 않은** 부분이다.
+   *
+   * 위 두 검사만으로는 컴포넌트가 **구독**하는지 알 수 없다 — 렌더 시점에 한 번 읽고
+   * 마는 구현도, 지역 상수 `"24"`를 들고 있다가 우연히 맞는 구현도 똑같이 통과한다.
+   * 여기서는 **마운트한 뒤에** 설정을 바꾸고 화면이 따라오는지를 본다. `useSyncExternalStore`
+   * 없이는 빨개진다. (이 저장소 원장의 "공허한 A/B" 실패 사례와 같은 자리다.) */
+  it("마운트한 뒤 설정을 바꾸면 이미 떠 있는 픽커가 따라 바뀐다 — 구독이 실제로 돈다", () => {
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:00:05" fields={TIME_FIELDS} onChange={() => undefined} />);
+    expect(fieldOf("거래 시각").textContent).toBe("2026. 08. 12. 15:00:05");
+
+    act(() => setHourFormat("12"));
+    expect(fieldOf("거래 시각").textContent).toBe("2026. 08. 12. 오후 03:00:05");
+
+    act(() => setHourFormat("24"));
+    expect(fieldOf("거래 시각").textContent).toBe("2026. 08. 12. 15:00:05");
+  });
+
+  it("시 열이 24칸 그대로다 — 라벨만 12시간제로 읽힌다", () => {
+    // 위·아래 프리로드까지 일곱 행이 연속한 24시간 값을 그대로 읽어야 한다. 12칸으로
+    // 순환시켰다면 정오를 넘는 이 구간에서 어긋난다(스펙 §7이 24칸을 고른 이유).
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T11:00:05" fields={TIME_FIELDS} onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 시각"));
+
+    const hour = screen.getByRole("group", { name: "시 오전 11" });
+    const rows = [...hour.querySelectorAll(".date-wheel-values button")].map((row) => row.textContent);
+    expect(rows).toEqual(["오전 08", "오전 09", "오전 10", "오전 11", "오후 12", "오후 01", "오후 02"]);
+  });
+
+  it("분·초 열은 12시간제와 무관하다 — 대조군", () => {
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:07:05" fields={TIME_FIELDS} onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 시각"));
+
+    expect(screen.getByRole("group", { name: "분 07" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "초 05" })).toBeTruthy();
+  });
+
+  it("오전/오후 문구를 소비자가 바꿀 수 있다 — 킷이 한국어를 안 박는다", () => {
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:00:05" fields={TIME_FIELDS} onChange={() => undefined} labels={{ meridiem: { am: "AM", pm: "PM" } }} />);
+    expect(fieldOf("거래 시각").textContent).toBe("2026. 08. 12. PM 03:00:05");
+  });
+
+  /* `meridiem`을 **통째로만** 갈아 끼울 수 있다는 것이 이 검사의 내용이다.
+   * `units`처럼 부분 병합(`{ ...DEFAULT.meridiem, ...override.meridiem }`)을 하면,
+   * 한쪽만 준 소비자에게 나머지 한쪽이 한국어로 새고 — 그게 이 저장소가 이미 갖고
+   * 있는 결함이다. 타입이 둘 다 요구하므로 그 상태 자체가 만들어지지 않는다. */
+  it("오전/오후는 통째로 바뀐다 — 한쪽만 한국어로 남는 상태가 없다", () => {
+    setHourFormat("12");
+    const { rerender } = render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T03:00:05" fields={TIME_FIELDS} onChange={() => undefined} labels={{ meridiem: { am: "AM", pm: "PM" } }} />);
+    expect(fieldOf("거래 시각").textContent).toBe("2026. 08. 12. AM 03:00:05");
+    rerender(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:00:05" fields={TIME_FIELDS} onChange={() => undefined} labels={{ meridiem: { am: "AM", pm: "PM" } }} />);
+    expect(fieldOf("거래 시각").textContent).toBe("2026. 08. 12. PM 03:00:05");
+  });
+
+  it("시 단위가 없는 픽커는 12시간제에서도 그대로다 — 날짜 전용 대조군", () => {
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} />);
+    expect(fieldOf("거래 날짜").textContent).toBe("2026. 08. 12.");
+  });
+});

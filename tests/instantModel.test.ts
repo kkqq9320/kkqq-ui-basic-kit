@@ -550,3 +550,91 @@ describe("빈 fields (F-3)", () => {
     expect(clampToRange("2026-07-15", {}, [])).toBe("2026-07-15");
   });
 });
+
+// ── 3단계 항목 1·2 — 12시간제는 **라벨만** 바꾼다 (설계 스펙 §7·§10) ─────────
+//
+// 시 열은 24칸 그대로다. 12칸으로 순환시키면 정오를 영영 못 넘어가서 값에 따라
+// 오전/오후가 자동으로 바뀔 수 없다(스펙 §7) — 그래서 이 블록의 검사는 전부
+// "같은 값, 다른 글자"이고, 값을 바꾸는 검사가 하나도 없는 것이 요점이다.
+//
+// 오전/오후 문자열이 인자로 들어오는 이유: 스펙 §10이 "`AM`/`PM`으로 라벨을 바꾸면
+// 폭이 달라진다"고 소비자에게 경고한다는 것 자체가 **바꿀 수 있어야 한다**는 뜻이다.
+// `weekdays`가 이미 같은 방식으로 들어온다 — 모델은 한국어를 모른다.
+const KO_HOUR = { format: "12", am: "오전", pm: "오후" } as const;
+const EN_HOUR = { format: "12", am: "AM", pm: "PM" } as const;
+
+describe("dateWheelLabel — 12시간제 (3단계)", () => {
+  const F: WheelUnit[] = ["year", "month", "day", "hour", "minute"];
+
+  it("대조군: 인자를 안 주면 24시간제 그대로다 — 기존 호출부가 글자 하나도 안 바뀐다", () => {
+    expect(dateWheelLabel("2026-08-12T15:00", "hour", WEEKDAYS_KO, F)).toBe("15");
+    expect(dateWheelLabel("2026-08-12T00:00", "hour", WEEKDAYS_KO, F)).toBe("00");
+  });
+
+  it("대조군: format이 \"24\"면 오전/오후 문자열을 줘도 안 붙는다", () => {
+    expect(dateWheelLabel("2026-08-12T15:00", "hour", WEEKDAYS_KO, F, { format: "24", am: "오전", pm: "오후" })).toBe("15");
+  });
+
+  it("오후는 12를 빼고 오전/오후를 앞에 붙인다 — 트리거와 같은 어순(스펙 §7)", () => {
+    expect(dateWheelLabel("2026-08-12T15:00", "hour", WEEKDAYS_KO, F, KO_HOUR)).toBe("오후 03");
+  });
+
+  it("자정은 오전 12다 — 0을 12로 읽는다", () => {
+    expect(dateWheelLabel("2026-08-12T00:00", "hour", WEEKDAYS_KO, F, KO_HOUR)).toBe("오전 12");
+  });
+
+  it("정오는 오후 12다 — 12를 0으로 읽지 않는다", () => {
+    expect(dateWheelLabel("2026-08-12T12:00", "hour", WEEKDAYS_KO, F, KO_HOUR)).toBe("오후 12");
+  });
+
+  it("오전 한 자리도 두 자리로 채운다", () => {
+    expect(dateWheelLabel("2026-08-12T09:00", "hour", WEEKDAYS_KO, F, KO_HOUR)).toBe("오전 09");
+    expect(dateWheelLabel("2026-08-12T11:59", "hour", WEEKDAYS_KO, F, KO_HOUR)).toBe("오전 11");
+  });
+
+  it("23시는 오후 11이다 — 열 끝에서도 어긋나지 않는다", () => {
+    expect(dateWheelLabel("2026-08-12T23:00", "hour", WEEKDAYS_KO, F, KO_HOUR)).toBe("오후 11");
+  });
+
+  it("오전/오후 문자열은 모델이 안 정한다 — 소비자가 준 것을 그대로 쓴다", () => {
+    expect(dateWheelLabel("2026-08-12T15:00", "hour", WEEKDAYS_KO, F, EN_HOUR)).toBe("PM 03");
+  });
+
+  it("시가 아닌 열은 12시간제와 무관하다 — 분·초·일은 그대로", () => {
+    const G: WheelUnit[] = ["year", "month", "day", "hour", "minute", "second"];
+    expect(dateWheelLabel("2026-08-12T15:07:05", "minute", WEEKDAYS_KO, G, KO_HOUR)).toBe("07");
+    expect(dateWheelLabel("2026-08-12T15:07:05", "second", WEEKDAYS_KO, G, KO_HOUR)).toBe("05");
+    expect(dateWheelLabel("2026-08-12T15:07:05", "day", WEEKDAYS_KO, G, KO_HOUR)).toBe("12 수");
+  });
+});
+
+describe("dateTriggerParts — 12시간제 (3단계)", () => {
+  const F: WheelUnit[] = ["year", "month", "day", "hour", "minute", "second"];
+  const text = (parts: { text: string }[]) => parts.map((part) => part.text).join("");
+
+  it("대조군: 인자를 안 주면 24시간제 그대로다", () => {
+    expect(text(dateTriggerParts("2026-08-12T15:00:05", F, null))).toBe("2026. 08. 12. 15:00:05");
+  });
+
+  it("시 세그먼트가 오전/오후를 싣는다 — 트리거와 열이 같은 어순(스펙 §10)", () => {
+    expect(text(dateTriggerParts("2026-08-12T15:00:05", F, null, KO_HOUR))).toBe("2026. 08. 12. 오후 03:00:05");
+  });
+
+  it("오전/오후는 시 세그먼트 안이다 — 별도 조각으로 쪼개지 않는다", () => {
+    // 값의 절반이지 구두점이 아니다. 쪼개면 세그먼트 클릭·활성 표시가 갈라진다.
+    const hour = dateTriggerParts("2026-08-12T15:00:05", F, null, KO_HOUR).find((part) => part.unit === "hour");
+    expect(hour?.text).toBe("오후 03");
+  });
+
+  it("자리 지키기(U+2012)는 12시간제에서도 그대로다 — 오전/오후는 남고 숫자만 버퍼가 된다", () => {
+    const parts = dateTriggerParts("2026-08-12T15:00:05", F, { unit: "hour", digits: "1" }, KO_HOUR);
+    // 채움 문자는 **코드포인트로** 적는다 — U+2012는 `-`(U+002D)·`–`(U+2013)와 화면에서
+    // 구별되지 않아, 글리프를 그대로 쓰면 틀린 문자가 눈에 안 띄는 채 통과한다.
+    expect(parts.find((part) => part.unit === "hour")?.text).toBe("오후 1\u2012");
+  });
+
+  it("시각 전용 값도 같다", () => {
+    const G: WheelUnit[] = ["hour", "minute"];
+    expect(text(dateTriggerParts("00:30", G, null, KO_HOUR))).toBe("오전 12:30");
+  });
+});

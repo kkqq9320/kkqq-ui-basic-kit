@@ -21,7 +21,13 @@
  * (2026-08-13 재확인: `src/`에서 `localStorage`를 만지는 파일은 `themeTokens.ts`
  *  하나뿐이고, 그 뒤에 들어온 단축키 모듈은 저장소를 아예 안 씁니다. 전제 유효.) */
 
-export type HourFormat = "12" | "24";
+/* 정의는 모델에 있습니다 — 시(時)를 어떻게 **읽을지**는 값의 어휘라 `model/instant.ts`가
+ * 소유하고, 여기서는 다시 내보내기만 합니다. 같은 유니온을 두 파일에 적으면 한쪽이
+ * 조용히 어긋납니다(이 저장소가 숫자로 이미 두 번 겪은 자리). **타입 전용 import라
+ * 런타임 의존은 0**이고, 모델 쪽의 "아무것도 import 하지 않는다" 계약과도 어긋나지
+ * 않습니다 — 방향이 반대입니다. */
+export type { HourFormat } from "./model/instant";
+import type { HourFormat } from "./model/instant";
 
 /** 기본값이 `"24"`라서, 앱이 아무것도 안 하면 화면은 지금과 **글자 하나도** 다르지 않습니다. */
 let hourFormat: HourFormat = "24";
