@@ -310,7 +310,7 @@ describe("DateWheelPicker", () => {
       next: "next",
       select: "picker",
       weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
-      units: { year: "Year", month: "Month", day: "Day" },
+      units: { year: "Year", month: "Month", day: "Day", hour: "Hour", minute: "Minute", second: "Second" },
     };
     render(<DateWheelPicker ariaLabel="Date" value="" onChange={() => undefined} labels={english} allowClear />);
 
@@ -5012,7 +5012,7 @@ describe("DateWheelPicker 팝오버 안내 문구 — 시간 열이 있으면 hi
 const _hintNowIsOptional: DateWheelLabels = {
   placeholder: "날짜 선택", hint: "안내", today: "오늘", now: "지금", clear: "비우기", done: "완료",
   previous: "이전", next: "다음", select: "선택", weekdays: ["일", "월", "화", "수", "목", "금", "토"],
-  units: { year: "연도", month: "월", day: "일" },
+  units: { year: "연도", month: "월", day: "일", hour: "시", minute: "분", second: "초" },
   // 3단계: `meridiem`은 **필수**다. 그리는 글자이고, 선택으로 두면 영어로
   // override한 소비자에게 한국어가 새는 자리가 하나 더 생긴다(원장의 `units` 누수와
   // 정확히 같은 모양) — 그 실수를 되풀이하지 않는다는 계약을 여기서 못 박는다.
@@ -5938,5 +5938,42 @@ describe("팝오버 버튼은 pointerup에서 확정된다 (오너 실기기 결
     pointer("pointerUp", now, { pointerId: 6, clientX: 10, clientY: 10, pointerType: "mouse" });
     fireEvent.click(now);
     expect(onChange).toHaveBeenCalledTimes(1);
+  });
+});
+
+/* 🔴 **`units`의 한국어 누수를 닫았습니다**(오너 결정 2026-08-13).
+ *
+ * 시·분·초가 **선택**이던 동안, 라벨을 영어로 바꾼 소비자가 연·월·일만 주면 병합
+ * (`{ ...DEFAULT.units, ...override.units }`)이 나머지 셋을 **한국어 기본값**으로 메웠고,
+ * 시각 열의 접근성 이름이 영어 화면에서 `"시 03"`으로 읽혔습니다. **화면에는 안 보이고
+ * 귀에만 들리는** 결함이라 눈으로는 영영 안 잡힙니다.
+ *
+ * 이제 여섯 다 필수라 **그 상태 자체가 만들어지지 않습니다.** 아래는 그 계약이 타입
+ * 수준에서 살아 있는지를 보는 검사입니다 — 이 파일의 `_hintNowIsOptional`과 같은 idiom
+ * 으로, `it()` 없이 모듈 스코프에 두어 `tsc --noEmit`만으로 판정합니다. 누가 셋 중
+ * 하나라도 다시 선택으로 열면 **여기서 tsc가 거절합니다.** */
+const _unitsAreAllRequired: DateWheelLabels["units"] = {
+  year: "Year", month: "Month", day: "Day",
+  // 이 셋을 지우면 tsc가 터집니다 — 그게 이 상수의 전부입니다.
+  hour: "Hour", minute: "Minute", second: "Second",
+};
+void _unitsAreAllRequired;
+
+describe("units 누수가 닫혔다 (오너 결정 2026-08-13)", () => {
+  /* 렌더로도 한 번 봅니다 — 타입 상수만으로는 "그래서 화면/귀에 무엇이 나가는가"가
+   * 안 보입니다. 영어로 전부 바꾼 소비자에게 한국어가 한 글자도 안 남아야 합니다. */
+  it("영어로 override한 소비자의 시각 열 이름에 한국어가 안 남는다", () => {
+    render(<DateWheelPicker ariaLabel="Logged at" value="2026-08-12T15:07:41" fields={TIME_FIELDS} onChange={() => undefined}
+      labels={{
+        // ⚠️ `weekdays`도 같이 넘깁니다 — 일 열 이름은 `units.day`와 **요일**을 함께 그리므로
+        // (`12 수`), 그것을 빼면 이 검사가 `units` 누수가 아니라 요일 누수를 잡습니다.
+        // 처음에 안 넘겨서 빨갛게 나왔고, 그게 **다른 축**이라는 것을 그때 알았습니다.
+        weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+        units: { year: "Year", month: "Month", day: "Day", hour: "Hour", minute: "Minute", second: "Second" },
+      }} />);
+    fireEvent.click(fieldOf("Logged at"));
+    const names = [...document.querySelectorAll(".date-wheel-column")].map((column) => column.getAttribute("aria-label") ?? "");
+    expect(names.some((name) => /[가-힣]/.test(name))).toBe(false);
+    expect(names).toContain("Hour 15");
   });
 });
