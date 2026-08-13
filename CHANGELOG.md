@@ -78,9 +78,18 @@ localhost)에서만** 동작합니다. 평문 HTTP에서는 `navigator.clipboard
 3. **`min`/`max` 비교 규칙** — 좋은 방향이고 **렌더 크래시 제거를 포함**합니다
 4. **`DateWheelLabels.meridiem` 필수** (`{ am, pm }`)
 5. **`DateWheelLabels.units`의 `hour`·`minute`·`second` 필수**
-6. **`KIT_RESERVED`에 `Ctrl+S`** — 앱이 `Ctrl+S`(및 `Ctrl+Shift+S`·`Cmd+S`)를 액션에
-   걸 수 없습니다. 함께 등록된 `Ctrl+C`·`V`·`Z`는 이미 `unbindableReason`의 `native-edit`로
-   막혀 있던 것이라 **새 손실이 아닙니다**(실측).
+6. **`KIT_RESERVED`에 `Ctrl+S`** — 사용자가 **설정 화면에서** `Ctrl+S`(및
+   `Ctrl+Shift+S`·`Cmd+S`)를 **녹음할 수 없습니다.** 함께 등록된 `Ctrl+C`·`V`·`Z`는
+   이미 `unbindableReason`의 `native-edit`로 막혀 있던 것이라 **새 손실이 아닙니다**(실측).
+
+   > 🔴 **정정(2026-08-14 감사).** 이 항목은 처음에 *"앱이 `Ctrl+S`를 액션에 걸 수
+   > 없습니다"*였는데 **틀렸습니다.** 예약 검사(`findConflict`)를 부르는 자리는
+   > 녹음기 하나뿐이고, `defaultCombo`·`overrides`·`storage`로 들어오는 조합의
+   > 관문인 `bindingOf`는 `unbindableReason`만 봅니다 — 거기에 `KeyS`는 없습니다.
+   > **앱이 코드로 넣으면 그대로 걸립니다.** 다만 날짜 필드에 포커스가 있을 때는
+   > 피커가 먼저 `preventDefault`를 부르므로 규칙 1에 걸려 액션이 안 뜹니다.
+   > 즉 **깨지는 것은 녹음 경로뿐**입니다. 두 관문의 차이는 설계 스펙 §5.2에
+   > 표로 적어 뒀습니다.
 
 > 1~3은 2b(PR #52), 4~5는 그 뒤 라운드. 넷·다섯은 **일부러 필수**입니다 — 선택으로 두면
 > 부분 override가 한국어를 남겨 스크린리더로 샙니다. 비용을 재 보니 **소비자 0곳**
@@ -125,11 +134,14 @@ localhost)에서만** 동작합니다. 평문 HTTP에서는 `navigator.clipboard
 
 ### ⚠️ 소비자가 알아야 할 것
 
-- **`KIT_RESERVED`에 `Ctrl+S`가 들어갑니다 — 앱은 이제 `Ctrl+S`를 액션에 걸 수
+- **`KIT_RESERVED`에 `Ctrl+S`가 들어갑니다 — 설정 화면에서 `Ctrl+S`를 녹음할 수
   없습니다.** `Ctrl+C`·`Ctrl+V`·`Ctrl+Z`도 함께 등록되지만 그 셋은 이미
   `unbindableReason`의 `native-edit`로 막혀 있던 것이라 **새로 잃는 것은 없습니다.**
   `Ctrl+S` 하나가 새 손실이고, 예약 비교가 `Shift`·`Alt`·`Meta`를 접으므로
   `Ctrl+Shift+S`·`Cmd+S`도 함께 막힙니다.
+  ⚠️ **앱이 `defaultCombo`·`overrides`로 코드에 직접 넣는 것은 막히지 않습니다** —
+  `bindingOf`는 예약 목록이 아니라 `unbindableReason`만 봅니다(2026-08-14 정정,
+  설계 스펙 §5.2의 표). 넣으면 걸리고, 날짜 필드에 포커스가 있을 때만 안 뜹니다.
 - **`Ctrl+S`는 브라우저의 "페이지 저장"을 실제로 가져갑니다.** `Ctrl+;`는 실기기로
   확인하고 뺏은 것이지만 이건 **아직 확인하지 못했습니다** — 폰에는 `Ctrl` 키가 없어
   이 저장소가 쓰던 확인 방법을 그대로 쓸 수 없습니다. 그래서 범위를 좁혔습니다:

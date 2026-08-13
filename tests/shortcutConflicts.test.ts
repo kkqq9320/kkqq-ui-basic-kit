@@ -6,8 +6,14 @@
  * 아래 둘째 describe가 `src/`를 훑어 실제로 쓰이는 수식어 조합을 세고, `KIT_RESERVED`와
  * **통째로 비교**합니다(필터형은 0건에서 공허하게 통과합니다).
  *
- * 지금 킷이 점유한 조합은 하나입니다 — `DateWheelPicker.tsx`의 `handleShortcut`의
- * `(ctrlKey || metaKey) && event.code === "Semicolon"`.
+ * 지금 킷이 점유한 조합은 **다섯**입니다(2026-08-14) — 전부 `DateWheelPicker.tsx`의
+ * `handleShortcut`이고, `Semicolon`(오늘로)·`KeyC`(복사)·`KeyV`(붙여넣기)·
+ * `KeyZ`(되돌리기)·`KeyS`(확정, **팝오버가 열려 있을 때만**)입니다.
+ *
+ * ⚠️ **예약은 녹음기에서만 막습니다.** `findConflict`를 부르는 자리는 녹음기
+ * 하나뿐이고 `bindingOf`는 `unbindableReason`만 봅니다. `Ctrl+C`·`V`·`Z`는 §6.2의
+ * `native-edit`이라 두 경로 다 막히지만, **`Ctrl+S`는 `defaultCombo`·`overrides`로
+ * 들어오면 그대로 바인딩됩니다**(설계 스펙 §5.2의 표).
  */
 import { describe, expect, it } from "vitest";
 
