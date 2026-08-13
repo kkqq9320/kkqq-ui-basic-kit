@@ -22,15 +22,28 @@
 /* 고른 칸 — **중립색 칩**입니다(오너 결정 2026-08-13: "디자인이랑 모양, 백그라운드 컬러
  * 색감은 아까가 더 좋았는데. 아까 같은 색상에 좀 더 진하게 해 봐").
  *
- * 강조색 색조를 얹은 판을 한 번 거쳐 왔는데, 오너가 **중립색 쪽**을 골랐습니다. 이유가
- * 설계와도 맞습니다 — 색으로 말하면 강조색을 쓰는 일곱 자리와 계속 겨루게 되고, 여기서
- * 말해야 하는 것은 **"이 묶음에서 지금 이것"**이라는 위치이지 강조가 아닙니다.
+ * **바탕은 중립색이고 글자만 강조색입니다**(오너 결정 2026-08-13). 바탕을 강조색으로
+ * 채우거나 색조를 얹으면 강조색을 쓰는 일곱 자리("이걸 하세요")와 겨루는데, **글자
+ * 하나만 강조색인 것은 그 어휘와 안 부딪힙니다** — 채워진 버튼은 여전히 행동이고,
+ * 여기는 트랙 위의 중립 칩에 글자만 강조된 모양입니다. 자리(트랙 안의 칩)가 "고름"을
+ * 말하고, 강조색 글자가 그 위에서 **어느 것인지**를 한 번 더 짚습니다.
  *
  * "좀 더 진하게"는 **트랙을 더 짙게** 해서 얻었습니다 — 칩 자체를 어둡게 하려면 색을
  * 어느 방향으로 섞을지 정해야 하는데, 그 방향이 라이트/다크에서 반대라 한쪽이 반드시
  * 이상해집니다. 트랙만 짙게 하면 **같은 선언 하나가 두 테마에서 다 맞습니다**
  * (`--line` 비중을 82% → 52%로). 칩은 `--surface` 그대로라 대비가 그만큼 커집니다. */
-.segmented > button[aria-checked="true"] { color: var(--text); border-color: color-mix(in srgb, var(--line) 70%, transparent); background: var(--surface); box-shadow: 0 1px 4px color-mix(in srgb, #000 34%, transparent); font-weight: 800; }
+.segmented > button[aria-checked="true"] { color: var(--accent-text); border-color: color-mix(in srgb, var(--line) 70%, transparent); background: var(--surface); box-shadow: 0 1px 4px color-mix(in srgb, #000 34%, transparent); font-weight: 800; }
+
+/* 🔴 **그림자의 방향이 테마마다 반대여야 합니다**(오너: "light에서 box shadow는 좋은데
+ * dark는 좀 부자연스럽네").
+ *
+ * 이유는 앞 라운드에서 잰 그대로입니다 — 칩과 트랙의 밝기 관계가 테마마다 **뒤집힙니다**:
+ *   라이트 : 칩 rgb(255,253,250) > 트랙 rgb(239,236,231)  → 칩이 **떠 있는** 카드
+ *   다크   : 칩 rgb(26,27,39)   < 트랙 rgb(42,43,58)      → 칩이 **파인** 우물
+ * 드롭 섀도는 "떠 있다"는 신호라, 파인 것 아래에 깔면 **구조와 반대되는 말**을 합니다 —
+ * 그게 다크에서 부자연스러웠던 것입니다. 밝기차를 그대로 두고 그림자만 방향을 맞춥니다:
+ * 다크에서는 안쪽 그림자(위에서 지는)로 **파임을 거들게** 합니다. */
+[data-theme="dark"] .segmented > button[aria-checked="true"] { box-shadow: inset 0 1px 3px color-mix(in srgb, #000 46%, transparent); }
 
 .segmented > button:disabled { opacity: .45; cursor: not-allowed; }
 
@@ -46,3 +59,6 @@
  * 링이라 고른 칸에도 안 고른 칸에도 같은 방식으로 얹힙니다. */
 .segmented > button:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
 .segmented > button[aria-checked="true"]:focus-visible { box-shadow: inset 0 0 0 2px var(--accent), 0 1px 4px color-mix(in srgb, #000 34%, transparent); }
+/* 다크에서는 위 규칙의 드롭 섀도 대신 파임 그림자를 쓰므로, 포커스 링도 그 짝으로 얹습니다.
+ * ⚠️ 이 줄이 없으면 다크에서 **포커스가 파임을 지웁니다**(뒤에 오는 규칙이 이기므로). */
+[data-theme="dark"] .segmented > button[aria-checked="true"]:focus-visible { box-shadow: inset 0 0 0 2px var(--accent), inset 0 1px 3px color-mix(in srgb, #000 46%, transparent); }
