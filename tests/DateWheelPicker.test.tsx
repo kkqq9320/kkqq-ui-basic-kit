@@ -6136,3 +6136,59 @@ describe("필드의 복사·붙여넣기·되돌리기·저장", () => {
     expect(activeSegment()).toBe("day");
   });
 });
+
+/* 격자(step) — 설계 스펙 §8. 기계 쪽 계약입니다(모델 쪽은 instantModel.test.ts). */
+describe("열마다의 격자(step)", () => {
+  const col = (unit: string) => document.querySelector(`.date-wheel-column[data-unit="${unit}"]`) as HTMLElement;
+
+  it("한 노치가 step 하나다", () => {
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="시각" value="03:00" onChange={onChange} fields={["hour", "minute"]} step={{ minute: 15 }} />);
+    fireEvent.click(fieldOf("시각"));
+    fireEvent.click(rowAt(col("minute"), 1));
+    expect(onChange).toHaveBeenCalledWith("03:15");
+  });
+
+  it("타이핑이 격자에 안 떨어지면 내린다", () => {
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="시각" value="03:00" onChange={onChange} fields={["hour", "minute"]} step={{ minute: 15 }} />);
+    const field = fieldOf("시각");
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "4" });
+    fireEvent.keyDown(field, { key: "4" });
+    expect(onChange).toHaveBeenLastCalledWith("03:30");
+  });
+
+  /* 🔴 **격자가 경계를 건너뛰면 경계 자신이 한 칸을 차지합니다.** min=03:07에 분 step 15면
+   * 03:15 아래 칸은 03:00(범위 밖 → `—`)이 아니라 **03:07**입니다. */
+  it("min이 격자 밖이면 그 min이 열의 끝점으로 들어온다", () => {
+    render(<DateWheelPicker ariaLabel="시각" value="03:15" onChange={() => undefined} fields={["hour", "minute"]} min="03:07" step={{ minute: 15 }} />);
+    fireEvent.click(fieldOf("시각"));
+    expect(rowAt(col("minute"), -1).textContent).toContain("07");
+  });
+
+  it("그 끝점 아래로는 갈 수 없다", () => {
+    setWheelRowsPerSide(2);
+    render(<DateWheelPicker ariaLabel="시각" value="03:15" onChange={() => undefined} fields={["hour", "minute"]} min="03:07" step={{ minute: 15 }} />);
+    fireEvent.click(fieldOf("시각"));
+    expect(rowAt(col("minute"), -2).textContent).toBe("—");
+  });
+
+  /* 🔴 **대조군 — step이 없으면 걷지 않습니다.** 걸으면 월 +2가 중간에 2월 말일로 잘려
+   * 2026-03-28이 됩니다(일이 연·월에 의존하는 자리). 한 번에 계산해야 2026-03-31입니다. */
+  it("step이 없으면 월 +2를 한 번에 계산한다 — 걷지 않는다", () => {
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-01-31" onChange={onChange} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    fireEvent.click(rowAt(col("month"), 2));
+    expect(onChange).toHaveBeenCalledWith("2026-03-31");
+  });
+
+  it("step을 안 넘긴 열은 1칸씩 그대로 움직인다", () => {
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="시각" value="03:00" onChange={onChange} fields={["hour", "minute"]} step={{ minute: 15 }} />);
+    fireEvent.click(fieldOf("시각"));
+    fireEvent.click(rowAt(col("hour"), 1));
+    expect(onChange).toHaveBeenCalledWith("04:00");
+  });
+});

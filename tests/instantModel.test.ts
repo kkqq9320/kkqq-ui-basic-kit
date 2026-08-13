@@ -915,6 +915,10 @@ describe("stepOf — 격자 간격 읽기", () => {
     expect(stepOf("minute", { minute: 0.5 })).toBe(1);
   });
   it("NaN은 1로 떨어진다", () => { expect(stepOf("minute", { minute: NaN })).toBe(1); });
+  /* Infinity가 유한성 가드의 **유일한** 사용처입니다 — NaN은 뒤의 (whole >= 1) 가드가
+   * 이미 잡습니다(NaN >= 1 은 거짓). 이 검사가 없으면 유한성 가드를 지워도 0 red라
+   * 공허했습니다(실측). Infinity면 격자 칸이 하나뿐인 열이 됩니다. */
+  it("Infinity는 1로 떨어진다", () => { expect(stepOf("minute", { minute: Infinity })).toBe(1); });
 });
 
 describe("snapToStep — 격자에 안 얹히면 내린다", () => {
