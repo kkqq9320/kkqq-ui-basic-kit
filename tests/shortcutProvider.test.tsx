@@ -100,6 +100,31 @@ describe("디스패치", () => {
     expect(onFire).toHaveBeenCalledTimes(1);
   });
 
+  /* §6.2 — 등록 금지는 녹음기만의 규칙이 아닙니다. `defaultCombo`·`overrides`로
+   * 들어와도 `bindingOf`가 같은 관문을 봐야 우회가 안 됩니다(전체 리뷰 Important 2가
+   * `Escape`·`Tab`에서 이미 값을 치른 자리). 앱이 코드로 직접 넣는 경로입니다. */
+  it("defaultCombo로 들어온 맨 Enter는 바인딩되지 않는다", () => {
+    const onFire = vi.fn();
+    render(<ShortcutProvider actions={[action({ defaultCombo: "Enter", onFire })]} />);
+    press({ code: "Enter" });
+    expect(onFire).not.toHaveBeenCalled();
+  });
+
+  it("overrides로 들어온 Ctrl+Z도 바인딩되지 않는다", () => {
+    const onFire = vi.fn();
+    render(<ShortcutProvider actions={[action({ onFire })]} overrides={{ toggle: "Ctrl+KeyZ" }} />);
+    press({ code: "KeyZ", ctrlKey: true });
+    expect(onFire).not.toHaveBeenCalled();
+  });
+
+  // 대조군 — 같은 경로로 들어온 평범한 조합은 그대로 동작합니다.
+  it("같은 경로로 들어온 Ctrl+Enter는 동작한다", () => {
+    const onFire = vi.fn();
+    render(<ShortcutProvider actions={[action({ defaultCombo: "Ctrl+Enter", onFire })]} />);
+    press({ code: "Enter", ctrlKey: true });
+    expect(onFire).toHaveBeenCalledTimes(1);
+  });
+
   it("null 덮어쓰기는 조합을 지운 것이다 — 기본값으로 되돌아가지 않는다", () => {
     const onFire = vi.fn();
     render(<ShortcutProvider actions={[action({ onFire })]} overrides={{ toggle: null }} />);
@@ -328,11 +353,11 @@ describe("저장 — storage prop (스펙 §7)", () => {
     // press해야 합니다 — act 없이 부르면 리액트가 리렌더를 다음 프레임으로 미뤄
     // registryRef.current가 아직 옛 클로저를 가리킨 채로 press가 먼저 돕니다.
     let ok = false;
-    act(() => { ok = registry.setBinding("toggle", "Ctrl+KeyZ"); });
+    act(() => { ok = registry.setBinding("toggle", "Ctrl+KeyJ"); });
 
     expect(ok).toBe(true);
-    expect(storage.read()).toEqual({ toggle: "Ctrl+KeyZ" });
-    press({ code: "KeyZ", ctrlKey: true });
+    expect(storage.read()).toEqual({ toggle: "Ctrl+KeyJ" });
+    press({ code: "KeyJ", ctrlKey: true });
     expect(onFire).toHaveBeenCalledTimes(1);
   });
 
@@ -360,7 +385,7 @@ describe("저장 — storage prop (스펙 §7)", () => {
       </ShortcutProvider>,
     );
 
-    expect(registry.setBinding("toggle", "Ctrl+KeyZ")).toBe(false);
+    expect(registry.setBinding("toggle", "Ctrl+KeyJ")).toBe(false);
   });
 
   /* ⚠️ **뮤테이션 대상 3.** controlled(overrides 있음)면 storage가 와도 킷은
@@ -391,7 +416,7 @@ describe("저장 — storage prop (스펙 §7)", () => {
         </ShortcutProvider>,
       );
 
-      expect(registry.setBinding("toggle", "Ctrl+KeyZ")).toBe(false);
+      expect(registry.setBinding("toggle", "Ctrl+KeyJ")).toBe(false);
       expect(storage.write).not.toHaveBeenCalled();
     });
 
@@ -414,14 +439,14 @@ describe("저장 — storage prop (스펙 §7)", () => {
     it("전환하면 저장소에 있던 조합이 실제로 바인딩된다", () => {
       const onFire = vi.fn();
       const storage = createShortcutStorage({ key: "test:transition" });
-      storage.write({ toggle: "Ctrl+KeyZ" });
+      storage.write({ toggle: "Ctrl+KeyJ" });
       const { rerender } = render(
         <ShortcutProvider actions={[action({ onFire, defaultCombo: "Ctrl+KeyB" })]} overrides={{}} storage={storage} />,
       );
 
       rerender(<ShortcutProvider actions={[action({ onFire, defaultCombo: "Ctrl+KeyB" })]} storage={storage} />);
 
-      press({ code: "KeyZ", ctrlKey: true });
+      press({ code: "KeyJ", ctrlKey: true });
       expect(onFire).toHaveBeenCalledTimes(1);
     });
 
@@ -431,7 +456,7 @@ describe("저장 — storage prop (스펙 §7)", () => {
     it("전환 후에는 옛 defaultCombo가 더 이상 뜨지 않는다 — 저장소 값이 가린다", () => {
       const onFire = vi.fn();
       const storage = createShortcutStorage({ key: "test:transition-hides-default" });
-      storage.write({ toggle: "Ctrl+KeyZ" });
+      storage.write({ toggle: "Ctrl+KeyJ" });
       const { rerender } = render(
         <ShortcutProvider actions={[action({ onFire, defaultCombo: "Ctrl+KeyB" })]} overrides={{}} storage={storage} />,
       );
@@ -448,14 +473,14 @@ describe("저장 — storage prop (스펙 §7)", () => {
       const onFire = vi.fn();
       const storageA = createShortcutStorage({ key: "test:swap-a" });
       const storageB = createShortcutStorage({ key: "test:swap-b" });
-      storageB.write({ toggle: "Ctrl+KeyZ" });
+      storageB.write({ toggle: "Ctrl+KeyJ" });
       const { rerender } = render(
         <ShortcutProvider actions={[action({ onFire, defaultCombo: "Ctrl+KeyB" })]} storage={storageA} />,
       );
 
       rerender(<ShortcutProvider actions={[action({ onFire, defaultCombo: "Ctrl+KeyB" })]} storage={storageB} />);
 
-      press({ code: "KeyZ", ctrlKey: true });
+      press({ code: "KeyJ", ctrlKey: true });
       expect(onFire).toHaveBeenCalledTimes(1);
     });
   });
@@ -519,7 +544,7 @@ describe("저장 — storage prop (스펙 §7)", () => {
         </ShortcutProvider>,
       );
 
-      expect(registry.restoreBindings({ toggle: "Ctrl+KeyZ" })).toBe(false);
+      expect(registry.restoreBindings({ toggle: "Ctrl+KeyJ" })).toBe(false);
     });
   });
 

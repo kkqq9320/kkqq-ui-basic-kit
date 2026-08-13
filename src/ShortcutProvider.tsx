@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { formatCombo, comboFromEvent, parseCombo, shouldTrigger, UNBINDABLE_CODES } from "./shortcuts";
+import { formatCombo, comboFromEvent, parseCombo, shouldTrigger, unbindableReason } from "./shortcuts";
 import { type ShortcutBindings, type ShortcutStorage } from "./shortcutStorage";
 
 export type ShortcutAction = {
@@ -160,12 +160,13 @@ export function ShortcutProvider({ actions, overrides, storage, children }: Shor
       if (raw === null) return null;
       const combo = parseCombo(raw);
       if (!combo) return null;
-      // §6.2 — Escape·Tab(Shift+Tab 포함)은 defaultCombo·overrides로 들어와도 바인딩되지
-      // 않습니다. 전에는 이 관문이 ShortcutSettings의 녹음기 안에만 있어서 여길 우회할 수
-      // 있었고, 그 결과 예를 들어 Shift+Tab을 바인딩하면 Dialog의 포커스 트랩(감싸지 않는
-      // 평범한 Tab에서는 preventDefault를 안 부름)과 부딪혀 포커스가 아예 안 나갔습니다
-      // (전체 리뷰 Important 2).
-      if (UNBINDABLE_CODES.has(combo.code)) return null;
+      // §6.2 — 등록 금지 조합은 defaultCombo·overrides로 들어와도 바인딩되지 않습니다.
+      // 전에는 이 관문이 ShortcutSettings의 녹음기 안에만 있어서 여길 우회할 수 있었고,
+      // 그 결과 예를 들어 Shift+Tab을 바인딩하면 Dialog의 포커스 트랩(감싸지 않는 평범한
+      // Tab에서는 preventDefault를 안 부름)과 부딪혀 포커스가 아예 안 나갔습니다
+      // (전체 리뷰 Important 2). 이유별 목록은 shortcuts.ts의 unbindableReason에 있습니다 —
+      // Escape·Tab(킷 리스너), 맨 Enter·Space(활성화), Ctrl+C/V/X/Z/Y(브라우저 편집).
+      if (unbindableReason(combo)) return null;
       return formatCombo(combo);
     }
     // ⚠️ 값 검증(정규화·UNBINDABLE_CODES)은 여기(bindingOf)와 녹음기(ShortcutSettings)

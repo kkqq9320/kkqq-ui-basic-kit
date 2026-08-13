@@ -79,6 +79,64 @@ const NON_TEXT_INPUT_TYPES = new Set(["button", "checkbox", "color", "file", "hi
  * 유일한 자리이고, 빠뜨리면 조합이 두 번 동작해 **눈에 보입니다.** */
 const NATIVE_EDIT_CODES = new Set(["KeyA", "KeyC", "KeyV", "KeyX", "KeyZ", "KeyY"]);
 
+/** 수식어 없이 눌리면 **포커스한 것을 실행하는** 키. 스펙 §6.2.
+ *
+ * **실측(2026-08-13, 오너 · macOS Safari 26.3 + Windows Chrome 151, 진짜 키보드).**
+ * `<button>`·`<summary>`에서 `Enter`는 `defaultPrevented=false`인 채로 활성화되고,
+ * 그 자리에서 `preventDefault()`를 부르면 **활성화가 죽습니다.** 양쪽 OS 동일.
+ * `Space`는 활성화가 `keyup`에서 일어나 이 회차의 프로브가 못 쟀지만(§10-9),
+ * **같은 부류라 같이 막습니다** — 여기서는 안 막았을 때의 손해가 크고 막았을 때의
+ * 손해가 거의 없어서, "잰 것만 적는다"의 예외로 오너가 정했습니다(2026-08-13). */
+const BARE_ACTIVATION_CODES: ReadonlySet<string> = new Set(["Enter", "Space"]);
+
+/** `NATIVE_EDIT_CODES` 중 **등록 자체를 막는** 것들 — `KeyA`만 빠집니다.
+ *
+ * 규칙 5(§2.3)는 이 조합들을 텍스트 입력 **안에서만** 양보하므로, 밖에서는 앱이
+ * `Ctrl+Z`를 전역 되돌리기로 쓸 수 있는 설계였습니다. **오너가 그걸 접었습니다
+ * (2026-08-13)** — 복사·붙여넣기·되돌리기는 "너무 중요해서" 앱이 다시 정의하면
+ * 안 된다는 판단이고, 대가(전역 undo를 못 건다)를 알고 고른 것입니다.
+ *
+ * **`KeyA`만 남긴 것도 오너 결정입니다** — 텍스트 칸 밖에서 브라우저의 "전체 선택"은
+ * 쓸모가 거의 없고, 앱이 "행 전체 선택"으로 쓰고 싶어 하는 조합입니다. 대신
+ * `bindingWarning`이 "텍스트 입력 안에서는 안 뜬다"를 알려 줍니다. */
+const UNBINDABLE_EDIT_CODES: ReadonlySet<string> = new Set(["KeyC", "KeyV", "KeyX", "KeyZ", "KeyY"]);
+
+export type UnbindableReason = "kit-listener" | "activation" | "native-edit";
+export type BindingWarning = "yields-in-text-input";
+
+/** 이 조합을 액션에 걸 수 있는가 — 못 걸면 **이유**를, 걸 수 있으면 `null`을 줍니다
+ * (스펙 §6.2). **문구가 아니라 이유 코드입니다** — 사용자에게 보일 문장은 UI의
+ * 것이고(§9의 파일 경계), 여기는 규칙만 압니다.
+ *
+ * **관문이 하나여야 합니다.** `bindingOf`(`ShortcutProvider.tsx`)와 녹음기
+ * (`ShortcutSettings.tsx`)가 **둘 다** 이걸 봅니다 — 전에 `Escape`·`Tab` 금지가
+ * 녹음기 안에만 있어서 `defaultCombo`·`overrides`가 그냥 우회했던 자리입니다
+ * (전체 리뷰 Important 2). 세 번째 관문을 만들지 마세요. */
+export function unbindableReason(combo: Combo): UnbindableReason | null {
+  // 킷 리스너와 겹치는 키 — 수식어와 무관합니다(`Shift+Tab`도 포커스를 옮깁니다).
+  if (UNBINDABLE_CODES.has(combo.code)) return "kit-listener";
+  // 활성화 키 — **맨 키일 때만.** `Ctrl+Enter`("보내기")는 정상적인 단축키이고,
+  // 브라우저가 그걸로 버튼을 누르지도 않습니다. 여기서 세는 수식어는 규칙 2와
+  // 같은 셋(Ctrl·Alt·Meta)이라 `Shift+Enter`는 막힙니다 — 디스패치에서도 Shift만
+  // 붙은 조합은 맨 키와 같은 경로를 타므로 그래야 앞뒤가 맞습니다.
+  if (!(combo.ctrl || combo.alt || combo.meta) && BARE_ACTIVATION_CODES.has(combo.code)) return "activation";
+  // 브라우저 편집 조합 — 판정을 **규칙 5와 똑같이** 맞춥니다(`(ctrl||meta)`만 보고
+  // shift·alt는 안 봄). 관문이 규칙 5보다 좁으면 `Ctrl+Shift+Z`가 등록에 성공한 뒤
+  // 텍스트 칸에서 조용히 안 뜹니다 — `reservedKey`에서 이미 값을 치른 모양입니다.
+  if ((combo.ctrl || combo.meta) && UNBINDABLE_EDIT_CODES.has(combo.code)) return "native-edit";
+  return null;
+}
+
+/** 걸 수는 있는데 **알려 줘야 하는** 조합인가(스펙 §6.2). 지금은 `Ctrl+A`·`Cmd+A`
+ * 하나뿐입니다 — 규칙 5가 텍스트 입력 안에서 양보하므로 거기서는 안 뜹니다.
+ * 목록을 `NATIVE_EDIT_CODES`에서 빼서 계산하므로, 나중에 등록 금지 목록이 줄면
+ * 경고 대상이 저절로 늘어납니다(둘이 갈리지 않습니다). */
+export function bindingWarning(combo: Combo): BindingWarning | null {
+  if (unbindableReason(combo)) return null;                 // 못 거는 조합에 경고는 의미가 없습니다
+  if ((combo.ctrl || combo.meta) && NATIVE_EDIT_CODES.has(combo.code)) return "yields-in-text-input";
+  return null;
+}
+
 /** 맨 키를 **네이티브로 먹는** 폼 컨트롤인가(규칙 9 — 스펙 §2.6).
  *
  * **규칙 4(타이핑)와 다른 범주입니다. 합치면 안 됩니다.** `checkbox`·`radio`는
