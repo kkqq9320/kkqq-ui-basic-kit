@@ -28,7 +28,10 @@ export type ParsedShortcutBindings = { backup: ShortcutBackup; dropped: string[]
 
 export type ShortcutStorage = {
   /** 지금 저장된 덮어쓰기. 저장소가 막혔거나 값이 깨졌어도 **던지지 않고** `{}`를
-   *  돌려줍니다. */
+   *  돌려줍니다. 내부적으로 `parse`를 거치지만 **버린 이름은 여기서 알려주지
+   *  않습니다** — 반환 타입이 `ShortcutBindings`(맵)뿐이라 `dropped`를 실을 자리가
+   *  없습니다(전체 리뷰 Minor 6). 버린 이름이 필요하면 저장된 원문을 직접
+   *  `parse(JSON.parse(raw))`에 넘겨 `dropped`를 보세요. */
   read(): ShortcutBindings;
   /** 저장에 성공하면 `true`. 저장소가 막혀 있으면 `false`이고 **예외를 던지지
    *  않습니다.**

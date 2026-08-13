@@ -54,7 +54,15 @@ export type ShortcutRegistry = {
    *    `false`를 돌려주지만, 이때는 **이미 화면 상태를 갱신한 뒤**입니다 —
    *    `themeTokens`/`ThemeColorEditor`와 같은 관용으로, 저장이 막혀도 이 탭에서는
    *    계속 조합을 고를 수 있어야 하기 때문입니다. "아무것도 안 하고"는 이 경우
-   *    거짓입니다(전체 리뷰 Important 2 — 이전 문서는 두 경우를 구분하지 않았습니다). */
+   *    거짓입니다(전체 리뷰 Important 2 — 이전 문서는 두 경우를 구분하지 않았습니다).
+   *
+   *  ⚠️ **`combo`를 검증하지 않습니다**(전체 리뷰 Minor 9) — 정규화·`UNBINDABLE_CODES`
+   *  검사는 `bindingOf`와 녹음기에만 있습니다(위 파일 경계 주석 참고). `bindingOf`는
+   *  걸러진 값을 조용히 무효(`null`)로 다루므로, 앱이 `setBinding`으로 비정규 문자열을
+   *  직접 넣으면 **그 세션에는 조합이 없다가**, 새로고침해서 `storage.read()`가
+   *  `normalizeCombo`를 거쳐 그 값을 걸러 낸 뒤에는 `defaultCombo`가 돌아옵니다 —
+   *  같은 저장값이 새로고침 전후로 다르게 보입니다. `ShortcutSettings`의 녹음기를
+   *  거치는 정상 경로에서는 애초에 정규화된 값만 들어오므로 이 문제가 없습니다. */
   setBinding(id: string, combo: string | null): boolean;
   /** 백업에서 복원한 맵(`storage.parse(input)?.backup.bindings`)을 통째로 커밋합니다
    *  — `setBinding`을 항목마다 루프로 부르는 대신입니다. 저장(`storage.write`)과 이
