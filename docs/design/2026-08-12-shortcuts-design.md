@@ -595,6 +595,7 @@ controlled이거나 `storage`가 없으면 아무것도 안 하고 `false`를 �
 |---|---|---|
 | JS 코드 | **아마 빠짐 — 소비자 번들러에 달렸습니다** | `package.json:13`의 `"sideEffects": ["*.css"]`가 표준 신호이고 **킷이 할 수 있는 전부**입니다. 아래 참고 |
 | `document` 리스너 | 0개 | 리스너가 `ShortcutProvider`의 effect 안에만 삽니다 |
+| `window` `storage` 리스너 | 0개 | Task 7이 붙인 것 — `storage`를 uncontrolled로 넘겼을 때만 `storage.subscribe`가 부착됩니다(§7.3). `overrides`가 있거나(controlled) `storage`가 없으면 0개, `ShortcutProvider`를 아예 안 쓰면 물론 0개입니다. 이 줄이 §8 표에 없던 것이 전체 리뷰 Minor 8입니다 — Task 7이 `document` 리스너 칸만 재고 이 축을 표에 안 더했습니다 |
 | CSS | **바이트는 냅니다** | `css/index.css`가 열한 개를 `@import`하는 통번들입니다 |
 
 ⚠️ **JS 칸만 검사로 못박을 수 없습니다.** 나머지 둘은 킷 안에서 재지지만, "번들에서
@@ -651,6 +652,12 @@ controlled이거나 `storage`가 없으면 아무것도 안 하고 `false`를 �
 7. **§2.4가 실제로 막는다** — 트리거된 뒤 그 이벤트의 `defaultPrevented`가 참이다.
    대조군: 트리거되지 **않은** 조합에서는 거짓이다. 이 둘이 같이 있어야 §2.4의 표
    두 줄이 증명됩니다.
+8. **`ShortcutProvider`가 언마운트되면 `storage.subscribe`가 돌려준 해지 함수가
+   실제로 불린다**(전체 리뷰 Minor 8) — 3번이 `document`의 keydown 리스너만 재고
+   `window`의 `storage` 리스너는 안 재고 있었습니다. `spyStorage()`의 `subscribe`가
+   `vi.fn()` 해지 함수를 돌려주게 하고, 언마운트 후 그 스파이가 불렸는지를 봅니다
+   (`window.addEventListener`를 직접 스파이하면 React 자신의 다른 리스너까지 섞여
+   잡음이 됩니다).
 
 > ⚠️ 이 저장소의 규칙: **고침을 빼고 실제로 빨개지는 것을 본 검사만 인정합니다.**
 > 그리고 **뮤테이션 전에 커밋하세요** — `git checkout --`이 미커밋 수정을 날립니다.

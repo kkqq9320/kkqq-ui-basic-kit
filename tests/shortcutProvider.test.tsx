@@ -201,6 +201,24 @@ describe("옵트인 (스펙 §8)", () => {
     add.mockRestore();
     remove.mockRestore();
   });
+
+  /* ⚠️ **전체 리뷰 Minor 8.** §8 표에 `document` keydown 리스너 줄만 있고 `window`의
+   * `storage` 리스너(uncontrolled+`storage`일 때만 붙는 `storage.subscribe`) 줄이
+   * 없었습니다 — 이 테스트가 그 축의 언마운트 보장을 잽니다. `window.addEventListener`를
+   * 직접 스파이하지 않습니다 — React 자신도 여러 전역 리스너를 붙이므로 그걸 스파이하면
+   * 이 킷과 무관한 호출까지 섞여 셀 수 없습니다. 대신 `storage.subscribe`가 돌려주는
+   * 해지 함수 자체를 스파이해서, 언마운트가 그 함수를 실제로 부르는지만 잽니다 —
+   * `storage.subscribe`가 그 함수를 실제로 리스너 해지에 쓰는지는
+   * `shortcutStorage.test.ts`의 "해지 함수를 부르면 더 이상 안 불린다"가 이미 잽니다. */
+  it("storage.subscribe의 해지 함수가 언마운트 때 실제로 불린다 (전체 리뷰 Minor 8)", () => {
+    const unsubscribe = vi.fn();
+    const storage: ShortcutStorage = { ...spyStorage(), subscribe: vi.fn(() => unsubscribe) };
+    const view = render(<ShortcutProvider actions={[action()]} storage={storage} />);
+
+    expect(unsubscribe).not.toHaveBeenCalled();
+    view.unmount();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
 });
 
 /* Task 7 — 저장(§7). storage prop을 uncontrolled로 넘기면 킷이 마운트 때 읽고,

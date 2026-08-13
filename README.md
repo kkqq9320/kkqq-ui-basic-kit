@@ -789,6 +789,12 @@ const shortcutStorage = createShortcutStorage();   // localStorage, 키 "shortcu
 킷이 마운트 때 `storage.read()`로 채우고, 녹음·지우기는 `registry.setBinding`을 거쳐
 `storage.write`로 저장됩니다. 다른 탭에서 바꾼 값도 `storage.subscribe`로 따라옵니다.
 
+⚠️ **`storage`는 안정적인 참조여야 합니다** — 위 예시처럼 컴포넌트 **밖**에서 한 번만
+`createShortcutStorage()`를 부르세요. JSX 안에서 `storage={createShortcutStorage()}`
+처럼 매 렌더 새로 만들면, `ShortcutProvider`가 그 참조 변화를 "다른 저장소로
+바뀌었다"로 읽어 매 렌더마다 다시 구독합니다(전체 리뷰 Minor 8 — `window`의
+`storage` 리스너가 붙었다 떨어졌다를 반복합니다).
+
 **앱이 저장하게 하려면(controlled)** — 위 첫 예시처럼 `overrides`를 넘기세요. 그러면
 킷은 **저장소를 전혀 건드리지 않습니다**(`storage`를 같이 넘겨도 완전히 무시됩니다) —
 서버 동기화나 다른 저장 방식을 쓰고 싶을 때 이쪽입니다.
