@@ -41,9 +41,15 @@ export type ShortcutRegistry = {
    *  안 하고 `false`를 돌려줍니다** — 그 경우 앱이 `ShortcutSettings`의 `onChange`로
    *  직접 처리해야 합니다. */
   setBinding(id: string, combo: string | null): boolean;
+  /** 백업에서 복원한 맵(`storage.parse(input)?.backup.bindings`)을 통째로 커밋합니다
+   *  — `setBinding`을 항목마다 루프로 부르는 대신입니다. 저장(`storage.write`)과 이
+   *  탭의 화면 상태를 함께 갱신합니다. `setBinding`과 같은 경계 — controlled이거나
+   *  `storage`가 없으면 아무것도 안 하고 `false`를 돌려줍니다(`themePalette
+   *  .applyBackup`과 같은 자리, 전체 리뷰 Important 5-나). */
+  restoreBindings(bindings: ShortcutBindings): boolean;
 };
 
-const ShortcutContext = createContext<ShortcutRegistry>({ actions: [], bindingOf: () => null, setBinding: () => false });
+const ShortcutContext = createContext<ShortcutRegistry>({ actions: [], bindingOf: () => null, setBinding: () => false, restoreBindings: () => false });
 
 export function useShortcutRegistry(): ShortcutRegistry {
   return useContext(ShortcutContext);
@@ -61,6 +67,24 @@ export function ShortcutProvider({ actions, overrides, storage, children }: Shor
   // 초기값 계산에서도 storage.read()를 부르면 안 됩니다.
   const [ownOverrides, setOwnOverrides] = useState<ShortcutBindings>(() => (!controlled && storage ? storage.read() : {}));
 
+  // `setBinding`·`restoreBindings`가 병합 베이스로 씁니다 — `ownOverrides`(state) 대신
+  // 이 ref를 보는 이유는 아래 `updateOwnOverrides` 주석에 적어 둡니다(전체 리뷰
+  // Important 5-가). `useRef`의 인자는 첫 렌더에서만 쓰이므로 위 `useState` 초기값과
+  // 항상 같은 값으로 시작합니다.
+  const ownOverridesRef = useRef<ShortcutBindings>(ownOverrides);
+
+  // ⚠️ **`ownOverrides`를 바꾸는 자리는 전부 이 함수를 지나야 합니다** — state만 바꾸고
+  // ref를 안 바꾸면 다음 `setBinding` 호출이 낡은 ref를 베이스로 병합해 방금 그 변경을
+  // (예: 다른 탭에서 온 `subscribe` 갱신을) 덮어씁니다. `setBinding`은 이 ref를
+  // **동기로** 읽고 그 자리에서 `storage.write`를 부르므로, `setOwnOverrides(prev => …)`
+  // 갱신 함수 안에 병합 로직을 넣는 방법은 못 씁니다 — React가 그 함수를 지금 당장
+  // 부른다는 보장이 없고(StrictMode는 실제로 두 번 부릅니다), `write`의 동기 반환값이
+  // 필요합니다. ref는 그 자리에서 바로 갱신되므로 이 문제가 없습니다.
+  function updateOwnOverrides(next: ShortcutBindings) {
+    ownOverridesRef.current = next;
+    setOwnOverrides(next);
+  }
+
   // ⚠️ `useState`의 초기화 함수는 **마운트에 한 번만** 돕니다 — controlled 여부나
   // `storage` 참조가 나중에 바뀌는 것은 위 줄로 못 잡습니다. `ThemeColorEditor`의
   // `loadedTheme` 패턴(렌더 중 직전 값과 비교해 바뀌었으면 그 자리에서 다시 읽기)과
@@ -76,15 +100,17 @@ export function ShortcutProvider({ actions, overrides, storage, children }: Shor
     // controlled로 바뀌면 다시 안 읽습니다 — ThemeColorEditor의 loadedTheme과 같은
     // 이유로, 앱이 이미 overrides로 값을 넘기고 있는데 저장소를 다시 읽으면 그 값을
     // 덮어써 앱과 갈라집니다. storage가 없어지는 전환도 다시 읽을 곳이 없으므로 건너뜁니다.
-    if (!controlled && storage) setOwnOverrides(storage.read());
+    if (!controlled && storage) updateOwnOverrides(storage.read());
   }
 
   // 다른 탭·다른 창의 변경을 받습니다. controlled거나 storage가 없으면 구독하지
   // 않습니다 — §8의 "storage를 안 넘기면 저장소를 안 건드린다"가 이 effect에도
-  // 그대로 적용됩니다.
+  // 그대로 적용됩니다. `setOwnOverrides`가 아니라 `updateOwnOverrides`를 넘깁니다 —
+  // 안 그러면 다른 탭에서 온 갱신이 state는 바꾸면서 `ownOverridesRef`는 낡은 채로
+  // 남겨, 그 직후 이 탭에서 `setBinding`을 부르면 다른 탭의 변경을 덮어씁니다.
   useEffect(() => {
     if (controlled || !storage) return;
-    return storage.subscribe(setOwnOverrides);
+    return storage.subscribe(updateOwnOverrides);
   }, [controlled, storage]);
 
   // controlled면 앱의 overrides, uncontrolled+storage면 킷이 읽어 온 사본, 둘 다
@@ -126,15 +152,37 @@ export function ShortcutProvider({ actions, overrides, storage, children }: Shor
     // 만들면 셋이 갈릴 여지가 생깁니다.
     function setBinding(id: string, combo: string | null): boolean {
       if (controlled || !storage) return false;
-      const next = { ...effectiveOverrides, [id]: combo };
+      // ⚠️ 베이스는 `effectiveOverrides`(렌더 스코프의 클로저)가 아니라
+      // `ownOverridesRef.current`입니다(전체 리뷰 Important 5-가). 같은 이벤트
+      // 핸들러·act() 안에서(리렌더 없이) `setBinding`을 여러 번 부르면 —
+      // `restoreBindings`가 없던 시절엔 백업 복원을 이렇게 루프로 흉내 냈습니다 —
+      // `effectiveOverrides`는 그 호출들 내내 이 렌더가 시작할 때의 값에 그대로
+      // 고정돼 있어서, 나중 호출이 앞선 호출의 결과를 덮어씁니다. `ownOverridesRef`는
+      // `updateOwnOverrides`가 호출 직후 동기로 갱신하므로 그 문제가 없습니다.
+      const next = { ...ownOverridesRef.current, [id]: combo };
       const ok = storage.write(next);
       // 저장이 막혀도 화면은 반영합니다 — themeTokens/ThemeColorEditor와 같은 관용입니다
       // ("저장이 막혀도 화면에는 적용된다"). 이 탭 안에서는 사용자가 계속 조합을 고를 수
       // 있어야 하고, 실패 신호는 이 함수의 반환값(false)이 이미 전달합니다.
-      setOwnOverrides(next);
+      updateOwnOverrides(next);
       return ok;
     }
-    return { actions, bindingOf, setBinding };
+    /** 백업에서 복원한 맵을 통째로 커밋합니다 — `setBinding`을 항목마다 루프로 부르는
+     *  대신입니다(그 루프는 위 5-가가 고치기 전엔 마지막 항목만 남았고, 지금도 항목마다
+     *  `storage.write`를 반복해 부르는 낭비가 있습니다). `themePalette.applyBackup`과
+     *  같은 자리(전체 리뷰 Important 5-나) — 다만 팔레트는 라이트·다크 두 저장소를 따로
+     *  갖고 있어 `write`만 하고 `:root` 적용은 넘긴 테마에만 하는 반면, 단축키는 저장소가
+     *  하나뿐이라 `write`와 화면 갱신(`updateOwnOverrides`)을 둘 다 이 함수가 합니다 —
+     *  `storage.write`만 직접 부르면 저장은 되어도 이 탭의 화면 상태가 낡습니다
+     *  (`subscribe`는 설계상 같은 탭 변경을 안 받습니다). `setBinding`과 같은 경계 —
+     *  controlled이거나 storage가 없으면 아무것도 안 하고 `false`를 돌려줍니다. */
+    function restoreBindings(bindings: ShortcutBindings): boolean {
+      if (controlled || !storage) return false;
+      const ok = storage.write(bindings);
+      updateOwnOverrides(bindings);
+      return ok;
+    }
+    return { actions, bindingOf, setBinding, restoreBindings };
   }, [actions, effectiveOverrides, controlled, storage]);
 
   // 리스너를 다시 걸지 않으려고 ref로 최신값을 봅니다 — 액션 배열이 매 렌더 새 참조여도

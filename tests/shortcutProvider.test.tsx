@@ -395,6 +395,69 @@ describe("저장 — storage prop (스펙 §7)", () => {
     });
   });
 
+  /* ⚠️ **전체 리뷰 Important 5-가.** `setBinding`이 렌더 스코프의 `effectiveOverrides`를
+   * 클로저로 잡습니다 — 같은 `act()` 안에서(리렌더 없이) 두 번 연달아 부르면, 둘째
+   * 호출도 첫째 호출 **이전**의 렌더가 캡처한 `effectiveOverrides`를 베이스로 계산해서
+   * 첫째 호출의 결과를 덮어씁니다. `for`문으로 여러 항목을 한 번에 커밋하면 마지막
+   * 하나만 남는 결함(복원 경로가 바로 이 모양으로 씁니다 — 아래 5-나). */
+  it("setBinding을 같은 act 안에서 두 번 연달아 불러도 둘 다 남는다 (전체 리뷰 Important 5-가)", () => {
+    const storage = createShortcutStorage({ key: "test:loop-accumulate" });
+    let registry!: ShortcutRegistry;
+    render(
+      <ShortcutProvider actions={[action({ id: "a" }), action({ id: "b" })]} storage={storage}>
+        <RegistryCapture onReady={(r) => { registry = r; }} />
+      </ShortcutProvider>,
+    );
+
+    act(() => {
+      registry.setBinding("a", "Ctrl+KeyA");
+      registry.setBinding("b", "Ctrl+KeyB"); // 리렌더 없이 곧장 두 번째 호출
+    });
+
+    expect(storage.read()).toEqual({ a: "Ctrl+KeyA", b: "Ctrl+KeyB" });
+  });
+
+  /* ⚠️ **전체 리뷰 Important 5-나.** 백업을 통째로 복원할 길이 없었습니다 — `setBinding`을
+   * 루프로 돌리면 위 5-가의 결함에 걸리고, `storage.write(...)`를 직접 부르면 저장은
+   * 되지만 화면 상태(`ownOverrides`)가 낡습니다(`subscribe`는 설계상 같은 탭 변경을 안
+   * 받으므로). `registry.restoreBindings`는 저장과 화면 갱신을 함께 합니다 —
+   * `themePalette.applyBackup`과 같은 자리. */
+  describe("registry.restoreBindings — 맵을 통째로 복원 (전체 리뷰 Important 5-나)", () => {
+    it("저장도 되고, 같은 탭의 화면 상태도 바로 반영된다", () => {
+      const onFire = vi.fn();
+      const storage = createShortcutStorage({ key: "test:restore" });
+      let registry!: ShortcutRegistry;
+      render(
+        <ShortcutProvider actions={[action({ onFire, defaultCombo: "Ctrl+KeyQ" })]} storage={storage}>
+          <RegistryCapture onReady={(r) => { registry = r; }} />
+        </ShortcutProvider>,
+      );
+
+      let ok = false;
+      act(() => { ok = registry.restoreBindings({ toggle: "Ctrl+KeyR" }); });
+
+      expect(ok).toBe(true);
+      expect(storage.read()).toEqual({ toggle: "Ctrl+KeyR" });
+      // storage.write만 불렀다면 이 press가 실패합니다 — subscribe는 같은 탭 변경을
+      // 안 받으므로, ownOverrides가 restoreBindings 스스로 갱신해야만 통과합니다.
+      press({ code: "KeyR", ctrlKey: true });
+      expect(onFire).toHaveBeenCalledTimes(1);
+    });
+
+    // 대조군 — setBinding과 같은 경계입니다. controlled거나 storage가 없으면
+    // restoreBindings도 아무것도 안 하고 false를 돌려줍니다.
+    it("대조군 — overrides도 storage도 없으면 아무것도 안 하고 false를 돌려준다", () => {
+      let registry!: ShortcutRegistry;
+      render(
+        <ShortcutProvider actions={[action()]}>
+          <RegistryCapture onReady={(r) => { registry = r; }} />
+        </ShortcutProvider>,
+      );
+
+      expect(registry.restoreBindings({ toggle: "Ctrl+KeyZ" })).toBe(false);
+    });
+  });
+
   it("다른 탭의 storage 이벤트를 구독해 바인딩을 갱신한다", () => {
     const onFire = vi.fn();
     const storage = createShortcutStorage({ key: "test:cross-tab" });

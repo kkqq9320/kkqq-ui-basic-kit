@@ -50,6 +50,11 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.7.0
   `registry.setBinding`으로 커밋합니다(`ShortcutProvider`가 `storage`를 받았을 때만
   실제로 저장됩니다). 둘 다 없으면 저장할 곳이 없다는 뜻이라 조용히 넘어가지 않고
   콘솔에 경고를 남깁니다.
+- **`ShortcutRegistry.restoreBindings(bindings)`** — 백업에서 파싱한 맵을 통째로
+  커밋합니다. `setBinding`을 항목마다 루프로 부르는 것과 달리 `storage.write`를
+  한 번만 부르고, `storage.write`를 직접 부르는 것과 달리 이 탭의 화면 상태도 함께
+  갱신합니다(`subscribe`는 다른 탭의 변경만 받으므로). `setBinding`과 같은 경계 —
+  controlled이거나 `storage`가 없으면 아무것도 안 합니다.
 - **데모에 조합 예시**(`demo/main.tsx`) — 사이드바 접기/펴기가 `Ctrl + \`에 걸려
   있고, 앱이 `defaultCombo`로 그 값을 준 코드가 그대로 보입니다. 이제 저장소도
   킷이 맡습니다(`storage={createShortcutStorage()}`) — **새로고침해도 재녹음한

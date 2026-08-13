@@ -809,6 +809,24 @@ id나 형식에 안 맞는 값은 버리고"라고 적어, 마치 킷이 액션 
 없습니다). **`null`과 "키 없음"은 다릅니다** — `null`은 사용자가 그 액션의 조합을
 지운 것이고, 키가 아예 없는 것은 `defaultCombo`를 쓴다는 뜻입니다.
 
+**백업을 복원하려면 `registry.restoreBindings(bindings)`를 쓰세요** — `useShortcutRegistry()`로
+꺼낸 레지스트리에 있고, `setBinding`과 같은 경계입니다(uncontrolled에서만 동작하고,
+controlled거나 `storage`가 없으면 아무것도 안 하고 `false`를 돌려줍니다):
+
+```tsx
+const registry = useShortcutRegistry();
+
+const parsed = shortcutStorage.parse(JSON.parse(text));
+if (!parsed) return alert("이 파일은 단축키 백업이 아닙니다");
+if (parsed.dropped.length) alert(`이 버전이 모르는 조합 ${parsed.dropped.length}개는 뺐습니다`);
+registry.restoreBindings(parsed.backup.bindings);   // 저장과 이 탭의 화면 갱신을 함께 합니다
+```
+
+⚠️ **`setBinding`을 항목마다 루프로 불러 복원을 흉내 내지 마세요** — 한 번에 여러
+항목을 커밋하려면 `restoreBindings`를 쓰세요. 그리고 `shortcutStorage.write(bindings)`를
+직접 부르지도 마세요 — 저장은 되지만 이 탭의 화면 상태는 낡습니다(`subscribe`는
+다른 탭의 변경만 받습니다). `restoreBindings`는 그 둘을 함께 합니다.
+
 **맨 키(수식어 없는 키) 단축키를 쓰려면 `data-kkqq-shortcut-scope`가 필요합니다.**
 수식어(Ctrl·Alt·Meta) 조합은 어디서나 트리거되지만, 맨 키는 기본적으로
 `document.activeElement`가 `<body>`일 때만 트리거됩니다. 이 기본값은 **플랫폼마다

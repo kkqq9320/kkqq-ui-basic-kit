@@ -503,6 +503,26 @@ export function createShortcutStorage(options?: { key?: string }): ShortcutStora
 곳뿐이고 `setBinding`은 그 위에 저장 배선만 얹습니다 — 세 번째 검증 지점을 만들면
 셋이 갈릴 여지가 생기므로 일부러 안 만들었습니다.
 
+⚠️ **`setBinding`은 병합 베이스로 렌더 스코프의 값이 아니라 ref를 씁니다**(전체 리뷰
+Important 5-가). 같은 이벤트 핸들러 안에서(리렌더 없이) 여러 번 부르면, 렌더 스코프의
+`effectiveOverrides`는 그 호출들 내내 이 렌더가 시작할 때의 값에 고정돼 있어 나중
+호출이 앞선 호출을 덮어씁니다 — `ownOverridesRef`는 `setBinding`이 부를 때마다 그
+자리에서 동기로 갱신되므로 이 문제가 없습니다. 뮤테이션 확인: 병합 베이스를
+`ownOverridesRef.current` 대신 `effectiveOverrides`로 되돌리면
+"setBinding을 같은 act 안에서 두 번 연달아 불러도 둘 다 남는다"가 빨개짐.
+
+**`ShortcutRegistry.restoreBindings(bindings): boolean`**이 더해졌습니다(전체 리뷰
+Important 5-나) — 백업에서 `parse`한 맵을 통째로 커밋하는 길입니다.
+`themePalette.applyBackup`과 같은 자리지만, 팔레트는 라이트·다크 두 저장소를 따로
+갖고 있어 `write`만 하고 `:root` 적용은 넘긴 테마에만 하는 반면, 단축키는 저장소가
+하나뿐이라 `write`와 이 탭의 화면 상태 갱신을 둘 다 이 함수가 합니다.
+`storage.write(bindings)`를 호출자가 직접 부르면 저장은 되지만 이 탭의 화면은
+낡습니다 — `subscribe`는 설계상 같은 탭 안의 변경을 안 받기 때문입니다(§7.1).
+`setBinding`을 항목마다 루프로 부르는 방법도 있었지만, 위 5-가가 고쳐지기 전에는
+마지막 항목만 남았고 고쳐진 지금도 항목 수만큼 `storage.write`를 반복해 부르는
+낭비가 있습니다 — `restoreBindings`는 한 번만 씁니다. `setBinding`과 같은 경계 —
+controlled이거나 `storage`가 없으면 아무것도 안 하고 `false`를 돌려줍니다.
+
 인계 문서가 §5(이 항목)에 대해 적어 둔 *"저장 위치는 localStorage, 킷이 맡음"*은
 **더 이상 유일한 답이 아닙니다** — 킷이 맡을 수도(위 표 2행), 앱이 맡을 수도(1행)
 있고 어느 쪽도 기본값이 강제되지 않습니다(3행 — 안 쓰면 아무 저장도 안 일어남).
