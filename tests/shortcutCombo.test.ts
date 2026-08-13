@@ -5,7 +5,7 @@
  * 그러면 사용자가 같은 조합을 두 액션에 걸 수 있습니다.
  *
  * 키 이름이 `event.key`가 아니라 `event.code`인 이유는 자판 배열입니다(스펙 §4).
- * 킷이 이미 그렇게 하고 있습니다 — `DateWheelPicker.tsx:1095`가 `Ctrl+;`를
+ * 킷이 이미 그렇게 하고 있습니다 — `DateWheelPicker.tsx`의 `handleShortcut`이 `Ctrl+;`를
  * `event.code === "Semicolon"`으로 봅니다.
  */
 import { describe, expect, it } from "vitest";

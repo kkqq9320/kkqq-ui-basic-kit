@@ -132,7 +132,7 @@ Important 3-나).
 두 가지가 나옵니다.
 
 **(가) 키보드를 제일 많이 먹는 컨트롤 둘이 수식어 공간을 이미 통째로 비워 뒀습니다.**
-`src/DateWheelPicker.tsx:1163`과 `src/Select.tsx:371`이 똑같이
+`src/DateWheelPicker.tsx`의 `handleFieldKey`와 `src/Select.tsx`의 `handleKeyDown`이 똑같이
 `if (event.ctrlKey || event.metaKey) return;`이고, 주석이 이유를 적어 두었습니다 —
 *"브라우저·OS 단축키입니다."* 킷이 점유한 조합은 **`Ctrl+;` 하나뿐**입니다.
 
@@ -244,9 +244,14 @@ type ShortcutAction = {
 **키 이름은 `event.key`가 아니라 `event.code`입니다 — 킷이 이미 그렇게 정해 뒀습니다.**
 
 ```
-src/DateWheelPicker.tsx:1095   (event.ctrlKey || event.metaKey) && event.code === "Semicolon"
-src/DateWheelPicker.tsx:1102   event.key === "Delete" && allowClear
+src/DateWheelPicker.tsx  handleShortcut   (event.ctrlKey || event.metaKey) && event.code === "Semicolon"
+src/DateWheelPicker.tsx  handleShortcut   event.key === "Delete" && allowClear
 ```
+
+> **줄 번호가 아니라 함수 이름으로 가리킵니다.** 초판은 `:1095`·`:1102`로 적었는데,
+> 그 파일이 계속 자라 **하루 만에 1130·1137로 밀렸습니다.** 이 저장소가 기록해 둔
+> *"주석에 적은 숫자는 아무도 다시 재지 않는다"*의 그 모양입니다 — 함수 이름은
+> 편집에 살아남고 grep도 됩니다.
 
 이유는 자판 배열입니다. `key`는 배열을 따라가고 `code`는 물리 위치라 한글·AZERTY에서도
 같은 자리입니다. 단축키 모듈이 `key`를 정본으로 쓰면 **킷 안에 표기법이 둘이 되고,
@@ -279,7 +284,7 @@ src/DateWheelPicker.tsx:1102   event.key === "Delete" && allowClear
 새 조합을 쓰기 시작한 날 조용히 틀립니다 — §10-2.
 
 **예약 비교는 수식어를 접습니다 — `Meta`뿐 아니라 `Shift`·`Alt`도.**
-`DateWheelPicker.tsx:1095`의 실제 가드는
+`DateWheelPicker.tsx`의 `handleShortcut`의 실제 가드는
 `(event.ctrlKey || event.metaKey) && event.code === "Semicolon"`이고,
 **`shiftKey`·`altKey`를 아예 보지 않습니다.** 즉 그 컴포넌트는 `Ctrl+;`뿐 아니라
 `Ctrl+Shift+;`·`Ctrl+Alt+;`·`Cmd+Shift+;`도 전부 먹습니다. 문자열을 그대로
