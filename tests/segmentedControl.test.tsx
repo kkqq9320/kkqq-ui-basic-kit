@@ -189,8 +189,24 @@ describe("SegmentedControl — 라디오 그룹", () => {
     expect(segmentedCssSource).toContain("background: var(--segmented-track); }");
   });
 
-  it("테마별 그림자 예외가 없다 — 관계가 안 뒤집히므로 필요 없다", () => {
-    expect(segmentedCssSource).not.toContain("data-theme");
+  /* 🔴 **다크에는 예외가 있고, 있어야 합니다.** 한때 "테마별 예외가 없다"를 계약으로
+   * 뒀는데 그건 **틀린 계약**이었습니다 — 재 보니 검은 그림자가 트랙을 어둡게 만들 수
+   * 있는 최대치가 라이트 81단계 대 **다크 14단계**입니다. 어두운 면은 그림자를 못 싣고,
+   * 그래서 "떠 있다"를 **빛**(위 모서리 하이라이트 + 칩보다 밝은 테두리)으로 말해야 합니다.
+   *
+   * ⚠️ 앞서 지운 예외와 성격이 다릅니다 — 그때는 밝기 **순서가 뒤집힌 것**을 그림자로
+   * 덮으려던 것이라 근본을 고치자 사라졌고, 여기는 순서가 맞는 상태에서 **매체의 한계**를
+   * 다룹니다. 같은 "예외"라도 하나는 증상 가리기였고 하나는 물리입니다. */
+  it("다크는 빛으로 떠 있다고 말한다 — 위 하이라이트와 칩보다 밝은 테두리", () => {
+    expect(segmentedCssSource).toContain('[data-theme="dark"] .segmented > button[aria-checked="true"] {');
+    expect(segmentedCssSource).toContain("inset 0 1px 0 color-mix(in srgb, #fff 9%, transparent)");
+    expect(segmentedCssSource).toContain("border-color: color-mix(in srgb, var(--segmented-chip) 88%, #fff);");
+  });
+
+  it("다크 포커스가 그 하이라이트를 지우지 않는다", () => {
+    // 포커스 규칙이 뒤에 오므로 짝이 없으면 링이 하이라이트와 그림자를 통째로 덮습니다.
+    const focusRule = segmentedCssSource.slice(segmentedCssSource.indexOf('[data-theme="dark"] .segmented > button[aria-checked="true"]:focus-visible'));
+    expect(focusRule.slice(0, 260)).toContain("inset 0 1px 0 color-mix(in srgb, #fff 9%, transparent)");
   });
 
   it("묶음이 움푹한 트랙이고 고른 칸만 떠 있다", () => {
