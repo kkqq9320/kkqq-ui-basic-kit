@@ -3231,7 +3231,9 @@ describe("DateWheelPicker 단축키", () => {
   it("완료 버튼의 aria-keyshortcuts가 고정돼 있다", () => {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} />);
     fireEvent.click(fieldOf("거래 날짜"));
-    expect(screen.getByRole("button", { name: "완료" }).getAttribute("aria-keyshortcuts")).toBe("Enter");
+    // `Ctrl+S`가 2026-08-14에 이 버튼의 두 번째 이름이 됐습니다 — 같은 `commitAndClose`를
+    // 부르므로 여기 안 적으면 보조기술이 버튼에 그 단축키가 있다는 것을 모릅니다.
+    expect(screen.getByRole("button", { name: "완료" }).getAttribute("aria-keyshortcuts")).toBe("Enter Control+S Meta+S");
   });
 });
 
