@@ -148,5 +148,22 @@ body.date-wheel-fold-demo .date-wheel-popover[aria-label="초까지 예약 시�
 .demo-setting-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .demo-setting-row > span { color: var(--muted); font-size: var(--font-size-xs); }
 .demo-setting-choices { display: flex; gap: 6px; }
-.demo-setting-choices .secondary-button { min-width: 44px; padding: 0 10px; white-space: nowrap; }
+/* 🔴 **버튼 폭을 고정합니다**(오너: "24시간 12시간 버튼 박스랑 한 줄 두 줄 박스랑 둘 다
+ * 버튼 2개인 건 똑같은데 너비를 같게 하는 게 시인성에 더 좋지 않을까?").
+ * 글자 수로 폭이 정해지면 **버튼 수가 같은 줄끼리도 상자 폭이 달라집니다** — 설정 화면은
+ * 세로로 훑는 자리라 그 들쭉날쭉함이 그대로 읽힙니다. 고정 폭이면 버튼 수만 폭을 정합니다. */
+.demo-setting-choices .secondary-button { width: 64px; min-width: 64px; padding: 0; white-space: nowrap; }
 .demo-setting-choices .secondary-button[aria-pressed="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+
+
+/* 🔴 **성능 격리 모드** — 오너: "전체적으로 안드로이드에서 엄청 버벅대네. 그냥 느린 것
+ * 같아." 데모 페이지는 패널이 여럿이고 픽커의 값이 **App 최상단 상태**라, 한 칸 움직일
+ * 때마다 페이지 전체가 다시 그려집니다. 그건 **데모의 구조**이지 킷의 비용이 아닐 수
+ * 있는데, 지금 캡처로는 둘을 못 가릅니다.
+ *
+ * 이 모드는 시각 피커 패널만 남기고 나머지를 **DOM에서 지우지 않고 감춥니다**
+ * (`content-visibility`로 렌더 비용까지 끊습니다 — `display: none`은 레이아웃을 바꿔
+ * 팝오버 좌표까지 달라지므로 비교가 안 됩니다).
+ * 같은 스와이프를 켜고/끄고 두 번 재서 fps를 비교하면 답이 나옵니다. */
+body.demo-isolate .workspace > *:not(.panel-grid),
+body.demo-isolate .panel-grid > .panel:not(.demo-time-panel) { content-visibility: hidden; contain: strict; height: 0; overflow: hidden; }

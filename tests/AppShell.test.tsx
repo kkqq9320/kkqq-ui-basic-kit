@@ -44,6 +44,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { AppShell } from "../src/AppShell";
 import tokensCssSource from "../css/tokens.css?raw";
+import controlsCssSource from "../css/controls.css?raw";
 
 afterEach(() => {
   cleanup();
@@ -1779,5 +1780,21 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     await waitFor(() => expect(parseFloat(keyboardInsetOf(root))).toBe(target));
 
     scrollRoot.setClientHeight(CLIENT_HEIGHT_TRUE);   // 다음 테스트에 영향이 없도록 원상복구
+  });
+});
+
+/* 🔴 오너 리포트(2026-08-13): "날짜+시각 필드가 왼쪽 필드 높이랑 똑같애야지 —
+ * 이런 거 알아서 설정해 두라고 만든 킷인데 데모에서 이런 걸 안 지키면 어떡해?"
+ *
+ * `FieldGrid`의 칸들은 같은 행이라 높이가 이미 같습니다(그리드 항목의 기본 `stretch`).
+ * 어긋난 것은 **칸 안**입니다 — 라벨 글이 길어 두세 줄이 되면 남는 높이가 컨트롤 **아래**로
+ * 가서, 옆 칸과 입력 상자의 세로 위치가 달라집니다. `LAYOUT-PRINCIPLES`가 "줄 끝이 안
+ * 맞는다"로 부르는 그 증상이고, **킷이 해 줘야 하는 일**입니다.
+ *
+ * ⚠️ 픽셀 정렬은 레이아웃이라 jsdom이 못 봅니다 — 여기서는 **그 규칙이 선언돼 있는지**만
+ * 봅니다. 실제로 맞는지는 실제 브라우저 실측이 근거이고 PR 본문에 있습니다. */
+describe("라벨은 컨트롤을 칸 바닥에 맞춘다 (오너 리포트)", () => {
+  it("남는 높이가 글과 컨트롤 사이로 간다", () => {
+    expect(controlsCssSource).toContain("label { display: grid; gap: 6px; align-content: space-between;");
   });
 });

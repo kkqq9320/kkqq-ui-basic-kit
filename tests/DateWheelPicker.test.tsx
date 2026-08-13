@@ -5507,7 +5507,7 @@ describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () =
   // 오너 리포트 5차로 2000 → 700ms. 소스의 `DATE_WHEEL_HOLD_MS`와 같은 수여야 하고,
   // 아래 "임계 전에 떼면"은 이 값에서 400을 빼므로 임계가 바뀌면 그 검사가 먼저 깨집니다 —
   // 실제로 깨져서 알았습니다. 그게 이 상수를 검사에 둔 값어치입니다.
-  const HOLD_MS = 700;
+  const HOLD_MS = 500;
 
   const openTime = (value: string, onChange = vi.fn()) => {
     render(<DateWheelPicker ariaLabel="거래 시각" value={value} fields={TIME_FIELDS} onChange={onChange} />);
@@ -5840,10 +5840,19 @@ describe("DateWheelPicker 더블탭 초기화 (오너 리포트 5차)", () => {
    * 홀드 쪽 검사("이미 그 값이면 아무 일도 안 일어난다")가 이미 지킵니다. */
 });
 
-describe("길게 누르기 임계 (오너 리포트 5차 — 너무 느리다)", () => {
-  it("700ms다 — 2초는 오너가 실제로 눌러 보고 느리다고 했다", () => {
-    // 소스와 CSS가 **같은 수**를 써야 합니다. 진행 막대가 임계보다 길거나 짧으면
-    // 다 찼는데 안 걸리거나 걸렸는데 덜 찬 채로 사라집니다 — 조용히 거짓말하는 표시입니다.
-    expect(datePickerCssSource).toContain("animation: date-wheel-hold 700ms linear forwards;");
+describe("길게 누르기 임계와 진행 막대 (오너 리포트 5·6차)", () => {
+  /* 🔴 **수 셋이 한 벌입니다:** 소스의 `DATE_WHEEL_HOLD_MS`(500) = CSS의 지연(200) +
+   * 성장(300). 하나만 바꾸면 막대가 다 찼는데 안 걸리거나, 걸렸는데 덜 찬 채 사라집니다 —
+   * 이 저장소가 "조용히 거짓말하는 표시"라고 부르는 것입니다.
+   *
+   * **지연 200ms는 오너 요청입니다** — "더블 터치할 때는 하단에 바가 안 나오는 게 좋겠어".
+   * 더블탭의 한 탭은 보통 50~120ms라 지연 안에 끝나고, 그동안 막대는 `width: 0`이라
+   * 아무것도 안 그립니다. */
+  it("막대의 지연과 성장을 합치면 홀드 임계 500ms다", () => {
+    expect(datePickerCssSource).toContain("animation: date-wheel-hold 300ms linear 200ms forwards;");
+  });
+
+  it("움직임을 줄이는 환경에서도 지연은 남는다 — 더블탭에서 번쩍이면 안 된다", () => {
+    expect(datePickerCssSource).toContain(".date-wheel-column.holding::after { animation: date-wheel-hold 1ms linear 200ms forwards; }");
   });
 });

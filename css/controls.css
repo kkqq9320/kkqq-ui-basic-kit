@@ -19,7 +19,18 @@ textarea { resize: vertical; line-height: 1.45; }
  * 받으므로, select.css:23·date-picker.css:129가 `:not(:disabled)`를 달아야 했던
  * 이유가 이 셋에는 생기지 않습니다. */
 input:disabled, select:disabled, textarea:disabled { opacity: .55; cursor: not-allowed; }
-label { display: grid; gap: 6px; color: var(--muted); font-size: var(--font-size-body); font-weight: 600; }
+/* 🔴 **`align-content: space-between`이 이 줄의 요점입니다**(오너 리포트 2026-08-13:
+ * "날짜+시각 필드가 왼쪽 필드 높이랑 똑같애야지 이런 거 알아서 설정해 두라고 만든 킷인데").
+ *
+ * `FieldGrid`의 칸들은 같은 행이라 **높이가 같습니다**(그리드 항목의 기본 `stretch`).
+ * 그런데 라벨 글이 두세 줄로 길어진 칸에서는 그 여유가 **컨트롤 아래**로 가서, 옆 칸과
+ * 입력 상자의 세로 위치가 어긋났습니다 — `LAYOUT-PRINCIPLES`가 "줄 끝이 안 맞는다"로
+ * 부르는 바로 그 증상이고, **킷이 알아서 해 줘야 하는 자리**입니다.
+ *
+ * `space-between`이면 남는 높이가 **글과 컨트롤 사이**로 가므로 컨트롤이 칸 바닥에
+ * 붙고, 한 행의 입력 상자들이 같은 줄에서 끝납니다. `gap: 6px`은 최소 간격으로 남습니다.
+ * 여유가 없는(=혼자 있는) 라벨에서는 나눌 것이 없어 **아무것도 안 바뀝니다.** */
+label { display: grid; gap: 6px; align-content: space-between; color: var(--muted); font-size: var(--font-size-body); font-weight: 600; }
 
 /* 3줄에서 시작해 내부 스크롤바 없이 늘어나는 메모 입력 */
 .auto-grow-textarea { min-height: calc(1.45em * 3 + 22px); overflow-y: hidden; resize: none; white-space: pre-wrap; }

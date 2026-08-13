@@ -609,6 +609,9 @@ function Demo() {
   /* 오너 리포트 6번 — 휠에 보이는 행을 위아래 2개씩(기본) / 1개씩으로 갈아 끼웁니다.
    * 킷이 토큰 둘로 묶어 둬서 demo.css가 그 둘만 덮어씁니다. 실기기에서 고릅니다. */
   const wheelRows = useSyncExternalStore(subscribeWheelRowsPerSide, getWheelRowsPerSide, getWheelRowsPerSide);
+  /* 성능 격리 모드(오너: "안드로이드에서 엄청 버벅대네") — 데모 페이지의 다시 그리기
+   * 비용과 킷의 비용을 **가르기 위한** 스위치입니다. 켜고/끄고 같은 스와이프를 재세요. */
+  const [isolate, setIsolate] = useState(false);
   /* 12시간제는 **킷 전역 설정**이라 `useState`로 들고 있으면 안 됩니다(설계 스펙 §11) —
    * 값은 킷 안에 있고 데모는 **구독해서 읽습니다.** 로컬 상태로 흉내 내면 이 화면의
    * 다른 픽커들이 안 따라오는데, 그러면 조작판이 화면과 다른 말을 하는 이 저장소의
@@ -676,6 +679,11 @@ function Demo() {
   }, [foldSixColumns]);
 
   // 6번은 이제 데모 CSS 흉내가 아니라 **킷 전역 설정**이라, body 클래스가 필요 없습니다.
+
+  useEffect(() => {
+    document.body.classList.toggle("demo-isolate", isolate);
+    return () => document.body.classList.remove("demo-isolate");
+  }, [isolate]);
 
   // 1초씩 세다 마지막 칸에서 `disabled`를 켭니다. **버튼을 바로 토글하면 안 됩니다** —
   // `DateWheelPicker.tsx:659-665`가 바깥 `pointerdown`에 팝오버를 닫으므로, 누르는 순간
@@ -832,7 +840,7 @@ function Demo() {
             {/* Task 3(2b-3)가 시·분·초를 실제로 그리게 만든 뒤 처음 여는 시각 픽커들(2b-4).
                 값 형식은 fields가 가르는 계열을 그대로 따릅니다 — model/instant.ts의
                 familyOf. */}
-            <Panel title="시각 피커" hint="TIME WHEEL">
+            <Panel title="시각 피커" hint="TIME WHEEL" className="demo-time-panel">
               <FieldGrid>
                 <label>시각만 (fields — budget 백업 예약 화면이 지금 &lt;input type=&quot;number&quot;&gt; 둘로 받는 모양)<DateWheelPicker ariaLabel="예약 시각" value={reservationTime} onChange={(next) => { logTraceNote(`예약 시각 onChange → ${next}`); setReservationTime(next); }} fields={["hour", "minute"]} /></label>
                 <label>날짜+시각 (fields)<DateWheelPicker ariaLabel="약속 시각" value={meetingAt} onChange={(next) => { logTraceNote(`약속 시각 onChange → ${next}`); setMeetingAt(next); }} fields={["year", "month", "day", "hour", "minute"]} /></label>
@@ -858,6 +866,13 @@ function Demo() {
                     {([1, 2, 3, 4] as const).map((rows) => (
                       <button type="button" key={rows} className="secondary-button" aria-pressed={wheelRows === rows} onClick={() => setWheelRowsPerSide(rows)}>{rows}</button>
                     ))}
+                  </div>
+                </div>
+                <div className="demo-setting-row">
+                  <span>성능 격리 (다른 패널 감추기)</span>
+                  <div className="demo-setting-choices">
+                    <button type="button" className="secondary-button" aria-pressed={!isolate} onClick={() => setIsolate(false)}>끔</button>
+                    <button type="button" className="secondary-button" aria-pressed={isolate} onClick={() => setIsolate(true)}>켬</button>
                   </div>
                 </div>
                 <div className="demo-setting-row">

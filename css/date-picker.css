@@ -342,7 +342,12 @@
  * `DATE_WHEEL_HOLD_MS`와 같아야 합니다** — 어긋나면 막대가 다 찼는데 아직 안 걸리거나,
  * 걸렸는데 막대가 덜 찬 채로 사라집니다. 그래서 그 값을 여기 적어 둡니다(2000ms).
  * ⚠️ 한쪽만 바꾸면 조용히 거짓말하는 표시가 됩니다. */
-.date-wheel-column.holding::after { content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--accent); border-radius: 0 2px 2px 0; animation: date-wheel-hold 700ms linear forwards; }
+/* 🔴 **막대는 200ms 뒤에야 자라기 시작합니다**(오너 리포트: "더블 터치할 때는 하단에
+ * 바가 안 나오는 게 좋겠어"). 더블탭의 한 탭은 보통 50~120ms라 그 안에 끝나므로, 지연
+ * 동안 `width: 0`인 막대는 **아무것도 그리지 않습니다.** 지연 200 + 성장 300 = 홀드
+ * 임계 500ms와 정확히 같습니다 — ⚠️ 셋 중 하나만 바꾸면 막대가 다 찼는데 안 걸리거나
+ * 걸렸는데 덜 찬 채 사라집니다. 검사가 소스의 `DATE_WHEEL_HOLD_MS`와 대조합니다. */
+.date-wheel-column.holding::after { content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--accent); border-radius: 0 2px 2px 0; animation: date-wheel-hold 300ms linear 200ms forwards; }
 @keyframes date-wheel-hold { to { width: 100%; } }
 
 /* 액션 행은 팝오버 바닥에 **붙습니다.**
@@ -415,5 +420,7 @@
   .date-wheel-column:is(.moving-next, .moving-previous) .date-wheel-values button.selected { animation: none; transition: none; }
   /* ⚠️ **누름 표시는 장식이 아니라 진행 상태입니다** — 여기서 지우면 2초를 아무 신호 없이
    * 기다리게 됩니다. 움직임만 없애고 **표시는 남깁니다**(누르는 순간 가득 찬 막대). */
-  .date-wheel-column.holding::after { width: 100%; animation: none; }
+  /* 움직임은 빼되 **지연은 남깁니다** — 더블탭의 첫 탭에서 막대가 번쩍이면 안 됩니다.
+   * 0ms짜리 애니메이션이 지연 뒤에 한 번에 채웁니다. */
+  .date-wheel-column.holding::after { animation: date-wheel-hold 1ms linear 200ms forwards; }
 }
