@@ -262,6 +262,60 @@ describe("규칙 5 — 타이핑 중에는 네이티브 편집 조합을 양보�
     expect(shouldTrigger(keydown({ code: "KeyA", ctrlKey: true }))).toBe(true);
   });
 
+  /* **§10-7의 구멍 — 실측으로 찾았습니다**(2026-08-13, 오너 · Windows Chrome 151 +
+   * macOS Safari 26.3, 진짜 키보드). 전부 `defaultPrevented=false`인 채로 편집이
+   * 일어났고, `preventDefault`를 걸면 그 편집이 죽었습니다:
+   *
+   * | | 조합 | 브라우저가 한 일 |
+   * |---|---|---|
+   * | 윈도우 | `Ctrl+Backspace` | 앞 단어 삭제 (15→12) |
+   * | 윈도우 | `Ctrl+←` | 단어 단위 이동 (12→6) |
+   * | 맥 | `Cmd+Backspace` | **줄 전체** 삭제 (14→0) |
+   * | 맥 | `Cmd+←` | 줄 처음으로 (26→0) |
+   * | 맥 | `⌥+Backspace` | 단어 삭제 (26→21) |
+   * | 맥 | `⌥+←` | 단어 이동 (21→11) |
+   *
+   * 맥 줄 넷이 규칙 5의 수식어에 **`Alt`를 더해야 하는 이유**입니다 — `⌥+Backspace`는
+   * `(ctrl||meta)`에 안 걸립니다. 윈도우에서도 `Alt+Backspace`는 되돌리기라 손해가 없습니다. */
+  it("textarea 안에서 Ctrl+Backspace는 트리거되지 않는다", () => {
+    const { container } = render(<textarea />);
+    container.querySelector("textarea")!.focus();
+    expect(shouldTrigger(keydown({ code: "Backspace", ctrlKey: true }))).toBe(false);
+  });
+
+  it("textarea 안에서 Ctrl+←는 트리거되지 않는다", () => {
+    const { container } = render(<textarea />);
+    container.querySelector("textarea")!.focus();
+    expect(shouldTrigger(keydown({ code: "ArrowLeft", ctrlKey: true }))).toBe(false);
+  });
+
+  it("textarea 안에서 Cmd+←도 트리거되지 않는다 — 맥은 줄 처음으로 갑니다", () => {
+    const { container } = render(<textarea />);
+    container.querySelector("textarea")!.focus();
+    expect(shouldTrigger(keydown({ code: "ArrowLeft", metaKey: true }))).toBe(false);
+  });
+
+  it("textarea 안에서 Alt+Backspace도 트리거되지 않는다 — 맥의 단어 삭제", () => {
+    const { container } = render(<textarea />);
+    container.querySelector("textarea")!.focus();
+    expect(shouldTrigger(keydown({ code: "Backspace", altKey: true }))).toBe(false);
+  });
+
+  // 대조군 셋 — 텍스트 입력 **밖**에서는 같은 조합들이 그대로 트리거됩니다.
+  it("body에서 Ctrl+Backspace는 트리거된다", () => {
+    expect(shouldTrigger(keydown({ code: "Backspace", ctrlKey: true }))).toBe(true);
+  });
+
+  it("body에서 Alt+Backspace는 트리거된다", () => {
+    expect(shouldTrigger(keydown({ code: "Backspace", altKey: true }))).toBe(true);
+  });
+
+  /* 대조군 — **맨 `Backspace`는 목록과 무관하게** 규칙 4가 막습니다. 이게 없으면
+   * "Backspace가 들어간 건 다 막힌다"는 구현으로도 위가 전부 통과합니다. */
+  it("body에서 맨 Backspace는 트리거된다", () => {
+    expect(shouldTrigger(keydown({ code: "Backspace" }))).toBe(true);
+  });
+
   it("양보 목록에 없는 조합은 타이핑 중에도 트리거된다", () => {
     const { container } = render(<textarea />);
     container.querySelector("textarea")!.focus();

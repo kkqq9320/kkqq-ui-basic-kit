@@ -76,17 +76,36 @@ const NON_TEXT_INPUT_TYPES = new Set(["button", "checkbox", "color", "file", "hi
 
 /** 브라우저가 네이티브로 처리하면서 **`preventDefault`를 부르지 않는** 편집 조합.
  * 그래서 규칙 1이 이것들을 못 막습니다 — 스펙 §2.3. 이 스펙에서 목록을 쓰는
- * 유일한 자리이고, 빠뜨리면 조합이 두 번 동작해 **눈에 보입니다.** */
-const NATIVE_EDIT_CODES = new Set(["KeyA", "KeyC", "KeyV", "KeyX", "KeyZ", "KeyY"]);
+ * 유일한 자리이고, 빠뜨리면 조합이 두 번 동작해 **눈에 보입니다.**
+ *
+ * **뒤의 셋은 §10-7을 실측해서 찾은 구멍입니다**(2026-08-13, 오너 · Windows
+ * Chrome 151 + macOS Safari 26.3, 진짜 키보드). 전부 `defaultPrevented=false`인 채로
+ * 편집이 일어났고, `preventDefault`를 걸면 그 편집이 죽었습니다:
+ *
+ * | | 조합 | 브라우저가 한 일 |
+ * |---|---|---|
+ * | 윈도우 | `Ctrl+Backspace` | 앞 단어 삭제 (15→12) |
+ * | 윈도우 | `Ctrl+←` | 단어 단위 이동 (12→6) |
+ * | 맥 | `Cmd+Backspace` | **줄 전체** 삭제 (14→0) |
+ * | 맥 | `Cmd+←` | 줄 처음으로 (26→0) |
+ * | 맥 | `⌥+Backspace` | 단어 삭제 (26→21) |
+ * | 맥 | `⌥+←` | 단어 이동 (21→11) |
+ *
+ * `ArrowRight`는 `ArrowLeft`의 짝이라 같이 넣습니다 — 방향만 다른 같은 동작이고,
+ * 한쪽만 막으면 앱이 `Ctrl+→`를 걸었을 때만 조용히 새는 비대칭이 남습니다.
+ *
+ * ⚠️ **`Delete`·`Home`·`End`·`↑`·`↓`는 안 쟀습니다.** 같은 부류로 보이지만 이
+ * 목록은 관측으로 늘려 가는 자리입니다(§10-7). */
+const NATIVE_EDIT_CODES = new Set(["KeyA", "KeyC", "KeyV", "KeyX", "KeyZ", "KeyY", "Backspace", "ArrowLeft", "ArrowRight"]);
 
 /** 수식어 없이 눌리면 **포커스한 것을 실행하는** 키. 스펙 §6.2.
  *
  * **실측(2026-08-13, 오너 · macOS Safari 26.3 + Windows Chrome 151, 진짜 키보드).**
  * `<button>`·`<summary>`에서 `Enter`는 `defaultPrevented=false`인 채로 활성화되고,
  * 그 자리에서 `preventDefault()`를 부르면 **활성화가 죽습니다.** 양쪽 OS 동일.
- * `Space`는 활성화가 `keyup`에서 일어나 이 회차의 프로브가 못 쟀지만(§10-9),
- * **같은 부류라 같이 막습니다** — 여기서는 안 막았을 때의 손해가 크고 막았을 때의
- * 손해가 거의 없어서, "잰 것만 적는다"의 예외로 오너가 정했습니다(2026-08-13). */
+ * `Space`도 그 뒤 같은 방법으로 쟀고 **같은 결과였습니다** — 체크박스·버튼·`<summary>`
+ * 전부 관측에서 동작하고 차단에서 죽습니다(§10-9). 처음 회차에 못 쟀던 것은
+ * 활성화가 `keyup`에서 일어나는데 프로브가 `keydown` 직후에 봐서였습니다. */
 const BARE_ACTIVATION_CODES: ReadonlySet<string> = new Set(["Enter", "Space"]);
 
 /** `NATIVE_EDIT_CODES` 중 **등록 자체를 막는** 것들 — `KeyA`만 빠집니다.
@@ -133,7 +152,9 @@ export function unbindableReason(combo: Combo): UnbindableReason | null {
  * 경고 대상이 저절로 늘어납니다(둘이 갈리지 않습니다). */
 export function bindingWarning(combo: Combo): BindingWarning | null {
   if (unbindableReason(combo)) return null;                 // 못 거는 조합에 경고는 의미가 없습니다
-  if ((combo.ctrl || combo.meta) && NATIVE_EDIT_CODES.has(combo.code)) return "yields-in-text-input";
+  // 규칙 5와 **같은 판정**이어야 합니다 — 여기가 좁으면 `Ctrl+Backspace`를 등록한
+  // 사용자가 경고를 못 받고, 텍스트 칸에서 안 뜨는 이유를 모릅니다.
+  if ((combo.ctrl || combo.meta || combo.alt) && NATIVE_EDIT_CODES.has(combo.code)) return "yields-in-text-input";
   return null;
 }
 
@@ -331,7 +352,10 @@ export function shouldTrigger(event: KeyboardEvent): boolean {
   // 그러면 어떤 <textarea>에서도 그 글자를 못 칩니다.
   if (combo.ctrl || combo.alt || combo.meta) {
     // 규칙 5 — 타이핑 중에만, 그리고 Ctrl/Meta 조합에만 적용됩니다.
-    if (typing && (combo.ctrl || combo.meta) && NATIVE_EDIT_CODES.has(combo.code)) return false;
+    // `Alt`도 셉니다 — **맥 때문입니다.** `⌥+Backspace`(단어 삭제)와 `⌥+←`(단어 이동)이
+    // `(ctrl||meta)`에는 안 걸리는데 실측에서 둘 다 편집을 했습니다(§10-7). 윈도우에서도
+    // `Alt+Backspace`는 되돌리기라 넣어서 잃는 것이 없습니다.
+    if (typing && (combo.ctrl || combo.meta || combo.alt) && NATIVE_EDIT_CODES.has(combo.code)) return false;
     return true;                                        // 규칙 2
   }
   if (typing) return false;                             // 규칙 4
