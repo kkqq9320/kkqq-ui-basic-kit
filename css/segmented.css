@@ -15,7 +15,7 @@
  * ⚠️ **트랙 배경과 칩 배경이 서로 다른 토큰이어야 합니다.** 둘이 같으면 떠 있는 느낌이
  * 사라져 구조가 말하던 것이 통째로 없어집니다 — 처음 시안이 정확히 그래서 "분간이 안
  * 간다"가 나왔습니다. */
-.segmented { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: color-mix(in srgb, var(--surface-soft) 52%, var(--line)); }
+.segmented { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); }
 
 .segmented > button { min-width: var(--segmented-min-width, 56px); height: var(--segmented-height, 30px); display: inline-flex; align-items: center; justify-content: center; padding: 0 10px; border: 1px solid transparent; border-radius: 7px; color: var(--muted); background: transparent; font-size: var(--action-font-size); font-weight: 700; line-height: 1; white-space: nowrap; }
 
@@ -28,22 +28,18 @@
  * 여기는 트랙 위의 중립 칩에 글자만 강조된 모양입니다. 자리(트랙 안의 칩)가 "고름"을
  * 말하고, 강조색 글자가 그 위에서 **어느 것인지**를 한 번 더 짚습니다.
  *
- * "좀 더 진하게"는 **트랙을 더 짙게** 해서 얻었습니다 — 칩 자체를 어둡게 하려면 색을
- * 어느 방향으로 섞을지 정해야 하는데, 그 방향이 라이트/다크에서 반대라 한쪽이 반드시
- * 이상해집니다. 트랙만 짙게 하면 **같은 선언 하나가 두 테마에서 다 맞습니다**
- * (`--line` 비중을 82% → 52%로). 칩은 `--surface` 그대로라 대비가 그만큼 커집니다. */
+ * 🔴 **트랙은 `--bg`이고 칩은 `--surface`입니다 — 두 테마에서 다 "뜬 카드"가 되는 유일한
+ * 쌍입니다**(오너: "다크도 칩이 뜬 카드처럼 보였으면 좋겠어"). 이 킷의 토큰에서
+ * `--bg`는 **라이트에서도 다크에서도** `--surface`보다 어둡습니다
+ * (라이트 #f6f4ef < #fffdfa, 다크 #101119 < #1a1b27) — 그래서 "바닥 위에 놓인 면"이라는
+ * 관계가 테마와 무관하게 성립하고, **그림자도 두 테마에서 같은 방향(드롭)으로 갑니다.**
+ *
+ * ⚠️ 한 판 전에는 트랙을 `--surface-soft`에 `--line`을 섞어 만들었는데, `--line`이
+ * **다크에서는 `--surface`보다 밝아서** 트랙이 칩보다 밝아졌습니다 — 칩이 파인 우물이
+ * 되고 드롭 섀도가 구조와 반대말을 했습니다. 토큰의 밝기 순서가 테마마다 뒤집히는
+ * 자리를 밟은 것이고, **`--bg`/`--surface`는 그 순서가 안 뒤집히는 쌍**입니다. */
 .segmented > button[aria-checked="true"] { color: var(--accent-text); border-color: color-mix(in srgb, var(--line) 70%, transparent); background: var(--surface); box-shadow: 0 1px 4px color-mix(in srgb, #000 34%, transparent); font-weight: 800; }
 
-/* 🔴 **그림자의 방향이 테마마다 반대여야 합니다**(오너: "light에서 box shadow는 좋은데
- * dark는 좀 부자연스럽네").
- *
- * 이유는 앞 라운드에서 잰 그대로입니다 — 칩과 트랙의 밝기 관계가 테마마다 **뒤집힙니다**:
- *   라이트 : 칩 rgb(255,253,250) > 트랙 rgb(239,236,231)  → 칩이 **떠 있는** 카드
- *   다크   : 칩 rgb(26,27,39)   < 트랙 rgb(42,43,58)      → 칩이 **파인** 우물
- * 드롭 섀도는 "떠 있다"는 신호라, 파인 것 아래에 깔면 **구조와 반대되는 말**을 합니다 —
- * 그게 다크에서 부자연스러웠던 것입니다. 밝기차를 그대로 두고 그림자만 방향을 맞춥니다:
- * 다크에서는 안쪽 그림자(위에서 지는)로 **파임을 거들게** 합니다. */
-[data-theme="dark"] .segmented > button[aria-checked="true"] { box-shadow: inset 0 1px 3px color-mix(in srgb, #000 46%, transparent); }
 
 .segmented > button:disabled { opacity: .45; cursor: not-allowed; }
 
@@ -59,6 +55,3 @@
  * 링이라 고른 칸에도 안 고른 칸에도 같은 방식으로 얹힙니다. */
 .segmented > button:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
 .segmented > button[aria-checked="true"]:focus-visible { box-shadow: inset 0 0 0 2px var(--accent), 0 1px 4px color-mix(in srgb, #000 34%, transparent); }
-/* 다크에서는 위 규칙의 드롭 섀도 대신 파임 그림자를 쓰므로, 포커스 링도 그 짝으로 얹습니다.
- * ⚠️ 이 줄이 없으면 다크에서 **포커스가 파임을 지웁니다**(뒤에 오는 규칙이 이기므로). */
-[data-theme="dark"] .segmented > button[aria-checked="true"]:focus-visible { box-shadow: inset 0 0 0 2px var(--accent), inset 0 1px 3px color-mix(in srgb, #000 46%, transparent); }

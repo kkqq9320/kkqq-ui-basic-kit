@@ -68,13 +68,25 @@ export type DateWheelLabels = {
   select: string;
   /** 일요일부터 7개 */
   weekdays: string[];
-  /** 열의 aria-label 접두사. `year`·`month`·`day`는 늘 그려지므로 필수, `hour`·`minute`·
-   *  `second`는 **타입은 여전히 선택**입니다 — `fields`가 그 열들을 아예 안 가진 소비자가
-   *  `labels.units`를 부분 override(연·월·일만)해도 계속 컴파일되게 두는 것입니다.
-   *  `DEFAULT_DATE_WHEEL_LABELS.units`는 Task 3부터 여섯 다 채워져 있고, override가
-   *  일부만 주면 `{ ...DEFAULT.units, ...override.units }` 병합이 나머지를 그 기본값으로
-   *  메웁니다 — 그래서 시·분·초 열이 실제로 그려지는 순간에도 `undefined`로 새지 않습니다. */
-  units: { year: string; month: string; day: string; hour?: string; minute?: string; second?: string };
+  /** 열의 `aria-label` 접두사. **여섯 다 필수입니다.**
+   *
+   *  🔴 **한동안 시·분·초만 선택이었고, 그게 스크린리더로 새는 결함이었습니다.**
+   *  병합이 `{ ...DEFAULT.units, ...override.units }`라, 라벨을 영어로 바꾼 소비자가
+   *  연·월·일만 주면 나머지 셋은 **기본값(한국어)이 그대로 남습니다** — 시각 열의 이름이
+   *  영어 화면에서 `"시 03"`으로 읽혔습니다. 화면에는 안 보이고 **귀에만 들리는** 결함이라
+   *  아무도 눈으로 못 잡습니다.
+   *
+   *  선택으로 둔 것은 2b의 의도였습니다(그때는 시각 열이 안 그려졌습니다). 3단계에서
+   *  **실제로 그려지기 시작하면서** 그 선택이 누수로 바뀌었습니다.
+   *
+   *  **필수로 닫습니다**(오너 결정 2026-08-13). 비용을 재고 나서 한 결정입니다 — 킷 안
+   *  3곳, **소비자 0곳**(`budget`은 `DateWheelPicker`를 12개 파일에서 쓰는데 `labels=`를
+   *  한 건도 안 넘기고, `homa_gwangju`는 안 씁니다). `meridiem`이 처음부터 필수인 이유가
+   *  같습니다: **그리는 이름은 빠뜨릴 수 없게 두면 누수가 구조적으로 불가능해집니다.**
+   *
+   *  ⚠️ 타입 breaking입니다 — `DateWheelLabels`로 완전히 타입된 라벨 상수를 만드는
+   *  소비자가 깨집니다. `labels` prop 자체는 `Partial<…>`이라 부분 override는 영향 없습니다. */
+  units: { year: string; month: string; day: string; hour: string; minute: string; second: string };
   /** 12시간제(`hourFormat === "12"`)에서 시 앞에 붙는 두 글자 — 트리거와 시 열이 같이
    *  씁니다(설계 스펙 §7·§10).
    *
