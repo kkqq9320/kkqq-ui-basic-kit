@@ -145,8 +145,8 @@
 
 | 소비자 | 부착 자리 | 범위 | Ctrl/Meta 조합 | `preventDefault` |
 |---|---|---|---|---|
-| `DateWheelPicker` `handleFieldKey` | 1 | 포커스(트리거 **버튼**) | 전부 양보, `Ctrl+;`만 씀 | 처리한 분기마다 부름 |
-| `Select` `handleKeyDown` | 2 | 포커스(트리거 **버튼**·메뉴) | 전부 양보 | 처리한 분기마다 부름 |
+| `DateWheelPicker` `handleFieldKey` → `handleShortcut` | 1 | 포커스(트리거 **버튼**) | **다섯을 씀**(2026-08-14): `Ctrl+;` `Ctrl+C` `Ctrl+V` `Ctrl+Z` `Ctrl+S`. 나머지는 양보 | **조건부** — 그 다섯과 처리한 분기는 부르지만 `Tab`·(닫힘)`Escape`는 **의도적으로 안 부름** |
+| `Select` `handleKeyDown` | 2 | 포커스(트리거 **버튼**·메뉴) | 전부 양보 | **조건부** — 열림 상태의 `Tab`은 **의도적으로 안 부름** |
 | `Dialog` `handleKeyDown` (`:69`) | 1 | 열림, document. **`Tab` 포커스 트랩** | — | **조건부** — 트랩이 감쌀 때만(`:72`·`:75`·`:76`) |
 | `useEscapeToClose` (`src/hooks.ts:25`) | 1 | 열린 팝업, document | — | **안 부름** |
 | `SectionTabs` `closeOnEscape` ×2 (`:70`·`:145`) | 2 | 모바일 메뉴, document | — | **안 부름** |
@@ -168,10 +168,19 @@ Important 3-나).
 **(가) 키보드를 제일 많이 먹는 컨트롤 둘이 수식어 공간을 이미 통째로 비워 뒀습니다.**
 `src/DateWheelPicker.tsx`의 `handleFieldKey`와 `src/Select.tsx`의 `handleKeyDown`이 똑같이
 `if (event.ctrlKey || event.metaKey) return;`이고, 주석이 이유를 적어 두었습니다 —
-*"브라우저·OS 단축키입니다."* 킷이 점유한 조합은 **`Ctrl+;` 하나뿐**입니다.
+*"브라우저·OS 단축키입니다."* ~~킷이 점유한 조합은 **`Ctrl+;` 하나뿐**입니다.~~
 
-**(나) `defaultPrevented`의 구멍은 다섯이고, 걸린 키는 여전히 `Escape`와 `Tab`
-둘뿐입니다.** 셋(`useEscapeToClose`·`SectionTabs`·`PageChrome`)은 `Escape`를 먹으면서
+🔴 **2026-08-14에 다섯이 됐습니다.** `DateWheelPicker`가 날짜 필드에 복사·붙여넣기·
+되돌리기·저장을 넣으면서 `handleShortcut`이 `Ctrl+;`·`Ctrl+C`·`Ctrl+V`·`Ctrl+Z`·
+`Ctrl+S`를 먹습니다(`Ctrl+S`는 **팝오버가 열려 있을 때만**). 위에 인용한 "전부 양보"
+가드 자체는 그대로 있지만 이제 그 다섯 가드 **뒤**에 있습니다.
+
+**그래서 이 문단이 근거로 쓰이던 결론이 하나 약해집니다** — "킷은 수식어 공간을
+사실상 통째로 비워 뒀다"는 더 이상 참이 아닙니다. `KIT_RESERVED`는 다섯으로
+갱신됐고 `tests/shortcutConflicts.test.ts`가 소스와 대조합니다.
+
+**(나) `defaultPrevented`의 구멍은 ~~다섯~~ **여덟**이고, 걸린 키는 여전히 `Escape`와
+`Tab` 둘뿐입니다.** 셋(`useEscapeToClose`·`SectionTabs`·`PageChrome`)은 `Escape`를 먹으면서
 `preventDefault`를 안 부르고, `Dialog`의 포커스 트랩은 **감싸지 않는 평범한 `Tab`
 이동에서** 안 부르고, `ShortcutSettings`의 녹음기는 **녹음 중** `Escape`·`Tab` 양쪽에서
 **의도적으로** 안 부릅니다(§6.2 — 포커스가 그대로 나가야 하고, `Escape`가 다른
@@ -179,10 +188,30 @@ document 리스너로 전파돼야 하기 때문입니다). `ShortcutProvider`�
 더해집니다 — 소비하면(바인딩이 맞으면) 항상 `preventDefault`를 부르고, 게다가
 Important 2 수정 뒤로는 `Escape`·`Tab`을 애초에 바인딩할 수조차 없습니다.
 
-그런데 이 다섯은 포커스 범위가 아니라 **document 리스너**라서 규칙 1이 말하는
-"포커스한 컨트롤"이라는 범주에 애초에 안 들어갑니다. 그리고 `Escape`와 `Tab`은
-§6.2에 따라 **조합으로 등록할 수 없습니다** — `Shift+Tab`도 같이 빠집니다. 그래서 이
-구멍은 규칙 1의 반례가 아니라, **§6.2가 우연이 아니라 필연이라는 근거**입니다.
+🔴 **"다섯"과 그 뒤 논증을 정정합니다(2026-08-14 감사).** 실제로는 **여덟**이고,
+셋은 document 리스너가 아니라 **포커스 범위** 소비자입니다:
+
+| 빠져 있던 자리 | 무엇 | 주석이 의도라고 적어 둔 것 |
+|---|---|---|
+| `Select.handleKeyDown`의 `Tab`(열림) | 트리거로 포커스를 옮기고 닫음 | *"기본 동작(다음 요소로 이동)은 막지 않습니다"* |
+| `DateWheelPicker.handleFieldKey`의 `Tab` | 확정하고 닫음 | *"**preventDefault를 부르지 않는다**"* |
+| `DateWheelPicker.handleFieldKey`의 `Escape`(닫힘·버퍼 있음) | `stopPropagation()`으로 삼킴 | *"preventDefault는 부르지 않는다 — §3이 정한 것은 전파 차단 하나뿐"* |
+
+**이건 2026-08-14 변경 탓이 아닙니다** — 원래부터 표가 이 셋을 안 세고 있었습니다.
+
+**결론은 살지만 근거가 바뀝니다.** *"구멍은 전부 document 리스너라서 규칙 1의 범주
+밖"*이라는 논증은 **거짓**입니다. 실제로 안전을 보장하는 것은 **두 번째 이유
+하나뿐**입니다 — 여덟 자리가 먹는 키가 전부 `Escape`와 `Tab`이고, 그 둘은 §6.2에
+따라 **조합으로 등록할 수 없습니다**(`Shift+Tab`도 같이). 그래서 이 구멍은 규칙 1의
+반례가 아니라 **§6.2가 우연이 아니라 필연이라는 근거**입니다.
+
+⚠️ **그러니 "포커스 범위 소비자는 항상 `preventDefault`를 부른다"로 일반화하지
+마세요.** 셋이 반례입니다. 포커스 범위에서 **등록 가능한 키**를 `preventDefault`
+없이 먹는 분기를 새로 만들면 그때 규칙 1이 진짜로 뚫립니다 — 그리고
+`keyConsumers.test.ts`는 부착 자리 수만 세므로 **조용합니다.**
+
+> `stopPropagation()`은 `preventDefault`도 아니고 `defaultPrevented`에 보이지도 않는
+> **세 번째 삼킴 기전**입니다. 이 표에는 그것을 적을 열이 없습니다.
 
 > ⚠️ **이 표의 '부착 자리' 열은 검사(§10-1, `tests/keyConsumers.test.ts`)로
 > 지킵니다** — 파일별 자리 수가 달라지면 빨개집니다. **다만 그 검사는 개수만 재고,
@@ -323,9 +352,26 @@ src/DateWheelPicker.tsx  handleShortcut   event.key === "Delete" && allowClear
 | 5.2 킷이 이미 쓰는 조합 | **완전히 — 넓게 잡아서** | 킷이 자기 예약 목록을 압니다. 컴포넌트의 실제 판정보다 비교를 넓게 잡아 완전한 것이지, 문자열을 정확히 일치시켜서가 아닙니다 — 아래 |
 | 5.3 브라우저·OS 예약 | **부분만** | 아래 |
 
-### 5.2 킷의 예약 목록은 지금 한 개입니다
+### 5.2 킷의 예약 목록은 지금 다섯입니다
 
-`Ctrl+;` / `Cmd+;` (`DateWheelPicker` — 오늘로 설정).
+`DateWheelPicker` 하나가 전부 씁니다(`handleShortcut`):
+
+| 조합 | 무엇 | 언제 |
+|---|---|---|
+| `Ctrl+;` / `Cmd+;` | 오늘로 설정 | 언제나 |
+| `Ctrl+C` | 날짜 복사 | 언제나 |
+| `Ctrl+V` | 붙여넣기 | 언제나 |
+| `Ctrl+Z` | 되돌리기 | 언제나 |
+| `Ctrl+S` | 확정(`완료` 버튼) | **팝오버가 열려 있을 때만** |
+
+> **2026-08-14에 넷이 늘었습니다.** 그 전까지 이 절의 제목은 *"지금 한 개입니다"*였고,
+> 그게 §2.1 (가)의 *"킷이 점유한 조합은 `Ctrl+;` 하나뿐"*과 짝을 이뤘습니다. 컴포넌트가
+> 새 조합을 먹기 시작했을 때 **`KIT_RESERVED`와 검사는 갱신됐는데 이 문서만 낡았습니다** —
+> §2.1이 자기 사각지대로 예고해 둔 모양 그대로입니다(부착 자리 수가 안 늘어 검사는 조용).
+>
+> ⚠️ **`Ctrl+C`·`V`·`Z`는 §6.2가 이미 등록 금지로 막고 있어** 예약 목록에 있든 없든
+> 앱이 못 겁니다. **새로 못 걸게 된 것은 `Ctrl+S` 하나**이고, 그것도 **녹음기에서만**
+> 막힙니다 — 아래 ⚠️.
 
 이 목록은 **코드에서 파생돼야 하고 손으로 적으면 안 됩니다.** 손으로 적으면 컴포넌트가
 새 조합을 쓰기 시작한 날 조용히 틀립니다 — §10-2.
@@ -351,6 +397,29 @@ src/DateWheelPicker.tsx  handleShortcut   event.key === "Delete" && allowClear
 ⚠️ **이 접기는 `KIT_RESERVED`와 비교할 때만 씁니다.** §5.1(액션끼리)의 비교에는
 쓰지 않습니다 — 거기서는 `Ctrl+K`와 `Cmd+K`가, 그리고 `Ctrl+K`와 `Ctrl+Shift+K`가
 **다른 조합**이고, 앱이 그것들을 따로 걸 수 있어야 합니다.
+
+#### ⚠️ 예약은 **녹음기에서만** 막습니다 — 등록 금지(§6.2)와 다릅니다
+
+관문이 둘이고 **보는 것이 다릅니다.** 이 차이를 모르면 문서가 과장하게 됩니다
+(실제로 v0.8.0 릴리스 노트가 그랬습니다 — 아래).
+
+| 경로 | 무엇을 보나 | `Ctrl+S`를 막나 |
+|---|---|---|
+| 녹음기(`ShortcutSettings`) | `unbindableReason` **그리고** `findConflict`(→`KIT_RESERVED`) | **예** — "킷의 날짜 선택기가 씁니다" |
+| `defaultCombo`·`overrides`·`storage` (`bindingOf`) | `unbindableReason` **하나뿐** | **아니오** — 그대로 바인딩됩니다 |
+
+`bindingOf`는 `findConflict`를 부르지 않습니다(`findConflict`를 부르는 자리는
+녹음기 하나뿐입니다). 그래서 앱이 코드로 `defaultCombo: "Ctrl+KeyS"`를 넣으면
+**등록됩니다.** `Ctrl+C`·`V`·`Z`가 막히는 것은 예약이라서가 아니라 §6.2의
+`native-edit`에 있어서입니다 — 그건 `unbindableReason`이라 두 경로 모두에 걸립니다.
+
+**이건 설계상 의도된 비대칭입니다**(지금까지는): §6.2의 등록 금지는 **구조적 결함**을
+막는 것(포커스가 안 나감, 버튼이 안 눌림)이고, 예약 충돌은 **알려 주는 것**입니다 —
+사용자가 그 자리에서 다른 조합을 고르면 됩니다. 앱이 코드로 넣는 것은 앱의 선택이고,
+결과도 조용하지 않습니다(날짜 필드에 포커스가 있을 때만 액션 대신 피커가 동작).
+
+⚠️ **다만 §5.2 본문이 그 조용하지 않음을 근거로 예약 접기를 정당화했다는 점에서**,
+`bindingOf`도 `KIT_RESERVED`를 보게 할지는 **열린 결정입니다**(오너). 지금은 안 봅니다.
 
 ### 5.3 브라우저·OS 예약은 목록이 아니라 관측으로 다룹니다
 
@@ -926,9 +995,16 @@ controlled이거나 `storage`가 없으면 아무것도 안 하고 `false`를 �
    (선례: `colorLiterals.test.ts`, `classNameContract.test.ts`)
    ⚠️ **이 검사는 개수만 봅니다** — 어떤 핸들러가 `preventDefault`를 부르는지도, 어떤
    키를 먹는지도 안 봅니다. 그래서 기존 소비자 안에 분기가 하나 늘어 새 키를 먹기
-   시작해도 자리 수가 그대로면 빨개지지 않습니다. `preventDefault`를 안 부르는 자리는
-   §2.1 표대로 다섯이고 걸린 키는 `Escape`·`Tab`뿐이라는 것은, 이 검사가 아니라
-   §2.1을 사람이 다시 재서 지킵니다(전체 리뷰 Important 3-가).
+   시작해도 자리 수가 그대로면 빨개지지 않습니다. `preventDefault`를 안 부르는 자리가
+   §2.1 표대로이고 걸린 키는 `Escape`·`Tab`뿐이라는 것은, 이 검사가 아니라 §2.1을
+   사람이 다시 재서 지킵니다(전체 리뷰 Important 3-가).
+
+   🔴 **2026-08-14에 그 절차가 실제로 안 돌았습니다.** `DateWheelPicker`가
+   `handleShortcut` **안에** 가드 넷을 더해 `Ctrl+C`·`V`·`Z`·`S`를 먹기 시작했는데,
+   부착 자리 수는 1 그대로라 이 검사는 초록이었고 §2.1 표만 낡았습니다. `KIT_RESERVED`와
+   `shortcutConflicts.test.ts`는 같이 갱신됐으므로 **코드↔예약 목록은 고정돼 있고,
+   고정되지 않는 것은 문서↔코드**입니다. 그 감사에서 (나)의 숫자도 원래부터 셋 모자랐던
+   것이 드러났습니다.
 2. **§5.2의 예약 목록은 코드에서 파생된다.** 손으로 적은 목록이면 빨개집니다.
 3. **`ShortcutProvider` 없이 킷을 쓰면 `document`에 keydown 리스너가 안 붙는다.**
 4. **`css/shortcuts.css`의 모든 규칙이 `.kkqq-shortcuts` 아래에 있다.**
