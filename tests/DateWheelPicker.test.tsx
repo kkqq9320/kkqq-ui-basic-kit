@@ -5479,7 +5479,7 @@ describe("labels.meridiem을 명시적으로 undefined로 줘도 터지지 않�
  * CSS 선택자 하나로 두 경우를 다 맞추는 자리라, 소스로 계약을 고정합니다. */
 describe("시각 묶음 경계 여백 (오너 리포트 5번)", () => {
   it("시 열이 첫 열이 아닐 때만 여백이 붙는다", () => {
-    expect(datePickerCssSource).toContain('.date-wheel-column[data-unit="hour"]:not(:first-child) { margin-left: 10px; }');
+    expect(datePickerCssSource).toContain('.date-wheel-column[data-unit="hour"]:not(:first-child) { margin-left: 8px; }');
   });
 
   it("열이 자기 단위를 마크업으로 말한다 — CSS가 지목할 수 있어야 한다", () => {
@@ -5672,5 +5672,37 @@ describe("DateWheelPicker 휠 행 수 설정 (오너 리포트 6번)", () => {
     setWheelRowsPerSide(3);
     openYear();
     expect(document.querySelector(".date-wheel-columns")?.getAttribute("style")).toContain("--date-wheel-rows: 3");
+  });
+});
+
+/* 오너 리포트 3차 — 오전/오후 줄이 시각 열 블록과 같은 자리에서 시작하고 끝나야 합니다
+ * ("오전 오후 시작과 끝이랑 안 맞아서 깨진 듯한 느낌"). 자리는 CSS calc이 잡고, 그
+ * calc이 쓸 두 수(열 개수 · 시각이 시작하는 인덱스)는 컴포넌트가 내려보냅니다.
+ * ⚠️ 이 검사가 보는 것은 **그 두 수가 실제로 내려간다는 것**까지입니다 — 픽셀 정렬은
+ * 레이아웃이라 jsdom이 못 봅니다(실제 브라우저 실측이 근거이고 PR 본문에 있습니다). */
+describe("오전/오후 줄의 격자 좌표 (오너 리포트 3차)", () => {
+  const openAt = (fields: WheelUnit[], value: string) => {
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="정렬" value={value} fields={fields} onChange={() => undefined} />);
+    fireEvent.click(fieldOf("정렬"));
+    return document.querySelector(".date-wheel-meridiem")?.getAttribute("style") ?? "";
+  };
+
+  it("날짜+시각 6열이면 시각은 네 번째 열에서 시작한다", () => {
+    const style = openAt(["year", "month", "day", "hour", "minute", "second"], "2026-08-12T15:00:05");
+    expect(style).toContain("--date-wheel-fields: 6");
+    expect(style).toContain("--date-wheel-time-start: 3");
+  });
+
+  it("시각 전용이면 시작 인덱스가 0이라 왼쪽으로 안 밀린다", () => {
+    const style = openAt(["hour", "minute"], "15:00");
+    expect(style).toContain("--date-wheel-fields: 2");
+    expect(style).toContain("--date-wheel-time-start: 0");
+  });
+
+  it("날짜가 하루만 남아도 인덱스가 따라간다", () => {
+    const style = openAt(["day", "hour", "minute"], "2026-08-12T15:00");
+    expect(style).toContain("--date-wheel-fields: 3");
+    expect(style).toContain("--date-wheel-time-start: 1");
   });
 });

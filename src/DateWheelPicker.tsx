@@ -1853,7 +1853,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
           `tabIndex={-1}`은 팝오버 안 다른 버튼들과 같습니다 — 이 컨트롤의 포커스 자리는
           트리거 하나뿐입니다(§6.2). */}
       {meridiem && (
-        <div className="date-wheel-meridiem">
+        <div className="date-wheel-meridiem" style={{ "--date-wheel-fields": columns.length, "--date-wheel-time-start": columns.indexOf(MERIDIEM_UNIT) } as CSSProperties}>
           {(["am", "pm"] as const).map((half) => {
             const pressed = meridiem === half;
             // 반대 절반으로 못 가면(경계가 통째로 막았으면) 그 버튼은 열의 ± 버튼과
