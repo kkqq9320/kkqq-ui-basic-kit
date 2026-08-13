@@ -9,16 +9,19 @@
  * 것은 빠뜨린 게 아닙니다. */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { getHourFormat, setHourFormat, subscribeHourFormat } from "../src/settings";
+import { getHourFormat, setHourFormat, subscribeHourFormat, getWheelRowsPerSide, setWheelRowsPerSide, subscribeWheelRowsPerSide } from "../src/settings";
 
 // 모듈 스코프 상태와 구독자 집합은 검사 사이에 샙니다. 둘 다 되돌립니다 —
 // 구독자를 안 걷으면 뒤 검사의 `setHourFormat`이 앞 검사의 스파이를 부릅니다.
 const started: Array<() => void> = [];
 const track = (listener: () => void) => { const stop = subscribeHourFormat(listener); started.push(stop); return stop; };
 
+const trackRows = (listener: () => void) => { const stop = subscribeWheelRowsPerSide(listener); started.push(stop); return stop; };
+
 afterEach(() => {
   while (started.length) started.pop()!();
   setHourFormat("24");
+  setWheelRowsPerSide(1);
 });
 
 describe("hourFormat 전역 설정", () => {
@@ -69,5 +72,47 @@ describe("hourFormat 전역 설정", () => {
     track(other);
     try { setHourFormat("12"); } catch { /* 위 검사가 따로 봅니다 */ }
     expect(other).toHaveBeenCalledTimes(1);
+  });
+});
+
+/* 오너 리포트 6번 — 휠에 위아래로 보이는 행 수(2026-08-13 오너 결정).
+ * "설정 페이지에 넣고 사용자가 커스터마이징 할 수 있게. **기본은 1. 최대 4개.**"
+ *
+ * `hourFormat`과 같은 자리에 삽니다 — 한 화면에서 픽커마다 행 수가 다른 것은 설정이
+ * 아니라 사고이고, 사용자가 자기 앱 전체에 대해 한 번 고르는 값입니다. */
+describe("wheelRowsPerSide 전역 설정", () => {
+  it("기본값은 1이다 — 오너 결정", () => {
+    expect(getWheelRowsPerSide()).toBe(1);
+  });
+
+  it("1부터 4까지 받는다", () => {
+    for (const rows of [1, 2, 3, 4] as const) {
+      setWheelRowsPerSide(rows);
+      expect(getWheelRowsPerSide()).toBe(rows);
+    }
+  });
+
+  it("구독자가 바뀔 때 알림을 받는다", () => {
+    const seen = vi.fn();
+    trackRows(seen);
+    setWheelRowsPerSide(3);
+    expect(seen).toHaveBeenCalledTimes(1);
+  });
+
+  it("같은 값으로 다시 넣으면 구독자를 안 부른다", () => {
+    const seen = vi.fn();
+    trackRows(seen);
+    setWheelRowsPerSide(1);
+    expect(seen).not.toHaveBeenCalled();
+  });
+
+  it("hourFormat과 서로 간섭하지 않는다 — 구독이 갈라져 있다", () => {
+    const rowsSeen = vi.fn();
+    const hourSeen = vi.fn();
+    trackRows(rowsSeen);
+    track(hourSeen);
+    setWheelRowsPerSide(4);
+    expect(rowsSeen).toHaveBeenCalledTimes(1);
+    expect(hourSeen).not.toHaveBeenCalled();
   });
 });

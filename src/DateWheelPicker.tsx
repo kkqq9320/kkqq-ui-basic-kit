@@ -10,7 +10,7 @@
  *     절대 다른 컬럼으로 자리올림하지 않습니다
  *   · 데스크톱 휠·화살표는 커서가 있는 컬럼만, 모바일 스와이프·키보드는 활성 컬럼만
  */
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
 import { createPortal } from "react-dom";
 
 import {
@@ -23,7 +23,7 @@ import {
   type HourDisplay,
   type WheelUnit,
 } from "./model/instant";
-import { getHourFormat, subscribeHourFormat } from "./settings";
+import { getHourFormat, getWheelRowsPerSide, subscribeHourFormat, subscribeWheelRowsPerSide } from "./settings";
 import { useBackToClose, useEscapeToClose } from "./hooks";
 import { dropdownViewportSpace, focusTriggerOnClick, isPrimaryButton, onViewportChange } from "./positioning";
 
@@ -124,7 +124,18 @@ export const DEFAULT_DATE_WHEEL_LABELS: DateWheelLabels = {
  *  오너가 그 값을 알고 고른 것이라 그대로 둡니다. 바꾸려면 여기 하나만 고치면 됩니다. */
 const DATE_WHEEL_HOLD_MS = 2000;
 
-const DATE_WHEEL_OFFSETS = [-3, -2, -1, 0, 1, 2, 3];
+/** 그릴 행 오프셋. **바깥 한 줄씩은 보이지 않는 프리로드**이고 나머지가 화면에 뜹니다
+ *  (오너 리포트 6번: 위아래 몇 줄을 보여 줄지가 이제 킷 전역 설정입니다).
+ *
+ *  🔧 **행 수를 설정으로 열면서 기하가 오히려 단순해졌습니다.** 실험 단계에서는 행이 늘
+ *  일곱이고 창 높이만 줄여서 정지 위치를 −30px에서 −60px로 옮겨야 했는데, 이제 행 수
+ *  자체가 `2n+3`으로 따라오므로 **선택 행이 언제나 위에서 `n+1`번째**이고 정지 위치는
+ *  `n`이 무엇이든 **항상 −30px**입니다. n=1에서는 DOM 행도 일곱에서 다섯으로 줄어듭니다.
+ *  프리로드 판정(`aria-hidden`)도 같은 수에서 나오므로 따로 어긋날 자리가 없습니다. */
+function wheelOffsets(rowsPerSide: number): number[] {
+  const span = rowsPerSide + 1;
+  return Array.from({ length: span * 2 + 1 }, (_, index) => index - span);
+}
 /**
  * 열의 휠 이동 모션. **필드 셋이 서로 다른 것을 몰고 있고, 그게 요점입니다.**
  *
@@ -296,6 +307,12 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 세 번째 인자(서버 스냅샷)도 같은 함수입니다 — 이 값은 서버·클라이언트가 다르지
    * 않습니다(지속성이 없으므로 언제나 기본 `"24"`에서 시작합니다). */
   const hourFormat = useSyncExternalStore(subscribeHourFormat, getHourFormat, getHourFormat);
+  /* 위아래로 보이는 행 수도 킷 전역 설정입니다(오너 리포트 6번) — 한 화면에서 픽커마다
+   * 행 수가 다른 것은 설정이 아니라 사고입니다. 🔴 **기본 1은 오너가 실기기에서 정한
+   * 것이고, "새 축은 기본값이 지금과 같음"(PRINCIPLES §14)을 의도적으로 깬 자리입니다** —
+   * 핀을 올리는 소비자는 다른 휠을 봅니다. */
+  const rowsPerSide = useSyncExternalStore(subscribeWheelRowsPerSide, getWheelRowsPerSide, getWheelRowsPerSide);
+  const offsets = useMemo(() => wheelOffsets(rowsPerSide), [rowsPerSide]);
   // 모델은 전역 설정을 안 읽습니다(`src/model/instant.ts`는 아무것도 import 하지
   // 않는 것이 계약입니다) — 기계가 읽어서 인자로 내려보냅니다. 매 렌더 새 객체를
   // 만들면 모델 호출이 달라 보이므로 묶습니다.
@@ -1845,7 +1862,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
           })}
         </div>
       )}
-      <div className="date-wheel-columns" data-fields={columns.length}>
+      <div className="date-wheel-columns" data-fields={columns.length} style={{ "--date-wheel-rows": rowsPerSide } as CSSProperties}>
         {/* 열은 **포커스를 받지 않고 키도 받지 않습니다**(설계 스펙 §5·§6.2) — `tabIndex`가
             없고 `onKeyDown`도 없습니다. 활성 표시는 `resolvedActiveUnit`이 붙이는 `.active`
             클래스 하나로만 그려집니다. css/date-picker.css의 `.date-wheel-column:focus-visible`
@@ -1859,7 +1876,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
               컨테이너의 key가 바뀌어 행이 통째로 리마운트되므로 포커스를 둘 수도 없습니다. */}
-          <div className="date-wheel-viewport"><div className="date-wheel-values" key={`${unit}-${motion.sequence}`}>{DATE_WHEEL_OFFSETS.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === 3; const buffered = offset === 0 && resolvedTyping?.unit === unit ? resolvedTyping.digits : null; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={() => rowValue && applyShift(unit, offset)} key={offset}>{buffered ?? (rowValue ? model.label(rowValue, unit, labels.weekdays, fields, hourDisplay) : "—")}</button>; })}</div></div>
+          <div className="date-wheel-viewport"><div className="date-wheel-values" key={`${unit}-${motion.sequence}`}>{offsets.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === rowsPerSide + 1; const buffered = offset === 0 && resolvedTyping?.unit === unit ? resolvedTyping.digits : null; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={() => rowValue && applyShift(unit, offset)} key={offset}>{buffered ?? (rowValue ? model.label(rowValue, unit, labels.weekdays, fields, hourDisplay) : "—")}</button>; })}</div></div>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.next}`} disabled={!shifted(unit, 1)} onClick={() => applyShift(unit, 1)}><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></button>
         </section>; })}
       </div>

@@ -50,6 +50,9 @@ import {
   getHourFormat,
   setHourFormat,
   subscribeHourFormat,
+  getWheelRowsPerSide,
+  setWheelRowsPerSide,
+  subscribeWheelRowsPerSide,
 } from "../src";
 
 /** 사이드바 토글의 **앱** 기본 조합. 킷의 기본은 여전히 `null`입니다(단축키 설계 스펙
@@ -605,7 +608,7 @@ function Demo() {
   const [foldSixColumns, setFoldSixColumns] = useState(false);
   /* 오너 리포트 6번 — 휠에 보이는 행을 위아래 2개씩(기본) / 1개씩으로 갈아 끼웁니다.
    * 킷이 토큰 둘로 묶어 둬서 demo.css가 그 둘만 덮어씁니다. 실기기에서 고릅니다. */
-  const [oneRowEachSide, setOneRowEachSide] = useState(false);
+  const wheelRows = useSyncExternalStore(subscribeWheelRowsPerSide, getWheelRowsPerSide, getWheelRowsPerSide);
   /* 12시간제는 **킷 전역 설정**이라 `useState`로 들고 있으면 안 됩니다(설계 스펙 §11) —
    * 값은 킷 안에 있고 데모는 **구독해서 읽습니다.** 로컬 상태로 흉내 내면 이 화면의
    * 다른 픽커들이 안 따라오는데, 그러면 조작판이 화면과 다른 말을 하는 이 저장소의
@@ -672,11 +675,7 @@ function Demo() {
     return () => document.body.classList.remove("date-wheel-fold-demo");
   }, [foldSixColumns]);
 
-  // 6번 토글도 같은 이유로 body 클래스입니다(팝오버가 body 포털).
-  useEffect(() => {
-    document.body.classList.toggle("date-wheel-rows-1", oneRowEachSide);
-    return () => document.body.classList.remove("date-wheel-rows-1");
-  }, [oneRowEachSide]);
+  // 6번은 이제 데모 CSS 흉내가 아니라 **킷 전역 설정**이라, body 클래스가 필요 없습니다.
 
   // 1초씩 세다 마지막 칸에서 `disabled`를 켭니다. **버튼을 바로 토글하면 안 됩니다** —
   // `DateWheelPicker.tsx:659-665`가 바깥 `pointerdown`에 팝오버를 닫으므로, 누르는 순간
@@ -839,25 +838,39 @@ function Demo() {
                 <label>날짜+시각 (fields)<DateWheelPicker ariaLabel="약속 시각" value={meetingAt} onChange={(next) => { logTraceNote(`약속 시각 onChange → ${next}`); setMeetingAt(next); }} fields={["year", "month", "day", "hour", "minute"]} /></label>
                 <label>초까지 — 6열 (fields)<DateWheelPicker ariaLabel="초까지 예약 시각" value={loggedAt} onChange={(next) => { logTraceNote(`초까지 예약 시각 onChange → ${next}`); setLoggedAt(next); }} fields={["year", "month", "day", "hour", "minute", "second"]} /></label>
               </FieldGrid>
-              <div className="button-row" style={{ marginTop: 16 }}>
-                <button type="button" className="secondary-button" aria-pressed={foldSixColumns} onClick={() => setFoldSixColumns((value) => !value)}>
-                  {foldSixColumns ? "6열 — 두 줄로 접음 (다시 눌러 한 줄로)" : "6열 — 한 줄 유지 (기본, 눌러서 두 줄과 비교)"}
-                </button>
-                {/* 3단계 — 12시간제(설계 스펙 §7·§11). **인스턴스 prop이 아니라 킷 전역
-                    설정**이라, 이 버튼 하나가 이 화면의 시각 픽커 셋을 전부 바꿉니다.
-                    그게 눈에 보이는 것이 이 토글의 값어치입니다: 하나만 바뀌면 구독이
-                    안 도는 것입니다. */}
-                <button type="button" className="secondary-button" aria-pressed={hourFormat === "12"} onClick={() => setHourFormat(hourFormat === "12" ? "24" : "12")}>
-                  {hourFormat === "12" ? "12시간제 — 오후 03 (다시 눌러 24시간제)" : "24시간제 — 15 (기본, 눌러서 12시간제와 비교)"}
-                </button>
-                {/* 오너 리포트 6번 — 실기기에서 고릅니다. */}
-                <button type="button" className="secondary-button" aria-pressed={oneRowEachSide} onClick={() => setOneRowEachSide((value) => !value)}>
-                  {oneRowEachSide ? "휠 행 — 위아래 1개씩 (다시 눌러 2개씩)" : "휠 행 — 위아래 2개씩 (기본, 눌러서 1개씩과 비교)"}
-                </button>
+              {/* 🔴 **설정 줄 모양입니다. 문장이 적힌 토글이 아닙니다**(오너 리포트
+                  2026-08-13 2차: "설정 정의하는 버튼 크기가 작아서 글자들이 다 중복돼서
+                  알아볼 수가 없어"). 폰 폭에서 버튼 하나에 문장을 넣으면 줄이 겹칩니다 —
+                  라벨은 왼쪽에 두고 버튼에는 **값만** 넣습니다. 이 셋은 전부 킷 전역
+                  설정이라, 앱의 설정 화면이 실제로 이 모양이 됩니다. */}
+              <div className="demo-settings" style={{ marginTop: 16 }}>
+                <div className="demo-setting-row">
+                  <span>시간 표기</span>
+                  <div className="demo-setting-choices">
+                    {(["24", "12"] as const).map((format) => (
+                      <button type="button" key={format} className="secondary-button" aria-pressed={hourFormat === format} onClick={() => setHourFormat(format)}>{format}시간</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="demo-setting-row">
+                  <span>휠에 보이는 줄 (위아래 각)</span>
+                  <div className="demo-setting-choices">
+                    {([1, 2, 3, 4] as const).map((rows) => (
+                      <button type="button" key={rows} className="secondary-button" aria-pressed={wheelRows === rows} onClick={() => setWheelRowsPerSide(rows)}>{rows}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="demo-setting-row">
+                  <span>6열 배치</span>
+                  <div className="demo-setting-choices">
+                    <button type="button" className="secondary-button" aria-pressed={!foldSixColumns} onClick={() => setFoldSixColumns(false)}>한 줄</button>
+                    <button type="button" className="secondary-button" aria-pressed={foldSixColumns} onClick={() => setFoldSixColumns(true)}>두 줄</button>
+                  </div>
+                </div>
               </div>
               <p className="muted-copy" style={{ marginTop: 8 }}>
                 <strong>실기기 미확인 — 12시간제에서 볼 것 셋</strong>(설계 스펙 §14).
-                위 토글을 켜고 <strong>“날짜+시각”</strong> 픽커를 여세요.
+                위 <strong>시간 표기</strong>를 12시간으로 두고 <strong>“날짜+시각”</strong> 픽커를 여세요.
                 ① <strong>시 열의 폭</strong> — 라벨이 <code>오후 03</code>으로 다섯 글자가
                 되어 열이 좁으면 잘립니다. ② <strong>오전/오후 버튼의 크기와 자리</strong> —
                 열 바로 위에 두 칸으로 있습니다(하단 <code>오늘·비우기·완료</code> 줄과
@@ -870,7 +883,7 @@ function Demo() {
                 <strong>실기기 미확인</strong> — 설계 스펙 §16 미결 1번(6열을 폰에서 한 줄로
                 둘지, 날짜 줄·시각 줄 두 줄로 접을지). 열당 약 50px이라 스와이프 대상이
                 얼마나 좁아지는지가 판단 근거인데 에뮬레이션으로는 알 수 없는 종류라서
-                강제로 정하지 않았습니다. 위 “초까지” 픽커를 폰에서 열고 토글로 두 모양을
+                강제로 정하지 않았습니다. 위 “초까지” 픽커를 폰에서 열고 <strong>6열 배치</strong>로 두 모양을
                 비교해 주세요.
               </p>
               <p className="muted-copy" style={{ marginTop: 4 }}>
