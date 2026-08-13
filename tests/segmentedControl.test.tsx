@@ -113,7 +113,7 @@ describe("SegmentedControl — 라디오 그룹", () => {
    * 그래서 검사도 "강조색이 없어야 한다"가 아니라 **"바탕에 강조색이 없어야 한다"**입니다. */
   it("고른 칸은 바탕이 중립색이고 글자만 강조색이다", () => {
     const chipRule = /\.segmented > button\[aria-checked="true"\] \{[^}]*\}/.exec(segmentedCssSource)?.[0] ?? "(칩 규칙이 없다)";
-    expect(chipRule).toContain("background: var(--surface);");
+    expect(chipRule).toContain("background: var(--segmented-chip);");
     expect(chipRule).toContain("color: var(--accent-text);");
   });
 
@@ -140,16 +140,53 @@ describe("SegmentedControl — 라디오 그룹", () => {
       return at < 0 ? null : body.slice(at + name.length + 1, body.indexOf(";", at)).trim();
     };
     for (const block of [":root {", '[data-theme="dark"] {']) {
-      const track = value(block, "--bg");
-      const chip = value(block, "--surface");
+      const track = value(block, "--segmented-track");
+      const chip = value(block, "--segmented-chip");
       expect(track).toMatch(/^#[0-9a-f]{6}$/);   // 전제 — 못 읽으면 아래가 공허합니다
       expect(chip).toMatch(/^#[0-9a-f]{6}$/);
       expect(luminance(chip!)).toBeGreaterThan(luminance(track!));
+      // 순서만으로는 1단계 차이도 통과합니다 — 뜬 느낌이 나려면 실제로 떨어져 있어야 합니다.
+      const step = (hex: string) => parseInt(hex.slice(1, 3), 16);
+      expect(step(chip!) - step(track!)).toBeGreaterThanOrEqual(12);
+    }
+  });
+
+  /* 🔴 **칩 위 글자 대비를 여기서 다시 잽니다 — 이 검사는 한 번 사라졌다가 돌아왔습니다.**
+   * 앞 라운드에 줄 범위로 검사 블록을 갈아 끼우면서 **같이 지워졌고**, 그 사실을 이번에
+   * 색을 바꾸다가 알았습니다. 없는 동안 칩 색이 두 번 바뀌었으니, 그대로였으면 대비가
+   * 조용히 깎인 채 나갔을 것입니다.
+   *
+   * ⚠️ **대비는 칩 위에서** 재야 합니다. 칩이 밝아지면 같은 글자색이 못 쓰게 됩니다 —
+   * 실제로 앞 판의 `#8489e6`이 칩이 밝아지면서 **3.50**까지 떨어졌고, 그래서 이번에
+   * `--accent-text`의 다크 값을 다시 골랐습니다. **칩 색을 바꾸면 이 검사가 잡습니다.** */
+  it("고른 칸 글자가 칩 위에서 두 테마 모두 AA를 넘는다", () => {
+    const luminance = (hex: string) => {
+      const channels = [1, 3, 5]
+        .map((index) => parseInt(hex.slice(index, index + 2), 16) / 255)
+        .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+      return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+    };
+    const value = (block: string, name: string) => {
+      const blockStart = tokensCssSource.indexOf(block);
+      const body = tokensCssSource.slice(blockStart, tokensCssSource.indexOf("}", blockStart));
+      const at = body.indexOf(name + ":");
+      return at < 0 ? null : body.slice(at + name.length + 1, body.indexOf(";", at)).trim();
+    };
+    const contrast = (a: string, b: string) => {
+      const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+      return (high + 0.05) / (low + 0.05);
+    };
+    for (const block of [":root {", '[data-theme="dark"] {']) {
+      const text = value(block, "--accent-text");
+      const chip = value(block, "--segmented-chip");
+      expect(text).toMatch(/^#[0-9a-f]{6}$/);   // 전제 — 못 읽으면 아래가 공허합니다
+      expect(chip).toMatch(/^#[0-9a-f]{6}$/);
+      expect(contrast(text!, chip!)).toBeGreaterThanOrEqual(4.5);
     }
   });
 
   it("트랙은 바닥색이고 칩은 면색이다 — 그 쌍이라야 두 테마가 같이 맞는다", () => {
-    expect(segmentedCssSource).toContain("background: var(--bg); }");
+    expect(segmentedCssSource).toContain("background: var(--segmented-track); }");
   });
 
   it("테마별 그림자 예외가 없다 — 관계가 안 뒤집히므로 필요 없다", () => {
