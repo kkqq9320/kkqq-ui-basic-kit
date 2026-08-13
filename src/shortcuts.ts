@@ -183,9 +183,40 @@ export function sidebarToggleAction(onFire: () => void, options: SidebarToggleAc
   return { id: SIDEBAR_TOGGLE_ID, label, defaultCombo, onFire };
 }
 
+/** IME가 조합 중에 **자기 몫으로** 보내는 keydown인가(규칙 8, 스펙 §2.5).
+ *
+ * **실측(2026-08-13, Windows Chrome, 한글 IME).** 조합 중에 `Ctrl+\`를 **한 번** 누르면
+ * keydown이 **둘** 옵니다 — 같은 `code`, 같은 수식어:
+ *
+ * ```
+ * keydown key="Process" code=Backslash keyCode=229  mods=Ctrl  ime=Y   → 처리됨=Y
+ * keydown key="\"       code=Backslash keyCode=220  mods=Ctrl  ime=N   → 처리됨=Y
+ * ```
+ *
+ * 규칙 8이 없으면 **둘 다 발사되어 액션이 두 번 돕니다.** 사이드바 토글은 접혔다 펴져
+ * **아무 일도 안 한 것처럼** 보이고, 페이지 이동이라면 두 번 이동합니다. 같은 캡처의
+ * 대조군이 이것을 못박습니다 — 조합이 아닐 때는 누를 때마다 `처리됨=Y`가 **하나씩**입니다.
+ *
+ * 그리고 규칙 6이 IME 자신의 이벤트까지 `preventDefault`하면 **조합 중인 커서가
+ * 튑니다**(오너 관측: 입력 커서가 맨 왼쪽으로). 여기서 걸러 내면 그 이벤트는 손대지
+ * 않고 지나갑니다.
+ *
+ * **`keyCode === 229`도 같이 봅니다.** `isComposing`만으로는 부족한 자리가 있습니다 —
+ * 안드로이드 소프트 키보드는 조합 중에 `key="Unidentified"`·`keyCode=229`로 보내고
+ * (`demo/eventTrace.ts`가 그 이유를 적어 둔 자리), 위 캡처에서도 **조합을 여는 첫
+ * keydown은 `isComposing`이 아직 `false`**였습니다.
+ *
+ * ⚠️ **맨 키는 이 규칙이 지키는 게 아닙니다.** 조합은 텍스트 입력에 포커스가 있을 때만
+ * 일어나므로 맨 키는 **규칙 4**가 막습니다 — 위 캡처에서 조합을 여는 `ㄱ`이
+ * `ime=N`인데도 안 걸린 것이 그 증거입니다. 규칙 8이 닫는 것은 **수식어 조합**뿐입니다. */
+function isImeEvent(event: KeyboardEvent): boolean {
+  return event.isComposing || event.keyCode === 229;
+}
+
 export function shouldTrigger(event: KeyboardEvent): boolean {
   if (isRecording()) return false;                      // 스펙 §6.1
   if (event.repeat) return false;                       // 눌러 둔 키가 액션을 반복하지 않게
+  if (isImeEvent(event)) return false;                  // 규칙 8 — 스펙 §2.5
   if (event.defaultPrevented) return false;             // 규칙 1
   const combo = comboFromEvent(event);
   const active = document.activeElement;

@@ -32,6 +32,38 @@ function keydown(init: KeyboardEventInit & { code: string }): KeyboardEvent {
   return new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
 }
 
+/* 규칙 8(스펙 §2.5). **실측에서 나온 규칙입니다** — 2026-08-13 Windows Chrome 한글 IME
+ * 캡처에서, 조합 중에 `Ctrl+\`를 한 번 누르면 keydown이 **둘** 왔습니다(같은 `code`,
+ * 같은 수식어, 하나는 `keyCode=229`/`isComposing=true`). 규칙 8이 없으면 둘 다
+ * 발사되어 액션이 두 번 돕니다. */
+describe("규칙 8 — IME가 자기 몫으로 보내는 keydown은 트리거하지 않는다", () => {
+  it("isComposing이면 안 한다", () => {
+    expect(shouldTrigger(keydown({ code: "Backslash", ctrlKey: true, isComposing: true }))).toBe(false);
+  });
+
+  // 대조군 — 이게 없으면 "언제나 false"인 구현으로도 통과합니다.
+  it("같은 조합이 조합 중이 아니면 한다", () => {
+    expect(shouldTrigger(keydown({ code: "Backslash", ctrlKey: true }))).toBe(true);
+  });
+
+  /* `isComposing`만으로는 부족합니다 — 안드로이드 소프트 키보드는 조합 중에
+   * `keyCode=229`로 보내고, 위 캡처에서도 **조합을 여는 첫 keydown은 `isComposing`이
+   * 아직 false**였습니다. `keyCode`는 `KeyboardEventInit`에 없어 따로 심습니다. */
+  it("keyCode 229면 isComposing이 거짓이어도 안 한다", () => {
+    const event = keydown({ code: "Backslash", ctrlKey: true });
+    Object.defineProperty(event, "keyCode", { value: 229 });
+    expect(event.isComposing).toBe(false);   // 전제 — isComposing이 아니라 keyCode가 잡는 것
+    expect(shouldTrigger(event)).toBe(false);
+  });
+
+  // 대조군 — 평범한 keyCode는 통과해야 합니다(229만 걸러야지 전부 걸면 안 됩니다).
+  it("keyCode가 229가 아니면 한다", () => {
+    const event = keydown({ code: "Backslash", ctrlKey: true });
+    Object.defineProperty(event, "keyCode", { value: 220 });
+    expect(shouldTrigger(event)).toBe(true);
+  });
+});
+
 describe("규칙 1 — 컨트롤이 처리했으면 트리거하지 않는다", () => {
   it("defaultPrevented면 안 한다", () => {
     const event = keydown({ code: "KeyK", ctrlKey: true });
