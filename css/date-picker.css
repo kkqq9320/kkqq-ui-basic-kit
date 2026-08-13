@@ -149,7 +149,28 @@
  *
  * ⚠️ **크기·위치는 실기기 확인 항목입니다**(스펙 §14의 셋째). 지금 값은 하단 줄의
  * 높이 토큰을 그대로 빌려 온 것이고, 폰에서 엄지로 눌러 보고 정해야 합니다. */
-.date-wheel-meridiem { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 0 0 8px; }
+/* 🔴 **오전/오후 줄은 시각 열 블록과 정확히 같은 자리에서 시작하고 끝납니다**
+ * (오너 리포트 3차 2026-08-13: "오전 오후 시작과 끝이랑 안 맞아서 깨진 듯한 느낌").
+ *
+ * 전에는 팝오버 폭을 통째로 반으로 갈랐습니다. 그러면 그 **가운데 경계선이 아래 열
+ * 어디에도 대응하지 않는 자리**에 떨어져서, 두 격자가 어긋난 것처럼 보입니다.
+ * 이제 시 열이 시작하는 트랙에서 시작해 마지막 열에서 끝나므로, 오전/오후가 **시각
+ * 블록의 머리말**로 읽힙니다 — 스펙 §7의 "위치는 시 열 근처"가 원래 뜻하던 것입니다.
+ *
+ * 계산은 순수 calc입니다. `repeat()`의 **개수**에는 var()를 못 쓰지만(이 파일이 이미
+ * 한 번 밟은 자리), 트랙 **폭**은 calc으로 그대로 나옵니다:
+ *   트랙 = (100% − (열수−1)×간격) / 열수,  왼쪽 = 시각시작인덱스 × (트랙 + 간격)
+ * 시각 전용 픽커면 `--date-wheel-time-start`가 0이라 왼쪽 여백이 0입니다. */
+.date-wheel-meridiem {
+  --date-wheel-col-gap: 6px;
+  --date-wheel-track: calc((100% - (var(--date-wheel-fields, 1) - 1) * var(--date-wheel-col-gap)) / var(--date-wheel-fields, 1));
+  /* 트랙 시작에 **시 열의 경계 여백까지** 더해야 눈에 보이는 상자와 정확히 맞습니다
+   * (트랙은 528에서 시작하지만 시 열 상자는 8px 안쪽인 536에서 시작합니다 — 실측).
+   * CSS에 조건문이 없어서 `min(시작인덱스, 1)`로 0/1을 만듭니다: 시각 전용이면 시작
+   * 인덱스가 0이라 여백도 0이고, 날짜가 앞에 있으면 정확히 한 번 더해집니다. */
+  margin-left: calc(var(--date-wheel-time-start, 0) * (var(--date-wheel-track) + var(--date-wheel-col-gap)) + min(var(--date-wheel-time-start, 0), 1) * 8px);
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--date-wheel-col-gap); padding: 0 0 8px;
+}
 .date-wheel-meridiem button { height: var(--compact-action-height); display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: var(--surface); font-size: var(--action-font-size); font-weight: 700; }
 /* 눌린 절반은 **열의 선택된 행과 같은 언어**로 말합니다 — 이 줄이 값의 일부라는 것을
  * 화면이 그렇게 말합니다(확정 버튼의 `.primary`와 같은 강조를 쓰면 "누르면 확정된다"로
@@ -267,14 +288,17 @@
  *
  * 자리는 왼쪽 간격 한가운데입니다 — 그래서 `left`가 `calc(간격/-2)`이고, 그 간격을
  * 만들려고 시각 열에 `margin-left`를 줍니다(간격이 없으면 놓을 자리도 없습니다). */
-.date-wheel-column:is([data-unit="minute"], [data-unit="second"]) { margin-left: 11px; }
+/* ⚠️ **여백은 6열에서 통째로 열 폭에서 나옵니다.** 오너: "열이 너무 좁아져서 보기
+ * 불편한데? 너무 답답한 느낌이야." 그래서 `:`가 읽힐 만큼만 벌리고 더는 안 씁니다 —
+ * 기본 간격 6px에 6px을 더해 12px, `:`(폭 6px)가 그 한가운데입니다. */
+.date-wheel-column:is([data-unit="minute"], [data-unit="second"]) { margin-left: 6px; }
 .date-wheel-column:is([data-unit="minute"], [data-unit="second"])::before {
   content: ":"; position: absolute; z-index: 1; left: -9px; top: calc(30px + var(--date-wheel-rows-h) / 2);
   transform: translateY(-50%); width: 6px; text-align: center; color: var(--muted); font-size: var(--font-size-control); font-weight: 700; line-height: 1; pointer-events: none;
 }
 /* 날짜 묶음 → 시각 묶음 경계. 시 열 앞에만 붙으므로, 시각 전용 픽커(첫 열이 시)에서는
  * 앞에 날짜 열이 없어 그냥 왼쪽 여백이 됩니다 — 그건 원하지 않으므로 첫 열은 뺍니다. */
-.date-wheel-column[data-unit="hour"]:not(:first-child) { margin-left: 10px; }
+.date-wheel-column[data-unit="hour"]:not(:first-child) { margin-left: 8px; }
 
 .date-wheel-viewport { width: 100%; height: var(--date-wheel-rows-h); overflow: hidden; border-top: 1px solid color-mix(in srgb, var(--line) 68%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--line) 68%, transparent); }
 .date-wheel-values { width: 100%; height: calc((var(--date-wheel-rows, 1) * 2 + 3) * 30px); display: grid; grid-auto-rows: 30px; overflow: hidden; transform: translateY(calc(var(--date-wheel-rest) + var(--date-wheel-drag-offset, 0px))); transform-origin: 50% 50%; transition: transform 110ms cubic-bezier(.22, .8, .3, 1); will-change: transform, opacity; }
