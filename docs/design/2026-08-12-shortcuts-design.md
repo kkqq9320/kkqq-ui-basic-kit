@@ -113,7 +113,8 @@
 ### 2.1 규칙 1이 성립하는 근거는 실측입니다
 
 킷의 키 소비자 전수(`src/` 여덟 곳, 2026-08-12 측정 + 전체 리뷰로 2026-08-13에
-`ShortcutProvider`·`ShortcutSettings` 두 곳을 더함):
+`ShortcutProvider`·`ShortcutSettings` 두 곳을 더함. 2026-08-13에 `SegmentedControl`이 늘었고,
+**규칙 1이 성립하는 쪽**입니다 — 처리한 키마다 `preventDefault`를 부르고 Ctrl·Meta·Alt는 전부 양보합니다):
 
 | 소비자 | 부착 자리 | 범위 | Ctrl/Meta 조합 | `preventDefault` |
 |---|---|---|---|---|
@@ -125,6 +126,7 @@
 | `PageChrome` `closeOnEscape` (`:183`) | 1 | `<details>`, document | — | **안 부름** |
 | `ShortcutProvider` `handleKeyDown` (`:67`) | 1 | 마운트 내내, document, **버블** | 바인딩되면 소비, 그 외엔 무시 — `Escape`·`Tab`(`Shift+Tab` 포함)은 `bindingOf`가 드롭해 애초에 바인딩 자체가 안 됨(§6.2, 전체 리뷰 Important 2) | 트리거된 것만 부름(규칙 6) — 소비하면서 안 부르는 경우 없음 |
 | `ShortcutSettings` 녹음기 `handleKeyDown` (`:40`) | 1 | 녹음 중만, document, **캡처** | 전부 소비(녹음 대상) | **조건부** — `Escape`·`Tab`만 의도적으로 안 부름(§6.2), 그 외엔 부름 |
+| `SegmentedControl` `onKeyDown` | 1 | 포커스(묶음 안) | **전부 양보** — Ctrl·Meta·Alt가 눌리면 즉시 반환 | 처리한 분기(`←`·`→`·`↑`·`↓`·`Home`·`End`)마다 부름 |
 
 **'부착 자리' 열의 단위는 `tests/keyConsumers.test.ts`의 `KNOWN_CONSUMERS`와 같습니다**
 — `addEventListener("keydown", …)`·`onKeyDown={…}`이 나온 자리 수(파일별)입니다.

@@ -53,6 +53,7 @@ import {
   getWheelRowsPerSide,
   setWheelRowsPerSide,
   subscribeWheelRowsPerSide,
+  SegmentedControl,
 } from "../src";
 
 /** 사이드바 토글의 **앱** 기본 조합. 킷의 기본은 여전히 `null`입니다(단축키 설계 스펙
@@ -614,7 +615,7 @@ function Demo() {
   const [isolate, setIsolate] = useState(false);
   /* ON(선택됨) 모양 시안 셋 — 오너가 실기기에서 고릅니다. 킷 기본값은 "반전"이고
    * 나머지 둘은 demo.css가 덮습니다. 정해지면 킷 규칙 하나만 바꾸고 이 실험은 지웁니다. */
-  const [onStyle, setOnStyle] = useState<"invert" | "outline" | "segment">("invert");
+
   /* 12시간제는 **킷 전역 설정**이라 `useState`로 들고 있으면 안 됩니다(설계 스펙 §11) —
    * 값은 킷 안에 있고 데모는 **구독해서 읽습니다.** 로컬 상태로 흉내 내면 이 화면의
    * 다른 픽커들이 안 따라오는데, 그러면 조작판이 화면과 다른 말을 하는 이 저장소의
@@ -688,11 +689,7 @@ function Demo() {
     return () => document.body.classList.remove("demo-isolate");
   }, [isolate]);
 
-  useEffect(() => {
-    document.body.classList.toggle("on-style-outline", onStyle === "outline");
-    document.body.classList.toggle("on-style-segment", onStyle === "segment");
-    return () => document.body.classList.remove("on-style-outline", "on-style-segment");
-  }, [onStyle]);
+
 
   // 1초씩 세다 마지막 칸에서 `disabled`를 켭니다. **버튼을 바로 토글하면 안 됩니다** —
   // `DateWheelPicker.tsx:659-665`가 바깥 `pointerdown`에 팝오버를 닫으므로, 누르는 순간
@@ -861,46 +858,29 @@ function Demo() {
                   라벨은 왼쪽에 두고 버튼에는 **값만** 넣습니다. 이 셋은 전부 킷 전역
                   설정이라, 앱의 설정 화면이 실제로 이 모양이 됩니다. */}
               <div className="demo-settings" style={{ marginTop: 16 }}>
+                {/* 🔴 **데모가 더 이상 손으로 안 그립니다** — 오너 질문("이건 왜 모듈화
+                    안 돼 있는 것 같지?")의 답이 이것입니다. 값 하나를 몇 개 중에서 고르는
+                    묶음은 이제 킷 컴포넌트(`SegmentedControl`)이고, 접근성(라디오 그룹 ·
+                    roving tabindex · 화살표)도 거기 들어 있습니다. */}
                 <div className="demo-setting-row">
                   <span>시간 표기</span>
-                  <div className="demo-setting-choices">
-                    {(["24", "12"] as const).map((format) => (
-                      <button type="button" key={format} className="secondary-button" aria-pressed={hourFormat === format} onClick={() => setHourFormat(format)}>{format}시간</button>
-                    ))}
-                  </div>
+                  <SegmentedControl ariaLabel="시간 표기" value={hourFormat} onChange={setHourFormat}
+                    options={[{ value: "24", label: "24시간" }, { value: "12", label: "12시간" }]} />
                 </div>
                 <div className="demo-setting-row">
                   <span>휠에 보이는 줄 (위아래 각)</span>
-                  <div className="demo-setting-choices">
-                    {([1, 2, 3, 4] as const).map((rows) => (
-                      <button type="button" key={rows} className="secondary-button" aria-pressed={wheelRows === rows} onClick={() => setWheelRowsPerSide(rows)}>{rows}</button>
-                    ))}
-                  </div>
-                </div>
-                {/* 🔴 이 줄 자체가 시안입니다 — 위 세 줄의 ON 버튼이 같이 바뀝니다.
-                    "저장/완료" 같은 강조 버튼과 나란히 놓고 보셔야 하므로, 아래 팝오버를
-                    열어 `완료`(강조색 채움)와 함께 비교해 주세요. */}
-                <div className="demo-setting-row">
-                  <span>ON 버튼 모양 (시안)</span>
-                  <div className="demo-setting-choices">
-                    {([["invert", "반전"], ["outline", "테두리"], ["segment", "세그먼트"]] as const).map(([value, label]) => (
-                      <button type="button" key={value} className="secondary-button" aria-pressed={onStyle === value} onClick={() => setOnStyle(value)}>{label}</button>
-                    ))}
-                  </div>
+                  <SegmentedControl ariaLabel="휠에 보이는 줄" value={String(wheelRows)} onChange={(next) => setWheelRowsPerSide(Number(next) as 1 | 2 | 3 | 4)}
+                    options={[{ value: "1", label: "1" }, { value: "2", label: "2" }, { value: "3", label: "3" }, { value: "4", label: "4" }]} />
                 </div>
                 <div className="demo-setting-row">
                   <span>성능 격리 (다른 패널 감추기)</span>
-                  <div className="demo-setting-choices">
-                    <button type="button" className="secondary-button" aria-pressed={!isolate} onClick={() => setIsolate(false)}>끔</button>
-                    <button type="button" className="secondary-button" aria-pressed={isolate} onClick={() => setIsolate(true)}>켬</button>
-                  </div>
+                  <SegmentedControl ariaLabel="성능 격리" value={isolate ? "on" : "off"} onChange={(next) => setIsolate(next === "on")}
+                    options={[{ value: "off", label: "끔" }, { value: "on", label: "켬" }]} />
                 </div>
                 <div className="demo-setting-row">
                   <span>6열 배치</span>
-                  <div className="demo-setting-choices">
-                    <button type="button" className="secondary-button" aria-pressed={!foldSixColumns} onClick={() => setFoldSixColumns(false)}>한 줄</button>
-                    <button type="button" className="secondary-button" aria-pressed={foldSixColumns} onClick={() => setFoldSixColumns(true)}>두 줄</button>
-                  </div>
+                  <SegmentedControl ariaLabel="6열 배치" value={foldSixColumns ? "two" : "one"} onChange={(next) => setFoldSixColumns(next === "two")}
+                    options={[{ value: "one", label: "한 줄" }, { value: "two", label: "두 줄" }]} />
                 </div>
               </div>
               <p className="muted-copy" style={{ marginTop: 8 }}>

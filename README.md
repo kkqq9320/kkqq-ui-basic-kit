@@ -10,6 +10,7 @@ React + 순수 CSS로 짠 컴포넌트 모음입니다.
 - 섹션 탭 (`SectionTabs`)
 - 페이지 뼈대 (`PageHeader`, `SummaryCard`, `Panel`)
 - 자동 확장 텍스트영역 (`AutoGrowTextarea`)
+- 세그먼트 컨트롤 (`SegmentedControl`) — 값 하나를 몇 개 중에서 고르는 묶음
 - 색상 토큰 편집기 (`ThemeColorEditor`) — 사용자가 팔레트를 직접 바꿉니다
 - 디자인 토큰 + 라이트/다크 테마 + Pretendard Variable (SIL OFL 1.1)
 - **[PRINCIPLES.md](PRINCIPLES.md)** — 왜 그렇게 만들었는지에 대한 계약
@@ -428,6 +429,37 @@ macOS `Cmd+;`도 실기기로 확인했습니다(2026-08-11) — 동작합니다
 ```css
 .dense { gap: 8px; align-items: stretch; }
 ```
+
+### SegmentedControl
+
+값 하나를 몇 개 중에서 고르는 묶음입니다. 설정 화면의 켬/끔, 표기 방식, 단계 선택처럼
+**항상 하나가 골라져 있는** 자리에 씁니다.
+
+```tsx
+<SegmentedControl
+  ariaLabel="시간 표기"          // 필수 — 한 화면에 묶음이 둘 이상이면 서로 구별돼야 합니다
+  value={hourFormat}
+  onChange={setHourFormat}
+  options={[
+    { value: "24", label: "24시간" },
+    { value: "12", label: "12시간" },
+    { value: "auto", label: "자동", disabled: true },
+  ]}
+/>
+```
+
+**접근성은 라디오 그룹입니다** — `radiogroup` + `radio`이고, 탭 정거장은 묶음 하나
+(고른 칸만 `tabIndex=0`), `←`/`→`(`↑`/`↓`)로 옮기고 `Home`/`End`로 양 끝입니다.
+`disabled` 칸은 화살표가 **건너뜁니다** — 멈춰 서면 그 뒤로 키보드로 못 갑니다.
+Ctrl·Meta·Alt가 눌린 키는 전부 양보하므로 앱의 단축키와 겨루지 않습니다.
+
+**같은 값을 다시 고르면 `onChange`를 부르지 않습니다** — 안 바뀐 값을 보내면 소비자의
+dirty 판정이 더러워집니다.
+
+⚠️ **고른 칸은 강조색으로 채우지 않습니다.** 이 킷에서 강조색 채움은 `.primary`·다이얼로그
+확정 등 **"이걸 하세요"**라는 뜻으로 이미 일곱 자리가 씁니다. 고름은 행동이 아니라
+값이므로, 움푹한 트랙 위에 뜬 칩 + 강조색 **색조**로 말합니다. 색을 바꾸려면
+`.segmented` 아래 선택자를 앱에서 덮으세요.
 
 ### AutoGrowTextarea
 

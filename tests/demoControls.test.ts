@@ -111,7 +111,10 @@ describe("데모 조작판 — 12시간제 토글이 킷 전역 설정을 쓴다
     expect(localState).toEqual([]);
   });
 
-  it("토글이 setHourFormat을 실제로 부른다", () => {
-    expect(demoSource).toContain("onClick={() => setHourFormat(");
+  it("조작판이 setHourFormat을 실제로 부른다", () => {
+    // 2026-08-13: 손으로 그리던 버튼 묶음이 킷 컴포넌트(`SegmentedControl`)로 바뀌면서
+    // 부착이 `onClick`에서 `onChange`로 옮겨졌습니다. **이 검사가 잡아서 알았습니다** —
+    // 소스 텍스트로 계약을 쓸 때 앵커가 구현 세부에 걸려 있으면 이렇게 따라옵니다.
+    expect(demoSource).toContain("onChange={setHourFormat}");
   });
 });

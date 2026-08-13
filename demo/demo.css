@@ -147,12 +147,10 @@ body.date-wheel-fold-demo .date-wheel-popover[aria-label="초까지 예약 시�
 .demo-settings { display: flex; flex-direction: column; gap: 10px; }
 .demo-setting-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .demo-setting-row > span { color: var(--muted); font-size: var(--font-size-xs); }
-.demo-setting-choices { display: flex; gap: 6px; }
 /* 🔴 **버튼 폭을 고정합니다**(오너: "24시간 12시간 버튼 박스랑 한 줄 두 줄 박스랑 둘 다
  * 버튼 2개인 건 똑같은데 너비를 같게 하는 게 시인성에 더 좋지 않을까?").
  * 글자 수로 폭이 정해지면 **버튼 수가 같은 줄끼리도 상자 폭이 달라집니다** — 설정 화면은
  * 세로로 훑는 자리라 그 들쭉날쭉함이 그대로 읽힙니다. 고정 폭이면 버튼 수만 폭을 정합니다. */
-.demo-setting-choices .secondary-button { width: 64px; min-width: 64px; padding: 0; white-space: nowrap; }
 /* 눌린 상태는 이제 **킷이** 그립니다(`css/controls.css`) — 데모가 자기 버전을 갖고
  * 있던 것이 포커스와 겹쳐 보이던 원인이었습니다. 여기서 지웁니다. */
 
@@ -170,33 +168,5 @@ body.demo-isolate .workspace > *:not(.panel-grid),
 body.demo-isolate .panel-grid > .panel:not(.demo-time-panel) { content-visibility: hidden; contain: strict; height: 0; overflow: hidden; }
 
 
-/* 🔴 **ON(선택됨) 모양 시안 셋 — 오너가 실기기에서 고릅니다.**
- * 오너: "ON 돼 있는 설정에 이 색상 적용한 건 다른 강조하는 이거랑 중복돼서 구분이 안 되는데.
- * 모든 시안을 데모에 올려서 봐 보고 싶어."
- *
- * 킷 기본값은 **반전 채움**(`css/controls.css`)이고, 아래 둘은 그 위를 덮습니다.
- * 정해지면 킷의 그 규칙 하나만 바꾸고 이 블록은 지웁니다 — 휠 줄 수 실험과 같은 방식입니다. */
-
-/* 시안 2 — 테두리만 강조(가벼움). 배경은 그대로 두고 강조색 테두리·글자·굵게. */
-body.on-style-outline .demo-setting-choices .secondary-button[aria-pressed="true"] {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--accent);
-  font-weight: 800;
-}
-
-/* 시안 3 — 세그먼트 컨트롤. 묶음 전체가 움푹한 트랙이고 선택된 칸만 떠 있는 칩입니다.
- * ⚠️ 이 시안만 **묶음 클래스**가 필요합니다(킷에는 아직 없습니다) — 고르시면 킷에
- * 선택 묶음 컴포넌트를 하나 만들어야 합니다. 여기서는 데모의 묶음에만 얹습니다. */
-body.on-style-segment .demo-setting-choices {
-  gap: 2px; padding: 3px; border-radius: 9px;
-  background: color-mix(in srgb, var(--surface-soft) 88%, var(--line));
-}
-body.on-style-segment .demo-setting-choices .secondary-button {
-  border-color: transparent; background: transparent; color: var(--muted); font-weight: 700;
-}
-body.on-style-segment .demo-setting-choices .secondary-button[aria-pressed="true"] {
-  color: var(--text); border-color: transparent; background: var(--surface);
-  box-shadow: 0 1px 3px color-mix(in srgb, #000 26%, transparent);
-}
+/* ON 모양 시안 실험은 끝났습니다 — 오너가 세그먼트를 골랐고, 그건 이제 킷 컴포넌트
+ * (`SegmentedControl` / `css/segmented.css`)입니다. 데모는 그것을 그냥 씁니다. */

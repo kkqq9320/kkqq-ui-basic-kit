@@ -37,6 +37,11 @@ const KNOWN_CONSUMERS: Record<string, number> = {
   "../src/PageChrome.tsx": 1,
   "../src/ShortcutProvider.tsx": 1,
   "../src/ShortcutSettings.tsx": 1,
+  /* 2026-08-13 추가. **숫자만 맞춘 것이 아니라 §2.1 표를 다시 쟀습니다**(이 파일 위
+   * 주석이 요구하는 절차입니다): `SegmentedControl`은 Ctrl·Meta·Alt가 눌리면 즉시
+   * 반환하고, 처리한 분기(←·→·↑·↓·Home·End)마다 `preventDefault`를 부릅니다 —
+   * 규칙 1이 성립하는 쪽이라 단축키와 겨루지 않습니다. */
+  "../src/SegmentedControl.tsx": 1,
 };
 
 function keydownSites(source: string): number {
