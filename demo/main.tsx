@@ -510,6 +510,9 @@ function Demo() {
    *  3열×2줄로 접습니다. 킷 컴포넌트의 팝오버는 body 포털이라 이 컴포넌트를 감싸는
    *  것으로는 스코프를 못 잡고, 그래서 body 클래스로 토글합니다(아래 useEffect). */
   const [foldSixColumns, setFoldSixColumns] = useState(false);
+  /* 오너 리포트 6번 — 휠에 보이는 행을 위아래 2개씩(기본) / 1개씩으로 갈아 끼웁니다.
+   * 킷이 토큰 둘로 묶어 둬서 demo.css가 그 둘만 덮어씁니다. 실기기에서 고릅니다. */
+  const [oneRowEachSide, setOneRowEachSide] = useState(false);
   /* 12시간제는 **킷 전역 설정**이라 `useState`로 들고 있으면 안 됩니다(설계 스펙 §11) —
    * 값은 킷 안에 있고 데모는 **구독해서 읽습니다.** 로컬 상태로 흉내 내면 이 화면의
    * 다른 픽커들이 안 따라오는데, 그러면 조작판이 화면과 다른 말을 하는 이 저장소의
@@ -581,6 +584,12 @@ function Demo() {
     document.body.classList.toggle("date-wheel-fold-demo", foldSixColumns);
     return () => document.body.classList.remove("date-wheel-fold-demo");
   }, [foldSixColumns]);
+
+  // 6번 토글도 같은 이유로 body 클래스입니다(팝오버가 body 포털).
+  useEffect(() => {
+    document.body.classList.toggle("date-wheel-rows-1", oneRowEachSide);
+    return () => document.body.classList.remove("date-wheel-rows-1");
+  }, [oneRowEachSide]);
 
   // 1초씩 세다 마지막 칸에서 `disabled`를 켭니다. **버튼을 바로 토글하면 안 됩니다** —
   // `DateWheelPicker.tsx:659-665`가 바깥 `pointerdown`에 팝오버를 닫으므로, 누르는 순간
@@ -736,9 +745,9 @@ function Demo() {
                 familyOf. */}
             <Panel title="시각 피커" hint="TIME WHEEL">
               <FieldGrid>
-                <label>시각만 (fields — budget 백업 예약 화면이 지금 &lt;input type=&quot;number&quot;&gt; 둘로 받는 모양)<DateWheelPicker ariaLabel="예약 시각" value={reservationTime} onChange={setReservationTime} fields={["hour", "minute"]} /></label>
-                <label>날짜+시각 (fields)<DateWheelPicker ariaLabel="약속 시각" value={meetingAt} onChange={setMeetingAt} fields={["year", "month", "day", "hour", "minute"]} /></label>
-                <label>초까지 — 6열 (fields)<DateWheelPicker ariaLabel="초까지 예약 시각" value={loggedAt} onChange={setLoggedAt} fields={["year", "month", "day", "hour", "minute", "second"]} /></label>
+                <label>시각만 (fields — budget 백업 예약 화면이 지금 &lt;input type=&quot;number&quot;&gt; 둘로 받는 모양)<DateWheelPicker ariaLabel="예약 시각" value={reservationTime} onChange={(next) => { logTraceNote(`예약 시각 onChange → ${next}`); setReservationTime(next); }} fields={["hour", "minute"]} /></label>
+                <label>날짜+시각 (fields)<DateWheelPicker ariaLabel="약속 시각" value={meetingAt} onChange={(next) => { logTraceNote(`약속 시각 onChange → ${next}`); setMeetingAt(next); }} fields={["year", "month", "day", "hour", "minute"]} /></label>
+                <label>초까지 — 6열 (fields)<DateWheelPicker ariaLabel="초까지 예약 시각" value={loggedAt} onChange={(next) => { logTraceNote(`초까지 예약 시각 onChange → ${next}`); setLoggedAt(next); }} fields={["year", "month", "day", "hour", "minute", "second"]} /></label>
               </FieldGrid>
               <div className="button-row" style={{ marginTop: 16 }}>
                 <button type="button" className="secondary-button" aria-pressed={foldSixColumns} onClick={() => setFoldSixColumns((value) => !value)}>
@@ -750,6 +759,10 @@ function Demo() {
                     안 도는 것입니다. */}
                 <button type="button" className="secondary-button" aria-pressed={hourFormat === "12"} onClick={() => setHourFormat(hourFormat === "12" ? "24" : "12")}>
                   {hourFormat === "12" ? "12시간제 — 오후 03 (다시 눌러 24시간제)" : "24시간제 — 15 (기본, 눌러서 12시간제와 비교)"}
+                </button>
+                {/* 오너 리포트 6번 — 실기기에서 고릅니다. */}
+                <button type="button" className="secondary-button" aria-pressed={oneRowEachSide} onClick={() => setOneRowEachSide((value) => !value)}>
+                  {oneRowEachSide ? "휠 행 — 위아래 1개씩 (다시 눌러 2개씩)" : "휠 행 — 위아래 2개씩 (기본, 눌러서 1개씩과 비교)"}
                 </button>
               </div>
               <p className="muted-copy" style={{ marginTop: 8 }}>

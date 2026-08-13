@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits, familyOf, parseValue, serializeValue, isContiguous, comparisonPrecision, usableBound, outOfRange, clampToRange, meridiemOf, hourFromTwelve } from "../src/model/instant";
+import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits, familyOf, parseValue, serializeValue, isContiguous, comparisonPrecision, usableBound, outOfRange, clampToRange, meridiemOf, hourFromTwelve, twelveHourText } from "../src/model/instant";
 import type { WheelUnit } from "../src/model/instant";
 
 const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
@@ -563,9 +563,13 @@ describe("빈 fields (F-3)", () => {
 const KO_HOUR = { format: "12", am: "오전", pm: "오후" } as const;
 const EN_HOUR = { format: "12", am: "AM", pm: "PM" } as const;
 
-describe("dateWheelLabel — 12시간제 (3단계)", () => {
+describe("dateWheelLabel — 12시간제 (3단계, 오너 결정으로 개정)", () => {
   const F: WheelUnit[] = ["year", "month", "day", "hour", "minute"];
 
+  /* 🔴 **오전/오후 글자는 열에 안 붙습니다(오너 결정 2026-08-13).** 스펙 §7은 열 라벨을
+   * `오후 03`으로 적었고 그렇게 구현했는데, 실제 화면을 보고 "휠 안에 오전/오후를 기입하지
+   * 말라"로 정해졌습니다 — 상단 버튼이 이미 어느 절반인지 말합니다. 트리거는 그대로입니다
+   * (아래 dateTriggerParts 블록). 열은 **12시간 읽기 숫자만** 그립니다. */
   it("대조군: 인자를 안 주면 24시간제 그대로다 — 기존 호출부가 글자 하나도 안 바뀐다", () => {
     expect(dateWheelLabel("2026-08-12T15:00", "hour", WEEKDAYS_KO, F)).toBe("15");
     expect(dateWheelLabel("2026-08-12T00:00", "hour", WEEKDAYS_KO, F)).toBe("00");
@@ -575,29 +579,19 @@ describe("dateWheelLabel — 12시간제 (3단계)", () => {
     expect(dateWheelLabel("2026-08-12T15:00", "hour", WEEKDAYS_KO, F, { format: "24", am: "오전", pm: "오후" })).toBe("15");
   });
 
-  it("오후는 12를 빼고 오전/오후를 앞에 붙인다 — 트리거와 같은 어순(스펙 §7)", () => {
-    expect(dateWheelLabel("2026-08-12T15:00", "hour", WEEKDAYS_KO, F, KO_HOUR)).toBe("오후 03");
+  it("12시간제 열은 읽기 숫자만이다 — 오전/오후 글자가 안 붙는다", () => {
+    expect(dateWheelLabel("2026-08-12T15:00", "hour", WEEKDAYS_KO, F, KO_HOUR)).toBe("03");
+    expect(dateWheelLabel("2026-08-12T15:00", "hour", WEEKDAYS_KO, F, EN_HOUR)).toBe("03");
   });
 
-  it("자정은 오전 12다 — 0을 12로 읽는다", () => {
-    expect(dateWheelLabel("2026-08-12T00:00", "hour", WEEKDAYS_KO, F, KO_HOUR)).toBe("오전 12");
+  it("자정도 정오도 12다 — 0을 12로 읽고, 12를 0으로 읽지 않는다", () => {
+    expect(dateWheelLabel("2026-08-12T00:00", "hour", WEEKDAYS_KO, F, KO_HOUR)).toBe("12");
+    expect(dateWheelLabel("2026-08-12T12:00", "hour", WEEKDAYS_KO, F, KO_HOUR)).toBe("12");
   });
 
-  it("정오는 오후 12다 — 12를 0으로 읽지 않는다", () => {
-    expect(dateWheelLabel("2026-08-12T12:00", "hour", WEEKDAYS_KO, F, KO_HOUR)).toBe("오후 12");
-  });
-
-  it("오전 한 자리도 두 자리로 채운다", () => {
-    expect(dateWheelLabel("2026-08-12T09:00", "hour", WEEKDAYS_KO, F, KO_HOUR)).toBe("오전 09");
-    expect(dateWheelLabel("2026-08-12T11:59", "hour", WEEKDAYS_KO, F, KO_HOUR)).toBe("오전 11");
-  });
-
-  it("23시는 오후 11이다 — 열 끝에서도 어긋나지 않는다", () => {
-    expect(dateWheelLabel("2026-08-12T23:00", "hour", WEEKDAYS_KO, F, KO_HOUR)).toBe("오후 11");
-  });
-
-  it("오전/오후 문자열은 모델이 안 정한다 — 소비자가 준 것을 그대로 쓴다", () => {
-    expect(dateWheelLabel("2026-08-12T15:00", "hour", WEEKDAYS_KO, F, EN_HOUR)).toBe("PM 03");
+  it("한 자리도 두 자리로 채운다", () => {
+    expect(dateWheelLabel("2026-08-12T09:00", "hour", WEEKDAYS_KO, F, KO_HOUR)).toBe("09");
+    expect(dateWheelLabel("2026-08-12T23:00", "hour", WEEKDAYS_KO, F, KO_HOUR)).toBe("11");
   });
 
   it("시가 아닌 열은 12시간제와 무관하다 — 분·초·일은 그대로", () => {
@@ -605,6 +599,15 @@ describe("dateWheelLabel — 12시간제 (3단계)", () => {
     expect(dateWheelLabel("2026-08-12T15:07:05", "minute", WEEKDAYS_KO, G, KO_HOUR)).toBe("07");
     expect(dateWheelLabel("2026-08-12T15:07:05", "second", WEEKDAYS_KO, G, KO_HOUR)).toBe("05");
     expect(dateWheelLabel("2026-08-12T15:07:05", "day", WEEKDAYS_KO, G, KO_HOUR)).toBe("12 수");
+  });
+
+  /* `twelveHourText`는 **트리거가** 씁니다(그리고 열의 접근성 이름을 기계가 조립할 때
+   * 같은 규칙을 씁니다). 열에서 빠졌다고 죽은 코드가 아니라는 것을 여기서 못 박습니다 —
+   * 안 그러면 다음 사람이 "안 쓰는 함수"로 읽고 지웁니다. */
+  it("twelveHourText는 살아 있다 — 트리거가 쓰는 규칙이다", () => {
+    expect(twelveHourText(15, KO_HOUR)).toBe("오후 03");
+    expect(twelveHourText(0, KO_HOUR)).toBe("오전 12");
+    expect(twelveHourText(12, EN_HOUR)).toBe("PM 12");
   });
 });
 

@@ -953,6 +953,21 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 합니다. 하나만 지나가면 "치면 맞는데 Tab으로 떠나면 틀리는" 갈라짐이 됩니다.
    *
    * 다른 열과 24시간제에서는 그대로 통과합니다 — 이 함수가 곧 그 조건입니다. */
+  /* 열의 접근성 이름. **그려지는 글자와 갈립니다 — 일부러입니다.**
+   * 오너 결정(2026-08-13)으로 시 열은 12시간제에서도 숫자만 그립니다(오전/오후는 상단
+   * 버튼이 말합니다). 하지만 **스크린리더에는 버튼이 안 보입니다** — 이름이 `"시 03"`이면
+   * 오전인지 오후인지 알 방법이 없고, 24칸 열에 같은 `03`이 두 번 나옵니다. 그래서
+   * 이름에는 절반을 붙입니다.
+   *
+   * 이 파일에는 이미 같은 종류의 선례가 있습니다: 트리거 이름이 채움 문자(U+2012)를
+   * **빼고** 읽습니다(§8) — 눈으로 보라고 넣은 것이 귀로도 읽혀야 할 이유가 없다는 근거로.
+   * 여기는 그 반대 방향이고 근거는 같습니다: **화면과 귀는 서로 다른 것을 놓칩니다.** */
+  function columnName(unit: DateWheelUnit) {
+    const drawn = model.label(baseValue, unit, labels.weekdays, fields, hourDisplay);
+    if (unit !== MERIDIEM_UNIT || !meridiem) return `${labels.units[unit]} ${drawn}`;
+    return `${labels.units[unit]} ${meridiem === "am" ? meridiemLabels.am : meridiemLabels.pm} ${drawn}`;
+  }
+
   function typedHourToValue(unit: DateWheelUnit, typed: number) {
     return unit === MERIDIEM_UNIT && meridiem ? model.hourFromTwelve(typed, meridiem) : typed;
   }
@@ -1777,7 +1792,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
 
             `onPointerDown`의 `setActiveUnit(unit)`이 **포인터 경로가 활성 세그먼트를 따라가는
             유일한 길**입니다(열의 `onFocus`가 하던 일). 지우지 마세요. */}
-        {columns.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}`} aria-label={`${labels.units[unit]} ${model.label(baseValue, unit, labels.weekdays, fields, hourDisplay)}`} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {columns.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}`} aria-label={columnName(unit)} data-unit={unit} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; }} onPointerMove={(event) => moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget)} onPointerUp={(event) => finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget)} onPointerCancel={(event) => { swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이

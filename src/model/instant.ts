@@ -655,7 +655,13 @@ export function dateWheelLabel(value: string, unit: DateWheelUnit, weekdays: str
   // 12시간제는 **시 열만** 건드립니다(3단계, 스펙 §7). 분·초는 어느 형식에서도 두 자리
   // 숫자 그대로입니다 — 그리고 시 열의 **칸 수는 여기서 안 바뀝니다.** 이 함수는 한 값을
   // 글자로 옮길 뿐이고, 열이 24칸이라는 것은 `shift`/`unitCeiling`이 정합니다.
-  if (unit === "hour" && hour.format === "12") return twelveHourText(parts.hour, hour);
+  //
+  // 🔴 **오전/오후 글자는 여기 안 붙습니다(오너 결정 2026-08-13).** 스펙 §7은 열 라벨을
+  // `오후 03`으로 적었고 한 번 그렇게 구현했는데, 실제 화면을 보고 **"휠 안에 오전/오후를
+  // 기입하지 마라"**로 정해졌습니다 — 상단 버튼이 이미 어느 절반인지 말합니다. 그래서 열은
+  // **12시간 읽기 숫자만** 그립니다. 트리거는 그대로 `오후 03`이고(거기는 값 전체를 한 줄로
+  // 읽는 자리라 절반을 빼면 뜻이 사라집니다), 열의 `aria-label`도 기계가 절반을 붙입니다.
+  if (unit === "hour" && hour.format === "12") return pad(parts.hour % 12 === 0 ? 12 : parts.hour % 12, 2);
   return pad(parts[unit], 2);   // hour(24시간제), minute, second
 }
 
