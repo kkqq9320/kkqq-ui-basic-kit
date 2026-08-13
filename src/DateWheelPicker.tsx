@@ -150,6 +150,15 @@ const DATE_WHEEL_TAP_SLOP = 12;
 /** 열 하나가 읽히는 최소 폭. 두 자리 숫자 + 일 열의 요일(`12 수`)이 안 잘리는 값이고,
  *  이 아래로 내려가면 오너가 말한 "답답한" 화면이 됩니다. */
 const DATE_WHEEL_COLUMN_MIN = 56;
+
+/** 되돌리기 스택의 최대 길이. 한 항목이 한 조작이므로 50이면 한 세션에서 사람이 하는
+ *  조작을 넉넉히 덮습니다. 무한히 쌓지 않는 이유는 이 컨트롤이 소비자 페이지에 여러 개
+ *  살아 있을 수 있어서입니다 — 각자 자기 스택을 듭니다. */
+const DATE_WHEEL_UNDO_LIMIT = 50;
+
+/** 휠 한 무리를 한 조작으로 묶는 꼬리 시간. 휠에는 `pointerup`에 해당하는 "뗌"이 없어
+ *  경계를 시간으로 볼 수밖에 없습니다 — 드래그·홀드와 달리 여기만 타이머입니다. */
+const DATE_WHEEL_UNDO_WHEEL_MS = 200;
 /** `css/date-picker.css`의 `.date-wheel-popover { padding: 12px }`와 같은 값.
  *  ⚠️ 한쪽만 바꾸면 바닥 폭이 조용히 어긋납니다 — 검사가 둘을 대조합니다. */
 const POPOVER_PADDING = 12;
@@ -175,6 +184,23 @@ function widestColumnMargin(drawn: WheelUnit[]): number {
  *  자체가 `2n+3`으로 따라오므로 **선택 행이 언제나 위에서 `n+1`번째**이고 정지 위치는
  *  `n`이 무엇이든 **항상 −30px**입니다. n=1에서는 DOM 행도 일곱에서 다섯으로 줄어듭니다.
  *  프리로드 판정(`aria-hidden`)도 같은 수에서 나오므로 따로 어긋날 자리가 없습니다. */
+/** 손가락인가(굵은 포인터).
+ *
+ * **이벤트 때마다 읽습니다** — 상태로 들고 있으면 창을 다른 화면으로 옮기거나 태블릿에
+ * 키보드를 붙였을 때 낡습니다. 값이 싸서 들고 있을 이유도 없습니다.
+ *
+ * `matchMedia`가 없는 환경(jsdom 포함)은 **가는 포인터**로 봅니다. 기존 클릭 테스트
+ * 여럿이 "세그먼트를 누르면 그 세그먼트가 활성"을 고정하고 있고, 그것들이 손대지 않은
+ * 채 계속 참이어야 이 변경이 "굵은 포인터에서만 다르다"는 뜻이 됩니다 — 그 테스트들이
+ * 이 갈림의 대조군입니다.
+ *
+ * ⚠️ **질의 문자열로 갈라 읽어야 합니다.** 이 파일은 `(prefers-reduced-motion: reduce)`도
+ * 묻습니다. 테스트에서 모든 질의에 `matches: true`를 주는 스텁을 쓰면 애니메이션 동작까지
+ * 조용히 뒤집혀, 무엇을 재고 있는지 알 수 없게 됩니다. */
+function isCoarsePointer(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+}
+
 function wheelOffsets(rowsPerSide: number): number[] {
   const span = rowsPerSide + 1;
   return Array.from({ length: span * 2 + 1 }, (_, index) => index - span);
@@ -1236,9 +1262,114 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     setColumnMotion((current) => (current[unit].playing ? { ...current, [unit]: { ...current[unit], playing: false } } : current));
   }
 
+  /* ---- 되돌리기(Ctrl+Z) --------------------------------------------------
+   *
+   * 🔴 **한 항목은 한 조작입니다 — `onChange` 한 번이 아닙니다.** 이 컨트롤은 화살표
+   * 한 번, 휠 한 칸, 드래그 한 노치마다 `onChange`를 부릅니다. 그 단위로 쌓으면 서른
+   * 칸 끈 드래그가 항목 서른 개가 되고 Ctrl+Z는 한 칸씩 되돌아옵니다 — 사용자가
+   * "되돌리기"라고 부르는 것이 아닙니다.
+   *
+   * 그래서 **이어지는 제스처는 시작할 때 한 번만** 쌓습니다. 제스처의 경계를 새로
+   * 만들지 않는 것이 요점입니다 — 이 파일에 이미 있습니다(열의 `onPointerDown`/
+   * `onPointerUp`, ± 버튼의 누름/뗌). 그 자리에 `beginUndoGesture`/`endUndoGesture`만
+   * 겁니다. **휠만 "뗌"이 없어서** 꼬리 타이머로 끝을 봅니다.
+   *
+   * ⚠️ 스택은 **되돌리기 전용입니다. 다시 하기(Ctrl+Shift+Z)는 없습니다** — 오너가
+   * 요청한 것은 되돌리기 하나이고, 없는 기능을 예약해 두면 소비자 앱이 그 조합을 못
+   * 쓰면서 아무도 안 씁니다. 이 결정의 대가는 릴리스 노트에 적습니다.
+   */
+  const undoStackRef = useRef<string[]>([]);
+  const undoGestureRef = useRef(false);
+  const undoWheelTimerRef = useRef<number | null>(null);
+
+  /* 붙여넣기는 `await`를 건너므로 **이 렌더의 `value` 클로저가 낡습니다.**
+   * `commitAndClose`가 바로 그 함정으로 방금 지운 값을 되살렸던 자리와 같은 결이라,
+   * 그쪽이 택한 방법(렌더 클로저 대신 기준값을 따로 들기)을 여기서도 씁니다. */
+  const valueRef = useRef(value);
+  valueRef.current = value;
+
+  function pushUndo(previous: string) {
+    const stack = undoStackRef.current;
+    if (stack[stack.length - 1] === previous) return;   // 같은 값을 두 번 쌓지 않습니다
+    stack.push(previous);
+    if (stack.length > DATE_WHEEL_UNDO_LIMIT) stack.shift();
+  }
+
+  function beginUndoGesture() {
+    if (!undoGestureRef.current) pushUndo(baseValue);
+    undoGestureRef.current = true;
+  }
+  function endUndoGesture() { undoGestureRef.current = false; }
+
+  /** 휠은 "뗌"이 없습니다 — 마지막 칸에서 꼬리 시간이 지나면 한 무리가 끝난 것으로 봅니다. */
+  function markUndoWheel() {
+    beginUndoGesture();
+    if (undoWheelTimerRef.current !== null) window.clearTimeout(undoWheelTimerRef.current);
+    undoWheelTimerRef.current = window.setTimeout(() => { undoWheelTimerRef.current = null; endUndoGesture(); }, DATE_WHEEL_UNDO_WHEEL_MS);
+  }
+
+  function undoValue() {
+    const previous = undoStackRef.current.pop();
+    if (previous === undefined) return;
+    setTyping(null);
+    // 빈 값으로 되돌아가면 "이번 세션에 지운 적 있음"도 같이 되살립니다 — 안 그러면
+    // 뒤이은 `완료`가 baseValue로 되채웁니다(`clearedRef` 선언부의 그 결함입니다).
+    clearedRef.current = previous === "";
+    onChange(previous);
+  }
+
+  /* ---- 클립보드(Ctrl+C · Ctrl+V) ----------------------------------------
+   *
+   * ⚠️ **접근은 이 두 함수 뒤로 격리합니다.** 어느 경로가 실제로 되는지는 **실브라우저
+   * 에서만** 확정됩니다 — 이 저장소의 계측 환경(브라우저 pane)은 CDP로 합성한 키를
+   * 쓰는데 그건 브라우저의 편집 명령을 돌리지 않아서, `copy`/`paste` 이벤트가 안 오는
+   * 것이 브라우저의 성질인지 계측기의 한계인지 **가려낼 수 없습니다**(같은 이유로 그
+   * 환경에서는 `event.code`가 늘 빈 문자열입니다). 그래서 실제로 잰 것만 코드로
+   * 굳힙니다: `navigator.clipboard`는 보안 컨텍스트가 아니면 아예 없고, 사용자 제스처
+   * 없이 부르면 `NotAllowedError`로 거절합니다.
+   *
+   * 없거나 거절당하면 **조용히 아무것도 하지 않습니다.** 폰에는 Ctrl 키가 없어 이
+   * 경로는 데스크톱 전용이고, 데스크톱에서 실패하는 경우는 권한 거절뿐입니다.
+   */
+  function writeClipboard(text: string) {
+    void navigator.clipboard?.writeText(text).catch(() => { /* 권한 거절 — 무시 */ });
+  }
+  async function readClipboard(): Promise<string | null> {
+    try { return (await navigator.clipboard?.readText()) ?? null; } catch { return null; }
+  }
+
+  /** Ctrl+C — **화면에 보이는 그대로** 씁니다(오너: "포맷된 날짜를 클립보드에"). 치던
+   *  버퍼를 먼저 확정하는 이유는, 안 그러면 화면에는 `20‒‒`가 보이는데 클립보드에는
+   *  옛 값이 가서 **본 것과 붙여넣은 것이 다르기** 때문입니다. */
+  function copyValue() {
+    const flushed = flushTyping();
+    const source = flushed ?? value;
+    if (!model.isValid(source, fields)) return;   // 빈 필드는 복사할 것이 없습니다
+    writeClipboard(model.triggerParts(source, fields, null, hourDisplay).map((part) => part.text).join(""));
+  }
+
+  /** Ctrl+V — 읽을 수 없으면 **아무것도 하지 않습니다.** 값을 지우지 않는 것이
+   *  `parsePasted`가 빈 문자열이 아니라 `null`을 돌려주는 이유입니다. */
+  async function pasteValue() {
+    const text = await readClipboard();
+    if (!text) return;
+    const parsed = model.parsePasted(text, fields, hourDisplay);
+    if (parsed === null) return;
+    const next = clampToRange(parsed);
+    // await 뒤라 `value` 클로저는 낡았습니다 — 지금 값은 ref로 읽습니다.
+    if (next === valueRef.current) return;
+    setTyping(null);
+    clearedRef.current = false;
+    pushUndo(valueRef.current);
+    onChange(next);
+  }
+
   function commitShift(sourceValue: string, unit: DateWheelUnit, amount: number, motion: "wheel" | "none" = "wheel") {
     const next = shiftedFrom(sourceValue, unit, amount);
     if (!next) return null;
+    // 제스처 중이면 시작할 때 이미 쌓았습니다. 화살표처럼 제스처가 아닌 경로만
+    // 여기서 한 번씩 쌓습니다.
+    if (!undoGestureRef.current) pushUndo(sourceValue);
     if (motion === "wheel") markColumnMotion(unit, amount);
     onChange(next);
     return next;
@@ -1279,6 +1410,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     const from = model.parts(baseValue, fields);
     const to = model.parts(next, fields);
     if (from && to) for (const unit of fields) markColumnMotion(unit, Math.sign(to[unit] - from[unit]));
+    pushUndo(baseValue);
     onChange(next);
   }
 
@@ -1295,6 +1427,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    */
   function commitTyped(unit: DateWheelUnit, amount: number) {
     const next = clampToRange(model.setUnit(baseValue, unit, amount, fields));
+    pushUndo(baseValue);
     onChange(next);
     return next;
   }
@@ -1400,6 +1533,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     // 조용히 덮어씁니다.
     setTyping(null);
     setActiveUnit(unit);
+    markUndoWheel();
     applyShift(unit, event.deltaY > 0 ? 1 : -1);
   }
 
@@ -1427,11 +1561,54 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       commitToday();
       return true;
     }
+    /* 아래 넷은 **네이티브 날짜 필드가 공짜로 갖는 것**입니다(오너 리포트). 이 컨트롤의
+     * 필드는 `<span>`이라 고를 텍스트가 없어서, 복사·붙여넣기·되돌리기가 브라우저 몫으로
+     * 남지 못합니다 — 직접 구현하지 않으면 그냥 안 됩니다.
+     *
+     * 🔴 **가드를 넷으로 따로 씁니다. 묶으면 안 됩니다.** `tests/shortcutConflicts.test.ts`가
+     * `src/`를 훑어 `(ctrlKey|metaKey)…event.code === "X"`를 세는데, `matchAll`은 매치를
+     * 지나가며 **소비**하므로 가드 하나에 `code`를 여러 개 달면 **첫 번째만 등록됩니다.**
+     * switch·조회표·`code === "KeyC" || code === "KeyV"`가 전부 같은 이유로 샙니다.
+     * 그러면 `KIT_RESERVED`가 실제보다 좁아지고, 소비자 앱이 등록에 성공한 뒤 이 필드가
+     * 그 키를 먹습니다. */
+    if ((event.ctrlKey || event.metaKey) && event.code === "KeyC") {
+      event.preventDefault();
+      copyValue();
+      return true;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.code === "KeyV") {
+      event.preventDefault();
+      void pasteValue();
+      return true;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.code === "KeyZ") {
+      event.preventDefault();
+      undoValue();
+      return true;
+    }
+    /* Ctrl+S는 **열려 있을 때만** 먹습니다.
+     *
+     * ⚠️ 닫힌 채로 `commitAndClose()`를 부르면 `!value && !clearedRef.current` 가지에 걸려
+     * **한 번도 연 적 없는 빈 필드에 오늘 날짜가 조용히 들어갑니다.** 그리고 `완료` 버튼은
+     * 팝오버에만 있으므로 "완료 버튼 누르는 것처럼"의 충실한 읽기도 열림입니다.
+     *
+     * ⚠️ **이것이 §11의 진짜 예외입니다.** `Ctrl+;`는 브라우저가 안 가져가는 것을 실기기로
+     * 확인하고 뺏은 것이지만, Ctrl+S는 브라우저의 "페이지 저장"입니다. 폰에는 Ctrl 키가
+     * 없어 그 확인을 같은 방법으로 할 수 없습니다 — 데스크톱 확인 항목으로 남깁니다. */
+    if ((event.ctrlKey || event.metaKey) && event.code === "KeyS") {
+      if (!open) return false;
+      event.preventDefault();
+      commitAndClose();
+      return true;
+    }
     if (event.ctrlKey || event.metaKey) return false;
     if (event.key === "Delete" && allowClear) {
       event.preventDefault();
       setTyping(null);
       clearedRef.current = true;   // commitAndClose가 이 값을 baseValue로 되살리지 않도록 기억
+      // 이미 비어 있으면 쌓지 않습니다 — 빈 값 위에 빈 값을 쌓으면 Ctrl+Z 한 번이
+      // 아무것도 안 한 것처럼 보입니다.
+      if (value) pushUndo(value);
       onChange("");
       return true;
     }
@@ -1881,7 +2058,21 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       // 조작이 아니라 그냥 **여는 조작**이고, 여는 조작은 버퍼를 들고 갑니다(§4.2).
       const clicked = event.target instanceof Element ? event.target.getAttribute("data-unit") : null;
       const clickedUnit = fields.find((field) => field === clicked);
-      if (clickedUnit) {
+      /* 🔴 **손가락에서는 세그먼트를 골라 주지 않습니다 — 그냥 여닫습니다**(오너 리포트:
+       * "모바일에선 연도나 월 일 클릭하면 그쪽으로 포커스가 가는데 그게 전혀 필요없고
+       * 터치하기 오히려 번잡스러워지니까").
+       *
+       * 세그먼트를 고르는 것은 **키보드로 이어서 편집할 사람**을 위한 준비입니다 —
+       * 고른 뒤 숫자를 치거나 `↑`/`↓`로 옮기라고 활성을 옮겨 두는 것입니다. 폰에는
+       * 그 다음 동작이 없습니다. 휠로 값을 맞추므로 활성 세그먼트가 하는 일이 없고,
+       * 손가락이 정확히 어느 조각에 닿았는지도 마우스만큼 안 맞습니다 — 목표가
+       * 좁아서 "월을 누르려다 일이 켜지는" 오조작만 늡니다.
+       *
+       * ⚠️ **`if (clickedUnit)` 자체를 되돌리는 것이 아닙니다.** 아래 주석의 "마우스로
+       * 숫자를 누른다고 픽커가 닫히면 안 돼"는 **마우스**에 대한 것이고 그대로 남습니다.
+       * 여기서 갈리는 것은 포인터의 굵기 하나뿐이라, 가는 포인터의 동작은 글자 하나도
+       * 안 바뀝니다. 다음 사람이 이걸 번복으로 읽지 않도록 적어 둡니다. */
+      if (clickedUnit && !isCoarsePointer()) {
         flushTyping();
         setActiveUnit(clickedUnit);
         // **세그먼트 클릭은 여닫기 토글이 아닙니다**(스펙 §6.4). 닫혀 있으면 열고, 열려
@@ -1995,7 +2186,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
 
             `onPointerDown`의 `setActiveUnit(unit)`이 **포인터 경로가 활성 세그먼트를 따라가는
             유일한 길**입니다(열의 `onFocus`가 하던 일). 지우지 마세요. */}
-        {columns.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}${holdingUnit === unit ? " holding" : ""}`} aria-label={columnName(unit)} data-unit={unit} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; armHold(unit, event.pointerId, event.clientY); }} onPointerMove={(event) => { const hold = holdRef.current; if (hold && hold.pointerId === event.pointerId && Math.abs(event.clientY - hold.y) > 4) cancelHold(); moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget); }} onPointerUp={(event) => { cancelHold(); finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget); }} onPointerCancel={(event) => { cancelHold(); swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {columns.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}${holdingUnit === unit ? " holding" : ""}`} aria-label={columnName(unit)} data-unit={unit} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); beginUndoGesture(); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; armHold(unit, event.pointerId, event.clientY); }} onPointerMove={(event) => { const hold = holdRef.current; if (hold && hold.pointerId === event.pointerId && Math.abs(event.clientY - hold.y) > 4) cancelHold(); moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget); }} onPointerUp={(event) => { cancelHold(); finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget); endUndoGesture(); }} onPointerCancel={(event) => { cancelHold(); endUndoGesture(); swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
@@ -2008,7 +2199,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
           이 버튼들은 그 단축키의 동등물이므로(title에 단축키를 적어 뒀다), 버퍼를 안 지우면
           같은 뜻의 단축키와 버튼이 다르게 굴며, 남은 버퍼가 이 버튼이 방금 설정한 값을
           나중에(예: 다음 Tab) 도로 덮어쓸 수 있다. */}
-      <div className="date-wheel-actions"><button type="button" tabIndex={-1} title={`${todayLabel} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" {...tapActivation(() => { setTyping(null); commitToday(); })}>{todayLabel}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" {...tapActivation(() => { setTyping(null); clearedRef.current = true; onChange(""); })}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" aria-keyshortcuts="Enter" {...tapActivation(commitAndClose)}>{labels.done}</button></div>
+      <div className="date-wheel-actions"><button type="button" tabIndex={-1} title={`${todayLabel} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" {...tapActivation(() => { setTyping(null); commitToday(); })}>{todayLabel}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" {...tapActivation(() => { setTyping(null); clearedRef.current = true; if (value) pushUndo(value); onChange(""); })}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" aria-keyshortcuts="Enter" {...tapActivation(commitAndClose)}>{labels.done}</button></div>
     </div>, document.body)}
   </div>;
 }

@@ -957,6 +957,11 @@ export type WheelModel = {
   /** 행을 길게 눌렀을 때 그 열이 갈 값(오너 리포트 4번). 연도만 "지금", 나머지는 바닥값.
    *  `null`이면 기계는 아무것도 하지 않습니다. */
   resetTarget(unit: WheelUnit, nowValue: string, fields: WheelUnit[]): number | null;
+  /** 붙여넣은 글자를 값으로(Ctrl+V). **읽을 수 없으면 `null`이고 기계는 그때 아무것도
+   *  하지 않습니다** — 붙여넣기 실패가 값을 지우면 사용자는 되돌릴 것도 없이 잃습니다.
+   *  `family`·`meridiem`과 같은 이유로 여기 있습니다: 구분자·자릿수·오전오후를 읽는 것은
+   *  전부 **값 지식**이고, 기계가 그걸 알면 §3.2가 금지한 자리로 돌아갑니다. */
+  parsePasted(text: string, fields: WheelUnit[], hour?: HourDisplay): string | null;
 };
 
 /* 기계가 이 객체 하나만 보고 돌게 하는 것이 목적입니다. 기간(duration) 모델이
@@ -984,4 +989,5 @@ export const instantModel: WheelModel = {
   family: familyOf,
   meridiem: meridiemOf,
   resetTarget,
+  parsePasted,
 };

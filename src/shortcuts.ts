@@ -248,7 +248,7 @@ export function isRecording(): boolean { return recordingDepth > 0; }
 /** 킷 컴포넌트가 **이미 쓰는** 조합. `tests/shortcutConflicts.test.ts`가 이 목록을
  * `src/`의 실제 코드와 대조하므로, 컴포넌트가 새 조합을 쓰기 시작하면 빨개집니다.
  * `Ctrl`로 적지만 macOS의 `Cmd`도 같은 자리입니다 — 킷이 둘을 같이 봅니다. */
-export const KIT_RESERVED: readonly string[] = ["Ctrl+Semicolon"];
+export const KIT_RESERVED: readonly string[] = ["Ctrl+Semicolon", "Ctrl+KeyC", "Ctrl+KeyV", "Ctrl+KeyZ", "Ctrl+KeyS"];
 
 export type Conflict = { combo: string; withActionId?: string; withKit?: boolean };
 
