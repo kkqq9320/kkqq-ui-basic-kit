@@ -43,15 +43,23 @@ import {
   ShortcutProvider,
   ShortcutSettings,
   SIDEBAR_TOGGLE_ID,
+  createShortcutStorage,
+  useShortcutRegistry,
   displayCombo,
-  normalizeCombo,
   sidebarToggleAction,
 } from "../src";
 
 /** 사이드바 토글의 **앱** 기본 조합. 킷의 기본은 여전히 `null`입니다(단축키 설계 스펙
  * §3.2) — 이 데모(앱)가 `sidebarToggleAction`의 `defaultCombo` 옵션으로 정합니다.
- * `overrides`는 사용자가 실제로 바꾼 것만 담습니다(§7.1). */
+ * `overrides`(또는 아래 `shortcutStorage`)는 사용자가 실제로 바꾼 것만 담습니다(§7.1). */
 const SIDEBAR_DEFAULT_COMBO = "Ctrl+Backslash";
+
+/** 단축키 덮어쓰기를 **킷이** localStorage에 저장하게 합니다(Task 7, 스펙 §7).
+ * `ShortcutProvider`에 `overrides` 대신 이걸 넘기면 uncontrolled입니다 — 마운트 때
+ * 읽고, `ShortcutSettings`가 녹음·지우기를 `registry.setBinding`으로 커밋할 때마다
+ * 씁니다. **이전 데모는 `useState`로만 들고 있어 새로고침하면 사라졌습니다** — 이제
+ * `localStorage`(`shortcutBindings` 키)에 남습니다. */
+const shortcutStorage = createShortcutStorage();
 
 /** 데모가 **자기 앱 색으로** 신설한 토큰. `demo.css`가 라이트·다크를 둘 다 정의하고
  *  `.demo-brand-chip`이 실제로 씁니다 — 안 쓰는 토큰은 편집기에 얹지 않습니다. */
@@ -65,6 +73,43 @@ const DEMO_GROUP = {
  * `--demo-brand`는 **저장소에 남은 채 화면에서만** 사라집니다. 팔레트를 지나면 목록을
  * 넘길 자리가 아예 없어 그 일이 일어날 수 없습니다. */
 const demoPalette = createThemePalette([...THEME_TOKEN_GROUPS, DEMO_GROUP]);
+
+/** 지금 바인딩된 사이드바 조합을 화면 문구용으로 꺼냅니다. `useShortcutRegistry`는
+ * `ShortcutProvider`의 **자손**에서만 실제 레지스트리를 봅니다 — `Demo`는 그
+ * Provider를 그리는 쪽(부모)이라 `Demo` 본문에서 바로 부르면 기본값(빈 레지스트리,
+ * `bindingOf`가 항상 `null`)만 보이므로, 화면에 쓰는 자리마다 이 훅을 쓰는 작은
+ * 컴포넌트로 뗍니다. bindingOf는 이미 정규화된 문자열을 돌려주므로(§4), 여기서
+ * `normalizeCombo`를 다시 부를 필요가 없습니다 — 우선순위(저장값 vs 기본값)의 정의가
+ * `bindingOf` 한 곳에만 있습니다. */
+function useSidebarCombo(): string | null {
+  return useShortcutRegistry().bindingOf(SIDEBAR_TOGGLE_ID);
+}
+
+/** 페이지 머리말 아래의 한 줄짜리 단축키 안내. */
+function SidebarComboLine() {
+  const combo = useSidebarCombo();
+  return <p className="muted-copy">사이드바 접기/펴기 단축키: <strong>{combo ? displayCombo(combo) : "없음"}</strong></p>;
+}
+
+/** "단축키" 패널 맨 위 설명문. `storage`(Task 7) 배선을 문장으로도 확인할 수 있게,
+ *  지금 바인딩과 그 저장 위치를 실제 값에서 파생시켜 보여 줍니다. */
+function ShortcutPanelIntro() {
+  const combo = useSidebarCombo();
+  return <p className="muted-copy">
+    {combo
+      ? <>사이드바 접기/펴기가 <strong>{displayCombo(combo)}</strong>에 걸려 있습니다.</>
+      : <>사이드바 접기/펴기에 지금 걸린 조합이 <strong>없음</strong>입니다 — 아래에서 새로 녹음해 보세요.</>}{" "}
+    킷의 기본값은 여전히 <code>defaultCombo: null</code>이고(설계 스펙 §3.2),
+    처음 걸려 있던 조합은 킷이 아니라 <strong>이 데모(앱)</strong>가
+    <code>sidebarToggleAction</code>의 <code>defaultCombo</code> 옵션으로
+    정했습니다. 아래에서 다시 녹음하거나 지우면 <code>ShortcutProvider</code>의{" "}
+    <code>storage</code>(<code>createShortcutStorage()</code>, Task 7)가{" "}
+    <code>localStorage</code>(<code>shortcutBindings</code> 키)에 씁니다 —{" "}
+    <strong>사용자가 실제로 바꾼 것만</strong> 담기므로(설계 스펙 §7.1) 지우면
+    기본값으로 되돌아가지 않고 "조합 없음"이 됩니다. <strong>이제 새로고침해도
+    남습니다</strong> — 브라우저의 다른 탭에서 바꿔도 이 탭이 따라옵니다.
+  </p>;
+}
 
 /** ?debug=1 일 때만 보이는 history 기록판. 콘솔을 열 필요가 없게 하려는 것입니다. */
 function HistoryLogPanel() {
@@ -537,18 +582,12 @@ function Demo() {
 
   useEffect(() => { localStorage.setItem("sidebarCollapsed", String(collapsed)); }, [collapsed]);
 
-  // 단축키 덮어쓰기. **사용자가 실제로 바꾼 것만** 담습니다(단축키 스펙 §7.1) — 앱의
-  // 기본 조합은 여기 안 넣습니다(`SIDEBAR_DEFAULT_COMBO` 참고). 저장은 없습니다
-  // (localStorage 등) — 새로고침하면 초기화됩니다.
-  const [shortcutOverrides, setShortcutOverrides] = useState<Record<string, string | null>>({});
-  // 화면에 적히는 조합 문자열은 전부 이 값에서 파생시킵니다 — 리터럴로 박아 두면 아래
-  // "단축키" 패널에서 재녹음/삭제해도 이 문구들만 낡은 채로 남습니다. `bindingOf`
-  // (`ShortcutProvider.tsx`)와 같은 우선순위를 따라야 실제 바인딩과 표시가 안 갈립니다 —
-  // **`??`는 못 씁니다:** override 키가 있는데 값이 `null`(사용자가 지운 상태)이면 `??`가
-  // 그걸 기본값으로 덮어써, §7.1의 "지운 것"과 "기본값을 쓰는 것"의 구분이 없어집니다.
-  const hasSidebarOverride = Object.prototype.hasOwnProperty.call(shortcutOverrides, SIDEBAR_TOGGLE_ID);
-  const rawSidebarCombo = hasSidebarOverride ? shortcutOverrides[SIDEBAR_TOGGLE_ID] : SIDEBAR_DEFAULT_COMBO;
-  const sidebarCombo = rawSidebarCombo === null ? null : normalizeCombo(rawSidebarCombo);
+  // 단축키 덮어쓰기는 이제 `shortcutStorage`(localStorage, 키 `shortcutBindings`)에
+  // 삽니다 — Task 7(스펙 §7). `ShortcutProvider`에 `overrides` 대신 `storage`를
+  // 넘기면 킷이 마운트 때 읽고 `ShortcutSettings`의 녹음·지우기를 직접 저장합니다.
+  // 화면에 쓰는 조합 문자열은 `useSidebarCombo`(= `registry.bindingOf`)에서
+  // 파생시킵니다 — 리터럴로 박아 두면 "단축키" 패널에서 재녹음/삭제해도 이 문구들만
+  // 낡은 채로 남습니다.
 
   /* **맨 키 허용 구역을 하나 보여 줍니다**(단축키 스펙 §2.2). `.workspace`가 그 예시입니다 —
      사이드바는 이 요소 밖의 형제라서(`AppShell.tsx`가 `<main className="workspace">`로
@@ -602,10 +641,12 @@ function Demo() {
         §3.2), 조합을 정한 것은 이 데모(=앱)이며, 그 자리는 `sidebarToggleAction`의 두 번째
         인자입니다. `sidebarToggleAction`이 주는 것은 안정적인 `id`(`SIDEBAR_TOGGLE_ID`)와
         이름표뿐이고, 접힘 상태를 뒤집는 핸들러는 앱이 넘깁니다 — `Sidebar`가 controlled라
-        서입니다. `overrides`는 사용자가 실제로 바꾼 것만 담습니다(§7.1). */}
+        서입니다. **`overrides` 대신 `storage`를 넘깁니다**(Task 7) — 킷이 uncontrolled로
+        직접 저장소를 읽고 씁니다. 사용자가 실제로 바꾼 것만 담깁니다(§7.1)는 그대로이고,
+        이제 그 값이 새로고침 뒤에도 남습니다. */}
     <ShortcutProvider
       actions={[sidebarToggleAction(() => setCollapsed((value) => !value), { defaultCombo: SIDEBAR_DEFAULT_COMBO })]}
-      overrides={shortcutOverrides}
+      storage={shortcutStorage}
     >
       <AppShell
         collapsed={collapsed}
@@ -654,9 +695,10 @@ function Demo() {
         </div>
         <PageHeader eyebrow="DESIGN SYSTEM" title="컴포넌트 데모" description="드롭다운·날짜 피커·사이드바·탭이 한 화면에 모두 있습니다. 브라우저 폭을 760px 아래로 줄이면 모바일 레이아웃으로 바뀝니다." />
         {/* 단축키 예시 하나를 여기서도 문자로 적어 둡니다 — 자세한 설명과 설정 UI는
-            "컨트롤" 탭의 "단축키" 패널에 있습니다. 값은 실제 바인딩(`sidebarCombo`)에서
-            파생시킵니다 — 리터럴이면 아래 패널에서 재녹음해도 여기는 안 바뀝니다. */}
-        <p className="muted-copy">사이드바 접기/펴기 단축키: <strong>{sidebarCombo ? displayCombo(sidebarCombo) : "없음"}</strong></p>
+            "컨트롤" 탭의 "단축키" 패널에 있습니다. 값은 실제 바인딩(`useSidebarCombo`,
+            = `registry.bindingOf`)에서 파생시킵니다 — 리터럴이면 아래 패널에서
+            재녹음해도 여기는 안 바뀝니다. */}
+        <SidebarComboLine />
         <SectionTabs ariaLabel="데모 섹션" value={tab} tabs={TABS as unknown as Array<{ value: string; label: string }>} onChange={(next) => setTab(next as typeof tab)} />
   
         {tab === "controls" && <>
@@ -782,19 +824,7 @@ function Demo() {
                 (단축키 설계 스펙 §8). 이 패널은 그걸 쓰는 예시이자 `ShortcutSettings`를
                 실제로 눌러 볼 수 있는 자리입니다. */}
             <Panel title="단축키" hint="SHORTCUTS">
-              <p className="muted-copy">
-                {sidebarCombo
-                  ? <>사이드바 접기/펴기가 <strong>{displayCombo(sidebarCombo)}</strong>에 걸려 있습니다.</>
-                  : <>사이드바 접기/펴기에 지금 걸린 조합이 <strong>없음</strong>입니다 — 아래에서 새로 녹음해 보세요.</>}{" "}
-                킷의 기본값은 여전히 <code>defaultCombo: null</code>이고(설계 스펙 §3.2),
-                처음 걸려 있던 조합은 킷이 아니라 <strong>이 데모(앱)</strong>가
-                <code>sidebarToggleAction</code>의 <code>defaultCombo</code> 옵션으로
-                정했습니다. 아래에서 다시 녹음하거나 지우면 <code>overrides</code>에
-                들어가는데, <code>overrides</code>는 <strong>사용자가 실제로 바꾼
-                것만</strong> 담습니다(설계 스펙 §7.1) — 그래서 지우면 기본값으로
-                되돌아가지 않고 "조합 없음"이 됩니다. 저장은 없습니다 — 새로고침하면
-                초기화됩니다.
-              </p>
+              <ShortcutPanelIntro />
               <p className="muted-copy">
                 <strong>맨 키(수식어 없는 키) 허용 구역을 보려면:</strong> 아래에서 이 조합을
                 지우고 수식어 없이 <kbd>\</kbd> 하나만 다시 녹음하세요. ① <code>.workspace</code>
@@ -807,7 +837,10 @@ function Demo() {
                 수식어가 붙은 조합은 규칙 2로 어디서나 걸리므로, 이 차이는 맨 키로 바꿔야만
                 보입니다.
               </p>
-              <ShortcutSettings onChange={(id, combo) => setShortcutOverrides((current) => ({ ...current, [id]: combo }))} />
+              {/* onChange를 안 넘깁니다 — ShortcutProvider가 storage(shortcutStorage)를
+                  받은 uncontrolled이므로, 녹음·지우기는 registry.setBinding을 거쳐
+                  localStorage에 바로 저장됩니다(Task 7). */}
+              <ShortcutSettings />
             </Panel>
           </PanelGrid>
         </>}
