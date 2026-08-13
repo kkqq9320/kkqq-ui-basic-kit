@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits, familyOf, parseValue, serializeValue, isContiguous, comparisonPrecision, usableBound, outOfRange, clampToRange, meridiemOf } from "../src/model/instant";
+import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits, familyOf, parseValue, serializeValue, isContiguous, comparisonPrecision, usableBound, outOfRange, clampToRange, meridiemOf, hourFromTwelve } from "../src/model/instant";
 import type { WheelUnit } from "../src/model/instant";
 
 const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
@@ -669,5 +669,71 @@ describe("meridiemOf — 오전/오후 판정 (3단계)", () => {
 
   it("instantModel을 지나서도 같다 — 기계가 부르는 경로", () => {
     expect(instantModel.meridiem("2026-08-12T15:00", F)).toBe("pm");
+  });
+});
+
+// ── 3단계 — 12시간제에서는 시 타이핑의 상한이 12다 (스펙 §7) ──────────────────
+//
+// "시 열의 숫자 타이핑은 기존 규칙 그대로입니다 — 12시간제에서 상한이 12라 `15`는
+// 첫 자리를 버리고 `5`로 재해석됩니다. 지금 월 열이 `13`에 하는 것과 같습니다."
+// 그리고 친 숫자는 **12시간 읽기**이지 값이 아니다 — 어느 절반인지는 지금 값이 정한다.
+describe("typeDigit — 12시간제 시 열 (3단계)", () => {
+  it("대조군: 24시간제에서 2는 아직 기다린다(20~23이 있으므로)", () => {
+    expect(typeDigit("hour", "", "2")).toEqual({ digits: "2", commit: null, advance: false });
+  });
+
+  it("12시간제에서 2는 즉시 확정된다 — 20~23이 없으므로 기다릴 이유가 없다", () => {
+    expect(typeDigit("hour", "", "2", "12")).toEqual({ digits: "", commit: 2, advance: true });
+  });
+
+  it("1은 두 자리가 될 수 있으므로 기다린다 — 10·11·12", () => {
+    expect(typeDigit("hour", "", "1", "12")).toEqual({ digits: "1", commit: null, advance: false });
+    expect(typeDigit("hour", "1", "2", "12")).toEqual({ digits: "", commit: 12, advance: true });
+  });
+
+  it("대조군: 24시간제에서 15는 그대로 15다", () => {
+    expect(typeDigit("hour", "1", "5")).toEqual({ digits: "", commit: 15, advance: true });
+  });
+
+  it("12시간제에서 15는 첫 자리를 버리고 5로 다시 읽는다 — 월 열이 13에 하는 것과 같다", () => {
+    expect(typeDigit("hour", "1", "5", "12")).toEqual({ digits: "", commit: 5, advance: true });
+  });
+
+  it("0시는 12시간제에 없다 — 0으로 시작해도 확정되지 않는다", () => {
+    expect(typeDigit("hour", "", "0", "12")).toEqual({ digits: "0", commit: null, advance: false });
+    expect(typeDigit("hour", "0", "0", "12")).toEqual({ digits: "0", commit: null, advance: false });
+  });
+
+  it("분·초는 12시간제와 무관하다 — 대조군", () => {
+    expect(typeDigit("minute", "1", "5", "12")).toEqual({ digits: "", commit: 15, advance: true });
+    expect(typeDigit("second", "", "2", "12")).toEqual({ digits: "2", commit: null, advance: false });
+  });
+});
+
+describe("flushBuffer — 12시간제 시 열 (3단계)", () => {
+  it("대조군: 24시간제는 0시를 받는다", () => {
+    expect(flushBuffer("hour", "0")).toBe(0);
+  });
+
+  it("12시간제는 0시를 안 받는다 — 12시간 읽기에 0이 없다", () => {
+    expect(flushBuffer("hour", "0", "12")).toBe(null);
+  });
+
+  it("12시간제는 12까지 받고 그 위는 버린다", () => {
+    expect(flushBuffer("hour", "12", "12")).toBe(12);
+    expect(flushBuffer("hour", "13", "12")).toBe(null);
+  });
+});
+
+describe("hourFromTwelve — 친 숫자는 읽기이지 값이 아니다 (3단계)", () => {
+  it("12는 오전이면 0시, 오후면 12시다", () => {
+    expect(hourFromTwelve(12, "am")).toBe(0);
+    expect(hourFromTwelve(12, "pm")).toBe(12);
+  });
+
+  it("1~11은 오전이면 그대로, 오후면 +12다", () => {
+    expect(hourFromTwelve(3, "am")).toBe(3);
+    expect(hourFromTwelve(3, "pm")).toBe(15);
+    expect(hourFromTwelve(11, "pm")).toBe(23);
   });
 });

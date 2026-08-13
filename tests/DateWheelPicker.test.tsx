@@ -5272,3 +5272,76 @@ describe("DateWheelPicker 시 세그먼트의 a/p 키 (3단계)", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 });
+
+// ── 3단계 — 12시간제에서 시 열에 치는 숫자는 **읽기**다 (스펙 §7) ─────────────
+//
+// "시 열의 숫자 타이핑은 기존 규칙 그대로입니다 — 12시간제에서 상한이 12라 `15`는
+// 첫 자리를 버리고 `5`로 재해석됩니다." 그리고 그 숫자는 값이 아니라 12시간 읽기라,
+// **어느 절반인지는 지금 값이 정한다** — 오후에 3을 치면 15시다.
+describe("DateWheelPicker 12시간제 시 타이핑 (3단계)", () => {
+  const typeHour = (value: string, keys: string[]) => {
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 시각" value={value} fields={TIME_ONLY} onChange={onChange} />);
+    const field = fieldOf("거래 시각");
+    field.focus();
+    for (const key of keys) fireEvent.keyDown(field, { key });
+    return { onChange, field };
+  };
+
+  it("대조군: 24시간제에서 15를 치면 15시다", () => {
+    const { onChange } = typeHour("03:00:05", ["1", "5"]);
+    expect(onChange).toHaveBeenLastCalledWith("15:00:05");
+  });
+
+  it("오후일 때 3을 치면 15시다 — 친 것은 읽기이지 값이 아니다", () => {
+    setHourFormat("12");
+    const { onChange } = typeHour("15:00:05", ["3"]);
+    expect(onChange).toHaveBeenLastCalledWith("15:00:05");
+  });
+
+  it("오전일 때 3을 치면 3시다 — 같은 키, 다른 절반, 다른 값", () => {
+    setHourFormat("12");
+    const { onChange } = typeHour("03:00:05", ["3"]);
+    expect(onChange).toHaveBeenLastCalledWith("03:00:05");
+  });
+
+  it("오후일 때 4를 치면 16시다", () => {
+    setHourFormat("12");
+    const { onChange } = typeHour("15:00:05", ["4"]);
+    expect(onChange).toHaveBeenLastCalledWith("16:00:05");
+  });
+
+  it("오전 12는 자정이고 오후 12는 정오다", () => {
+    setHourFormat("12");
+    expect(typeHour("03:00:05", ["1", "2"]).onChange).toHaveBeenLastCalledWith("00:00:05");
+    cleanup();
+    expect(typeHour("15:00:05", ["1", "2"]).onChange).toHaveBeenLastCalledWith("12:00:05");
+  });
+
+  it("15는 첫 자리를 버리고 5로 다시 읽는다 — 오후면 17시다", () => {
+    setHourFormat("12");
+    const { onChange } = typeHour("15:00:05", ["1", "5"]);
+    expect(onChange).toHaveBeenLastCalledWith("17:00:05");
+  });
+
+  it("반쯤 친 채 열을 떠나면 그 버퍼도 읽기로 확정된다 — Tab", () => {
+    setHourFormat("12");
+    const { onChange, field } = typeHour("15:00:05", ["1"]);
+    expect(field.textContent).toContain(FILL);
+    fireEvent.keyDown(field, { key: "Tab" });
+    expect(onChange).toHaveBeenLastCalledWith("13:00:05");   // 읽기 1 + 오후 = 13시
+  });
+
+  it("12시간제에서 0으로 시작하면 확정되지 않는다 — 12시간 읽기에 0시가 없다", () => {
+    setHourFormat("12");
+    const { onChange, field } = typeHour("15:00:05", ["0"]);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(field.textContent).toContain(FILL);
+  });
+
+  it("분 열은 12시간제와 무관하다 — 대조군", () => {
+    setHourFormat("12");
+    const { onChange } = typeHour("15:00:05", ["ArrowRight", "1", "5"]);
+    expect(onChange).toHaveBeenLastCalledWith("15:15:05");
+  });
+});

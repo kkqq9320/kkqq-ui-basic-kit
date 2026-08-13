@@ -402,20 +402,30 @@ function maxDigits(unit: WheelUnit) {
 
 /** 한 자리만으로 확정되는 최소값 — 두 자리가 시작될 수 없는 첫 숫자.
  *  월 2(13~19가 없음) · 일 4(40~49가 없음) · 시 3(24~29가 없음) · 분·초 6(60~69가 없음). */
-function soloFloor(unit: WheelUnit) {
+function soloFloor(unit: WheelUnit, hourFormat: HourFormat = "24") {
   if (unit === "month") return 2;
   if (unit === "day") return 4;
-  if (unit === "hour") return 3;
+  // 12시간제에서는 상한이 12라 20~23이 없습니다 — 그래서 2부터 기다릴 이유가
+  // 사라집니다(3단계, 스펙 §7). 24시간제는 그대로 3입니다.
+  if (unit === "hour") return hourFormat === "12" ? 2 : 3;
   return 6;   // minute, second
 }
 
 /** 자릿수 판정용 상한. 문맥이 없으므로 일은 31로 넉넉히 잡고,
  *  말일 자르기는 값 설정 쪽(`withUnitValue`)이 따로 합니다 — 지금과 같은 분담입니다. */
-function typingCeiling(unit: WheelUnit) {
+function typingCeiling(unit: WheelUnit, hourFormat: HourFormat = "24") {
   if (unit === "month") return 12;
   if (unit === "day") return 31;
-  if (unit === "hour") return 23;
+  if (unit === "hour") return hourFormat === "12" ? 12 : 23;
   return 59;   // minute, second
+}
+
+/** 타이핑이 받는 최소값. `unitFloor`와 **일부러 다른 함수**입니다 — `unitFloor`는 열의
+ *  값 범위(시는 0)이고 이것은 **친 숫자의 범위**입니다. 12시간 읽기에는 0이 없고 12가
+ *  그 자리를 대신합니다(3단계, 스펙 §7). `unitFloor`를 건드리면 `shiftDateValue`의
+ *  순환까지 12시간제를 알게 되는데, 열은 24칸 그대로여야 합니다. */
+function typingFloor(unit: WheelUnit, hourFormat: HourFormat = "24") {
+  return unit === "hour" && hourFormat === "12" ? 1 : unitFloor(unit);
 }
 
 export type TypingStep = {
@@ -433,7 +443,7 @@ const DONE = (commit: number): TypingStep => ({ digits: "", commit, advance: tru
 /** 버퍼에 숫자 하나를 더한 결과. `digit`은 "0"~"9" 한 글자여야 합니다.
  *  인자가 `DateWheelUnit`이 아니라 `WheelUnit`인 것은 의도입니다 — 이 함수는 시·분·초로도
  *  불립니다. `DateWheelUnit`(3단위)은 `WheelUnit`의 부분집합이라 기존 호출부는 그대로 통과합니다. */
-export function typeDigit(unit: WheelUnit, buffer: string, digit: string): TypingStep {
+export function typeDigit(unit: WheelUnit, buffer: string, digit: string, hourFormat: HourFormat = "24"): TypingStep {
   if (unit === "year") {
     const next = buffer + digit;
     return next.length >= maxDigits(unit) ? DONE(Number(next)) : WAIT(next);
@@ -441,15 +451,17 @@ export function typeDigit(unit: WheelUnit, buffer: string, digit: string): Typin
 
   if (buffer === "") {
     // 두 자리가 시작될 수 없는 숫자면 기다릴 이유가 없습니다.
-    return Number(digit) >= soloFloor(unit) ? DONE(Number(digit)) : WAIT(digit);
+    return Number(digit) >= soloFloor(unit, hourFormat) ? DONE(Number(digit)) : WAIT(digit);
   }
 
   const combined = Number(buffer + digit);
-  // 하한은 unitFloor입니다 — 월·일은 1(0월·0일이 없음)이지만 시·분·초는 0(0시가 있음).
-  if (combined >= unitFloor(unit) && combined <= typingCeiling(unit)) return DONE(combined);
-  // 두 자리 조합이 애초에 존재하지 않는 수입니다(월 13, 일 39). 첫 자리를 버리고
-  // 이 숫자를 새 입력의 첫 자리로 다시 읽습니다 — 네이티브가 이렇게 합니다.
-  return typeDigit(unit, "", digit);
+  // 하한은 typingFloor입니다 — 월·일은 1(0월·0일이 없음), 시·분·초는 0, 다만
+  // **12시간제의 시만 1**입니다(12시간 읽기에 0이 없습니다).
+  if (combined >= typingFloor(unit, hourFormat) && combined <= typingCeiling(unit, hourFormat)) return DONE(combined);
+  // 두 자리 조합이 애초에 존재하지 않는 수입니다(월 13, 일 39, **12시간제의 시 15**).
+  // 첫 자리를 버리고 이 숫자를 새 입력의 첫 자리로 다시 읽습니다 — 네이티브가 이렇게
+  // 합니다. 스펙 §7이 12시간제의 `15` → `5`를 "월 열이 13에 하는 것과 같다"고 적은 자리입니다.
+  return typeDigit(unit, "", digit, hourFormat);
 }
 
 /**
@@ -461,12 +473,23 @@ export function typeDigit(unit: WheelUnit, buffer: string, digit: string): Typin
  *
  * 인자가 `WheelUnit`인 이유는 `typeDigit`과 같습니다 — 시·분·초로도 불립니다.
  */
-export function flushBuffer(unit: WheelUnit, buffer: string): number | null {
+export function flushBuffer(unit: WheelUnit, buffer: string, hourFormat: HourFormat = "24"): number | null {
   if (!buffer) return null;
   const typed = Number(buffer);
   if (unit === "year") return buffer.length <= 2 ? 2000 + typed : typed;
-  // 0월·0일은 없지만 0시·0분·0초는 있습니다.
-  return typed >= unitFloor(unit) ? typed : null;
+  // 0월·0일은 없지만 0시·0분·0초는 있습니다. **12시간제의 시만 1부터**이고, 위쪽도
+  // 함께 봅니다 — `typeDigit`이 12를 넘는 버퍼를 만들지는 않지만, 이 함수는 버퍼를
+  // 받는 입구가 하나 더 있는 것처럼 방어합니다(그게 이 함수의 자리입니다).
+  return typed >= typingFloor(unit, hourFormat) && typed <= typingCeiling(unit, hourFormat) ? typed : null;
+}
+
+/** 친 숫자를 값으로. **친 것은 12시간 읽기이지 값이 아닙니다**(3단계, 스펙 §7) —
+ *  어느 절반인지는 지금 값이 정합니다(오후에 `3`을 치면 15시). `12`가 특별한 이유는
+ *  `twelveHourText`의 `0 → 12`와 같습니다: 12시간 읽기에 0이 없어 12가 그 자리를
+ *  대신하므로, 되돌릴 때 오전 12는 0시입니다. */
+export function hourFromTwelve(reading: number, half: "am" | "pm"): number {
+  const base = reading % 12;   // 12 → 0
+  return half === "am" ? base : base + 12;
 }
 
 /** 연도를 다루면서 0~99를 1900년대로 옮기지 않는 안전한 말일 계산.
@@ -772,8 +795,12 @@ export type WheelModel = {
    * 구독해서 읽고 인자로 내려보냅니다(이 파일은 아무것도 import 하지 않습니다). */
   label(value: string, unit: DateWheelUnit, weekdays: string[], fields?: WheelUnit[], hour?: HourDisplay): string;
   triggerParts(source: string, fields: DateWheelUnit[], typing: { unit: DateWheelUnit; digits: string } | null, hour?: HourDisplay): DateTriggerPart[];
-  typeDigit(unit: DateWheelUnit, buffer: string, digit: string): TypingStep;
-  flushBuffer(unit: DateWheelUnit, buffer: string): number | null;
+  /* `hourFormat`은 3단계에서 붙었습니다(스펙 §7) — 12시간제면 시 열의 타이핑 상한이
+   * 12이고, 그때 확정되는 수는 **값이 아니라 12시간 읽기**입니다. 그것을 값으로
+   * 되돌리는 것이 `hourFromTwelve`입니다. 안 넘기면 24시간제로, 지금까지와 같습니다. */
+  typeDigit(unit: DateWheelUnit, buffer: string, digit: string, hourFormat?: HourFormat): TypingStep;
+  flushBuffer(unit: DateWheelUnit, buffer: string, hourFormat?: HourFormat): number | null;
+  hourFromTwelve(reading: number, half: "am" | "pm"): number;
   now(timeZone: string, fields?: WheelUnit[]): string;
   // 값 지식 둘이 기계(DateWheelPicker.tsx)에 남아 있었습니다(설계 스펙 §1단계 측정·
   // §12) — min/max 접두 비교(rangeKey/outOfRange/clampToRange)와 commitToday의 값
@@ -814,6 +841,7 @@ export const instantModel: WheelModel = {
   triggerParts: dateTriggerParts,
   typeDigit,
   flushBuffer,
+  hourFromTwelve,
   now: todayIn,
   outOfRange,
   clampToRange,

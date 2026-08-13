@@ -934,6 +934,16 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   const meridiemShift = meridiem ? shifted(MERIDIEM_UNIT, meridiemDirection) : null;
   function flipMeridiem() { applyShift(MERIDIEM_UNIT, meridiemDirection); }
 
+  /* 12시간제에서 **시 열에 친 숫자는 값이 아니라 읽기**입니다(3단계, 스펙 §7) —
+   * 오후에 `3`을 치면 15시입니다. 어느 절반인지는 지금 값이 정하므로, 타이핑 경로
+   * 둘(숫자 키의 즉시 확정, 열을 떠날 때의 버퍼 확정)이 **같은 변환을 지나가야**
+   * 합니다. 하나만 지나가면 "치면 맞는데 Tab으로 떠나면 틀리는" 갈라짐이 됩니다.
+   *
+   * 다른 열과 24시간제에서는 그대로 통과합니다 — 이 함수가 곧 그 조건입니다. */
+  function typedHourToValue(unit: DateWheelUnit, typed: number) {
+    return unit === MERIDIEM_UNIT && meridiem ? model.hourFromTwelve(typed, meridiem) : typed;
+  }
+
   function markColumnMotion(unit: DateWheelUnit, amount: number) {
     if (amount) {
       setColumnMotion((current) => ({
@@ -1093,9 +1103,9 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     setTyping(null);
     const buffer = resolvedTyping;
     if (!buffer?.digits) return null;
-    const amount = model.flushBuffer(buffer.unit, buffer.digits);
+    const amount = model.flushBuffer(buffer.unit, buffer.digits, hourFormat);
     if (amount === null) return null;
-    return commitTyped(buffer.unit, amount);
+    return commitTyped(buffer.unit, typedHourToValue(buffer.unit, amount));
   }
 
   /**
@@ -1285,10 +1295,10 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       setActiveUnit(unit);
       setEditing(true);
       const buffer = resolvedTyping?.unit === unit ? resolvedTyping.digits : "";
-      const step = model.typeDigit(unit, buffer, key);
+      const step = model.typeDigit(unit, buffer, key, hourFormat);
       if (step.commit !== null) {
         setTyping(null);
-        commitTyped(unit, step.commit);
+        commitTyped(unit, typedHourToValue(unit, step.commit));
         if (step.advance) moveColumn(unit, 1);
       } else {
         setTyping({ unit, digits: step.digits });
