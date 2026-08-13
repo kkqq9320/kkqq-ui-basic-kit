@@ -29,6 +29,53 @@ function press(init: KeyboardEventInit & { code: string }): KeyboardEvent {
   return event;
 }
 
+/* **오너의 실기기 캡처를 그대로 재생합니다**(2026-08-13, Windows Chrome, 한글 IME —
+ * 스펙 §2.5·§10-5). 조합 중에 `Ctrl+\`를 **한 번** 눌렀을 때 실제로 온 두 이벤트:
+ *
+ *   keydown key="Process" code=Backslash keyCode=229  mods=Ctrl  ime=Y
+ *   keydown key="\"       code=Backslash keyCode=220  mods=Ctrl  ime=N
+ *
+ * 규칙 8이 없으면 **둘 다 발사되어 액션이 두 번** 돕니다 — 오너가 본 증상이 정확히
+ * 그것이었습니다("사이드바가 안 접힌다" = 접혔다 펴짐). 같은 캡처에 대조군도 있었습니다:
+ * 조합이 아닐 때는 누를 때마다 `처리됨=Y`가 하나씩이었습니다. */
+describe("IME 조합 중 한 번 누르면 한 번만 발사된다 (스펙 §2.5)", () => {
+  /** 실기기에서 온 두 이벤트를 순서대로 보냅니다. `keyCode`는 `KeyboardEventInit`에
+   *  없어 따로 심습니다 — 안 심으면 jsdom이 0으로 둬서 규칙 8의 절반이 안 걸립니다. */
+  function pressWhileComposing() {
+    const ime = new KeyboardEvent("keydown", { code: "Backslash", ctrlKey: true, isComposing: true, bubbles: true, cancelable: true });
+    Object.defineProperty(ime, "keyCode", { value: 229 });
+    document.dispatchEvent(ime);
+    const real = new KeyboardEvent("keydown", { code: "Backslash", ctrlKey: true, bubbles: true, cancelable: true });
+    Object.defineProperty(real, "keyCode", { value: 220 });
+    document.dispatchEvent(real);
+    return { ime, real };
+  }
+
+  it("keydown이 둘 와도 onFire는 한 번만 불린다", () => {
+    const onFire = vi.fn();
+    render(<ShortcutProvider actions={[action({ onFire, defaultCombo: "Ctrl+Backslash" })]} />);
+    pressWhileComposing();
+    expect(onFire).toHaveBeenCalledTimes(1);
+  });
+
+  // 대조군 — 조합이 아니면 이벤트가 하나 오고 한 번 발사됩니다.
+  it("조합이 아닐 때도 한 번이다", () => {
+    const onFire = vi.fn();
+    render(<ShortcutProvider actions={[action({ onFire, defaultCombo: "Ctrl+Backslash" })]} />);
+    press({ code: "Backslash", ctrlKey: true });
+    expect(onFire).toHaveBeenCalledTimes(1);
+  });
+
+  /* 규칙 6이 IME 자신의 이벤트까지 막으면 조합 중인 커서가 튑니다(오너 관측: 커서가
+   * 맨 왼쪽으로 이동). 그 이벤트는 **손대지 않고** 지나가야 합니다. */
+  it("IME 이벤트의 기본 동작은 건드리지 않는다", () => {
+    render(<ShortcutProvider actions={[action({ defaultCombo: "Ctrl+Backslash" })]} />);
+    const { ime, real } = pressWhileComposing();
+    expect(ime.defaultPrevented).toBe(false);
+    expect(real.defaultPrevented).toBe(true);   // 대조군 — 진짜 이벤트는 규칙 6이 막습니다
+  });
+});
+
 describe("디스패치", () => {
   it("바인딩된 조합이 액션을 부른다", () => {
     const onFire = vi.fn();
