@@ -124,6 +124,26 @@ export const DEFAULT_DATE_WHEEL_LABELS: DateWheelLabels = {
  *  오너가 그 값을 알고 고른 것이라 그대로 둡니다. 바꾸려면 여기 하나만 고치면 됩니다. */
 const DATE_WHEEL_HOLD_MS = 2000;
 
+/** 열 하나가 읽히는 최소 폭. 두 자리 숫자 + 일 열의 요일(`12 수`)이 안 잘리는 값이고,
+ *  이 아래로 내려가면 오너가 말한 "답답한" 화면이 됩니다. */
+const DATE_WHEEL_COLUMN_MIN = 56;
+/** `css/date-picker.css`의 `.date-wheel-popover { padding: 12px }`와 같은 값.
+ *  ⚠️ 한쪽만 바꾸면 바닥 폭이 조용히 어긋납니다 — 검사가 둘을 대조합니다. */
+const POPOVER_PADDING = 12;
+
+/** 열 하나가 잃을 수 있는 **최대** 가로 여백. `css/date-picker.css`의 마진과 같은 값이고,
+ *  검사가 둘을 대조합니다 — 한쪽만 바뀌면 바닥 폭이 조용히 어긋납니다.
+ *
+ *  🔴 **최대인 것이 요점입니다.** 그리드가 트랙을 **똑같이** 나누므로, 여백 예산을 총합으로
+ *  더하면 그 여유가 여섯 열에 골고루 퍼지고 **정작 여백을 쓰는 열만 여전히 좁습니다**
+ *  (실측: 총합으로 더했을 때 날짜 59 / 시 51). 트랙마다 최대 여백을 실어야 **가장 좁은
+ *  열**이 최소 폭을 지킵니다. 날짜 열이 그만큼 넉넉해지는 것은 대가로 받아들입니다. */
+function widestColumnMargin(drawn: WheelUnit[]): number {
+  const timeIndex = drawn.indexOf(MERIDIEM_UNIT);
+  if (timeIndex < 0) return 0;
+  return timeIndex > 0 ? 8 : 6;   // 날짜가 앞에 있으면 시 열의 경계 여백이 가장 큽니다
+}
+
 /** 그릴 행 오프셋. **바깥 한 줄씩은 보이지 않는 프리로드**이고 나머지가 화면에 뜹니다
  *  (오너 리포트 6번: 위아래 몇 줄을 보여 줄지가 이제 킷 전역 설정입니다).
  *
@@ -849,7 +869,19 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       const maxHeight = Math.max(230, (openAbove ? above : below) - gap);
       const viewportLeft = window.visualViewport?.offsetLeft ?? 0;
       const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
-      const width = Math.min(Math.max(rect.width, 292), viewportWidth - edge * 2);
+      /* 🔴 **바닥 폭이 열 개수를 따라갑니다**(오너 리포트 2026-08-13: "모바일에선 5열도
+       * 6열도 괜찮아 보이는데 데스크톱에서 좀 문제네. 카드 사이즈를 조금 더 키우면 안돼?").
+       *
+       * 팝오버 폭은 트리거 폭에서 나오는데, 데스크톱에서는 트리거가 폼 칸 하나라 좁습니다 —
+       * 화면은 넓은데 6열이 292px 안에 구겨집니다. 열 하나가 읽히려면 최소 폭이 있고,
+       * 그 최소는 **열 개수에 비례**합니다.
+       *
+       * ⚠️ **3열 픽커는 글자 하나 안 바뀝니다** — 3열의 필요 폭(204)이 기존 바닥 292보다
+       * 작아 292가 그대로 이깁니다. 실제로 넓어지는 것은 5·6열뿐입니다.
+       * ⚠️ **모바일도 안 바뀝니다** — 아래 뷰포트 클램프가 먼저 걸립니다(375px 화면에서는
+       * 예전에도 359로 잘리고 있었습니다). 오너가 "모바일은 괜찮다"고 한 그 폭 그대로입니다. */
+      const columnFloor = POPOVER_PADDING * 2 + (columns.length - 1) * gap + columns.length * (DATE_WHEEL_COLUMN_MIN + widestColumnMargin(columns));
+      const width = Math.min(Math.max(rect.width, 292, columnFloor), viewportWidth - edge * 2);
       const left = Math.min(Math.max(viewportLeft + edge, rect.left), viewportLeft + viewportWidth - width - edge);
       // ⚠️ **위로 뒤집을 때 `top`을 계산하지 마세요.** 그러려면 팝오버의 실제 높이가 필요한데
       // 이 함수는 팝오버가 마운트되기 **전에** 처음 돕니다 — 잴 대상이 아직 없습니다. 한동안
