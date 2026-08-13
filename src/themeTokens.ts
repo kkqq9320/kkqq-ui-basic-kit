@@ -51,7 +51,7 @@ export const THEME_TOKEN_GROUPS: ThemeTokenGroup[] = [
     title: "강조",
     tokens: [
       { name: "--accent", label: "강조색", description: "선택 상태·주요 버튼·링크" },
-      { name: "--accent-text", label: "강조 글자", description: "어두운 면 위의 강조색 글자 — 대비 때문에 다크에서만 밝습니다" },
+      { name: "--accent-text", label: "강조 글자", description: "세그먼트 칩 위의 강조색 글자 — 대비 때문에 다크에서만 밝습니다" },
       { name: "--accent-soft", label: "강조 배경", description: "선택된 항목의 옅은 배경" },
       { name: "--link", label: "링크 글자", description: "텍스트 버튼·링크" },
     ],
