@@ -658,6 +658,110 @@ function startSwipeTrace(column: Element) {
   };
 }
 
+/* ── 오너 리포트 2번 전용 프로브: "지금 버튼이 최초 한 번에 안 눌린다" ──────────
+ *
+ * **가르려는 것 하나뿐입니다: 그 탭에서 `click`이 아예 안 났는가, 났는데 아무 일도
+ * 안 일어났는가.** 둘은 고침이 완전히 다릅니다.
+ *   · `click` 없음 → 탭이 먹혔다. 후보: 팝오버의 `onMouseDown preventDefault`(터치의
+ *     합성 mousedown을 막으면 click이 삼켜질 수 있다 — 이 저장소가 **미검증으로 적어
+ *     둔 항목**입니다), 또는 팝오버가 스크롤 컨테이너라 첫 탭이 스크롤 정지에 쓰였다.
+ *   · `click` 있음 → 핸들러 쪽 문제. 그때는 데모의 onChange 표식이 같이 찍힙니다.
+ *
+ * 그래서 **버튼이 그 사이에 움직였는지**와 **팝오버가 스크롤됐는지**를 함께 남깁니다 —
+ * 손가락 아래에서 요소가 움직이면 브라우저가 click을 안 만듭니다.
+ *
+ * ⚠️ 휠 행(`.date-wheel-values button`)은 대상이 아닙니다. 그건 스와이프 경로라
+ * 이미 swipe 트레이스가 봅니다. 여기가 보는 것은 **팝오버의 버튼 줄**입니다. */
+/* 🔴 **탭마다 독립된 감시자를 둡니다 — 슬롯 하나로 두면 안 됩니다.**
+ * 리포트된 제스처가 바로 **"첫 탭이 안 먹고 두 번째에 된다"**입니다. 슬롯이 하나면
+ * 두 번째 탭이 700ms 안에 들어올 때 첫 감시자를 죽이고, **판정이 안 찍히는 것이 하필
+ * 실패한 그 탭**이 됩니다 — 성공한 두 번째만 남아 "정상"으로 읽힙니다.
+ * 계측기가 재려는 사건을 스스로 지우는 자리라, 슬롯을 없애고 각자 정리하게 둡니다. */
+function startTapTrace(button: Element) {
+  const started = performance.now();
+  const popover = button.closest(".date-wheel-popover");
+  const startTop = popover instanceof HTMLElement ? popover.scrollTop : -1;
+  const startRect = button.getBoundingClientRect();
+  const label = (button.textContent ?? "").trim().slice(0, 12);
+  const where = button.closest(".date-wheel-actions") ? "액션줄"
+    : button.closest(".date-wheel-meridiem") ? "오전오후"
+    : button.classList.contains("date-wheel-step") ? "±버튼" : "기타";
+  let sawClick = false;
+  let sawMouseDown = false;
+  let mouseDownBlocked = false;
+
+  append(`tap start   "${label}" (${where})  popScrollTop=${startTop} y=${Math.round(startRect.top)}`);
+
+  const onClick = (event: Event) => {
+    if (event.target instanceof Node && button.contains(event.target)) sawClick = true;
+  };
+  const onMouseDown = (event: MouseEvent) => {
+    if (!(event.target instanceof Node) || !button.contains(event.target)) return;
+    sawMouseDown = true;
+    // 버블 끝에서 읽어야 팝오버의 onMouseDown까지 다 돈 결과입니다.
+    setTimeout(() => { mouseDownBlocked = event.defaultPrevented; }, 0);
+  };
+  document.addEventListener("click", onClick, true);
+  document.addEventListener("mousedown", onMouseDown, true);
+
+  const timer = window.setTimeout(() => {
+    const endTop = popover instanceof HTMLElement ? popover.scrollTop : -1;
+    const endRect = button.getBoundingClientRect();
+    append(`tap verdict "${label}"  click=${sawClick ? "Y" : "🔴N"}  mousedown=${sawMouseDown ? "Y" : "N"}`
+      + ` mousedown막힘=${mouseDownBlocked ? "Y" : "N"}  스크롤Δ=${endTop - startTop}  버튼이동Δy=${Math.round(endRect.top - startRect.top)}`
+      + `  +${Math.round(performance.now() - started)}ms`);
+    append(sawClick
+      ? "  읽는 법: click이 났으므로 탭은 도착했습니다 — 값이 안 바뀌었다면 핸들러 쪽입니다(데모의 ── onChange 표식을 보세요)."
+      : "  🔴 읽는 법: click이 아예 안 났습니다 — 탭이 먹혔습니다. mousedown막힘=Y면 팝오버의 preventDefault가 1순위, 스크롤Δ≠0이면 스크롤 컨테이너가 1순위입니다.");
+    document.removeEventListener("click", onClick, true);
+    document.removeEventListener("mousedown", onMouseDown, true);
+  }, 700);
+  void timer;
+}
+
+/* ── 오너 리포트 1번 전용 프로브: "모바일에서 휠 애니메이션이 버벅인다" ──────────
+ *
+ * 휠 이동은 CSS 애니메이션(`date-wheel-slide-*` 210ms)이라 스와이프 트레이스가 안 봅니다
+ * (그쪽은 손가락이 닿아 있는 동안만 돕니다). 여기서는 **애니메이션이 시작되는 순간**
+ * 프레임 샘플링을 켜고, 끝나면 숫자로 판정합니다.
+ *
+ * **판정은 평균이 아니라 최대 프레임 간격입니다.** 60Hz면 16.7ms가 정상이고, 한 프레임이라도
+ * 50ms를 넘으면 눈에 "덜컥"으로 보입니다. 평균만 보면 그 한 프레임이 묻힙니다.
+ * 열 개수도 같이 남깁니다 — 3열과 6열은 합성 비용이 두 배고, 그게 1번의 1순위 후보입니다. */
+let slideWatch: { stop: () => void } | null = null;
+
+function startSlideTrace(columns: number) {
+  if (slideWatch) return;   // 열 여섯이 동시에 애니메이션하면 첫 하나만 잽니다
+  const started = performance.now();
+  let frames = 0;
+  let last = started;
+  let worst = 0;
+  let worstAt = 0;
+  let over32 = 0;
+  let raf = 0;
+
+  const tick = () => {
+    const now = performance.now();
+    const gap = now - last;
+    last = now;
+    frames += 1;
+    if (gap > worst) { worst = gap; worstAt = frames; }
+    if (gap > 32) over32 += 1;
+    if (now - started < 420) raf = requestAnimationFrame(tick);
+    else slideWatch?.stop();
+  };
+  raf = requestAnimationFrame(tick);
+
+  slideWatch = { stop: () => {
+    cancelAnimationFrame(raf);
+    slideWatch = null;
+    const total = Math.round(performance.now() - started);
+    const fps = frames > 0 ? Math.round((frames / total) * 1000) : 0;
+    append(`slide end   열=${columns}  frames=${frames} in ${total}ms (~${fps}fps)  최대간격=${Math.round(worst)}ms(f${worstAt})  32ms초과=${over32}`);
+    append("  읽는 법: 최대간격이 50ms를 넘으면 그 한 프레임이 '덜컥'입니다. 32ms초과가 여러 개면 전체가 반프레임으로 도는 것입니다. 열 수를 같이 보세요 — 3열과 6열을 각각 재서 비교해야 합니다.");
+  } };
+}
+
 function append(text: string) {
   const now = performance.now();
   // 새 배열을 만들어 교체합니다(push로 제자리 변경 금지) — React 상태로 그대로 흘려보내는
@@ -745,6 +849,9 @@ export function installEventTrace() {
       if (type === "pointerdown" && event.target instanceof Element) {
         const column = event.target.closest(".date-wheel-column");
         if (column) startSwipeTrace(column);
+        // 팝오버 안의 **버튼 줄**을 눌렀을 때만 — 휠 행은 위 swipe 트레이스 담당입니다.
+        const button = event.target.closest("button");
+        if (button && button.closest(".date-wheel-popover") && !button.closest(".date-wheel-values")) startTapTrace(button);
       }
       if (type === "pointerup") swipeStop?.();
     }, { capture: true, passive: true });
@@ -753,6 +860,15 @@ export function installEventTrace() {
   // 만든 것이다). 스와이프 트레이스는 취소로도 끝나므로 여기서 따로 받는다 — 안 그러면
   // 손가락이 화면 밖으로 나간 캡처에서 rAF 루프가 600프레임까지 계속 돈다.
   document.addEventListener("pointercancel", () => { swipeStop?.(); }, { capture: true, passive: true });
+
+  /* 휠 이동 애니메이션이 시작되는 순간 프레임 샘플링을 켭니다(오너 리포트 1번).
+   * `animationstart`는 버블하므로 document에서 한 번만 받으면 됩니다. 이름으로 걸러
+   * 진입(`date-wheel-enter`)과 선택 팝(`date-wheel-selected-pop`)은 빼고 **이동만** 봅니다. */
+  document.addEventListener("animationstart", (event) => {
+    if (!(event instanceof AnimationEvent)) return;
+    if (event.animationName !== "date-wheel-slide-next" && event.animationName !== "date-wheel-slide-previous") return;
+    startSlideTrace(document.querySelectorAll(".date-wheel-column").length);
+  }, { capture: true, passive: true });
 
   window.addEventListener("popstate", () => {
     append(`popstate    stackLen=${popupStackLength()}  menu=${menuPresent()}`);

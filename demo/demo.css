@@ -127,3 +127,16 @@ body.date-wheel-fold-demo .date-wheel-popover[aria-label="초까지 예약 시�
   background: rgba(255, 255, 255, .06); color: inherit;
   font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; resize: none;
 }
+
+
+/* 오너 리포트 6번 — "휠 위아래로 보이는 숫자가 2개씩인데 1개씩만 보이게 해볼 수 있어?
+ * 실제로 올려보고 결정하고 싶어" (2026-08-13).
+ *
+ * 킷 CSS가 토큰 둘로 묶어 뒀으므로(`css/date-picker.css`의 `--date-wheel-rows-h` /
+ * `--date-wheel-rest`) 여기서 그 둘만 덮어씁니다. **팝오버는 body 포털이라** 데모의
+ * 어떤 래퍼로도 스코프가 안 잡혀서 body 클래스로 겁니다 — 6열 접기 토글과 같은 방식입니다.
+ *
+ * 3행(위아래 1개씩) = 90px, 정지 −60px. 선택 행이 창 한가운데 오는 값입니다.
+ * ⚠️ 이건 **실험**입니다. 정해지면 킷 기본값으로 박고 `DATE_WHEEL_OFFSETS`·`preloadOnly`도
+ * 같이 줄여야 합니다(지금은 ±2가 화면 밖인데도 접근성 트리에 남습니다). */
+body.date-wheel-rows-1 .date-wheel-column { --date-wheel-rows-h: 90px; --date-wheel-rest: -60px; }

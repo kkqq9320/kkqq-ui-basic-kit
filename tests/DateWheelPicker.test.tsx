@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DateWheelPicker, DEFAULT_DATE_WHEEL_LABELS, type DateWheelLabels, type DateWheelUnit } from "../src/DateWheelPicker";
 import { instantModel, type WheelUnit } from "../src/model/instant";
+import { setHourFormat } from "../src/settings";
 import { Dialog } from "../src/Dialog";
 import datePickerCssSource from "../css/date-picker.css?raw";
 import tokensCssSource from "../css/tokens.css?raw";
@@ -19,7 +20,9 @@ import tokensCssSource from "../css/tokens.css?raw";
 // nowSpy.mockRestore()/shiftSpy.mockRestore()는 it 본문 맨 끝 줄이라, 그 위 어느
 // expect()든 던지면 건너뛰어져 스파이가 그대로 살아남는다 — instantModel은 파일
 // 전체가 공유하는 하나의 객체라 그 뒤 테스트로 샌다(전체 브랜치 리뷰 F-2 지적).
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
+// `hourFormat`은 모듈 스코프 전역이라(설계 스펙 §11) 검사 사이에 샌다 — 3단계
+// 블록 하나가 12시간제로 두고 끝나면 그 뒤 스위트 전체가 12시간제로 돈다.
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); setHourFormat("24"); });
 
 /**
  * 트리거가 빈 자리를 채우는 문자 — **U+2012 FIGURE DASH**. 밑줄이 아니다(설계 스펙 §4.5).
@@ -3985,18 +3988,37 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
 
   // **이제는 방향이 있어야 합니다.** 없으면 "드르륵"이 아니라 예전의 방향 없는 진입입니다.
   // 전제(키프레임이 있다)는 바로 위 테스트가 집니다.
-  it("진입 키프레임은 굴러 내려온다", () => {
+  /* 🔴 **좌표가 리터럴에서 토큰으로 바뀌었습니다**(오너 리포트 6번, 2026-08-13) — 보이는
+   * 행 수를 실기기에서 고르는 중이라 `--date-wheel-rest`(정지 위치)와 `--date-wheel-rows-h`
+   * (창 높이)가 그 둘을 **한 벌로** 묶습니다. 그래서 이 검사도 절대 좌표가 아니라 **정지
+   * 위치와의 관계**를 봅니다 — 그게 원래 이 검사가 말하려던 것이기도 합니다("한 행 위에서
+   * 시작해 제자리로 멎는다"). 리터럴로 뒀으면 토큰을 바꾼 순간 통과하면서 거짓이 됩니다. */
+  it("진입 키프레임은 정지 위치보다 한 행 위에서 굴러 내려온다", () => {
     const keyframes = /@keyframes date-wheel-enter\s*\{[\s\S]*?\n\}/.exec(datePickerCssSource)?.[0] ?? "(진입 키프레임이 없다)";
-    expect(keyframes).toMatch(/0%\s*\{[^}]*translateY\(-60px\)/);
+    expect(keyframes).toContain("translateY(calc(var(--date-wheel-rest) - 30px))");
   });
 
   // **travel은 프리로드가 감당하는 30px이 상한입니다.** 값 컨테이너 210px(7행), 뷰포트
   // 150px이므로 뷰포트가 보는 구간은 [Y, Y+150]이고 Y는 0~60만 가능합니다. 기본이 -30px
   // 이므로 시작점은 -60px보다 위로 갈 수 없습니다 — 넘기면 뷰포트 끝에 행이 없는 빈 띠가
   // 생깁니다. F1의 드래그 클램프 ±30과 **같은 기하에서 나온 같은 수**입니다.
-  it("진입은 -60px에서 시작해 기본 자리 -30px로 멎는다", () => {
+  it("진입은 정지 위치로 멎는다", () => {
     const keyframes = /@keyframes date-wheel-enter\s*\{[\s\S]*?\n\}/.exec(datePickerCssSource)?.[0] ?? "(진입 키프레임이 없다)";
-    expect(keyframes).toMatch(/100%\s*\{[^}]*translateY\(-30px\)/);
+    expect(keyframes).toContain("100% { opacity: 1; transform: translateY(var(--date-wheel-rest)); }");
+  });
+
+  /* 그리고 **토큰 둘이 짝을 이룬다**는 것을 따로 못 박습니다 — 이 라운드에서 새로 생긴
+   * 계약이고, 하나만 고치면 선택된 행이 창 가운데에서 벗어납니다. 기본값은 지금까지와
+   * 같은 5행(150px)/−30px입니다("새 축은 기본값이 지금과 같음", PRINCIPLES §14). */
+  it("휠 창 높이와 정지 위치는 한 벌로 선언된다 — 기본은 5행", () => {
+    expect(datePickerCssSource).toContain(".date-wheel-column { --date-wheel-rows-h: 150px; --date-wheel-rest: -30px; }");
+  });
+
+  it("창 높이와 정지 위치를 쓰는 자리 셋이 리터럴로 되돌아가지 않는다", () => {
+    // 뷰포트 높이 · 열 높이 · 정지 transform이 전부 토큰을 지나가야 데모 토글이 한 벌로 움직인다.
+    expect(datePickerCssSource).toContain(".date-wheel-viewport { width: 100%; height: var(--date-wheel-rows-h);");
+    expect(datePickerCssSource).toContain("height: calc(var(--date-wheel-rows-h) + 62px)");
+    expect(datePickerCssSource).toContain("transform: translateY(calc(var(--date-wheel-rest) + var(--date-wheel-drag-offset, 0px)))");
   });
 
   // **모든 열이 함께 구릅니다** — 축 1. 규칙은 하나이고, 열마다 다른 것은 **시차뿐**입니다.
@@ -4965,6 +4987,487 @@ const _hintNowIsOptional: DateWheelLabels = {
   placeholder: "날짜 선택", hint: "안내", today: "오늘", now: "지금", clear: "비우기", done: "완료",
   previous: "이전", next: "다음", select: "선택", weekdays: ["일", "월", "화", "수", "목", "금", "토"],
   units: { year: "연도", month: "월", day: "일" },
+  // 3단계: `meridiem`은 **필수**다. 그리는 글자이고, 선택으로 두면 영어로
+  // override한 소비자에게 한국어가 새는 자리가 하나 더 생긴다(원장의 `units` 누수와
+  // 정확히 같은 모양) — 그 실수를 되풀이하지 않는다는 계약을 여기서 못 박는다.
+  meridiem: { am: "오전", pm: "오후" },
   // hintNow 없음 — 필수가 되면 여기서 tsc가 터진다.
 };
 void _hintNowIsOptional;
+
+// ── 3단계 — 12시간제는 킷 전역 설정이고, 시 열은 24칸 그대로다 (스펙 §7·§10·§11) ──
+//
+// 이 블록의 검사는 전부 **같은 값, 다른 글자**다. 값을 바꾸는 검사가 하나도 없는
+// 것이 요점이다 — 12시간제는 읽는 방식이지 값이 아니다.
+const TIME_FIELDS: WheelUnit[] = ["year", "month", "day", "hour", "minute", "second"];
+
+describe("DateWheelPicker 12시간제 (3단계)", () => {
+  it("대조군: 기본은 24시간제다 — 설정을 안 건드리면 트리거가 지금과 같다", () => {
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:00:05" fields={TIME_FIELDS} onChange={() => undefined} />);
+    expect(fieldOf("거래 시각").textContent).toBe("2026. 08. 12. 15:00:05");
+  });
+
+  it("설정이 12면 트리거의 시 세그먼트가 오전/오후를 싣는다", () => {
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:00:05" fields={TIME_FIELDS} onChange={() => undefined} />);
+    expect(fieldOf("거래 시각").textContent).toBe("2026. 08. 12. 오후 03:00:05");
+  });
+
+  /* 🔴 이 검사가 이 태스크의 **공허하지 않은** 부분이다.
+   *
+   * 위 두 검사만으로는 컴포넌트가 **구독**하는지 알 수 없다 — 렌더 시점에 한 번 읽고
+   * 마는 구현도, 지역 상수 `"24"`를 들고 있다가 우연히 맞는 구현도 똑같이 통과한다.
+   * 여기서는 **마운트한 뒤에** 설정을 바꾸고 화면이 따라오는지를 본다. `useSyncExternalStore`
+   * 없이는 빨개진다. (이 저장소 원장의 "공허한 A/B" 실패 사례와 같은 자리다.) */
+  it("마운트한 뒤 설정을 바꾸면 이미 떠 있는 픽커가 따라 바뀐다 — 구독이 실제로 돈다", () => {
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:00:05" fields={TIME_FIELDS} onChange={() => undefined} />);
+    expect(fieldOf("거래 시각").textContent).toBe("2026. 08. 12. 15:00:05");
+
+    act(() => setHourFormat("12"));
+    expect(fieldOf("거래 시각").textContent).toBe("2026. 08. 12. 오후 03:00:05");
+
+    act(() => setHourFormat("24"));
+    expect(fieldOf("거래 시각").textContent).toBe("2026. 08. 12. 15:00:05");
+  });
+
+  /* 🔴 **오너 결정(2026-08-13)으로 열에서 오전/오후 글자를 뺐습니다.** 그래서 이 검사가
+   * 예전에 쓰던 증거("행이 오전 11 → 오후 12로 넘어간다")가 **사라졌습니다** — 이제 행은
+   * `11, 12, 01`이라 24칸 열과 12칸 열이 **글자로 구별되지 않습니다.** 라벨만 보는 검사를
+   * 그대로 뒀으면 통과는 계속하면서 아무것도 증명하지 않았을 것입니다.
+   *
+   * **그래서 증거를 값으로 옮깁니다:** 11시에서 한 칸 내리면 `12:00`(정오)이 되어야 하고,
+   * 그 값에서 오전/오후 버튼이 **오후로 뒤집혀야** 합니다. 12칸으로 순환하는 열이었다면
+   * 11 다음이 12로 보이더라도 값은 오전에 머뭅니다 — 그게 스펙 §7이 24칸을 고른 이유이고,
+   * 이 검사가 그것을 값으로 봅니다. */
+  it("열에는 숫자만 그린다 — 오전/오후 글자가 행에 안 붙는다", () => {
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T11:00:05" fields={TIME_FIELDS} onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 시각"));
+
+    const hour = screen.getByRole("group", { name: "시 오전 11" });
+    const rows = [...hour.querySelectorAll(".date-wheel-values button")].map((row) => row.textContent);
+    expect(rows).toEqual(["08", "09", "10", "11", "12", "01", "02"]);
+  });
+
+  it("열의 접근성 이름에는 절반이 남는다 — 스크린리더에는 버튼이 안 보인다", () => {
+    // 화면과 이름이 갈리는 것은 이 파일의 선례다(트리거 이름이 U+2012를 빼고 읽는다).
+    // 근거도 같다: 화면과 귀는 서로 다른 것을 놓친다. 24칸 열에 `03`이 두 번 나오는데
+    // 이름까지 `시 03`이면 오전인지 오후인지 알 방법이 없다.
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:00:05" fields={TIME_FIELDS} onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    expect(screen.getByRole("group", { name: "시 오후 03" })).toBeTruthy();
+  });
+
+  it("🔴 열이 24칸이라는 증거 — 11시에서 한 칸 내리면 정오가 되고 버튼이 오후로 뒤집힌다", () => {
+    setHourFormat("12");
+    const onChange = vi.fn();
+    const { rerender } = render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T11:00:05" fields={TIME_FIELDS} onChange={onChange} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    expect(screen.getByRole("button", { name: "오전" }).getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "시 다음" }));
+    // 12칸으로 순환하는 열이었다면 값이 오전에 머문다. 값이 정오로 간 것이 24칸의 증거다.
+    expect(onChange).toHaveBeenLastCalledWith("2026-08-12T12:00:05");
+
+    rerender(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T12:00:05" fields={TIME_FIELDS} onChange={onChange} />);
+    expect(screen.getByRole("button", { name: "오후" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("분·초 열은 12시간제와 무관하다 — 대조군", () => {
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:07:05" fields={TIME_FIELDS} onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 시각"));
+
+    expect(screen.getByRole("group", { name: "분 07" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "초 05" })).toBeTruthy();
+  });
+
+  it("오전/오후 문구를 소비자가 바꿀 수 있다 — 킷이 한국어를 안 박는다", () => {
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:00:05" fields={TIME_FIELDS} onChange={() => undefined} labels={{ meridiem: { am: "AM", pm: "PM" } }} />);
+    expect(fieldOf("거래 시각").textContent).toBe("2026. 08. 12. PM 03:00:05");
+  });
+
+  /* `meridiem`을 **통째로만** 갈아 끼울 수 있다는 것이 이 검사의 내용이다.
+   * `units`처럼 부분 병합(`{ ...DEFAULT.meridiem, ...override.meridiem }`)을 하면,
+   * 한쪽만 준 소비자에게 나머지 한쪽이 한국어로 새고 — 그게 이 저장소가 이미 갖고
+   * 있는 결함이다. 타입이 둘 다 요구하므로 그 상태 자체가 만들어지지 않는다. */
+  it("오전/오후는 통째로 바뀐다 — 한쪽만 한국어로 남는 상태가 없다", () => {
+    setHourFormat("12");
+    const { rerender } = render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T03:00:05" fields={TIME_FIELDS} onChange={() => undefined} labels={{ meridiem: { am: "AM", pm: "PM" } }} />);
+    expect(fieldOf("거래 시각").textContent).toBe("2026. 08. 12. AM 03:00:05");
+    rerender(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:00:05" fields={TIME_FIELDS} onChange={() => undefined} labels={{ meridiem: { am: "AM", pm: "PM" } }} />);
+    expect(fieldOf("거래 시각").textContent).toBe("2026. 08. 12. PM 03:00:05");
+  });
+
+  it("시 단위가 없는 픽커는 12시간제에서도 그대로다 — 날짜 전용 대조군", () => {
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} />);
+    expect(fieldOf("거래 날짜").textContent).toBe("2026. 08. 12.");
+  });
+});
+
+// ── 3단계 — 오전/오후는 열이 아니라 **버튼**이다 (스펙 §7) ────────────────────
+//
+// 열로 두지 않은 이유 셋이 스펙에 있다: 값이 둘뿐인데 DATE_WHEEL_OFFSETS가 일곱 행을
+// 그린다 / 가장 좁을 때 정확히 한 열을 아낀다(날짜+시각이 7열 대신 6열) / 팝오버에
+// 이미 버튼 줄이 있다. 이 블록은 그 결정이 화면에 그대로 나타나는지를 고정한다.
+//
+// **버튼은 표시가 아니라 지름길이다** — 시 열 라벨이 이미 어느 절반인지 말하므로,
+// 버튼의 값어치는 12칸을 굴리지 않고 한 번에 넘기는 것과 `a`/`p` 키의 눈에 보이는
+// 짝이 되는 것이다(스펙 §7).
+describe("DateWheelPicker 오전/오후 버튼 (3단계)", () => {
+  const openAt = (value: string, extra: Partial<{ min: string; max: string; onChange: (next: string) => void; fields: WheelUnit[] }> = {}) => {
+    const onChange = extra.onChange ?? vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 시각" value={value} fields={extra.fields ?? TIME_FIELDS} min={extra.min} max={extra.max} onChange={onChange} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    return onChange;
+  };
+
+  it("대조군: 24시간제에서는 버튼이 아예 없다", () => {
+    openAt("2026-08-12T15:00:05");
+    expect(screen.queryByRole("button", { name: "오전" })).toBe(null);
+    expect(screen.queryByRole("button", { name: "오후" })).toBe(null);
+  });
+
+  it("대조군: 시 열이 없는 픽커에는 12시간제라도 버튼이 없다", () => {
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    expect(screen.queryByRole("button", { name: "오전" })).toBe(null);
+  });
+
+  it("12시간제면 두 버튼이 있고, 지금 절반이 눌린 상태로 표시된다", () => {
+    setHourFormat("12");
+    openAt("2026-08-12T15:00:05");
+    expect(screen.getByRole("button", { name: "오전" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "오후" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("반대 절반을 누르면 시가 12만큼 움직인다 — 한 번에 넘어간다", () => {
+    setHourFormat("12");
+    const onChange = openAt("2026-08-12T03:00:05");
+    fireEvent.click(screen.getByRole("button", { name: "오후" }));
+    expect(onChange).toHaveBeenLastCalledWith("2026-08-12T15:00:05");
+  });
+
+  it("오후에서 오전으로도 같다", () => {
+    setHourFormat("12");
+    const onChange = openAt("2026-08-12T15:00:05");
+    fireEvent.click(screen.getByRole("button", { name: "오전" }));
+    expect(onChange).toHaveBeenLastCalledWith("2026-08-12T03:00:05");
+  });
+
+  /* 🔴 스펙 §7이 "자리올림 없음 규칙의 유일한 예외"라고 부르는 자리다 — 오전↔오후는
+   * 시(時)라는 한 숫자의 다른 절반을 고르는 일이라 **시 값이 ±12 움직인다.** 그
+   * 예외가 열 밖으로 새면 안 된다: 날짜는 그대로여야 한다. 오후 11시에서 오전으로
+   * 넘어가는 것이 이 검사가 가장 날카로운 지점이다(시간으로 12를 빼면 전날이 되는
+   * 흔한 구현이 여기서 빨개진다). */
+  it("날짜로 자리올림하지 않는다 — 오후 11시에서 오전으로 가도 같은 날이다", () => {
+    setHourFormat("12");
+    const onChange = openAt("2026-08-12T23:30:05");
+    fireEvent.click(screen.getByRole("button", { name: "오전" }));
+    expect(onChange).toHaveBeenLastCalledWith("2026-08-12T11:30:05");
+  });
+
+  it("이미 그 절반이면 아무 일도 안 일어난다", () => {
+    setHourFormat("12");
+    const onChange = openAt("2026-08-12T15:00:05");
+    fireEvent.click(screen.getByRole("button", { name: "오후" }));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  /* ⚠️ **제목을 정확히 적습니다.** 코드가 판정하는 것은 "반대 절반이 통째로 막혔는가"가
+   * 아니라 **"반대 절반의 같은 시각이 경계 밖인가"**입니다 — `shifted(MERIDIEM_UNIT, ±12)`가
+   * 곧 그 질문이고, 열의 ± 버튼이 쓰는 것과 **같은 함수**입니다. 아래 첫 검사의 값에서는
+   * 둘이 우연히 같은 답을 내므로, 그것만으로는 무엇이 고정됐는지 갈리지 않습니다. 그래서
+   * 갈라지는 값을 두 번째 검사로 함께 둡니다. */
+  it("반대 절반의 같은 시각이 경계 밖이면 그 버튼이 disabled다 — 열의 ± 버튼과 같은 함수", () => {
+    setHourFormat("12");
+    // max가 정오 직전이라 오후는 통째로 갈 수 없다 — 두 판정이 같은 답을 내는 값.
+    openAt("2026-08-12T03:00:05", { max: "2026-08-12T11:59:59" });
+    expect((screen.getByRole("button", { name: "오후" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "오전" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  /* 🔴 **두 판정이 갈리는 값 — 지금 동작을 있는 그대로 고정합니다.** `min`이 오전 09:00이면
+   * 오전은 09~11시가 **남아 있는데도** 15시의 거울인 03시가 경계 밖이라 오전 버튼이
+   * 잠깁니다. 버튼이 "±12 한 번"이라는 스펙 §7의 정의를 그대로 따른 결과이고, 절반 안으로
+   * 클램프하면 "12만큼 움직인다"가 깨집니다 — 자리올림 없음 규칙의 예외를 정당화하던
+   * 근거가 바로 그것이라 임의로 바꾸지 않았습니다.
+   *
+   * **막다른 길은 아닙니다** — 시 열을 직접 굴리면 09시로 갈 수 있습니다. 잠기는 것은
+   * 지름길뿐입니다. 그래도 **오너 판단 항목**이라 원장에 올렸습니다. */
+  it("반대 절반이 일부만 열려 있어도 거울 시각이 막혔으면 잠긴다 — 지금 동작(오너 판단 대기)", () => {
+    setHourFormat("12");
+    openAt("2026-08-12T15:00:05", { min: "2026-08-12T09:00:00" });
+    expect((screen.getByRole("button", { name: "오전" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("누르면 시 열이 휠 이동을 재생한다 — '지금' 버튼이 여러 칸을 건너뛸 때와 같은 이유", () => {
+    setHourFormat("12");
+    openAt("2026-08-12T03:00:05");
+    fireEvent.click(screen.getByRole("button", { name: "오후" }));
+    const hour = screen.getByRole("group", { name: "시 오전 03" });   // 값은 controlled라 그대로다
+    expect(/moving-\w+/.exec(hour.className)?.[0]).toBe("moving-next");
+  });
+
+  it("오전으로 되돌릴 때는 반대 방향으로 재생한다 — 열이 24칸이라 위로 올라가는 이동이다", () => {
+    setHourFormat("12");
+    openAt("2026-08-12T15:00:05");
+    fireEvent.click(screen.getByRole("button", { name: "오전" }));
+    const hour = screen.getByRole("group", { name: "시 오후 03" });
+    expect(/moving-\w+/.exec(hour.className)?.[0]).toBe("moving-previous");
+  });
+
+  /* 스펙 §7: "`오늘`·`완료`는 '확정·이동'인데 오전/오후는 **값의 절반**이라 성격이
+   * 다릅니다. 하단 줄에 섞으면 다른 종류가 한 줄에 앉습니다." — 그 결정을 마크업으로
+   * 못 박는다. 이게 없으면 다음 사람이 "버튼이니까 버튼 줄에" 옮겨도 아무도 모른다. */
+  it("하단 확정 줄(오늘·비우기·완료)에 섞이지 않는다", () => {
+    setHourFormat("12");
+    openAt("2026-08-12T15:00:05");
+    const actions = document.querySelector(".date-wheel-actions")!;
+    expect(actions.contains(screen.getByRole("button", { name: "오전" }))).toBe(false);
+    expect(actions.contains(screen.getByRole("button", { name: "오후" }))).toBe(false);
+  });
+
+  it("소비자가 바꾼 오전/오후 문구를 버튼도 쓴다", () => {
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:00:05" fields={TIME_FIELDS} onChange={() => undefined} labels={{ meridiem: { am: "AM", pm: "PM" } }} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    expect(screen.getByRole("button", { name: "PM" }).getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
+// ── 3단계 — 시 세그먼트가 `a`/`p`를 받는다 (스펙 §7) ──────────────────────────
+//
+// **팝오버를 안 열고도 되어야 한다.** 이 컨트롤의 계약이 "숫자를 팝오버 없이 친다"라서,
+// 오전/오후만 팝오버를 열어야 하면 그 계약에 구멍이 난다. 버튼은 이 키의 눈에 보이는
+// 짝이지 이 키의 대체가 아니다.
+//
+// **활성 세그먼트가 시일 때만 먹는다** — 네이티브와 같다. 그래서 이 블록은 시가 첫
+// 세그먼트인 시각 전용 픽커를 기본으로 쓰고, 날짜+시각에서 화살표로 시까지 옮겨 가는
+// 경로는 따로 하나 고정한다.
+const TIME_ONLY: WheelUnit[] = ["hour", "minute", "second"];
+
+describe("DateWheelPicker 시 세그먼트의 a/p 키 (3단계)", () => {
+  const typeInto = (value: string, keys: string[], extra: Partial<{ fields: WheelUnit[] }> = {}) => {
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 시각" value={value} fields={extra.fields ?? TIME_ONLY} onChange={onChange} />);
+    const field = fieldOf("거래 시각");
+    field.focus();
+    for (const key of keys) fireEvent.keyDown(field, { key });
+    return { onChange, field };
+  };
+
+  it("대조군: 24시간제에서는 아무 일도 안 한다", () => {
+    const { onChange } = typeInto("03:00:05", ["p"]);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("p는 오후로 넘긴다 — 그리고 팝오버를 열지 않는다", () => {
+    setHourFormat("12");
+    const { onChange, field } = typeInto("03:00:05", ["p"]);
+    expect(onChange).toHaveBeenLastCalledWith("15:00:05");
+    expect(field.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("a는 오전으로 되돌린다", () => {
+    setHourFormat("12");
+    const { onChange } = typeInto("15:00:05", ["a"]);
+    expect(onChange).toHaveBeenLastCalledWith("03:00:05");
+  });
+
+  it("대문자도 같다 — Shift를 눌러도 뜻이 안 바뀐다", () => {
+    setHourFormat("12");
+    const { onChange } = typeInto("03:00:05", ["P"]);
+    expect(onChange).toHaveBeenLastCalledWith("15:00:05");
+  });
+
+  it("이미 그 절반이면 아무 일도 안 한다", () => {
+    setHourFormat("12");
+    const { onChange } = typeInto("15:00:05", ["p"]);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("날짜+시각에서는 화살표로 시까지 간 다음에 먹는다 — 활성 세그먼트가 시일 때만", () => {
+    setHourFormat("12");
+    // 연 → 월 → 일 → 시. 세 번 옮기기 전에는 아무 일도 없어야 한다.
+    const { onChange, field } = typeInto("2026-08-12T03:00:05", ["p"], { fields: TIME_FIELDS });
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "p" });
+    expect(onChange).toHaveBeenLastCalledWith("2026-08-12T15:00:05");
+  });
+
+  it("활성 세그먼트가 시를 지나가면 안 먹는다 — 분에서 오전/오후는 뜻이 없다", () => {
+    setHourFormat("12");
+    const { onChange } = typeInto("03:00:05", ["ArrowRight", "p"]);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("시 열이 없는 픽커에서는 안 먹는다", () => {
+    setHourFormat("12");
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={onChange} />);
+    const field = fieldOf("거래 날짜");
+    field.focus();
+    fireEvent.keyDown(field, { key: "p" });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  /* 반쯤 친 버퍼는 **폐기**된다. 이 컴포넌트의 규칙이 "값을 직접 가리키는 조작 →
+   * 폐기"이고(휠·스와이프·행 클릭·오늘·비우기가 그렇다), 오전/오후는 값의 절반을
+   * 직접 고르는 일이다. 확정하면 사용자가 안 끝낸 숫자가 값이 되어 버린다. */
+  it("반쯤 친 숫자는 확정하지 않고 버린다", () => {
+    setHourFormat("12");
+    const { onChange, field } = typeInto("03:00:05", ["1"]);   // hour soloFloor(3) 아래라 버퍼로 남는다
+    expect(field.textContent).toContain(FILL);                 // 버퍼가 살아 있다
+    fireEvent.keyDown(field, { key: "p" });
+    expect(onChange).toHaveBeenLastCalledWith("15:00:05");     // 03 → 15. "01"이나 "1x"가 아니다
+    expect(field.textContent).not.toContain(FILL);             // 버퍼가 사라졌다
+  });
+
+  it("Ctrl·Meta가 눌린 p는 건드리지 않는다 — 브라우저 단축키다", () => {
+    setHourFormat("12");
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 시각" value="03:00:05" fields={TIME_ONLY} onChange={onChange} />);
+    const field = fieldOf("거래 시각");
+    field.focus();
+    fireEvent.keyDown(field, { key: "p", ctrlKey: true });
+    fireEvent.keyDown(field, { key: "p", metaKey: true });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+// ── 3단계 — 12시간제에서 시 열에 치는 숫자는 **읽기**다 (스펙 §7) ─────────────
+//
+// "시 열의 숫자 타이핑은 기존 규칙 그대로입니다 — 12시간제에서 상한이 12라 `15`는
+// 첫 자리를 버리고 `5`로 재해석됩니다." 그리고 그 숫자는 값이 아니라 12시간 읽기라,
+// **어느 절반인지는 지금 값이 정한다** — 오후에 3을 치면 15시다.
+describe("DateWheelPicker 12시간제 시 타이핑 (3단계)", () => {
+  const typeHour = (value: string, keys: string[]) => {
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 시각" value={value} fields={TIME_ONLY} onChange={onChange} />);
+    const field = fieldOf("거래 시각");
+    field.focus();
+    for (const key of keys) fireEvent.keyDown(field, { key });
+    return { onChange, field };
+  };
+
+  it("대조군: 24시간제에서 15를 치면 15시다", () => {
+    const { onChange } = typeHour("03:00:05", ["1", "5"]);
+    expect(onChange).toHaveBeenLastCalledWith("15:00:05");
+  });
+
+  it("오후일 때 3을 치면 15시다 — 친 것은 읽기이지 값이 아니다", () => {
+    setHourFormat("12");
+    const { onChange } = typeHour("15:00:05", ["3"]);
+    expect(onChange).toHaveBeenLastCalledWith("15:00:05");
+  });
+
+  it("오전일 때 3을 치면 3시다 — 같은 키, 다른 절반, 다른 값", () => {
+    setHourFormat("12");
+    const { onChange } = typeHour("03:00:05", ["3"]);
+    expect(onChange).toHaveBeenLastCalledWith("03:00:05");
+  });
+
+  it("오후일 때 4를 치면 16시다", () => {
+    setHourFormat("12");
+    const { onChange } = typeHour("15:00:05", ["4"]);
+    expect(onChange).toHaveBeenLastCalledWith("16:00:05");
+  });
+
+  it("오전 12는 자정이고 오후 12는 정오다", () => {
+    setHourFormat("12");
+    expect(typeHour("03:00:05", ["1", "2"]).onChange).toHaveBeenLastCalledWith("00:00:05");
+    cleanup();
+    expect(typeHour("15:00:05", ["1", "2"]).onChange).toHaveBeenLastCalledWith("12:00:05");
+  });
+
+  it("15는 첫 자리를 버리고 5로 다시 읽는다 — 오후면 17시다", () => {
+    setHourFormat("12");
+    const { onChange } = typeHour("15:00:05", ["1", "5"]);
+    expect(onChange).toHaveBeenLastCalledWith("17:00:05");
+  });
+
+  it("반쯤 친 채 열을 떠나면 그 버퍼도 읽기로 확정된다 — Tab", () => {
+    setHourFormat("12");
+    const { onChange, field } = typeHour("15:00:05", ["1"]);
+    expect(field.textContent).toContain(FILL);
+    fireEvent.keyDown(field, { key: "Tab" });
+    expect(onChange).toHaveBeenLastCalledWith("13:00:05");   // 읽기 1 + 오후 = 13시
+  });
+
+  it("12시간제에서 0으로 시작하면 확정되지 않는다 — 12시간 읽기에 0시가 없다", () => {
+    setHourFormat("12");
+    const { onChange, field } = typeHour("15:00:05", ["0"]);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(field.textContent).toContain(FILL);
+  });
+
+  it("분 열은 12시간제와 무관하다 — 대조군", () => {
+    setHourFormat("12");
+    const { onChange } = typeHour("15:00:05", ["ArrowRight", "1", "5"]);
+    expect(onChange).toHaveBeenLastCalledWith("15:15:05");
+  });
+});
+
+/* 🔴 `meridiem`을 **명시적으로 `undefined`로** override하는 경로. `hintNow`가 같은
+ * 자리에서 이미 검사를 하나 갖고 있습니다("hintNow를 명시적으로 undefined로
+ * override하면 hint로 대체된다") — `Partial<DateWheelLabels>`가 그것을 타입으로
+ * 허용하고(이 저장소 tsconfig에 `exactOptionalPropertyTypes`가 없습니다), 스프레드
+ * 병합에서 명시적 `undefined`는 **기본값으로 안 떨어지고 덮어씁니다.**
+ *
+ * `hintNow`는 `?? labels.hint`가 받아 주지만 `meridiem`에는 그게 없었습니다. 그리고
+ * 여기는 값이 아니라 **객체**라, `labels.meridiem.am`이 `useMemo`의 의존성 배열에서
+ * 곧바로 터집니다 — 의존성 배열은 본문보다 **먼저** 평가되므로 24시간제에서도,
+ * 날짜 전용 픽커에서도, 매 렌더 터집니다. 단언 실패가 아니라 렌더 크래시입니다. */
+describe("labels.meridiem을 명시적으로 undefined로 줘도 터지지 않는다 (3단계 후속)", () => {
+  it("24시간제 날짜 전용 픽커가 렌더된다", () => {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} labels={{ meridiem: undefined }} />);
+    expect(fieldOf("거래 날짜").textContent).toBe("2026. 08. 12.");
+  });
+
+  it("12시간제에서는 기본 오전/오후로 떨어진다", () => {
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 시각" value="15:00:05" fields={TIME_ONLY} onChange={() => undefined} labels={{ meridiem: undefined }} />);
+    expect(fieldOf("거래 시각").textContent).toBe("오후 03:00:05");
+  });
+
+  it("오전/오후 버튼도 기본 문구로 그려진다", () => {
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 시각" value="15:00:05" fields={TIME_ONLY} onChange={() => undefined} labels={{ meridiem: undefined }} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    expect(screen.getByRole("button", { name: "오후" }).getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
+/* 오너 리포트 5번의 경계 하나 — 날짜 묶음 → 시각 묶음 여백은 **시 열이 첫 열이 아닐
+ * 때만** 붙습니다. `["day","hour","minute"]`처럼 날짜 쪽이 하루만 남아도 경계는 있어야
+ * 하고, `["hour","minute"]`처럼 시각 전용이면 그냥 왼쪽이 비는 것이라 없어야 합니다.
+ * CSS 선택자 하나로 두 경우를 다 맞추는 자리라, 소스로 계약을 고정합니다. */
+describe("시각 묶음 경계 여백 (오너 리포트 5번)", () => {
+  it("시 열이 첫 열이 아닐 때만 여백이 붙는다", () => {
+    expect(datePickerCssSource).toContain('.date-wheel-column[data-unit="hour"]:not(:first-child) { margin-left: 10px; }');
+  });
+
+  it("열이 자기 단위를 마크업으로 말한다 — CSS가 지목할 수 있어야 한다", () => {
+    render(<DateWheelPicker ariaLabel="교차" value="2026-08-12T03:00" fields={["day", "hour", "minute"] as WheelUnit[]} onChange={() => undefined} />);
+    fireEvent.click(fieldOf("교차"));
+    const units = [...document.querySelectorAll(".date-wheel-column")].map((column) => column.getAttribute("data-unit"));
+    expect(units).toEqual(["day", "hour", "minute"]);
+    // 시가 둘째 열이므로 :not(:first-child)에 걸린다 = 경계 여백이 붙는 자리다.
+    expect(units.indexOf("hour")).toBe(1);
+  });
+
+  it("시각 전용 픽커에서는 시가 첫 열이라 여백 대상이 아니다", () => {
+    render(<DateWheelPicker ariaLabel="시각만" value="03:00" fields={["hour", "minute"] as WheelUnit[]} onChange={() => undefined} />);
+    fireEvent.click(fieldOf("시각만"));
+    const units = [...document.querySelectorAll(".date-wheel-column")].map((column) => column.getAttribute("data-unit"));
+    expect(units.indexOf("hour")).toBe(0);
+  });
+});
