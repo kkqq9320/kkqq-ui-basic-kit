@@ -15,7 +15,7 @@
  * ⚠️ **트랙 배경과 칩 배경이 서로 다른 토큰이어야 합니다.** 둘이 같으면 떠 있는 느낌이
  * 사라져 구조가 말하던 것이 통째로 없어집니다 — 처음 시안이 정확히 그래서 "분간이 안
  * 간다"가 나왔습니다. */
-.segmented { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); }
+.segmented { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--segmented-track); }
 
 .segmented > button { min-width: var(--segmented-min-width, 56px); height: var(--segmented-height, 30px); display: inline-flex; align-items: center; justify-content: center; padding: 0 10px; border: 1px solid transparent; border-radius: 7px; color: var(--muted); background: transparent; font-size: var(--action-font-size); font-weight: 700; line-height: 1; white-space: nowrap; }
 
@@ -28,17 +28,17 @@
  * 여기는 트랙 위의 중립 칩에 글자만 강조된 모양입니다. 자리(트랙 안의 칩)가 "고름"을
  * 말하고, 강조색 글자가 그 위에서 **어느 것인지**를 한 번 더 짚습니다.
  *
- * 🔴 **트랙은 `--bg`이고 칩은 `--surface`입니다 — 두 테마에서 다 "뜬 카드"가 되는 유일한
- * 쌍입니다**(오너: "다크도 칩이 뜬 카드처럼 보였으면 좋겠어"). 이 킷의 토큰에서
- * `--bg`는 **라이트에서도 다크에서도** `--surface`보다 어둡습니다
- * (라이트 #f6f4ef < #fffdfa, 다크 #101119 < #1a1b27) — 그래서 "바닥 위에 놓인 면"이라는
- * 관계가 테마와 무관하게 성립하고, **그림자도 두 테마에서 같은 방향(드롭)으로 갑니다.**
+ * 🔴 **트랙과 칩은 값으로 못 박은 토큰 쌍입니다**(`--segmented-track` / `--segmented-chip`).
+ * 두 테마 각각 **칩이 16단계 밝아서** 뜬 카드로 읽힙니다.
  *
- * ⚠️ 한 판 전에는 트랙을 `--surface-soft`에 `--line`을 섞어 만들었는데, `--line`이
- * **다크에서는 `--surface`보다 밝아서** 트랙이 칩보다 밝아졌습니다 — 칩이 파인 우물이
- * 되고 드롭 섀도가 구조와 반대말을 했습니다. 토큰의 밝기 순서가 테마마다 뒤집히는
- * 자리를 밟은 것이고, **`--bg`/`--surface`는 그 순서가 안 뒤집히는 쌍**입니다. */
-.segmented > button[aria-checked="true"] { color: var(--accent-text); border-color: color-mix(in srgb, var(--line) 70%, transparent); background: var(--surface); box-shadow: 0 1px 4px color-mix(in srgb, #000 34%, transparent); font-weight: 800; }
+ * ⚠️ **다른 토큰을 섞어 만들다가 두 번 틀렸습니다.**
+ *   1) `--surface-soft` + `--line` — `--line`이 다크에서는 `--surface`보다 밝아 **트랙이
+ *      칩보다 밝아졌고**, 칩이 파인 우물이 되어 드롭 섀도가 반대말을 했습니다.
+ *   2) `--bg` / `--surface` — 밝기 **순서는** 두 테마에서 맞았지만 다크의 `--bg`가 거의
+ *      검정이라 **색감이 죽었습니다**(오너: "아 색깔 왜 이래").
+ * 순서와 색감을 **동시에** 만족시키는 조합이 기존 토큰에는 없어서 값으로 고정했습니다.
+ * 검사가 순서와 차이를 함께 지킵니다. */
+.segmented > button[aria-checked="true"] { color: var(--accent-text); border-color: color-mix(in srgb, var(--line) 70%, transparent); background: var(--segmented-chip); box-shadow: 0 1px 4px color-mix(in srgb, #000 34%, transparent); font-weight: 800; }
 
 
 .segmented > button:disabled { opacity: .45; cursor: not-allowed; }
