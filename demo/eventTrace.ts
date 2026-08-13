@@ -677,11 +677,35 @@ function startSwipeTrace(column: Element) {
  * 두 번째 탭이 700ms 안에 들어올 때 첫 감시자를 죽이고, **판정이 안 찍히는 것이 하필
  * 실패한 그 탭**이 됩니다 — 성공한 두 번째만 남아 "정상"으로 읽힙니다.
  * 계측기가 재려는 사건을 스스로 지우는 자리라, 슬롯을 없애고 각자 정리하게 둡니다. */
-function startTapTrace(button: Element) {
+function startTapTrace(button: Element, x: number, y: number) {
   const started = performance.now();
   const popover = button.closest(".date-wheel-popover");
   const startTop = popover instanceof HTMLElement ? popover.scrollTop : -1;
   const startRect = button.getBoundingClientRect();
+  /* 🔴 **매 프레임 재야 합니다 — 시작과 끝만 재면 "움직였다 돌아온" 것이 안 보입니다.**
+   * 첫 캡처가 `버튼이동Δy=0`으로 왔는데, 그건 "안 움직였다"가 아니라 **"양 끝에서 같았다"**
+   * 입니다. 손가락이 닿아 있는 동안 버튼이 잠깐이라도 움직이면 브라우저는 click을 안
+   * 만듭니다 — 그게 지금 남은 1순위 후보이고, 옛 프로브로는 구조적으로 못 봅니다.
+   *
+   * `elementFromPoint`가 결정적인 필드입니다: **손가락 아래에 아직 그 버튼이 있는가.**
+   * 좌표는 pointerdown이 준 것을 그대로 씁니다. */
+  let worstShift = 0;
+  let leftFinger = false;
+  let leftFingerAt = -1;
+  let popTopChanges = 0;
+  let lastPopTop = popover instanceof HTMLElement ? popover.style.top : "";
+  let frames = 0;
+  let raf = 0;
+  const sample = () => {
+    frames += 1;
+    const shift = Math.round(button.getBoundingClientRect().top - startRect.top);
+    if (Math.abs(shift) > Math.abs(worstShift)) worstShift = shift;
+    if (popover instanceof HTMLElement && popover.style.top !== lastPopTop) { popTopChanges += 1; lastPopTop = popover.style.top; }
+    const under = document.elementFromPoint(x, y);
+    if (!leftFinger && !(under && button.contains(under))) { leftFinger = true; leftFingerAt = Math.round(performance.now() - started); }
+    if (performance.now() - started < 700) raf = requestAnimationFrame(sample);
+  };
+  raf = requestAnimationFrame(sample);
   const label = (button.textContent ?? "").trim().slice(0, 12);
   const where = button.closest(".date-wheel-actions") ? "액션줄"
     : button.closest(".date-wheel-meridiem") ? "오전오후"
@@ -705,14 +729,16 @@ function startTapTrace(button: Element) {
   document.addEventListener("mousedown", onMouseDown, true);
 
   const timer = window.setTimeout(() => {
+    cancelAnimationFrame(raf);
     const endTop = popover instanceof HTMLElement ? popover.scrollTop : -1;
     const endRect = button.getBoundingClientRect();
     append(`tap verdict "${label}"  click=${sawClick ? "Y" : "🔴N"}  mousedown=${sawMouseDown ? "Y" : "N"}`
-      + ` mousedown막힘=${mouseDownBlocked ? "Y" : "N"}  스크롤Δ=${endTop - startTop}  버튼이동Δy=${Math.round(endRect.top - startRect.top)}`
+      + ` mousedown막힘=${mouseDownBlocked ? "Y" : "N"}  스크롤Δ=${endTop - startTop}  버튼이동Δy(끝)=${Math.round(endRect.top - startRect.top)}`
+      + `  🔎최대이동=${worstShift}px  손가락밑을떠남=${leftFinger ? `Y(+${leftFingerAt}ms)` : "N"}  팝오버top바뀜=${popTopChanges}회  frames=${frames}`
       + `  +${Math.round(performance.now() - started)}ms`);
     append(sawClick
       ? "  읽는 법: click이 났으므로 탭은 도착했습니다 — 값이 안 바뀌었다면 핸들러 쪽입니다(데모의 ── onChange 표식을 보세요)."
-      : "  🔴 읽는 법: click이 아예 안 났습니다 — 탭이 먹혔습니다. mousedown막힘=Y면 팝오버의 preventDefault가 1순위, 스크롤Δ≠0이면 스크롤 컨테이너가 1순위입니다.");
+      : "  🔴 읽는 법: click이 아예 안 났습니다. 손가락밑을떠남=Y면 그 시점에 버튼이 손가락 아래에서 사라진 것이고(리렌더·재배치), 최대이동≠0이면 움직였다 돌아온 것입니다. 둘 다 N이면 브라우저가 제스처로 삼킨 것입니다.");
     document.removeEventListener("click", onClick, true);
     document.removeEventListener("mousedown", onMouseDown, true);
   }, 700);
@@ -851,7 +877,10 @@ export function installEventTrace() {
         if (column) startSwipeTrace(column);
         // 팝오버 안의 **버튼 줄**을 눌렀을 때만 — 휠 행은 위 swipe 트레이스 담당입니다.
         const button = event.target.closest("button");
-        if (button && button.closest(".date-wheel-popover") && !button.closest(".date-wheel-values")) startTapTrace(button);
+        if (button && button.closest(".date-wheel-popover") && !button.closest(".date-wheel-values")) {
+          const point = event as PointerEvent;
+          startTapTrace(button, point.clientX ?? 0, point.clientY ?? 0);
+        }
       }
       if (type === "pointerup") swipeStop?.();
     }, { capture: true, passive: true });
@@ -860,6 +889,12 @@ export function installEventTrace() {
   // 만든 것이다). 스와이프 트레이스는 취소로도 끝나므로 여기서 따로 받는다 — 안 그러면
   // 손가락이 화면 밖으로 나간 캡처에서 rAF 루프가 600프레임까지 계속 돈다.
   document.addEventListener("pointercancel", () => { swipeStop?.(); }, { capture: true, passive: true });
+
+  /* `touchcancel`은 위 목록에 없습니다(그 목록은 "탭이 무엇을 만드는가"용입니다). 그런데
+   * **탭이 먹히는 경로 중 하나가 정확히 이것**이라, 안 보이면 후보를 못 지웁니다. */
+  document.addEventListener("touchcancel", (event) => {
+    append(`touchcancel target=${describeTarget(event.target)}  🔴 이 탭은 여기서 끝났습니다 — click이 안 나는 이유가 됩니다`);
+  }, { capture: true, passive: true });
 
   /* 휠 이동 애니메이션이 시작되는 순간 프레임 샘플링을 켭니다(오너 리포트 1번).
    * `animationstart`는 버블하므로 document에서 한 번만 받으면 됩니다. 이름으로 걸러
