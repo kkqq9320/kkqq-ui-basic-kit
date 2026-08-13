@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits, familyOf, parseValue, serializeValue, isContiguous, comparisonPrecision, usableBound, outOfRange, clampToRange, meridiemOf, hourFromTwelve, twelveHourText, resetTarget } from "../src/model/instant";
+import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits, familyOf, parseValue, serializeValue, isContiguous, comparisonPrecision, usableBound, outOfRange, clampToRange, meridiemOf, hourFromTwelve, twelveHourText, resetTarget, parsePasted } from "../src/model/instant";
 import type { WheelUnit } from "../src/model/instant";
 
 const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
@@ -780,5 +780,107 @@ describe("resetTarget — 길게 눌러 초기화할 목적지 (오너 리포트
   it("instantModel을 지나서도 같다 — 기계가 부르는 경로", () => {
     expect(instantModel.resetTarget("second", NOW, F)).toBe(0);
     expect(instantModel.resetTarget("year", NOW, F)).toBe(2031);
+  });
+});
+
+/* parsePasted — 사람이 준 글자를 값으로.
+ *
+ * 이 함수의 계약은 둘입니다: 우리가 Ctrl+C로 쓴 것을 **되읽을 수 있어야** 하고,
+ * 읽을 수 없으면 **빈 값이 아니라 null**이어야 합니다(실패가 값을 지우면 안 됩니다). */
+describe("parsePasted — 붙여넣은 글자 읽기", () => {
+  const DATE: WheelUnit[] = ["year", "month", "day"];
+  const DATETIME: WheelUnit[] = ["year", "month", "day", "hour", "minute", "second"];
+  const TIME: WheelUnit[] = ["hour", "minute", "second"];
+  const KO12 = { format: "12" as const, am: "오전", pm: "오후" };
+
+  it("정규 형식을 그대로 읽는다", () => {
+    expect(parsePasted("2026-08-14", DATE)).toBe("2026-08-14");
+  });
+
+  // 🔴 왕복. Ctrl+C가 쓰는 것이 이 모양이므로 이게 깨지면 자기 출력도 못 읽습니다.
+  it("우리가 복사한 표시 형식을 되읽는다", () => {
+    expect(parsePasted("2026. 08. 14.", DATE)).toBe("2026-08-14");
+  });
+
+  it("자리를 안 채운 것도 읽는다", () => {
+    expect(parsePasted("2026-8-14", DATE)).toBe("2026-08-14");
+  });
+
+  it("구분자가 무엇이든 읽는다 — 목록을 두지 않기 때문", () => {
+    expect(parsePasted("2026/08/14", DATE)).toBe("2026-08-14");
+    expect(parsePasted("2026년 8월 14일", DATE)).toBe("2026-08-14");
+  });
+
+  it("구분자 없이 붙어 있는 것도 읽는다", () => {
+    expect(parsePasted("20260814", DATE)).toBe("2026-08-14");
+  });
+
+  // 대조군 — 붙은 덩어리는 폭이 딱 맞을 때만입니다. 어디서 끊을지 모르면 포기합니다.
+  it("붙어 있는데 폭이 안 맞으면 읽지 않는다", () => {
+    expect(parsePasted("2026081", DATE)).toBe(null);
+  });
+
+  it("날짜+시각을 날짜만 있는 픽커에 넣으면 날짜만 남는다", () => {
+    expect(parsePasted("2026-08-14T15:30:45", DATE)).toBe("2026-08-14");
+  });
+
+  it("날짜만 있는 글자를 날짜+시각 픽커에 넣으면 시각은 바닥값", () => {
+    expect(parsePasted("2026-08-14", DATETIME)).toBe("2026-08-14T00:00:00");
+  });
+
+  it("ISO의 밀리초는 버린다", () => {
+    expect(parsePasted("2026-08-14T15:30:45.123Z", DATETIME)).toBe("2026-08-14T15:30:45");
+  });
+
+  it("날짜+시각을 시각만 있는 픽커에 넣으면 앞의 날짜 세 덩어리를 버린다", () => {
+    expect(parsePasted("2026-08-14T15:30:45", TIME)).toBe("15:30:45");
+  });
+
+  it("오후 라벨이 있으면 12시간 읽기로 해석한다", () => {
+    expect(parsePasted("오후 03:30:45", TIME, KO12)).toBe("15:30:45");
+  });
+
+  it("오전 12는 0시다", () => {
+    expect(parsePasted("오전 12:00:00", TIME, KO12)).toBe("00:00:00");
+  });
+
+  it("ASCII PM도 읽는다", () => {
+    expect(parsePasted("3:30:45 PM", TIME, KO12)).toBe("15:30:45");
+  });
+
+  /* 🔴 대조군 — 기본 라벨은 빈 문자열입니다. `hour.pm &&`로 안 거르면
+   * `"".includes()`가 늘 참이라 **모든 붙여넣기가 오후**가 됩니다. */
+  it("기본 라벨(빈 문자열)은 아무것도 오후로 만들지 않는다", () => {
+    expect(parsePasted("03:30:45", TIME)).toBe("03:30:45");
+  });
+
+  it("오전/오후와 시가 앞뒤가 안 맞으면 포기한다", () => {
+    expect(parsePasted("오후 15:30:45", TIME, KO12)).toBe(null);
+  });
+
+  it("숫자가 없으면 null", () => {
+    expect(parsePasted("아무 글자", DATE)).toBe(null);
+    expect(parsePasted("", DATE)).toBe(null);
+  });
+
+  it("덩어리가 모자라면 null", () => {
+    expect(parsePasted("2026-08", DATE)).toBe(null);
+  });
+
+  it("범위 밖이면 null — 없는 달", () => {
+    expect(parsePasted("2026-13-01", DATE)).toBe(null);
+  });
+
+  it("범위 밖이면 null — 그 달에 없는 날", () => {
+    expect(parsePasted("2026-02-30", DATE)).toBe(null);
+  });
+
+  it("범위 밖이면 null — 25시", () => {
+    expect(parsePasted("25:00:00", TIME)).toBe(null);
+  });
+
+  it("윤년의 2월 29일은 읽는다 — 말일 계산이 실제로 도는지", () => {
+    expect(parsePasted("2028-02-29", DATE)).toBe("2028-02-29");
+    expect(parsePasted("2026-02-29", DATE)).toBe(null);
   });
 });
