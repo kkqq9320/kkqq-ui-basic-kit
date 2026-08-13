@@ -114,6 +114,54 @@ function ShortcutPanelIntro() {
   </p>;
 }
 
+/** **IME 조합 중에 수식어 단축키가 어떻게 되는가**를 잡는 자리(단축키 설계 스펙 §10 미검증).
+ *
+ * ⚠️ **에뮬레이션으로는 못 잽니다** — 한/영 전환이 필요합니다. 이 패널은 오너가 실제
+ * 키보드에서 한 번 재현하고 트레이스를 그대로 읽어 가라고 있는 것입니다.
+ *
+ * **질문을 좁혀 둡니다.** 조합(composition)은 텍스트 입력에 포커스가 있을 때만
+ * 일어나므로 **맨 키는 규칙 4가 이미 막습니다** — 노출은 규칙 2로 어디서나 걸리는
+ * **수식어 조합** 하나뿐입니다. 그래서 물어야 할 것은 둘입니다:
+ *
+ *   (1) 조합 중 keydown이 `code`를 제대로 달고 오는가  ← 스펙에 적힌 질문
+ *   (2) 발사되면 규칙 6의 `preventDefault()`가 **조합 중인 글자를 깨뜨리는가**
+ *
+ * **(2)는 스펙에 없던 질문입니다.** 그런데 사용자가 치던 "가"가 사라지는 쪽이 (1)보다
+ * 아픕니다. 재고 나서 정합니다 — 추측으로 `isComposing` 가드를 먼저 넣지 않습니다. */
+function ImeCapturePanel() {
+  const combo = useSidebarCombo();
+  const [text, setText] = useState("");
+  return <Panel title="IME 확인" hint="IME">
+    <p className="muted-copy">
+      한글 조합 중에 수식어 단축키가 걸리면 어떻게 되는지 잡는 자리입니다.
+      지금 사이드바 조합은 <strong>{combo ? displayCombo(combo) : "없음"}</strong>입니다
+      {combo ? null : <> — <strong>먼저 위 "단축키" 패널에서 수식어 조합을 하나 녹음하세요.</strong></>}.
+    </p>
+    <FieldGrid>
+      <label>조합할 칸<input
+        placeholder="한글로 전환한 뒤 여기에"
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+      /></label>
+    </FieldGrid>
+    <ol className="muted-copy" style={{ paddingLeft: "1.2em" }}>
+      <li>아래 <strong>여기부터</strong>를 누릅니다 — 트레이스에 표시가 하나 남아 그 뒤만 읽으면 됩니다.</li>
+      <li><strong>한글로 전환</strong>하고 위 칸에 <strong><code>ㄱ</code> 하나만</strong> 칩니다.
+        <strong>확정하지 말고</strong>(Space·Enter 누르지 말고) 멈춥니다.</li>
+      <li>그 상태에서 <strong>{combo ? displayCombo(combo) : "그 조합"}</strong>을 누릅니다.</li>
+      <li>화면에서 <strong>치던 글자가 살아 있는지</strong> 보고, 사이드바가 접혔는지 봅니다.</li>
+      <li>트레이스 패널을 열어 그 keydown 줄의 <code>ime=</code> · <code>code=</code> ·{" "}
+        <code>keyCode=</code>를 그대로 가져옵니다.</li>
+    </ol>
+    <div className="button-row" style={{ marginTop: 16 }}>
+      <button type="button" className="secondary-button" onClick={() => logTraceNote("IME 확인 — 여기부터")}>
+        여기부터
+      </button>
+      <button type="button" className="secondary-button" onClick={() => setText("")}>칸 비우기</button>
+    </div>
+  </Panel>;
+}
+
 /** ?debug=1 일 때만 보이는 history 기록판. 콘솔을 열 필요가 없게 하려는 것입니다. */
 function HistoryLogPanel() {
   const [lines, setLines] = useState(readProbeLog);
@@ -881,6 +929,7 @@ function Demo() {
                   localStorage에 바로 저장됩니다(Task 7). */}
               <ShortcutSettings />
             </Panel>
+            <ImeCapturePanel />
           </PanelGrid>
         </>}
 
