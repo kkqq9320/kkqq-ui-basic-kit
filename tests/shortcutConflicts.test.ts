@@ -96,7 +96,7 @@ describe("킷 예약 조합", () => {
    * - 80자보다 멀리 떨어진 `ctrlKey`/`event.code`
    * 새 소비자가 이런 모양으로 조합을 점유하면 이 검사는 조용히 그것을 놓치고,
    * `KIT_RESERVED`는 실제보다 좁은 채로 남습니다. */
-  it("예약 목록이 소스에 실제로 쓰인 조합과 일치한다", () => {
+  function scanUsedCombos(): Set<string> {
     const found = new Set<string>();
     for (const source of Object.values(sources)) {
       const withoutComments = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
@@ -104,6 +104,21 @@ describe("킷 예약 조합", () => {
         found.add(`Ctrl+${match[2]}`);
       }
     }
-    expect([...found].sort()).toEqual([...KIT_RESERVED].sort());
+    return found;
+  }
+
+  /* 전제 — 2026-08-14에 붙은 네 조합이 **실제로 소스에서 발견되는지.**
+   *
+   * 🔴 위 `matchAll`은 매치를 **소비**하므로 가드 하나 안에 `event.code`가 여럿이면
+   * **첫 번째만** 잡힙니다. 컴포넌트가 넷을 한 가드로 묶거나 switch로 바꾸는 순간 이
+   * 스캔은 조용히 좁아지는데, 아래 집합 비교만 있으면 그때 나오는 것이 "무엇이 왜
+   * 빠졌는지 알 수 없는 diff"입니다. 원인을 먼저 짚는 단언을 앞에 둡니다. */
+  it("컴포넌트가 새로 먹는 네 조합이 소스에서 실제로 발견된다", () => {
+    const found = [...scanUsedCombos()];
+    for (const combo of ["Ctrl+KeyC", "Ctrl+KeyV", "Ctrl+KeyZ", "Ctrl+KeyS"]) expect(found).toContain(combo);
+  });
+
+  it("예약 목록이 소스에 실제로 쓰인 조합과 일치한다", () => {
+    expect([...scanUsedCombos()].sort()).toEqual([...KIT_RESERVED].sort());
   });
 });

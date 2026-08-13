@@ -6,11 +6,27 @@
   "license": "MIT AND OFL-1.1",
   "private": true,
   "author": "KKQQ",
-  "repository": { "type": "git", "url": "git+https://github.com/kkqq9320/kkqq-ui-basic-kit.git" },
-  "bugs": { "url": "https://github.com/kkqq9320/kkqq-ui-basic-kit/issues" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kkqq9320/kkqq-ui-basic-kit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kkqq9320/kkqq-ui-basic-kit/issues"
+  },
   "homepage": "https://github.com/kkqq9320/kkqq-ui-basic-kit#readme",
-  "keywords": ["react", "design-system", "css", "dropdown", "date-picker", "dialog", "sidebar", "korean"],
-  "sideEffects": ["*.css"],
+  "keywords": [
+    "react",
+    "design-system",
+    "css",
+    "dropdown",
+    "date-picker",
+    "dialog",
+    "sidebar",
+    "korean"
+  ],
+  "sideEffects": [
+    "*.css"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./css/*": "./css/*",
@@ -19,8 +35,21 @@
     "./PRINCIPLES.md": "./PRINCIPLES.md",
     "./LAYOUT-PRINCIPLES.md": "./LAYOUT-PRINCIPLES.md"
   },
-  "files": ["src", "css", "fonts", "PRINCIPLES.md", "LAYOUT-PRINCIPLES.md", "CUSTOMIZING.md", "CHANGELOG.md", "README.md", "LICENSE"],
-  "peerDependencies": { "react": ">=18", "react-dom": ">=18" },
+  "files": [
+    "src",
+    "css",
+    "fonts",
+    "PRINCIPLES.md",
+    "LAYOUT-PRINCIPLES.md",
+    "CUSTOMIZING.md",
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.17",
@@ -34,6 +63,7 @@
   "scripts": {
     "dev": "vite",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "typecheck:src": "tsc --noEmit -p tsconfig.src.json"
   }
 }
