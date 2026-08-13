@@ -101,8 +101,8 @@ export const DEFAULT_DATE_WHEEL_LABELS: DateWheelLabels = {
   /* "길게 눌러 초기화"가 여기 있는 이유: 그 제스처는 **화면에 아무 단서가 없습니다.**
    * 누르기 시작하면 열 바닥에 진행 막대가 뜨지만, 그건 이미 누른 사람에게만 보입니다 —
    * 안내가 없으면 아무도 처음 한 번을 안 눌러 봅니다(오너 리포트 4번). */
-  hint: "휠·스와이프·방향키·숫자 입력 · 길게 눌러 초기화 · Ctrl+; 오늘",
-  hintNow: "휠·스와이프·방향키·숫자 입력 · 길게 눌러 초기화 · Ctrl+; 지금",
+  hint: "휠·스와이프·방향키·숫자 입력 · 가운데 두 번 탭하면 초기화 · Ctrl+; 오늘",
+  hintNow: "휠·스와이프·방향키·숫자 입력 · 가운데 두 번 탭하면 초기화 · Ctrl+; 지금",
   today: "오늘",
   now: "지금",
   clear: "비우기",
@@ -122,7 +122,12 @@ export const DEFAULT_DATE_WHEEL_LABELS: DateWheelLabels = {
 /** 휠의 행을 이만큼 누르고 있으면 그 열이 초기화됩니다(오너 리포트 4번, 오너 결정
  *  2026-08-13: 2초). 보통 앱의 롱프레스는 500~700ms이고 2초는 길게 느껴집니다 —
  *  오너가 그 값을 알고 고른 것이라 그대로 둡니다. 바꾸려면 여기 하나만 고치면 됩니다. */
-const DATE_WHEEL_HOLD_MS = 2000;
+const DATE_WHEEL_HOLD_MS = 700;
+
+/** 두 탭이 이 안에 들어오면 더블탭입니다(오너 리포트 5차: "더블탭으로 0이나 1로 할 수
+ *  있게 해"). 브라우저의 더블클릭 판정과 같은 눈금이고, 이보다 길게 잡으면 **천천히 두 번
+ *  누른 것**까지 초기화가 됩니다. */
+const DATE_WHEEL_DOUBLE_TAP_MS = 300;
 
 /** 열 하나가 읽히는 최소 폭. 두 자리 숫자 + 일 열의 요일(`12 수`)이 안 잘리는 값이고,
  *  이 아래로 내려가면 오너가 말한 "답답한" 화면이 됩니다. */
@@ -1043,14 +1048,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       // 손 떼기가 만드는 클릭이 행의 평범한 이동으로 또 값을 바꾸지 않게 합니다.
       suppressColumnClickRef.current = true;
       swipeRef.current = null;
-      setTyping(null);
-      const target = model.resetTarget(unit, model.now(timeZone, fields), fields);
-      if (target === null) return;
-      const from = model.parts(baseValue, fields);
-      const next = clampToRange(model.setUnit(baseValue, unit, target, fields));
-      if (!model.isValid(next, fields) || next === baseValue) return;
-      if (from) markColumnMotion(unit, Math.sign(target - from[unit]));
-      onChange(next);
+      resetColumn(unit);
     }, DATE_WHEEL_HOLD_MS);
     holdRef.current = { unit, pointerId, y, timer };
   }
@@ -1077,6 +1075,41 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     const drawn = model.label(baseValue, unit, labels.weekdays, fields, hourDisplay);
     if (unit !== MERIDIEM_UNIT || !meridiem) return `${labels.units[unit]} ${drawn}`;
     return `${labels.units[unit]} ${meridiem === "am" ? meridiemLabels.am : meridiemLabels.pm} ${drawn}`;
+  }
+
+  /* 🔴 **더블탭은 가운데(선택된) 행에서만 받습니다**(오너 리포트 5차).
+   *
+   * 오프셋 행을 연달아 탭하는 것은 **이미 뜻이 있는 조작**입니다 — 여러 칸을 빠르게
+   * 움직이는 방법이고, 거기에 더블탭을 얹으면 그 조작이 사라집니다(탭 두 번이 +2가
+   * 아니라 초기화가 됩니다). 반면 **가운데 행 탭은 지금도 화면상 아무 일도 안 합니다**
+   * (자기 자신으로 이동). 비어 있는 제스처라 뺏을 것이 없습니다.
+   *
+   * 열마다 따로 셉니다 — 초 열을 탭하고 분 열을 탭한 것은 더블탭이 아닙니다.
+   *
+   * ⚠️ 시각은 `Date.now()`가 아니라 이벤트의 `timeStamp`로 봅니다. 가짜 타이머를 쓰는
+   * 검사에서 둘이 갈라지고, 여기서 갈라지면 검사가 조용히 다른 것을 재게 됩니다. */
+  const lastCentreTapRef = useRef<{ unit: DateWheelUnit; at: number } | null>(null);
+
+  function centreTapped(unit: DateWheelUnit, at: number) {
+    const previous = lastCentreTapRef.current;
+    lastCentreTapRef.current = { unit, at };
+    if (!previous || previous.unit !== unit || at - previous.at > DATE_WHEEL_DOUBLE_TAP_MS) return false;
+    lastCentreTapRef.current = null;   // 세 번째 탭이 또 초기화가 되지 않게 셈을 끊습니다
+    resetColumn(unit);
+    return true;
+  }
+
+  /** 홀드와 더블탭이 **같은 함수**를 지납니다. 이 킷에서 같은 규칙이 두 곳에 복제됐을 때
+   *  갈라지지 않은 적이 없습니다(`commitAndClose`가 생긴 이유가 그것입니다). */
+  function resetColumn(unit: DateWheelUnit) {
+    setTyping(null);
+    const target = model.resetTarget(unit, model.now(timeZone, fields), fields);
+    if (target === null) return;
+    const from = model.parts(baseValue, fields);
+    const next = clampToRange(model.setUnit(baseValue, unit, target, fields));
+    if (!model.isValid(next, fields) || next === baseValue) return;
+    if (from) markColumnMotion(unit, Math.sign(target - from[unit]));
+    onChange(next);
   }
 
   function typedHourToValue(unit: DateWheelUnit, typed: number) {
@@ -1908,7 +1941,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
               컨테이너의 key가 바뀌어 행이 통째로 리마운트되므로 포커스를 둘 수도 없습니다. */}
-          <div className="date-wheel-viewport"><div className="date-wheel-values" key={`${unit}-${motion.sequence}`}>{offsets.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === rowsPerSide + 1; const buffered = offset === 0 && resolvedTyping?.unit === unit ? resolvedTyping.digits : null; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={() => rowValue && applyShift(unit, offset)} key={offset}>{buffered ?? (rowValue ? model.label(rowValue, unit, labels.weekdays, fields, hourDisplay) : "—")}</button>; })}</div></div>
+          <div className="date-wheel-viewport"><div className="date-wheel-values" key={`${unit}-${motion.sequence}`}>{offsets.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === rowsPerSide + 1; const buffered = offset === 0 && resolvedTyping?.unit === unit ? resolvedTyping.digits : null; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={(event) => { if (offset === 0 && centreTapped(unit, event.timeStamp)) return; if (rowValue) applyShift(unit, offset); }} key={offset}>{buffered ?? (rowValue ? model.label(rowValue, unit, labels.weekdays, fields, hourDisplay) : "—")}</button>; })}</div></div>
           <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.next}`} disabled={!shifted(unit, 1)} onClick={() => applyShift(unit, 1)}><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></button>
         </section>; })}
       </div>
