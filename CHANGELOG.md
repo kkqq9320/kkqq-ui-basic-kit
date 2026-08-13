@@ -26,6 +26,13 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.7.0
   (안 쓰면 0개).
 - **`ShortcutSettings`** — 사용자가 조합을 다시 녹음하거나 지우는 설정 UI. 등록
   중인 조합이 킷 컴포넌트나 다른 액션과 겹치면 등록을 막고 이유를 보여 줍니다.
+- **등록할 수 없는 조합**(설계 스펙 §6.2) — `Escape`·`Tab`에 더해, **맨 `Enter`·맨
+  `Space`**(포커스한 버튼·링크를 누르는 키)와 **`Ctrl`/`Cmd` + `C`·`V`·`X`·`Z`·`Y`**
+  (브라우저의 복사·붙여넣기·되돌리기)를 막습니다. 녹음기가 이유를 보여 주고,
+  `defaultCombo`·`overrides`로 코드에서 넣어도 똑같이 무시됩니다 — 관문이 한 곳
+  (`unbindableReason`)이라 두 경로가 갈리지 않습니다. **`Ctrl+Enter`처럼 수식어가
+  붙은 활성화 키는 그대로 걸 수 있습니다.**
+  `Ctrl+A`는 **걸 수 있고**, 대신 "텍스트 입력 안에서는 뜨지 않는다"고 알려 줍니다.
 - **`sidebarToggleAction(onFire, options?)` · `SIDEBAR_TOGGLE_ID`** — 킷이 기본
   제공하는 유일한 액션. **핸들러는 앱 것입니다** — `Sidebar`가 controlled라 킷이
   쥐는 것은 안정적인 `id`뿐입니다. `options`로 `label`과 `defaultCombo`를 넘길 수
