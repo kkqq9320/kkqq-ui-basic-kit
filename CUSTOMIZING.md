@@ -93,7 +93,9 @@
 - **Panel**: `title`, `hint`, `actions` (전부 optional — 없으면 머리말을 안 그림)
 - **MobileQuickBar**: `items`(**정확히 3개**), `barRef`
 - **Dialog**: `ariaLabel`(필수·고유), `wide`, `scroll`, `closeOnBackdrop`·`closeOnEscape`·`closeOnBack`
-- **ThemeColorEditor**: `theme`, `groups`(토큰 이름표·설명 교체 또는 새 토큰 추가), `onChange`
+- **ThemeColorEditor**: `theme`, `groups`(토큰 이름표·설명 교체 또는 새 토큰 추가), `onChange`,
+  `palette`(앱의 토큰 목록을 묶은 팔레트 — 읽기·쓰기·적용이 전부 이쪽으로),
+  `overrides`(앱이 저장소를 소유 — 넘기면 킷은 저장하지 않음), `onCommit`(손을 둔 뒤 한 번)
 
 > ⚠️ `labels`·`groups`처럼 **키가 있는 표를 갈아 끼울 때는 키 이름이 키트 쪽과
 > 같아야** 합니다. 로직이 키트 목록으로 돌기 때문에 이름이 어긋나면 에러 없이
@@ -119,8 +121,8 @@ CSS에서 같은 변수를 다시 정의**하면 그걸로 끝입니다. 라이�
 
 | 묶음 | 토큰 |
 |---|---|
-| 강조·브랜드 | `--accent`, `--accent-soft`, `--deep` |
-| 상태색 | `--green`, `--green-soft`, `--orange`, `--red`, `--gold` |
+| 강조·브랜드 | `--accent`, `--accent-soft`, `--deep`※ |
+| 상태색 | `--green`, `--green-soft`, `--orange`, `--red`, `--gold`※ |
 | 표면·선·글자 | `--bg`, `--surface`, `--surface-soft`, `--input`, `--sidebar`, `--line`, `--text`, `--muted` |
 | 타이포 | `--font-family-base`, `--font-size-*`(control 13 / nav 14 / section-title 18 / dialog-title 20 / page-title 31 …) |
 | 컨트롤 높이 | `--action-height`(38), `--compact-action-height`(32), `--action-min-width`(88), `--compact-action-min-width`(64) |
@@ -128,6 +130,19 @@ CSS에서 같은 변수를 다시 정의**하면 그걸로 끝입니다. 라이�
 | 사이드바 | `--sidebar-width`(238), `--sidebar-width-collapsed`(76), `--sidebar-motion`, `--sidebar-ease` |
 | 스크롤바·모션 | `--scrollbar-size`(4), `--scrollbar-thumb`, `--scrollbar-thumb-hover`, `--motion-fast`(140ms) |
 | 날짜 활성 세그먼트 | `--date-segment-active-background`, `--date-segment-active-text` (아래 주의) |
+
+> ※ **`--deep`·`--gold`는 CSS로 바꿀 수는 있지만 `ThemeColorEditor`에는 안 나옵니다.**
+> 킷 CSS가 그 둘을 쓰지 않아 편집기에서 고쳐도 화면이 안 바뀌었기 때문입니다 —
+> 안 쓰는 색을 편집기에 얹으면 사용자에게는 고장으로 보입니다. **앱이 그 둘을 쓰고
+> 사용자가 고르게까지 하고 싶다면** 자기 목록에 넣으세요(아래 "새 색 토큰을 더하기"와
+> 같은 방법입니다):
+>
+> ```ts
+> const palette = createThemePalette([
+>   ...THEME_TOKEN_GROUPS,
+>   { title: "브랜드", tokens: [{ name: "--deep", label: "짙은 면", description: "어두운 배경 면" }] },
+> ]);
+> ```
 
 > ⚠️ **날짜 활성 세그먼트 둘은 짝입니다.** 기본값이 `var(--text)`와 `var(--input)`이라
 > **반전**(칩은 글자색, 글자는 필드색)이고, 그래서 `--text`·`--input`만 바꿔도 저절로
@@ -153,6 +168,23 @@ CSS에서 같은 변수를 다시 정의**하면 그걸로 끝입니다. 라이�
 > `SummaryGrid`·`PanelGrid`·`FieldGrid`는 같은 세 축을 **프롭**(`min`/`max`/`justify`)
 > 으로도 받습니다 — 자리마다 덮어쓸 때 씁니다. **앱 전역이면 토큰, 한 자리만이면 프롭.**
 > 색상 카드 목록은 `ThemeColorEditor` 안이라 토큰으로만 조절합니다.
+
+#### 넓은 화면에서 패널이 넓어지는 것은 **앱이 정합니다** (소유자 결정, 2026-08-13)
+
+기본값이 상한 없음·왼쪽이라 2560 같은 화면에서 패널 하나가 **1077px**까지 갑니다. 킷이
+여기에 기본 뚜껑을 씌울지가 오래 열려 있던 질문이었고, **답은 "안 씌운다"입니다** — 한 줄에
+패널을 몇 개 놓을지, 그 줄이 얼마나 넓어도 되는지는 **그 화면이 무엇을 담는지 아는 쪽**만
+판단할 수 있습니다(`PRINCIPLES.md` §14: 킷은 축을 열고, 값은 앱이 정합니다).
+
+넓히고 싶지 않으면 앱에서 한 줄이면 됩니다:
+
+```css
+:root { --panel-max: 720px; }   /* 패널 한 장이 720을 넘지 않게 */
+```
+
+⚠️ 바로 아래 "`max`는 뚜껑이 아니라 열 수를 정합니다"를 먼저 읽으세요 — 값에 따라 **열이
+줄어 패널이 오히려 커질 수** 있습니다. 그리고 남는 폭을 옮기는 축은 `max`가 길이일 때만
+동작합니다(`1fr`이면 옮길 폭이 0이라 아무 일도 일어나지 않습니다).
 
 #### ⚠️ `max`는 뚜껑이 아니라 **열 수를 정합니다**
 
@@ -222,11 +254,92 @@ CSS에서 같은 변수를 다시 정의**하면 그걸로 끝입니다. 라이�
    ```css
    :root { --brand-2: #ff8a3d; }  :root[data-theme="dark"] { --brand-2: #ffa866; }
    ```
+
+> ⚠️ **둘 다 정의해야 하는 이유는 리셋입니다.** 리셋은 값을 넣는 것이 아니라 인라인
+> 스타일을 **걷어내는** 동작이라, CSS에 돌아갈 기본값이 없으면 검정(`#000000`)으로
+> 갑니다 — 사용자 눈에는 "리셋했더니 색이 사라졌다"로 보입니다. 리셋해도 **토큰과
+> 카드는 그대로 남습니다.** 사라지는 것은 사용자가 고친 값뿐입니다.
+
 2. 어딘가에서 실제로 쓰고 (`color: var(--brand-2)`),
 3. `groups`에 항목을 더하면 (`[...THEME_TOKEN_GROUPS, { title:"브랜드", tokens:[{name:"--brand-2", …}] }]`)
 
 편집기에 그 색이 뜨고 저장·적용됩니다 — 키트를 안 고치고 색이 늘어납니다.
 (색 토큰은 누군가 `var(--x)`로 **써야** 화면에 나타납니다. 어디 쓸지는 코드가 정합니다.)
+
+### 색 설정을 앱이 소유하기 (서버 저장·백업·복원)
+
+`localStorage`는 **origin(scheme+host+port)마다 별개**입니다. 그래서 같은 노트북이라도
+`http://10.1.1.254:3000`과 `https://myapp.example.com`은 색 설정이 갈립니다. 어디서 접속해도
+같게 하려면 **앱이 자기 저장소에 두어야** 하고, 킷은 그 기계를 줍니다.
+
+**토큰 목록을 한 번만 묶습니다.**
+
+```ts
+import { createThemePalette, THEME_TOKEN_GROUPS } from "kkqq-ui-basic-kit";
+
+const palette = createThemePalette([...THEME_TOKEN_GROUPS, MY_GROUP]);   // 앱이 한 번
+```
+
+이후 모든 조작이 이 객체를 지나므로 **목록을 넘길 자리가 없습니다.** 하나만 빠뜨려도
+앱이 신설한 색이 말없이 사라지던 자리가 없어집니다.
+
+| 멤버 | 하는 일 |
+|---|---|
+| `groups` / `tokens` | 편집기가 그릴 목록 |
+| `apply(theme, overrides?)` | `:root`에 적용 |
+| `read(theme)` / `write(theme, overrides)` | 로컬 저장소. `write`는 성공 여부를 돌려줍니다 |
+| `serialize(colors?)` | 두 테마를 봉투 하나로. 안 넘기면 `read`로 읽습니다 |
+| `parse(input)` | 검증. `{ backup, dropped } \| null` |
+| `applyBackup(backup, theme)` | 두 테마 다 저장하지만 **넘긴 테마만** 화면에 적용 |
+
+**로그인해서 서버 값으로 그리기:**
+
+```tsx
+<ThemeColorEditor
+  palette={palette}
+  theme={theme}
+  overrides={fromServer}           // 넘기면 킷은 저장하지 않습니다
+  onChange={setFromServer}         // 화면 적용은 편집기가 이미 끝냈습니다 — 이 맵을 앱 상태로 되먹이는 것뿐입니다
+  onCommit={(next) => save(next)}  // 손을 둔 뒤 한 번
+/>
+```
+
+> ⚠️ **`onChange`가 받은 맵을 반드시 `overrides`로 되먹이세요.** controlled 모드에서는
+> 편집기가 매 조작을 그 순간의 `overrides` 프롭에서 계산합니다 — 되먹이지 않으면 두
+> 번째 편집이 첫 번째 편집의 키를 잊은 맵으로 나오고, 이 맵을 통째 교체(PUT)로
+> 저장하면 사용자가 손대지 않은 색이 영구히 사라집니다.
+
+**백업·복원:**
+
+```ts
+const file = palette.serialize({ light: myLight, dark: myDark });   // 앱이 가진 값으로
+
+const parsed = palette.parse(JSON.parse(text));
+if (!parsed) return alert("이 파일은 색 백업이 아닙니다");
+if (parsed.dropped.length) alert(`이 버전이 모르는 색 ${parsed.dropped.length}개는 뺐습니다`);
+palette.applyBackup(parsed.backup, theme);   // 로컬에 저장하는 앱이라면 — theme은 필수
+```
+
+> ⚠️ **`applyBackup`은 두 테마를 다 저장하지만, 화면에는 넘긴 `theme`만 적용합니다.**
+> `:root`는 하나뿐이라 두 테마를 순서대로 적용하면 나중 것이 이겨 앞엣것을 덮기
+> 때문입니다 — 그래서 `theme` 인자가 필수입니다. `overrides`로 앱이 소유하는 경우에는
+> 이 함수를 쓰지 말고 `parse` → 내 상태에 넣기 → `palette.apply(theme, ...)` 순으로
+> 가세요. 안 그러면 앱이 소유하기로 한 저장소 **밖에 사본이 하나 더** 생깁니다.
+
+#### ⚠️ 이 맵은 전체 집합입니다 — 패치가 아닙니다
+
+`onChange`·`onCommit`·`serialize`·`parse`가 주고받는 맵은 그 테마의 덮어쓰기 **전체**이고,
+**없는 키는 "안 바뀜"이 아니라 "기본값"**입니다. 편집기에서 리셋이 값을 넣는 것이 아니라
+**키를 지우는** 동작이기 때문입니다.
+
+| 앱이 이렇게 저장하면 | 무슨 일이 나나 |
+|---|---|
+| `PATCH { 바뀐것만 }` 또는 `{ ...기존, ...받은것 }` | **리셋만 영영 안 먹습니다** — 지운 색이 다음 로그인에 되살아납니다 |
+| `{}`를 "값 없음"으로 보고 저장을 건너뜀 | **모두 초기화가 안 먹습니다** |
+| 통째로 교체(PUT) | 리셋·모두 초기화가 그대로 동작합니다 |
+
+빈 백업(`{}` 둘)은 "전부 기본값"이라는 **정상 상태**이고, `parse`가 돌려주는 `null`
+(= 백업이 아님)과 다릅니다.
 
 ### 폰트 바꾸기
 
@@ -306,5 +419,5 @@ body::-webkit-scrollbar,
 
 | 키 | 주인 | 비고 |
 |---|---|---|
-| `themeColors:light` / `themeColors:dark` | **키트** (`ThemeColorEditor`) | 사용자 팔레트 오버라이드 |
+| `themeColors:light` / `themeColors:dark` | **키트** (`ThemeColorEditor`) — **단, `overrides`를 넘기면 앱** | `overrides`가 오면 편집기가 저장을 멈추고, 그 저장소는 앱이 소유합니다 |
 | 사이드바 접힘·테마 등 | **앱** | 키트는 controlled — 저장은 앱 책임(예: `sidebarCollapsed`, `theme`) |

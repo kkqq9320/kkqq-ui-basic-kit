@@ -1,4 +1,28 @@
 /* 데모 페이지 전용 스타일. 디자인 시스템의 일부가 아닙니다. */
+
+/* 6열 두 줄 접기 실험 — 설계 스펙 §16 미결 1번, 실기기에서만 판단됩니다(2b-4).
+ * 한 줄 유지가 킷의 기본이고(css/date-picker.css의 `[data-fields="6"]`), 이 규칙은
+ * 그것을 **데모에서만** 3열×2줄(날짜 줄 / 시각 줄)로 접어 오너가 폰에서 두 모양을
+ * 나란히 비교할 수 있게 합니다.
+ *
+ * `DateWheelPicker`의 팝오버는 `document.body`에 직접 포털되므로 어떤 데모
+ * 래퍼로도 감쌀 수 없습니다(포털은 React 트리가 아니라 실제 DOM 트리 기준으로
+ * 조상을 끊습니다) — 그래서 두 조건을 함께 겁니다: `body.date-wheel-fold-demo`는
+ * `main.tsx`의 토글 버튼이 붙였다 뗍니다, `[aria-label="…"]`는 이 컴포넌트가 항상
+ * 노출하는 유일한 인스턴스별 식별자입니다(`popoverId`는 `useId()` 기반이라 예측할
+ * 수 없습니다). 데모에 이 aria-label을 가진 픽커가 정확히 하나뿐이므로 이 결합이
+ * 그 인스턴스 하나만 정확히 겨냥합니다.
+ *
+ * ⚠️ **문자열 결합이라 조용히 죽을 수 있습니다.** `main.tsx`에서 이 픽커의
+ * `ariaLabel="초까지 예약 시각"`을 바꾸거나(팝오버 aria-label은
+ * `${ariaLabel} ${labels.select}`, 기본 select="선택") 그 `labels.select`를
+ * override하면 이 선택자는 더 이상 매칭되지 않습니다. **에러도, 경고도 없이
+ * 그냥 접히지 않습니다** — 토글 버튼 라벨은 여전히 "두 줄로 접음"으로 바뀌므로
+ * 오너가 상태 변화 없이 문구만 바뀐 것을 보고 "두 모양이 똑같다"고 잘못 판단할
+ * 수 있습니다. 이 픽커의 `ariaLabel`을 바꾸면 이 줄의 문자열도 같이 바꾸세요. */
+body.date-wheel-fold-demo .date-wheel-popover[aria-label="초까지 예약 시각 선택"] .date-wheel-columns[data-fields="6"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 /* `.demo-grid`는 킷의 `FieldGrid`(css/page.css의 `.field-grid`)로 옮겨갔습니다 —
  * 데모에만 있는 레이아웃은 소비 앱이 쓸 수 없어서, 패널 안을 여러 열로 놓는 방법이
  * 킷에 아예 없었습니다. 이 클래스는 더 이상 쓰이지 않습니다. */
@@ -6,6 +30,18 @@
 .demo-swatches > div { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 9px; }
 .demo-swatches i { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 7px; }
 .demo-swatches code { min-width: 0; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; }
+
+/* 데모가 신설한 **앱 전용** 색. 라이트·다크를 **둘 다** 정의합니다 — 리셋은 값을 넣는 게
+ * 아니라 인라인 스타일을 걷어내는 동작이라, CSS에 돌아갈 기본값이 없으면 검정으로 갑니다
+ * (CUSTOMIZING.md의 경고 그대로입니다). 그리고 **쓰는 자리를 함께 둡니다** — 아래 칩이 이
+ * 색으로 칠해지므로 편집기에서 고치면 바뀌는 게 눈에 보입니다. 안 쓰는 토큰을 편집기에
+ * 얹는 것은 킷에서 방금 걷어낸 결함입니다(`--deep`·`--gold`). */
+:root { --demo-brand: #7b4bd8; }
+[data-theme="dark"] { --demo-brand: #b79bff; }
+.demo-brand-chip { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 999px; background: var(--demo-brand); color: #fff; font-size: 13px; font-weight: 600; }
+.demo-owner-note { margin: 0 0 10px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.demo-backup-box { width: 100%; min-height: 92px; margin-top: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--input); color: var(--text); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; line-height: 1.6; resize: vertical; }
+
 /* ?debug=1 진단 기록판 */
 .demo-log { max-height: 260px; margin: 12px 0 0; padding: 12px; overflow: auto; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); color: var(--text); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; user-select: text; }
 
@@ -31,6 +67,20 @@
   border: 1px solid var(--line); border-radius: 10px;
   background: var(--surface); box-shadow: 0 6px 20px rgba(0, 0, 0, .18);
 }
+/* 접힘 머리줄. 접으면 이것만 남아 알약 하나가 됩니다 — 왼쪽 아래를 비워야 그 자리에 있는
+ * 화면을 볼 수 있습니다(오너 요청). 버튼 자체가 머리줄이라 어디를 눌러도 접힙니다.
+ * 킷 버튼 규격(높이 38 등)을 일부러 벗어납니다: 이건 계측 도구의 손잡이지 앱 컨트롤이
+ * 아니고, 접었을 때 최대한 작아야 가리는 면적이 줄어듭니다. */
+.layout-switch-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-width: 0; height: auto; min-height: 0; padding: 0; border: 0; border-radius: 0;
+  background: none; color: var(--muted); cursor: pointer;
+  font: 700 10px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .06em;
+}
+.layout-switch-head:hover { color: var(--text); }
+.layout-switch-head em { color: var(--accent); font-style: normal; font-weight: 700; }
+.layout-switch.closed { gap: 0; padding: 7px 11px; }
+
 .layout-switch-row { display: grid; gap: 4px; }
 .layout-switch-row strong { color: var(--muted); font: 700 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .06em; }
 .layout-switch-buttons { display: flex; gap: 6px; }

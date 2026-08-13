@@ -19,13 +19,14 @@ const cssModules = import.meta.glob("../css/*.css", { query: "?raw", import: "de
 const allCss = Object.values(cssModules).join("\n");
 const exposed = THEME_TOKEN_GROUPS.flatMap((group) => group.tokens).map((token) => token.name);
 
-/**
- * 아직 `var()` 참조가 0건인 채로 편집기에 남아 있는 토큰. **미결정 항목이고 인계 문서의
- * "미결정 3건"에 같이 적혀 있습니다** — 쓸 자리를 찾을지, 편집기에서 뺄지 정해야 합니다.
- * 여기 적어 두는 이유는 두 가지입니다: 아래 계약을 지금 켤 수 있게 하고, **잊히지 않게**
- * 하는 것. 다음 테스트가 이 목록이 썩는 것도 막습니다.
- */
-const UNDECIDED = ["--deep", "--gold"];
+/* **예외 목록(`UNDECIDED`)이 없어졌습니다 (오너 결정, 2026-08-13).** `--deep`·`--gold`는
+ * 편집기에 카드로 나오면서 `var()` 참조가 0건이라, 고쳐도 아무 일이 안 일어났습니다.
+ * 오너의 답은 "편집기에서 뺀다"였습니다 — 토큰 자체는 `tokens.css`에 남아 앱이 쓸 수
+ * 있고, 앱이 편집까지 하고 싶으면 자기 `groups`/`palette`에 넣으면 됩니다.
+ *
+ * 그래서 계약이 **예외 없는 형태**가 됐습니다. 예외 목록은 그것을 관리하는 검사 셋을
+ * 데리고 다녔는데(목록이 썩지 않게, 목록에 헛이름이 없게), 목록이 사라지니 그 셋도
+ * 필요 없습니다. 다시 미결정이 생기면 그때 되살리세요. */
 
 describe("편집기에 노출된 토큰은 화면을 움직인다", () => {
   // 전제 확인 — 목록이 비면 아래 계약이 공허하게 통과합니다.
@@ -35,23 +36,10 @@ describe("편집기에 노출된 토큰은 화면을 움직인다", () => {
 
   // **exhaustive 형태입니다.** `filter(...).toEqual([])`가 아니라 안 쓰인 것 전부를
   // 나열해 비교합니다 — 어느 토큰이 죽었는지 실패 메시지가 직접 말합니다.
-  it("미결정으로 적어 둔 것 말고는 전부 CSS에서 쓰인다", () => {
+  it("전부 CSS에서 쓰인다", () => {
     const unused = exposed.filter((name) => !allCss.includes(`var(${name}`));
 
-    expect(unused.sort()).toEqual([...UNDECIDED].sort());
-  });
-
-  // **목록이 썩는 것을 막습니다.** 누군가 `--gold`를 쓰기 시작하면 이 테스트가 빨개져서
-  // 목록에서 빼게 만듭니다. 이게 없으면 예외 목록이 조용히 거짓이 됩니다.
-  it("미결정 목록에 이미 쓰이는 토큰이 남아 있지 않다", () => {
-    const nowUsed = UNDECIDED.filter((name) => allCss.includes(`var(${name}`));
-
-    expect(nowUsed).toEqual([]);
-  });
-
-  // 노출 목록에 없는 이름을 예외로 적어 두면 그것도 거짓입니다.
-  it("미결정 목록의 이름이 전부 실제 노출 토큰이다", () => {
-    expect(UNDECIDED.filter((name) => !exposed.includes(name))).toEqual([]);
+    expect(unused.sort()).toEqual([]);
   });
 });
 

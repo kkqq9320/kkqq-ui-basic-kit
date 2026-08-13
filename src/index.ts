@@ -11,6 +11,7 @@ export { AppShell, type AppShellProps } from "./AppShell";
 export { Dialog, DialogHeading, DialogActions, type DialogProps } from "./Dialog";
 export { ThemeColorEditor, type ThemeColorEditorProps } from "./ThemeColorEditor";
 export { THEME_TOKEN_GROUPS, THEME_TOKENS, applyTokenOverrides, defaultTokenValue, normalizeColor, readThemeDefaults, readTokenOverrides, toRgbText, writeTokenOverrides, type ThemeName, type ThemeToken, type ThemeTokenGroup } from "./themeTokens";
+export { createThemePalette, type ThemePalette, type ThemeColorBackup, type ParsedThemeColors } from "./themePalette";
 export { AutoGrowTextarea, type AutoGrowTextareaProps } from "./AutoGrowTextarea";
 export { PageHeader, SummaryGrid, SummaryCard, PanelGrid, Panel, FieldGrid, DismissibleDetails, type GridJustify } from "./PageChrome";
 export { PopupDepthContext, useBackToClose, useEscapeToClose, useScrollDirectionHidden, useVisualViewportBox, useVirtualKeyboard, useVirtualKeyboardOpen, type VisualViewportBox, type VirtualKeyboard } from "./hooks";

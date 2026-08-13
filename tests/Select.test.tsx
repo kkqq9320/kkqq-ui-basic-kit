@@ -395,6 +395,17 @@ describe("Select", () => {
       expect(screen.getByRole("listbox")).toBeTruthy();
     });
 
+    /* ⚠️ **이 검사는 약합니다. 여기에 무게를 싣지 마세요 — 실측으로 확인했습니다(2026-08-13).**
+     * `stubRect`를 안 부르므로 트리거 rect가 0끼리 비교돼 "앵커가 움직였나"가 언제나 거짓
+     * 입니다. 그렇다고 `stubRect`를 붙여도 달라지지 않습니다: 이 시나리오에서는 트리거가
+     * 애초에 안 움직이므로 200 대 200이고, 결론이 같습니다. 즉 이 검사가 잡을 수 있는 것은
+     * **"스크롤이면 무조건 닫는다"** 하나뿐입니다.
+     *
+     * 원 리뷰(REVIEW-01ddbb6..004aea6.md)가 이 자리를 "절대 실패할 수 없다"고 지목하면서
+     * `pointerDownInsideMenuRef` 면제를 지워도 통과한다고 적었는데, **오늘은 사실이 아닙니다.**
+     * 그 뒤 owner 리포트 라운드에서 들어온 아래 describe의 두 검사가 그 면제를 지킵니다 —
+     * 면제 한 줄을 지우고 재니 **정확히 그 둘 + 관련 하나, 셋이 빨개졌습니다.**
+     * 진짜 방어는 "메뉴 안에서 시작한 스와이프…" describe입니다. */
     it("메뉴 자신의 스크롤(옵션 목록)은 닫지 않는다", () => {
       render(<ControlledSelect />);
       fireEvent.click(screen.getByRole("button", { name: "항목" }));
@@ -743,6 +754,38 @@ describe("Select", () => {
       fireEvent.scroll(document, {});
 
       expect(screen.queryByRole("listbox")).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    /* 위 주석이 "앵커 이동 스크롤과 **뒤로가기**는 안 했다"고 적어 두었는데, 검사는 앵커
+     * 이동 쪽에만 있었습니다. 실측: `useBackToClose(open, closeAndReclaimFocus)`를
+     * `() => setOpen(false)`로 바꿔도 **Select 스위트 68개가 전부 초록**이었습니다.
+     *
+     * 이 경로가 특히 중요합니다 — 다이얼로그 안에서 열린 메뉴를 뒤로가기로 닫으면 메뉴만
+     * 닫히고 다이얼로그는 남는데, 그때 포커스가 `<body>`로 떨어지면 다음 Tab이
+     * **다이얼로그의 포커스 스코프 밖으로** 나갑니다.
+     *
+     * `state: null`로 popstate를 쏘는 것이 "표식이 사라진 자리에 착지했다"입니다 —
+     * `src/hooks.ts`의 `handlePopState`가 보는 것이 정확히 그 값입니다. */
+    it("뒤로가기로 닫으면 메뉴가 닫힌다", () => {
+      render(<ControlledSelect initialValue="a" />);
+      fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });
+
+      fireEvent.popState(window, { state: null });
+
+      expect(screen.queryByRole("listbox")).toBeNull();
+    });
+
+    /* ⚠️ 위와 **다른 `it`으로 나눕니다.** 한 블록에 두면 앞 단언이 먼저 터졌을 때 이 단언은
+     * 실행조차 안 되고, 그러면 "포커스도 검사됐다"가 거짓이 됩니다. */
+    it("뒤로가기로 닫을 때 포커스를 트리거로 회수한다", () => {
+      render(<ControlledSelect initialValue="a" />);
+      const trigger = screen.getByRole("button", { name: "항목" });
+      fireEvent.keyDown(trigger, { key: "ArrowDown" });
+      expect(document.activeElement).toBe(screen.getByRole("option", { name: "첫째" }));
+
+      fireEvent.popState(window, { state: null });
+
       expect(document.activeElement).toBe(trigger);
     });
   });

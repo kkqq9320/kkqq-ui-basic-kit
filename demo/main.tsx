@@ -16,7 +16,6 @@ installHistoryProbe();
 import {
   AppShell,
   AutoGrowTextarea,
-  BARE_KEY_SCOPE_ATTR,
   DateWheelPicker,
   Dialog,
   DialogActions,
@@ -31,21 +30,41 @@ import {
   SectionHeading,
   SectionTabs,
   Select,
-  ShortcutProvider,
-  ShortcutSettings,
-  SIDEBAR_TOGGLE_ID,
   Sidebar,
   ThemeColorEditor,
   SummaryCard,
   SummaryGrid,
-  displayCombo,
-  normalizeCombo,
-  sidebarToggleAction,
   useMobilePageTabs,
   useScrollDirectionHidden,
   useVirtualKeyboardOpen,
-  applyTokenOverrides,
+  THEME_TOKEN_GROUPS,
+  createThemePalette,
+  BARE_KEY_SCOPE_ATTR,
+  ShortcutProvider,
+  ShortcutSettings,
+  SIDEBAR_TOGGLE_ID,
+  displayCombo,
+  normalizeCombo,
+  sidebarToggleAction,
 } from "../src";
+
+/** 사이드바 토글의 **앱** 기본 조합. 킷의 기본은 여전히 `null`입니다(단축키 설계 스펙
+ * §3.2) — 이 데모(앱)가 `sidebarToggleAction`의 `defaultCombo` 옵션으로 정합니다.
+ * `overrides`는 사용자가 실제로 바꾼 것만 담습니다(§7.1). */
+const SIDEBAR_DEFAULT_COMBO = "Ctrl+Backslash";
+
+/** 데모가 **자기 앱 색으로** 신설한 토큰. `demo.css`가 라이트·다크를 둘 다 정의하고
+ *  `.demo-brand-chip`이 실제로 씁니다 — 안 쓰는 토큰은 편집기에 얹지 않습니다. */
+const DEMO_GROUP = {
+  title: "데모 앱 색",
+  tokens: [{ name: "--demo-brand", label: "데모 브랜드", description: "데모가 신설한 앱 전용 색 — 아래 칩에 쓰입니다" }],
+};
+
+/* ⚠️ **이 한 줄이 팔레트의 존재 이유입니다.** 예전 데모는 테마를 바꿀 때
+ * `applyTokenOverrides(theme)`를 목록 없이 불렀습니다. 킷 기본 목록만 도는 호출이라
+ * `--demo-brand`는 **저장소에 남은 채 화면에서만** 사라집니다. 팔레트를 지나면 목록을
+ * 넘길 자리가 아예 없어 그 일이 일어날 수 없습니다. */
+const demoPalette = createThemePalette([...THEME_TOKEN_GROUPS, DEMO_GROUP]);
 
 /** ?debug=1 일 때만 보이는 history 기록판. 콘솔을 열 필요가 없게 하려는 것입니다. */
 function HistoryLogPanel() {
@@ -183,6 +202,11 @@ function LayoutSwitch() {
   const [viewport, setViewport] = useState(0);
   const [justify, setJustify] = useState<(typeof JUSTIFY_CHOICES)[number]>("normal");
   const [fakeWidth, setFakeWidth] = useState(0);
+  /* 조작판을 접을 수 있습니다. 이건 화면 왼쪽 아래를 **고정으로** 덮고 있어서, 정작 그
+   * 자리를 보려면 치울 방법이 있어야 합니다(오너 요청). 기본은 지금까지대로 펼침이고,
+   * 선택은 기억합니다 — 접어 두고 새로 고쳤는데 다시 펴져 있으면 접은 의미가 없습니다. */
+  const [open, setOpen] = useState(() => localStorage.getItem("layoutSwitchOpen") !== "false");
+  useEffect(() => { localStorage.setItem("layoutSwitchOpen", String(open)); }, [open]);
 
   useEffect(() => {
     for (const a of AXES) document.documentElement.style.setProperty(a.token, `${axis[a.token]}px`);
@@ -221,6 +245,12 @@ function LayoutSwitch() {
   }, [fakeWidth]);
 
   useEffect(() => {
+    /* 접혀 있으면 아예 재지 않습니다 — 표를 아무도 안 보는데 400ms마다 옛 규칙을 얹었다
+       걷을 이유가 없습니다. **그 주입이 PR #29에서 스크롤 위치를 파괴한 바로 그 동작**
+       입니다(문서가 창 높이까지 짧아지는 순간 브라우저가 스크롤을 깎습니다).
+       ⚠️ 토큰을 넣는 위 이펙트는 계속 돕니다 — 접었다고 `--*-min`이 풀리면 조작판을
+       치우는 것만으로 화면이 바뀌어 무엇을 보고 있었는지 알 수 없게 됩니다. */
+    if (!open) return;
     /* ⚠️ **접힌 트랙을 빼고 셉니다.** `auto-fit`은 빈 트랙을 `0px`로 접어 두는데
        `gridTemplateColumns`에는 **그대로 남아 있습니다**(실측: `1077px 1077px 0px`).
        그냥 세면 패널 2장이 나눠 쓰는 줄을 "3칸"이라고 찍습니다 — 조작판이 화면과 다른
@@ -309,7 +339,8 @@ function LayoutSwitch() {
     const timer = window.setInterval(measure, 400);
     window.addEventListener("resize", measure);
     return () => { window.clearInterval(timer); window.removeEventListener("resize", measure); };
-  }, [axis, justify, fakeWidth]);
+    // `open`이 빠지면 접었다 펴도 이펙트가 다시 안 돌아 표가 영원히 `…`입니다.
+  }, [axis, justify, fakeWidth, open]);
 
   const slider = (a: (typeof AXES)[number] | (typeof MAX_AXES)[number]) =>
     <div className="layout-switch-row" key={a.token}>
@@ -338,7 +369,20 @@ function LayoutSwitch() {
      조작판이 고장 난 것처럼 보이는데, 실제로는 그 요소가 이 화면에 없을 뿐입니다. */
   const cell = (cols: number, px: number, where: string) => px ? `${cols ? cols + "칸 " : ""}${px}px` : where;
 
-  return <div className="layout-switch">
+  return <div className={`layout-switch${open ? "" : " closed"}`}>
+    {/* 접힘 머리줄. 접었을 때도 **지금 무엇이 걸려 있는지**는 한 줄로 남깁니다 — 접었다는
+        이유로 폭 흉내가 켜진 것을 잊으면, 화면이 왜 그런지 설명할 수 없게 됩니다. */}
+    <button
+      type="button"
+      className="layout-switch-head"
+      aria-expanded={open}
+      aria-label={open ? "조작판 접기" : "조작판 펴기"}
+      onClick={() => setOpen((shown) => !shown)}
+    >
+      <span>{open ? "▾" : "▸"} 조작판</span>
+      {!open && <em>{justify}{fakeWidth ? ` · 흉내 ${fakeWidth}` : ""}</em>}
+    </button>
+    {open && <>
     {AXES.map(slider)}
     {MAX_AXES.map(slider)}
     <div className="layout-switch-row">
@@ -394,6 +438,7 @@ function LayoutSwitch() {
           ? "이 화면 폭에서는 옛 규칙과 같습니다 — 의도한 대로입니다. 카드는 1920부터, 패널은 --panel-min 폭부터 갈립니다."
           : "이 화면 폭에서 달라집니다."}
     </small>
+    </>}
   </div>;
 }
 
@@ -417,35 +462,27 @@ const LAYOUT_PANELS: Record<string, () => ReactElement> = {
   </Panel>,
 };
 
-/** 사이드바 토글의 **앱** 기본 조합. 킷의 기본은 여전히 `null`입니다(스펙 §3.2) — 이
- * 데모(앱)가 `sidebarToggleAction`의 `defaultCombo` 옵션으로 정합니다. `overrides`는
- * 이제 사용자가 실제로 바꾼 것만 담습니다(스펙 §7.1, 전체 리뷰 Important 1). */
-const SIDEBAR_DEFAULT_COMBO = "Ctrl+Backslash";
-
 function Demo() {
   // 기본은 다크. 저장된 선택이 있으면 그게 우선.
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     const saved = localStorage.getItem("theme");
     return saved === "light" || saved === "dark" ? saved : "dark";
   });
+  /* 색 설정의 **주인**을 데모에서 바꿔 볼 수 있게 합니다.
+   *   꺼짐 — 킷이 `localStorage`에 읽고 씁니다(지금까지의 동작).
+   *   켜짐 — 앱(=이 데모)이 소유합니다. `overrides`를 넘기므로 킷은 **저장하지 않고**
+   *          적용과 알림만 하며, 값은 아래 `serverColors`에 삽니다(진짜 앱이라면 서버).
+   * 켜고 색을 고친 뒤 새로 고치면 사라지는 것이 정상입니다 — 이 데모에는 서버가 없습니다. */
+  const [appOwnsColors, setAppOwnsColors] = useState(false);
+  const [serverColors, setServerColors] = useState<Record<"light" | "dark", Record<string, string>>>({ light: {}, dark: {} });
+  /** `onCommit`이 언제 불렸는지 눈으로 보는 자리. 피커를 끄는 동안은 안 불립니다. */
+  const [lastCommit, setLastCommit] = useState("아직 없음");
+  const [backupText, setBackupText] = useState("");
+  const [restoreNote, setRestoreNote] = useState("");
+
   // 접힘 상태를 브라우저에 기억해 다음 방문에 그대로 재현합니다. Sidebar는 controlled라
   // 저장은 쓰는 쪽 책임입니다(PRINCIPLES §8).
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("sidebarCollapsed") === "true");
-  // 단축키 덮어쓰기. **사용자가 실제로 바꾼 것만** 담습니다(스펙 §7.1) — 앱의 기본
-  // 조합은 더 이상 여기 안 넣습니다(`SIDEBAR_DEFAULT_COMBO` 참고, 전체 리뷰 Important 1).
-  // 저장은 없습니다(localStorage 등) — 새로고침하면 초기화됩니다. 저장은 Task 7 소관입니다.
-  const [shortcutOverrides, setShortcutOverrides] = useState<Record<string, string | null>>({});
-  // 화면에 적힌 조합 문자열은 전부 이 값에서 파생시킵니다 — 리터럴로 박아 두면
-  // 아래 "단축키" 패널에서 재녹음/삭제해도 이 문구들만 낡은 채로 남습니다. `bindingOf`
-  // (`ShortcutProvider.tsx`)와 같은 우선순위를 그대로 따라야 실제 바인딩과 이 표시가
-  // 갈리지 않습니다 — `??`는 못 씁니다: override 키가 있는데 값이 `null`(사용자가
-  // 지운 상태)이면 `??`가 그걸 기본값으로 덮어써 버려 §7.1의 "지운 것"과 "기본값을
-  // 쓰는 것"의 구분이 없어집니다. `normalizeCombo`로 감싸는 것은 `bindingOf`가 하는
-  // 정규화와 맞추기 위해서입니다(지금 두 값 다 이미 정규형이라 무해하지만, 이 파생이
-  // 암묵적 가정에 기대지 않게 합니다).
-  const hasSidebarOverride = Object.prototype.hasOwnProperty.call(shortcutOverrides, SIDEBAR_TOGGLE_ID);
-  const rawSidebarCombo = hasSidebarOverride ? shortcutOverrides[SIDEBAR_TOGGLE_ID] : SIDEBAR_DEFAULT_COMBO;
-  const sidebarCombo = rawSidebarCombo === null ? null : normalizeCombo(rawSidebarCombo);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [page, setPage] = useState("dashboard");
   const [tab, setTab] = useState<(typeof TABS)[number]["value"]>("controls");
@@ -455,6 +492,21 @@ function Demo() {
   const [date, setDate] = useState("2026-07-23");
   const [optionalDate, setOptionalDate] = useState("");
   const [raceDate, setRaceDate] = useState("2026-07-23");
+  // Task 3(2b-3)가 시·분·초를 실제로 그리게 만들고 나서 처음 여는 시각 픽커들(2b-4).
+  // 값 형식은 fields가 가르는 계열을 그대로 따른다(model/instant.ts의 familyOf) —
+  // 시각만이면 "HH:MM", 날짜+시각이면 "YYYY-MM-DDTHH:MM"(초까지면 :SS도 붙는다).
+  /** budget의 백업 예약 화면이 지금 `<input type="number">` 둘로 시·분을 받고 있는
+   *  자리(docs/design/2026-08-12-wheel-picker-time-design.md §1) — 이 킷으로 옮기면
+   *  이 모양이 된다. */
+  const [reservationTime, setReservationTime] = useState("18:30");
+  const [meetingAt, setMeetingAt] = useState("2026-07-23T14:30");
+  const [loggedAt, setLoggedAt] = useState("2026-07-23T14:30:05");
+  /** 6열(연·월·일·시·분·초)을 한 줄로 둘지 두 줄(날짜 줄/시각 줄)로 접을지 —
+   *  설계 스펙 §16 미결 1번, 실기기에서만 판단됩니다(2b-4). 기본은 한 줄이고, 이
+   *  토글이 켜지면 demo.css의 데모 전용 규칙이 `.date-wheel-columns[data-fields="6"]`를
+   *  3열×2줄로 접습니다. 킷 컴포넌트의 팝오버는 body 포털이라 이 컴포넌트를 감싸는
+   *  것으로는 스코프를 못 잡고, 그래서 body 클래스로 토글합니다(아래 useEffect). */
+  const [foldSixColumns, setFoldSixColumns] = useState(false);
   // 설계 스펙 §7.1이 **미해결로** 적어 둔 경합 — "숫자를 반쯤 친 상태에서 소비자가
   // `disabled`를 켜면 그 숫자가 확정되는가". 아래 카운트다운이 그 순간을 만듭니다.
   const [raceDisabled, setRaceDisabled] = useState(false);
@@ -473,18 +525,37 @@ function Demo() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("theme", theme);
-    applyTokenOverrides(theme);   // 테마마다 저장된 색이 다르므로 전환할 때마다 다시 적용
-  }, [theme]);
+    // 테마마다 저장된 색이 다르므로 전환할 때마다 다시 적용합니다.
+    // ⚠️ 팔레트를 지납니다 — `applyTokenOverrides(theme)`는 킷 기본 목록만 돌아
+    // `--demo-brand`를 화면에서 조용히 떨어뜨립니다(저장소에는 남습니다).
+    if (appOwnsColors) demoPalette.apply(theme, serverColors[theme]);
+    else demoPalette.apply(theme);
+    // ⚠️ 본문에서 읽는 것을 의존성에 다 적습니다. 이 데모는 **정확히 이 자리에서**
+    // 한 번 당했습니다 — `justify`를 읽으면서 `axis`만 적어 두어 조작판의 축 하나가
+    // 통째로 죽어 있었고, 오너가 그 동작을 한 번도 못 봤습니다(tests/demoControls.test.ts).
+  }, [theme, appOwnsColors, serverColors]);
 
   useEffect(() => { localStorage.setItem("sidebarCollapsed", String(collapsed)); }, [collapsed]);
 
-  /* **맨 키 허용 구역을 하나 보여 줍니다**(스펙 §2.2). `.workspace`가 그 예시입니다 —
+  // 단축키 덮어쓰기. **사용자가 실제로 바꾼 것만** 담습니다(단축키 스펙 §7.1) — 앱의
+  // 기본 조합은 여기 안 넣습니다(`SIDEBAR_DEFAULT_COMBO` 참고). 저장은 없습니다
+  // (localStorage 등) — 새로고침하면 초기화됩니다.
+  const [shortcutOverrides, setShortcutOverrides] = useState<Record<string, string | null>>({});
+  // 화면에 적히는 조합 문자열은 전부 이 값에서 파생시킵니다 — 리터럴로 박아 두면 아래
+  // "단축키" 패널에서 재녹음/삭제해도 이 문구들만 낡은 채로 남습니다. `bindingOf`
+  // (`ShortcutProvider.tsx`)와 같은 우선순위를 따라야 실제 바인딩과 표시가 안 갈립니다 —
+  // **`??`는 못 씁니다:** override 키가 있는데 값이 `null`(사용자가 지운 상태)이면 `??`가
+  // 그걸 기본값으로 덮어써, §7.1의 "지운 것"과 "기본값을 쓰는 것"의 구분이 없어집니다.
+  const hasSidebarOverride = Object.prototype.hasOwnProperty.call(shortcutOverrides, SIDEBAR_TOGGLE_ID);
+  const rawSidebarCombo = hasSidebarOverride ? shortcutOverrides[SIDEBAR_TOGGLE_ID] : SIDEBAR_DEFAULT_COMBO;
+  const sidebarCombo = rawSidebarCombo === null ? null : normalizeCombo(rawSidebarCombo);
+
+  /* **맨 키 허용 구역을 하나 보여 줍니다**(단축키 스펙 §2.2). `.workspace`가 그 예시입니다 —
      사이드바는 이 요소 밖의 형제라서(`AppShell.tsx`가 `<main className="workspace">`로
      children만 감쌉니다) 여기 붙은 표식은 사이드바 버튼에는 안 걸립니다.
      ⚠️ **여기서만 `querySelector`로 붙입니다 — 실제 앱에서는 이러지 마세요.**
-     `.workspace`는 `AppShell`이 그리는 킷 소유 요소라 이 데모가 JSX로 직접 못 건드리고,
-     Task 6은 킷에 표식 전달용 prop을 새로 만들 수 없습니다(브리프 범위 밖). 자기
-     컨테이너를 직접 렌더하는 보통 앱이라면 그 JSX에 `data-kkqq-shortcut-scope`를
+     `.workspace`는 `AppShell`이 그리는 킷 소유 요소라 이 데모가 JSX로 직접 못 건드립니다.
+     자기 컨테이너를 직접 렌더하는 보통 앱이라면 그 JSX에 `data-kkqq-shortcut-scope`를
      바로 적으면 됩니다 — 이 훅 흉내가 필요 없습니다. */
   useEffect(() => {
     const workspace = document.querySelector<HTMLElement>(".workspace");
@@ -492,6 +563,16 @@ function Demo() {
     workspace.setAttribute(BARE_KEY_SCOPE_ATTR, "");
     return () => { workspace.removeAttribute(BARE_KEY_SCOPE_ATTR); };
   }, []);
+
+  // 6열 두 줄 접기 토글(2b-4, 설계 스펙 §16 미결 1번) — DateWheelPicker의 팝오버는
+  // document.body에 직접 포털되므로(트리거를 감싸는 어떤 데모 래퍼도 실제 DOM에서는
+  // 그 팝오버의 조상이 아니다), 이 인스턴스 하나에만 CSS를 스코프할 유일하게 예측
+  // 가능한 훅은 body 클래스뿐이다. demo.css가 이 클래스와 팝오버의 aria-label을
+  // 함께 조건으로 걸어 정확히 그 픽커의 그리드만 3열×2줄로 접는다.
+  useEffect(() => {
+    document.body.classList.toggle("date-wheel-fold-demo", foldSixColumns);
+    return () => document.body.classList.remove("date-wheel-fold-demo");
+  }, [foldSixColumns]);
 
   // 1초씩 세다 마지막 칸에서 `disabled`를 켭니다. **버튼을 바로 토글하면 안 됩니다** —
   // `DateWheelPicker.tsx:659-665`가 바깥 `pointerdown`에 팝오버를 닫으므로, 누르는 순간
@@ -517,12 +598,11 @@ function Demo() {
     {/* `--summary-card-min` 후보 비교용 조작판(데모 전용). 오너가 2560 화면에서 값을
         고르면 그 값이 tokens.css의 기본값이 되고 이 조작판은 사라집니다. */}
     <LayoutSwitch />
-    {/* **`defaultCombo` 옵션이 요점입니다** — 킷의 기본은 여전히 `null`이고(스펙 §3.2),
-        조합을 정한 것은 이 데모(=앱)이며, 그 자리는 `sidebarToggleAction`의 두 번째
-        인자(`options.defaultCombo`)입니다. `sidebarToggleAction`이 주는 것은 안정적인
-        `id`(`SIDEBAR_TOGGLE_ID`)와 이름표뿐이고, 접힘 상태를 뒤집는 핸들러는 앱이
-        넘깁니다 — `Sidebar`가 controlled라서입니다(`Sidebar.tsx:9`). `overrides`는
-        아래에서 사용자가 실제로 바꾼 것만 담습니다(스펙 §7.1). */}
+    {/* **`defaultCombo` 옵션이 요점입니다** — 킷의 기본은 여전히 `null`이고(단축키 스펙
+        §3.2), 조합을 정한 것은 이 데모(=앱)이며, 그 자리는 `sidebarToggleAction`의 두 번째
+        인자입니다. `sidebarToggleAction`이 주는 것은 안정적인 `id`(`SIDEBAR_TOGGLE_ID`)와
+        이름표뿐이고, 접힘 상태를 뒤집는 핸들러는 앱이 넘깁니다 — `Sidebar`가 controlled라
+        서입니다. `overrides`는 사용자가 실제로 바꾼 것만 담습니다(§7.1). */}
     <ShortcutProvider
       actions={[sidebarToggleAction(() => setCollapsed((value) => !value), { defaultCombo: SIDEBAR_DEFAULT_COMBO })]}
       overrides={shortcutOverrides}
@@ -574,11 +654,11 @@ function Demo() {
         </div>
         <PageHeader eyebrow="DESIGN SYSTEM" title="컴포넌트 데모" description="드롭다운·날짜 피커·사이드바·탭이 한 화면에 모두 있습니다. 브라우저 폭을 760px 아래로 줄이면 모바일 레이아웃으로 바뀝니다." />
         {/* 단축키 예시 하나를 여기서도 문자로 적어 둡니다 — 자세한 설명과 설정 UI는
-            "컨트롤" 탭의 "단축키" 패널에 있습니다. 값은 실제 바인딩(sidebarCombo)에서
+            "컨트롤" 탭의 "단축키" 패널에 있습니다. 값은 실제 바인딩(`sidebarCombo`)에서
             파생시킵니다 — 리터럴이면 아래 패널에서 재녹음해도 여기는 안 바뀝니다. */}
         <p className="muted-copy">사이드바 접기/펴기 단축키: <strong>{sidebarCombo ? displayCombo(sidebarCombo) : "없음"}</strong></p>
         <SectionTabs ariaLabel="데모 섹션" value={tab} tabs={TABS as unknown as Array<{ value: string; label: string }>} onChange={(next) => setTab(next as typeof tab)} />
-
+  
         {tab === "controls" && <>
           {historyProbeEnabled() && <HistoryLogPanel />}
           <SectionHeading title="컨트롤" description="입력·드롭다운·날짜는 41px, 표준 액션은 38px, 조밀한 액션은 32px입니다. 같은 문맥의 버튼은 반드시 같은 높이를 씁니다." />
@@ -643,6 +723,36 @@ function Demo() {
                 다른 결과가 나오면 그게 새 정보입니다.)
               </p>
             </Panel>
+            {/* Task 3(2b-3)가 시·분·초를 실제로 그리게 만든 뒤 처음 여는 시각 픽커들(2b-4).
+                값 형식은 fields가 가르는 계열을 그대로 따릅니다 — model/instant.ts의
+                familyOf. */}
+            <Panel title="시각 피커" hint="TIME WHEEL">
+              <FieldGrid>
+                <label>시각만 (fields — budget 백업 예약 화면이 지금 &lt;input type=&quot;number&quot;&gt; 둘로 받는 모양)<DateWheelPicker ariaLabel="예약 시각" value={reservationTime} onChange={setReservationTime} fields={["hour", "minute"]} /></label>
+                <label>날짜+시각 (fields)<DateWheelPicker ariaLabel="약속 시각" value={meetingAt} onChange={setMeetingAt} fields={["year", "month", "day", "hour", "minute"]} /></label>
+                <label>초까지 — 6열 (fields)<DateWheelPicker ariaLabel="초까지 예약 시각" value={loggedAt} onChange={setLoggedAt} fields={["year", "month", "day", "hour", "minute", "second"]} /></label>
+              </FieldGrid>
+              <div className="button-row" style={{ marginTop: 16 }}>
+                <button type="button" className="secondary-button" aria-pressed={foldSixColumns} onClick={() => setFoldSixColumns((value) => !value)}>
+                  {foldSixColumns ? "6열 — 두 줄로 접음 (다시 눌러 한 줄로)" : "6열 — 한 줄 유지 (기본, 눌러서 두 줄과 비교)"}
+                </button>
+              </div>
+              <p className="muted-copy" style={{ marginTop: 8 }}>
+                <strong>실기기 미확인</strong> — 설계 스펙 §16 미결 1번(6열을 폰에서 한 줄로
+                둘지, 날짜 줄·시각 줄 두 줄로 접을지). 열당 약 50px이라 스와이프 대상이
+                얼마나 좁아지는지가 판단 근거인데 에뮬레이션으로는 알 수 없는 종류라서
+                강제로 정하지 않았습니다. 위 “초까지” 픽커를 폰에서 열고 토글로 두 모양을
+                비교해 주세요.
+              </p>
+              <p className="muted-copy" style={{ marginTop: 4 }}>
+                <strong>두 줄로 접으면 팝오버가 세로로 훨씬 길어져 안이 스크롤될 가능성이
+                높습니다</strong>(375px 뷰포트·이 픽커 위치 기준 실측: 한 줄일 때도 이미
+                자리가 모자라 227px로 줄어 스크롤되는데, 두 줄로 접으면 필요한 높이가
+                309px → 527px로 늘어 스크롤이 훨씬 길어집니다 — §7.0). 완료·지금 버튼은
+                팝오버 바닥에 붙어 있어 스크롤과 무관하게 항상 손에 닿습니다. 잘려 보이는
+                것 자체가 버그가 아니라 이 트레이드오프입니다.
+              </p>
+            </Panel>
           </PanelGrid>
           <PanelGrid>
             <Panel title="텍스트와 버튼" hint="CONTROLS">
@@ -667,41 +777,39 @@ function Demo() {
               </div>
             </Panel>
           </PanelGrid>
-          {/* 옵트인 모듈입니다 — `ShortcutProvider`를 안 쓰면 리스너가 0개입니다
-              (설계 스펙 §8). 이 패널은 그걸 쓰는 예시이자 `ShortcutSettings`를 실제로
-              눌러 볼 수 있는 자리입니다. */}
-          <Panel title="단축키" hint="SHORTCUTS">
-            <p className="muted-copy">
-              {sidebarCombo
-                ? <>사이드바 접기/펴기가 <strong>{displayCombo(sidebarCombo)}</strong>에 걸려 있습니다.</>
-                : <>사이드바 접기/펴기에 지금 걸린 조합이 <strong>없음</strong>입니다 — 아래에서 새로 녹음해 보세요.</>}{" "}
-              킷의 기본값은 여전히 <code>defaultCombo: null</code>이고(설계 스펙 §3.2),
-              처음 걸려 있던 조합은 킷이 아니라 <strong>이 데모(앱)</strong>가
-              <code>sidebarToggleAction</code>의 <code>defaultCombo</code> 옵션으로
-              정했습니다. 아래에서 다시 녹음하거나 지우면 <code>overrides</code>에
-              들어가는데, <code>overrides</code>는 <strong>사용자가 실제로 바꾼
-              것만</strong> 담습니다(설계 스펙 §7.1) — 그래서 지우면 기본값으로
-              되돌아가지 않고 "조합 없음"이 됩니다(저장은 없습니다. 새로고침하면
-              초기화됩니다 — 저장은 다음 작업 몫입니다).
-            </p>
-            <p className="muted-copy">
-              <strong>맨 키(수식어 없는 키) 허용 구역을 보려면:</strong> 아래에서 이 조합을
-              지우고 수식어 없이 <kbd>\</kbd> 하나만 다시 녹음하세요. ① 바로 아래
-              "지우기" 버튼처럼 <code>.workspace</code> 안의(타이핑 칸이 아닌) 요소를
-              클릭해 거기 포커스를 둔 채 <kbd>\</kbd>를 누르면 동작합니다 —
-              <code>.workspace</code>에 <code>data-kkqq-shortcut-scope</code>가 붙어 있어서입니다
-              (설계 스펙 §2.2). ② 사이드바의 아무 버튼을 눌러 거기 포커스를 둔 채 누르면
-              동작하지 않습니다 — 사이드바는 <code>.workspace</code> 밖의 형제라 표식이 안
-              걸립니다. ③ 위 "텍스트와 버튼" 패널의 메모 칸에 포커스가 있을 때 누르면
-              그냥 <kbd>\</kbd>가 입력됩니다 — 타이핑 중에는 맨 키가 규칙 4로 막힙니다.
-              예: <strong>Ctrl+\</strong>처럼 수식어가 붙은 조합은 규칙 2로 어디서나
-              걸립니다(지금 실제로 걸린 바인딩을 가리키는 문장이 아닙니다) — 그래서 이
-              차이는 맨 키로 바꿔야만 보입니다. (포커스를 아예 <code>body</code>로
-              보내도 동작하지만 그건 규칙 3 때문이라 이 표식과 무관합니다 — 위 ①이
-              표식이 실제로 하는 일을 보여 주는 자리입니다.)
-            </p>
-            <ShortcutSettings onChange={(id, combo) => setShortcutOverrides((current) => ({ ...current, [id]: combo }))} />
-          </Panel>
+          <PanelGrid>
+            {/* 옵트인 모듈입니다 — `ShortcutProvider`를 안 쓰면 리스너가 0개입니다
+                (단축키 설계 스펙 §8). 이 패널은 그걸 쓰는 예시이자 `ShortcutSettings`를
+                실제로 눌러 볼 수 있는 자리입니다. */}
+            <Panel title="단축키" hint="SHORTCUTS">
+              <p className="muted-copy">
+                {sidebarCombo
+                  ? <>사이드바 접기/펴기가 <strong>{displayCombo(sidebarCombo)}</strong>에 걸려 있습니다.</>
+                  : <>사이드바 접기/펴기에 지금 걸린 조합이 <strong>없음</strong>입니다 — 아래에서 새로 녹음해 보세요.</>}{" "}
+                킷의 기본값은 여전히 <code>defaultCombo: null</code>이고(설계 스펙 §3.2),
+                처음 걸려 있던 조합은 킷이 아니라 <strong>이 데모(앱)</strong>가
+                <code>sidebarToggleAction</code>의 <code>defaultCombo</code> 옵션으로
+                정했습니다. 아래에서 다시 녹음하거나 지우면 <code>overrides</code>에
+                들어가는데, <code>overrides</code>는 <strong>사용자가 실제로 바꾼
+                것만</strong> 담습니다(설계 스펙 §7.1) — 그래서 지우면 기본값으로
+                되돌아가지 않고 "조합 없음"이 됩니다. 저장은 없습니다 — 새로고침하면
+                초기화됩니다.
+              </p>
+              <p className="muted-copy">
+                <strong>맨 키(수식어 없는 키) 허용 구역을 보려면:</strong> 아래에서 이 조합을
+                지우고 수식어 없이 <kbd>\</kbd> 하나만 다시 녹음하세요. ① <code>.workspace</code>
+                안의(타이핑 칸이 아닌) 요소를 클릭해 거기 포커스를 둔 채 <kbd>\</kbd>를 누르면
+                동작합니다 — <code>.workspace</code>에 <code>data-kkqq-shortcut-scope</code>가
+                붙어 있어서입니다(설계 스펙 §2.2). ② 사이드바의 아무 버튼에 포커스를 둔 채
+                누르면 동작하지 않습니다 — 사이드바는 <code>.workspace</code> 밖의 형제라
+                표식이 안 걸립니다. ③ 위 메모 칸에 포커스가 있을 때 누르면 그냥 <kbd>\</kbd>가
+                입력됩니다 — 타이핑 중에는 맨 키가 규칙 4로 막힙니다. <strong>Ctrl+\</strong>처럼
+                수식어가 붙은 조합은 규칙 2로 어디서나 걸리므로, 이 차이는 맨 키로 바꿔야만
+                보입니다.
+              </p>
+              <ShortcutSettings onChange={(id, combo) => setShortcutOverrides((current) => ({ ...current, [id]: combo }))} />
+            </Panel>
+          </PanelGrid>
         </>}
 
         {tab === "layout" && <>
@@ -731,10 +839,67 @@ function Demo() {
             {panelOrder.map((id) => LAYOUT_PANELS[id]())}
           </PanelGrid>
         </>}
-
+  
         {tab === "colors" && <>
           <SectionHeading title="색상 토큰" description="모든 컴포넌트 CSS는 이 토큰만 참조합니다. 여기서 바꾸면 화면 전체가 즉시 따라 바뀌고, 라이트·다크는 따로 저장됩니다." />
-          <ThemeColorEditor theme={theme} />
+  
+          <Panel title="색을 누가 저장하나" hint="아래 편집기가 이 설정으로 돕니다">
+            <p className="demo-owner-note">
+              이 편집기는 <code>createThemePalette([...THEME_TOKEN_GROUPS, DEMO_GROUP])</code>로 돕니다 —
+              그래서 킷이 모르는 <code>--demo-brand</code> 카드가 <b>데모 앱 색</b> 무리에 함께 나옵니다.
+              고쳐 보세요, 이 칩이 따라 바뀝니다: <span className="demo-brand-chip">데모 브랜드</span>
+            </p>
+            <div className="button-row" style={{ marginBottom: 10 }}>
+              <button
+                type="button"
+                className={appOwnsColors ? "primary" : "secondary-button"}
+                aria-pressed={appOwnsColors}
+                onClick={() => setAppOwnsColors((owned) => !owned)}
+              >
+                {appOwnsColors ? "앱이 저장(켜짐)" : "킷이 저장(꺼짐)"}
+              </button>
+              <button type="button" className="secondary-button" onClick={() => {
+                /* 앱이 소유하면 저장소가 아니라 **앱이 가진 값**으로 봉투를 만듭니다 —
+                   인자를 빼면 `read`로 저장소를 보므로 controlled 앱에서는 빈 백업이 나옵니다. */
+                const backup = appOwnsColors ? demoPalette.serialize(serverColors) : demoPalette.serialize();
+                setBackupText(JSON.stringify(backup, null, 2));
+                setRestoreNote(`백업을 만들었습니다 — 라이트 ${Object.keys(backup.colors.light).length}개, 다크 ${Object.keys(backup.colors.dark).length}개`);
+              }}>백업 만들기</button>
+              <button type="button" className="secondary-button" onClick={() => {
+                let raw: unknown;
+                try { raw = JSON.parse(backupText); } catch { setRestoreNote("JSON이 아닙니다"); return; }
+                const parsed = demoPalette.parse(raw);
+                if (!parsed) { setRestoreNote("이 파일은 색 백업이 아닙니다(봉투 모양이 아니거나 version이 다름)"); return; }
+                /* ⚠️ 소유자에 따라 복원 경로가 갈립니다. `applyBackup`은 **저장까지** 하므로,
+                   앱이 소유하는 동안 쓰면 앱 저장소 밖에 사본이 하나 더 생깁니다. */
+                if (appOwnsColors) {
+                  setServerColors(parsed.backup.colors);
+                  demoPalette.apply(theme, parsed.backup.colors[theme]);
+                } else {
+                  demoPalette.applyBackup(parsed.backup, theme);   // theme은 필수 — :root는 하나뿐입니다
+                }
+                setRestoreNote(parsed.dropped.length ? `복원했습니다. 모르는 색 ${parsed.dropped.length}개는 뺐습니다: ${parsed.dropped.join(", ")}` : "복원했습니다");
+              }}>복원</button>
+            </div>
+            <p className="demo-owner-note">
+              마지막 <code>onCommit</code>: {lastCommit} · {restoreNote || "피커를 끄는 동안은 안 불리고, 손을 떼거나 500ms 쉬면 한 번 불립니다"}
+            </p>
+            <textarea
+              className="demo-backup-box"
+              aria-label="색 백업 JSON"
+              value={backupText}
+              onChange={(event) => setBackupText(event.target.value)}
+              placeholder="백업 만들기를 누르면 여기에 봉투가 나옵니다. 값을 고쳐 복원해 보면 모르는 색이 어떻게 걸러지는지 보입니다."
+            />
+          </Panel>
+  
+          <ThemeColorEditor
+            theme={theme}
+            palette={demoPalette}
+            overrides={appOwnsColors ? serverColors[theme] : undefined}
+            onChange={appOwnsColors ? ((next) => setServerColors((current) => ({ ...current, [theme]: next }))) : undefined}
+            onCommit={(next) => setLastCommit(`${Object.keys(next).length}개 색`)}
+          />
         </>}
       </AppShell>
     </ShortcutProvider>
