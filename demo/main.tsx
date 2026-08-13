@@ -928,12 +928,16 @@ function Demo() {
               <p className="muted-copy">
                 <strong>맨 키(수식어 없는 키) 허용 구역을 보려면:</strong> 아래에서 이 조합을
                 지우고 수식어 없이 <kbd>\</kbd> 하나만 다시 녹음하세요. ① <code>.workspace</code>
-                안의(타이핑 칸이 아닌) 요소를 클릭해 거기 포커스를 둔 채 <kbd>\</kbd>를 누르면
+                안의 <strong>버튼</strong>을 클릭해 거기 포커스를 둔 채 <kbd>\</kbd>를 누르면
                 동작합니다 — <code>.workspace</code>에 <code>data-kkqq-shortcut-scope</code>가
                 붙어 있어서입니다(설계 스펙 §2.2). ② 사이드바의 아무 버튼에 포커스를 둔 채
                 누르면 동작하지 않습니다 — 사이드바는 <code>.workspace</code> 밖의 형제라
                 표식이 안 걸립니다. ③ 위 메모 칸에 포커스가 있을 때 누르면 그냥 <kbd>\</kbd>가
-                입력됩니다 — 타이핑 중에는 맨 키가 규칙 4로 막힙니다. <strong>Ctrl+\</strong>처럼
+                입력됩니다 — 타이핑 중에는 맨 키가 규칙 4로 막힙니다. ④ <strong>같은 구역
+                안이라도 레이아웃 패널의 슬라이더에 포커스를 두면 동작하지 않습니다</strong> —
+                폼 컨트롤은 맨 키를 이미 쓰고 있어서 규칙 9가 양보합니다(§2.6). 안 그러면
+                규칙 6의 <code>preventDefault</code>가 슬라이더의 화살표 조작을 죽입니다.
+                <strong>Ctrl+\</strong>처럼
                 수식어가 붙은 조합은 규칙 2로 어디서나 걸리므로, 이 차이는 맨 키로 바꿔야만
                 보입니다.
               </p>
