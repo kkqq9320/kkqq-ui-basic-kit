@@ -799,10 +799,15 @@ const shortcutStorage = createShortcutStorage();   // localStorage, 키 "shortcu
 
 `createShortcutStorage(options?: { key?: string })`가 저장소를 만듭니다. 백업/복원이
 필요하면 `serialize()`/`parse(input)`을 쓰세요 — `ThemeColorEditor`의
-`palette.serialize`/`palette.parse`와 같은 모양입니다(버전 붙은 봉투, 모르는 액션
-id나 형식에 안 맞는 값은 버리고 이름을 `dropped`에 남김). **`null`과 "키 없음"은
-다릅니다** — `null`은 사용자가 그 액션의 조합을 지운 것이고, 키가 아예 없는 것은
-`defaultCombo`를 쓴다는 뜻입니다.
+`palette.serialize`/`palette.parse`와 같은 모양입니다(버전 붙은 봉투). **킷은 액션
+id를 모릅니다**(§3.3 — 액션은 앱의 것이고 킷은 안을 보지 않습니다)**, 그래서
+`parse`는 액션 id를 근거로 아무것도 버리지 않습니다.** 버리는 것은 **값**뿐입니다 —
+문자열도 `null`도 아니거나, 문자열인데 `normalizeCombo`가 거부하면 그 값의 id를
+`dropped`에 남기고 뺍니다(전체 리뷰 Important 1 — 이 문단이 예전에 "모르는 액션
+id나 형식에 안 맞는 값은 버리고"라고 적어, 마치 킷이 액션 목록과 대조해 모르는 id를
+버리는 것처럼 읽혔습니다. `createShortcutStorage`는 액션 목록을 받는 자리 자체가
+없습니다). **`null`과 "키 없음"은 다릅니다** — `null`은 사용자가 그 액션의 조합을
+지운 것이고, 키가 아예 없는 것은 `defaultCombo`를 쓴다는 뜻입니다.
 
 **맨 키(수식어 없는 키) 단축키를 쓰려면 `data-kkqq-shortcut-scope`가 필요합니다.**
 수식어(Ctrl·Alt·Meta) 조합은 어디서나 트리거되지만, 맨 키는 기본적으로

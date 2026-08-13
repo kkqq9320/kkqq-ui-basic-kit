@@ -39,7 +39,8 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.7.0
   `write`/`read`는 절대 던지지 않고 `boolean`/`{}`로 실패를 알리고, 빈 맵을 쓰면
   저장된 키 자체를 지웁니다. `null`(사용자가 지움)과 키 없음(기본값을 씀)은 왕복
   에서 섞이지 않습니다. `serialize`/`parse`는 `ThemeColorEditor`의 팔레트와 같은
-  모양(모르는 액션 id·형식에 안 맞는 값은 버리고 이름을 `dropped`에 남김)입니다.
+  모양(버전 붙은 봉투)입니다 — 다만 킷은 액션 id를 모르므로(§3.3), `parse`가
+  버리는 것은 **형식에 안 맞는 값**뿐이고 그 값의 id를 `dropped`에 남깁니다.
 - **`ShortcutProvider`의 `storage` prop · `ShortcutRegistry.setBinding`**(Task 7) —
   `overrides` 대신 `storage`를 넘기면 킷이 uncontrolled로 저장소를 직접 읽고 쓰고,
   다른 탭의 변경도 구독합니다. `overrides`를 넘기면(controlled) `storage`는 완전히
