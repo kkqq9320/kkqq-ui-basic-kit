@@ -97,6 +97,13 @@
   color-scheme: light;
   --deep: #292a43;
   --accent: #575bd4;
+  /* 🔴 **어두운 면 위의 강조색 글자.** `--accent`를 글자로 그대로 쓰면 다크의 `--surface`
+   * 위에서 **3.13:1**로 AA(4.5)에 못 미칩니다(13px/800 실측). 채움으로 쓸 때는 흰 글자를
+   * 얹으니 문제가 없었는데, **글자색으로 쓰기 시작하면서 처음 드러난 자리**입니다.
+   * `.error`가 `var(--red)`로 대비가 안 나와 `--danger-text`라는 새 이름을 얻은 것과
+   * 같은 종류의 결정입니다 — 재사용이 아니라 새 이름.
+   * 라이트에서는 `--accent`와 같은 값이라 화면이 안 바뀝니다. */
+  --accent-text: #575bd4;
   --accent-soft: #eeeefe;
   --line: #e3e0d9;
   --muted: #77747f;
@@ -205,6 +212,10 @@
   background: #101119;
   color-scheme: dark;
   --deep: #11121f;
+  /* 다크에서만 밝힙니다. 실측(`--surface` #1a1b27 위, 13px/800):
+   *   --accent   #575bd4  →  3.13  ❌ AA 미달
+   *   --accent-text #8489e6 → 5.45  ✅  (라이트의 5.37과 짝이 맞습니다) */
+  --accent-text: #8489e6;
   --accent-soft: #2a2b50;
   --line: #323344;
   --muted: #9a9aac;
