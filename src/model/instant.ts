@@ -108,6 +108,39 @@ export function unitFloor(unit: WheelUnit) {
   return unit === "month" || unit === "day" ? 1 : 0;
 }
 
+/* ---- 격자(step) — 설계 스펙 §8 ------------------------------------------
+ *
+ * `step`은 **열마다 따로**입니다(`{ minute: 15 }`처럼 필요한 열만). 안 넘긴 열은 1이라
+ * 지금까지와 글자 하나 안 바뀝니다.
+ *
+ * 🔴 **격자의 기준점은 언제나 그 열의 바닥값입니다** — 시·분·초는 0, 월·일은 1.
+ * `min`/`max`를 기준으로 삼지 않는 것이 요점입니다: 그러면 같은 `step`을 준 픽커가
+ * `min`에 따라 다른 값 집합을 내주고, 소비자가 "15분 단위"라고 말한 것이 지켜지지
+ * 않습니다. 경계는 격자를 옮기는 것이 아니라 **격자의 끝을 자르는** 역할만 합니다.
+ */
+export type WheelStep = Partial<Record<WheelUnit, number>>;
+
+/** 그 열의 격자 간격. **1 미만·정수 아님·유한하지 않음은 전부 1로 떨어집니다** —
+ *  소비자가 `0`이나 `-5`를 주면 격자 계산이 0으로 나누거나 무한 루프가 되는데, 던지는
+ *  대신 "step 없음"으로 읽는 쪽이 이 킷의 다른 프롭들과 결이 같습니다(잘못된 `fields`도
+ *  던지지 않고 그릴 수 있는 것만 그립니다). */
+export function stepOf(unit: WheelUnit, step?: WheelStep): number {
+  const wanted = step?.[unit];
+  if (typeof wanted !== "number" || !Number.isFinite(wanted)) return 1;
+  const whole = Math.floor(wanted);
+  return whole >= 1 ? whole : 1;
+}
+
+/** 격자에 안 얹힌 값을 **아래 격자점으로** 내립니다(스펙 §8: "타이핑이 step 위에 안
+ *  떨어지면 내림"). 올림이 아닌 이유는 이 컴포넌트의 기존 규칙과 같습니다 — 사용자가
+ *  친 것보다 **큰 값을 만들어 주지 않습니다.** */
+export function snapToStep(unit: WheelUnit, amount: number, step?: WheelStep): number {
+  const stride = stepOf(unit, step);
+  if (stride === 1) return amount;
+  const floor = unitFloor(unit);
+  return floor + Math.floor((amount - floor) / stride) * stride;
+}
+
 /** 그 열이 받는 최대 자릿수. 연도만 4자리이고 나머지는 2자리입니다. */
 export function unitDigits(unit: WheelUnit) {
   return unit === "year" ? 4 : 2;
@@ -536,10 +569,12 @@ export function lastDayOf(year: number, monthIndex: number) {
  * Task 3부터 `new Date(...)`를 쓰지 않습니다 — parseValue/serializeValue로
  * 값을 드나들어 `fields`의 계열(date/time/datetime) 무엇이든 다룹니다(§5).
  */
-export function withUnitValue(value: string, unit: DateWheelUnit, amount: number, fields: WheelUnit[] = DEFAULT_FIELDS): string {
+export function withUnitValue(value: string, unit: DateWheelUnit, amount: number, fields: WheelUnit[] = DEFAULT_FIELDS, step?: WheelStep): string {
   const parts = parseValue(value, fields);
   if (!parts) return value;
-  const next = { ...parts, [unit]: amount };
+  // 격자에 안 얹힌 값은 **내립니다**(스펙 §8). 일은 아래에서 목적지 달의 말일로 한 번 더
+  // 잘리는데, 순서가 이래야 합니다 — 말일로 자른 뒤 내리면 격자 밖 값이 남습니다.
+  const next = { ...parts, [unit]: snapToStep(unit, amount, step) };
   if (unit === "day") {
     // 일은 스스로도 상한 검증이 필요합니다 — 타이핑이 다른 달의 말일보다 큰
     // 값을 칠 수 있습니다(4월에 "31"). 연·월과 달리 열 자신이 그 상한을 결정합니다.
@@ -594,21 +629,41 @@ export function todayIn(timeZone: string, fields: WheelUnit[] = DEFAULT_FIELDS):
  * 그냥 매치 실패로 걸러내고, `shiftedFrom`의 `model.isValid` 가드가 null로
  * 받아냅니다 — 별도 방어 코드가 필요 없습니다.
  */
-export function shiftDateValue(value: string, unit: DateWheelUnit, direction: number, fields: WheelUnit[] = DEFAULT_FIELDS): string {
+export function shiftDateValue(value: string, unit: DateWheelUnit, direction: number, fields: WheelUnit[] = DEFAULT_FIELDS, step?: WheelStep): string {
   const parts = parseValue(value, fields);
   if (!parts) return value;
   const next = { ...parts };
+  const stride = stepOf(unit, step);
+  const floor = unitFloor(unit);
+
+  /* **격자 위의 몇 번째 칸인가**(설계 스펙 §8). `stride`가 1이면 `index`가 값에서
+   * 바닥값을 뺀 것 그대로라 아래 식이 예전 것과 **수학적으로 같습니다** — 그래서
+   * `step`을 안 넘기면 동작이 하나도 안 바뀝니다.
+   *
+   * 🔴 **격자 밖에서 출발하는 경우가 규칙을 가릅니다.** `min`이 격자 밖이면(스펙 §8의
+   * `min="03:07"` + 분 step 15) 값이 격자에 안 얹힌 채로 조작이 시작됩니다. 그때
+   * "한 칸 위"는 **바로 위 격자점**이고 "한 칸 아래"는 **바로 아래 격자점**입니다 —
+   * `값 ± step`이 아닙니다. 그러지 않으면 `03:07`에서 위로 한 칸이 `03:22`가 되어
+   * **같은 픽커가 `min`에 따라 다른 시각 집합을 내줍니다**(스펙이 명시적으로 금지). */
+  const below = Math.floor((parts[unit] - floor) / stride);
+  const onGrid = (parts[unit] - floor) % stride === 0;
+  const from = onGrid ? below : (direction > 0 ? below : below + 1);
+  const index = from + direction;
+
   if (unit === "year") {
     // 연도는 상한이 없습니다(§4) — 순환하지 않고 그대로 더합니다.
-    next.year = parts.year + direction;
+    next.year = floor + index * stride;
   } else {
     // 월·일·시·분·초는 전부 "바닥값부터 상한까지 순환"이라는 하나의 규칙입니다.
     // unitCeiling이 문맥(day만 연·월을 봅니다, §3.1)을 받아 상한을 내주므로
     // 여기서 단위별 분기가 더 필요 없습니다.
+    //
+    // **격자가 열을 딱 나누지 못해도 허용합니다**(스펙 §8) — 분 step 7이면 마지막
+    // 칸이 56이고 그 다음이 0이라 간격만 4입니다. 금지하면 시 step 5(24를 안 나눔)
+    // 같은 흔한 경우가 통째로 막힙니다.
     const ceiling = unitCeiling(unit, parts)!;   // year는 위에서 걸렀으므로 null이 아닙니다
-    const floor = unitFloor(unit);
-    const size = ceiling - floor + 1;
-    next[unit] = ((parts[unit] - floor + direction) % size + size) % size + floor;
+    const count = Math.floor((ceiling - floor) / stride) + 1;
+    next[unit] = floor + (((index % count) + count) % count) * stride;
   }
   // 일은 연·월에 의존합니다(§3.1의 유일한 단위 간 의존) — 연·월이 움직여 그
   // 값이 더는 유효하지 않으면 목적지 달의 말일로 자르고, 다른 열로 자리올림하지
@@ -920,8 +975,8 @@ export type WheelModel = {
   isValid(value: string, fields?: WheelUnit[]): boolean;
   normalize(value: string, fields: DateWheelUnit[]): string;
   keyLength(fields: DateWheelUnit[]): number;
-  shift(value: string, unit: DateWheelUnit, direction: number, fields?: WheelUnit[]): string;
-  setUnit(value: string, unit: DateWheelUnit, amount: number, fields?: WheelUnit[]): string;
+  shift(value: string, unit: DateWheelUnit, direction: number, fields?: WheelUnit[], step?: WheelStep): string;
+  setUnit(value: string, unit: DateWheelUnit, amount: number, fields?: WheelUnit[], step?: WheelStep): string;
   /* `hour`는 3단계에서 붙었습니다(스펙 §7·§10) — 안 넘기면 24시간제로, 지금까지와
    * 글자 하나도 다르지 않습니다. **모델은 전역 설정을 읽지 않습니다**: 기계가
    * 구독해서 읽고 인자로 내려보냅니다(이 파일은 아무것도 import 하지 않습니다). */
@@ -962,6 +1017,8 @@ export type WheelModel = {
    *  `family`·`meridiem`과 같은 이유로 여기 있습니다: 구분자·자릿수·오전오후를 읽는 것은
    *  전부 **값 지식**이고, 기계가 그걸 알면 §3.2가 금지한 자리로 돌아갑니다. */
   parsePasted(text: string, fields: WheelUnit[], hour?: HourDisplay): string | null;
+  /** 그 열의 격자 간격(설계 스펙 §8). 기계가 "이 값이 격자 위인가"를 물을 때 씁니다. */
+  stepOf(unit: WheelUnit, step?: WheelStep): number;
 };
 
 /* 기계가 이 객체 하나만 보고 돌게 하는 것이 목적입니다. 기간(duration) 모델이
@@ -990,4 +1047,5 @@ export const instantModel: WheelModel = {
   meridiem: meridiemOf,
   resetTarget,
   parsePasted,
+  stepOf,
 };

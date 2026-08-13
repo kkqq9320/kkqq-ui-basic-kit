@@ -22,6 +22,7 @@ import {
   type DateWheelUnit,
   type HourDisplay,
   type WheelUnit,
+  type WheelStep,
 } from "./model/instant";
 import { getHourFormat, getWheelRowsPerSide, subscribeHourFormat, subscribeWheelRowsPerSide } from "./settings";
 import { useBackToClose, useEscapeToClose } from "./hooks";
@@ -279,6 +280,12 @@ export type DateWheelPickerProps = {
    *  그리는 것은 여전히 연·월·일뿐입니다.** `"hour"` 등을 넘기면 컴파일은 통과해도 동작은
    *  정의돼 있지 않습니다 — 시·분·초를 실제로 받는 것은 2b-3의 몫입니다. */
   fields?: WheelUnit[];
+  /** 열마다의 격자 간격(설계 스펙 §8). 안 넘긴 열은 1이라 **지금까지와 글자 하나 안
+   *  바뀝니다.** 격자의 기준점은 언제나 그 열의 바닥값(시·분·초는 0, 월·일은 1)이고
+   *  min/max가 아닙니다 — 경계로 잡으면 같은 step을 준 픽커가 min에 따라 다른 값 집합을
+   *  내줍니다. 한 노치가 한 칸이고(휠·화살표·스와이프·±), 타이핑이 격자에 안 떨어지면
+   *  **내립니다**. min/max가 격자보다 우선이라 경계는 격자 밖이어도 끝점으로 들어옵니다. */
+  step?: WheelStep;
   allowClear?: boolean;
   /** **필수입니다**(PRINCIPLES §11). 스크린리더 때문만이 아니라 **팝오버 머리말로 그대로
    *  그려지기 때문입니다** — 기본값을 두면 한 폼의 날짜 필드가 전부 같은 머리말을 답니다.
@@ -298,7 +305,7 @@ export type DateWheelPickerProps = {
   mobileBottomInset?: number;
 };
 
-export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DATE_WHEEL_FIELDS, allowClear = false, ariaLabel, heading, id, disabled = false, labels: labelOverrides, timeZone = "Asia/Seoul", mobileBottomInset = 78, className = "" }: DateWheelPickerProps) {
+export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DATE_WHEEL_FIELDS, allowClear = false, step, ariaLabel, heading, id, disabled = false, labels: labelOverrides, timeZone = "Asia/Seoul", mobileBottomInset = 78, className = "" }: DateWheelPickerProps) {
   // fields는 UNIT_LADDER에서 잘라낸 연속 구간이어야 합니다(설계 스펙 §4) — 지금
   // 소스는 불연속 조합(예: ["year","hour"])을 그리지 못하고, 그린다고 해도 트리거와
   // 팝오버가 서로 다른 열 개수를 말하는 등 정의되지 않은 동작이 됩니다. 타입
@@ -1017,8 +1024,33 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     else host.scrollTop += amount;
   }
 
+  /* 격자(step)가 경계를 건너뛸 때 **경계 자신이 한 칸을 차지합니다**(설계 스펙 §8):
+   * `min="03:07"`에 분 step 15면 열이 `03:07(=min) → 03:15 → 03:30`이고, `03:15`
+   * 아래 칸이 `—`가 아니라 `03:07`입니다. 한 번에 `amount`칸을 세면 `03:00`이 나와
+   * 범위 밖으로 걸러지므로, **한 칸씩 걸으면서 경계를 만나면 경계에 멈춥니다.**
+   *
+   * 🔴 **`stride === 1`이면 걷지 않습니다 — 걸으면 동작이 바뀝니다.** 월을 한 번에 +2
+   * 하면 `2026-01-31 → 2026-03-31`인데, 한 칸씩 걸으면 중간에 2월 말일로 잘려
+   * `2026-03-28`이 됩니다(일이 연·월에 의존하는 §3.1의 그 자리). 격자가 1이면 한 칸이
+   * 곧 한 단위라 경계를 건너뛸 수 없고, 그래서 걸을 이유도 없습니다. */
+  function walkToBound(sourceValue: string, unit: DateWheelUnit, amount: number) {
+    const direction = amount > 0 ? 1 : -1;
+    let current = sourceValue;
+    for (let taken = 0; taken < Math.abs(amount); taken += 1) {
+      const raw = model.normalize(model.shift(current, unit, direction, fields, step), fields);
+      if (!model.isValid(raw, fields)) return null;
+      if (!outOfRange(raw)) { current = raw; continue; }
+      // 격자점이 경계 밖입니다. 경계 자신이 아직 안 쓰였으면 거기서 한 칸을 씁니다.
+      const bound = clampToRange(raw);
+      if (bound === current || outOfRange(bound)) return null;
+      current = bound;
+    }
+    return current;
+  }
+
   function shiftedFrom(sourceValue: string, unit: DateWheelUnit, amount: number) {
-    const next = model.normalize(model.shift(sourceValue, unit, amount, fields), fields);
+    if (model.stepOf(unit, step) !== 1 && amount !== 0) return walkToBound(sourceValue, unit, amount);
+    const next = model.normalize(model.shift(sourceValue, unit, amount, fields, step), fields);
     // 연도가 10000 이상(또는 음수)이 되면 (Task 3부터) parseValue의 \d{4} 정규식이
     // 매치에 실패해 next가 조용히 깨진 문자열이 됩니다 — model.isValid가 그것을
     // 그대로 걸러냅니다. (예전엔 Date#toISOString()의 확장 표기(+010000-07-12)가
@@ -1150,7 +1182,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     const target = model.resetTarget(unit, model.now(timeZone, fields), fields);
     if (target === null) return;
     const from = model.parts(baseValue, fields);
-    const next = clampToRange(model.setUnit(baseValue, unit, target, fields));
+    const next = clampToRange(model.setUnit(baseValue, unit, target, fields, step));
     if (!model.isValid(next, fields) || next === baseValue) return;
     if (from) markColumnMotion(unit, Math.sign(target - from[unit]));
     onChange(next);
@@ -1426,7 +1458,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 타이핑은 휠 이동이 아닙니다.
    */
   function commitTyped(unit: DateWheelUnit, amount: number) {
-    const next = clampToRange(model.setUnit(baseValue, unit, amount, fields));
+    const next = clampToRange(model.setUnit(baseValue, unit, amount, fields, step));
     pushUndo(baseValue);
     onChange(next);
     return next;
