@@ -120,12 +120,12 @@ export const KIT_RESERVED: readonly string[] = ["Ctrl+Semicolon"];
 
 export type Conflict = { combo: string; withActionId?: string; withKit?: boolean };
 
-/** 킷 컴포넌트는 `ctrlKey || metaKey`로 판정합니다(`DateWheelPicker.tsx:1095`).
+/** 킷 컴포넌트는 `ctrlKey || metaKey`로 판정합니다(`DateWheelPicker.tsx`의 `handleShortcut`).
  * 그래서 **예약 조합을 비교할 때만** `Meta`를 `Ctrl`과 같은 것으로 봅니다.
  * 이게 없으면 `Cmd+;`가 충돌로 안 잡히고, 사용자는 등록에 성공한 뒤 날짜 선택기가
  * 그 키를 먹는 것을 봅니다 — **맥에서만 나는 결함**입니다.
  *
- * **`Shift`·`Alt`도 같은 이유로 접습니다.** `DateWheelPicker.tsx:1095`의 실제 가드는
+ * **`Shift`·`Alt`도 같은 이유로 접습니다.** `DateWheelPicker.tsx`의 `handleShortcut`의 실제 가드는
  * `(event.ctrlKey || event.metaKey) && event.code === "Semicolon"`이고 `shiftKey`·
  * `altKey`는 아예 보지 않습니다 — 그 컴포넌트는 `Ctrl+;`뿐 아니라 `Ctrl+Shift+;`·
  * `Ctrl+Alt+;`·`Cmd+Shift+;`도 전부 먹습니다. 접지 않으면 이 조합들의 문자열이

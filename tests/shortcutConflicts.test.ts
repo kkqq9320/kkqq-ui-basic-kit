@@ -6,7 +6,7 @@
  * 아래 둘째 describe가 `src/`를 훑어 실제로 쓰이는 수식어 조합을 세고, `KIT_RESERVED`와
  * **통째로 비교**합니다(필터형은 0건에서 공허하게 통과합니다).
  *
- * 지금 킷이 점유한 조합은 하나입니다 — `DateWheelPicker.tsx:1095`의
+ * 지금 킷이 점유한 조합은 하나입니다 — `DateWheelPicker.tsx`의 `handleShortcut`의
  * `(ctrlKey || metaKey) && event.code === "Semicolon"`.
  */
 import { describe, expect, it } from "vitest";
@@ -42,7 +42,7 @@ describe("킷 예약 조합", () => {
     expect(findConflict("Ctrl+Semicolon", "toggle", {})?.withKit).toBe(true);
   });
 
-  /* ⚠️ **Meta도 같이 잡아야 합니다.** `DateWheelPicker.tsx:1095`는
+  /* ⚠️ **Meta도 같이 잡아야 합니다.** `DateWheelPicker.tsx`의 `handleShortcut`는
    * `(event.ctrlKey || event.metaKey) && code === "Semicolon"`으로 판정합니다 —
    * 즉 `Cmd+;`도 그 컴포넌트가 먹습니다. 문자열로만 비교하면 `Meta+Semicolon`이
    * `Ctrl+Semicolon`과 달라서 **충돌이 안 잡히고, 등록에 성공한 뒤 날짜 선택기가
@@ -56,7 +56,7 @@ describe("킷 예약 조합", () => {
     expect(findConflict("Meta+KeyK", "toggle", {})).toBe(null);
   });
 
-  /* ⚠️ **Shift·Alt도 같이 잡아야 합니다.** `DateWheelPicker.tsx:1095`의 가드는
+  /* ⚠️ **Shift·Alt도 같이 잡아야 합니다.** `DateWheelPicker.tsx`의 `handleShortcut`의 가드는
    * `(event.ctrlKey || event.metaKey) && event.code === "Semicolon"`이라
    * `shiftKey`·`altKey`를 안 봅니다 — 즉 `Ctrl+Shift+;`·`Ctrl+Alt+;`·`Cmd+Shift+;`도
    * 전부 그 컴포넌트가 먹습니다. 문자열만 비교하면 이 조합들이 `"Ctrl+Semicolon"`과
