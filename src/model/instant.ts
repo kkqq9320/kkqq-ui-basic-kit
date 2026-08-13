@@ -52,6 +52,37 @@ export function twelveHourText(hour24: number, display: HourDisplay): string {
   return `${hour24 < 12 ? display.am : display.pm} ${pad(reading, 2)}`;
 }
 
+/** 오전/오후 조작이 **존재하는가**, 그리고 지금 값은 어느 절반인가(3단계, 스펙 §7).
+ *
+ *  시 열이 없는 픽커에는 이 조작 자체가 없으므로 `null`입니다 — 그래서 존재 여부와
+ *  절반 판정을 한 함수가 답합니다. **기계가 `fields.includes("hour")`나
+ *  `parts.hour < 12`를 직접 쓰지 않게 하는 것이 목적입니다**: 2b-4의 F-4에서
+ *  `hasTimeUnit`이 정확히 그 이유로 `model.family`로 옮겨졌고(§3.2 "기계는 단위가
+ *  무엇인지 모릅니다"), 여기가 같은 자리입니다. 정오가 오후의 시작이라는 것도
+ *  값 규칙이라 여기 있습니다. */
+export function meridiemOf(value: string, fields: WheelUnit[]): "am" | "pm" | null {
+  if (!fields.includes("hour")) return null;
+  const parts = parseValue(value, fields);
+  if (!parts) return null;
+  return parts.hour < 12 ? "am" : "pm";
+}
+
+/** 오전↔오후 한 번에 넘어가기가 시 열에서 몇 칸 이동인가(3단계, 스펙 §7).
+ *
+ *  🔴 **자리올림 없음 규칙의 유일한 예외가 여기입니다.** 오전↔오후는 독립된 값이
+ *  아니라 시(時)라는 한 숫자의 **다른 절반**이라, 그 조작은 곧 시 값을 ±12 옮기는
+ *  일입니다. 그래도 열 밖으로는 안 샙니다 — `shiftDateValue`가 시 열 안에서
+ *  순환하므로 **날짜는 그대로**입니다(오후 11시 → 오전 11시, 전날이 되지 않습니다).
+ *
+ *  부호가 있는 이유는 화면입니다: 열은 오전 00…11 다음에 오후 12…23이 오는 24칸이라,
+ *  오후로 갈 때는 아래로, 오전으로 되돌릴 때는 위로 도는 것이 눈에 맞습니다. */
+export const MERIDIEM_NOTCHES = 12;
+
+/** 오전/오후가 움직이는 열. **이름이 모델에 있는 이유는 §3.2입니다** — 기계는 어느
+ *  열인지 이 상수로 지목할 뿐, "시가 24칸이다"·"정오가 오후의 시작이다"·"±12다"를
+ *  알지 않습니다. 그 셋은 전부 위 함수·상수가 답합니다. */
+export const MERIDIEM_UNIT: WheelUnit = "hour";
+
 /** 그 단위가 시작하는 최소값. 월·일만 1이고 나머지(연·시·분·초)는 0입니다. */
 export function unitFloor(unit: WheelUnit) {
   return unit === "month" || unit === "day" ? 1 : 0;
@@ -761,6 +792,9 @@ export type WheelModel = {
    *  기계는 그걸 다시 손으로 베껴 쓴 것입니다) — 여기로 노출해 기계가
    *  모델에 묻게 합니다. */
   family(fields: WheelUnit[]): ValueFamily;
+  /** 오전/오후 조작이 존재하는가 + 지금 어느 절반인가(3단계, 스펙 §7). 시 열이 없으면
+   *  `null` — `family`와 같은 이유로 여기 있습니다(기계가 단위 이름을 알지 않게). */
+  meridiem(value: string, fields: WheelUnit[]): "am" | "pm" | null;
 };
 
 /* 기계가 이 객체 하나만 보고 돌게 하는 것이 목적입니다. 기간(duration) 모델이
@@ -785,4 +819,5 @@ export const instantModel: WheelModel = {
   clampToRange,
   parts: parseValue,
   family: familyOf,
+  meridiem: meridiemOf,
 };

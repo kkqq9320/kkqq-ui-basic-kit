@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits, familyOf, parseValue, serializeValue, isContiguous, comparisonPrecision, usableBound, outOfRange, clampToRange } from "../src/model/instant";
+import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits, familyOf, parseValue, serializeValue, isContiguous, comparisonPrecision, usableBound, outOfRange, clampToRange, meridiemOf } from "../src/model/instant";
 import type { WheelUnit } from "../src/model/instant";
 
 const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
@@ -636,5 +636,38 @@ describe("dateTriggerParts — 12시간제 (3단계)", () => {
   it("시각 전용 값도 같다", () => {
     const G: WheelUnit[] = ["hour", "minute"];
     expect(text(dateTriggerParts("00:30", G, null, KO_HOUR))).toBe("오전 12:30");
+  });
+});
+
+// ── 3단계 — 오전/오후는 **모델이** 판정한다 (스펙 §7, 2b-4 F-4와 같은 이유) ────
+//
+// 기계(DateWheelPicker.tsx)가 `fields.includes("hour")`나 `parts.hour < 12`를
+// 직접 쓰면 §3.2("기계는 단위가 무엇인지 모릅니다")를 어긴다 — 2b-4에서 `hasTimeUnit`이
+// 정확히 그 이유로 `model.family`로 옮겨졌다. 존재 여부와 어느 절반인지를 한 함수가
+// 답한다: 시 열이 없는 픽커에는 이 조작 자체가 없다(`null`).
+describe("meridiemOf — 오전/오후 판정 (3단계)", () => {
+  const F: WheelUnit[] = ["year", "month", "day", "hour", "minute"];
+
+  it("시 열이 없으면 null이다 — 그 픽커에는 이 조작이 존재하지 않는다", () => {
+    expect(meridiemOf("2026-08-12", ["year", "month", "day"])).toBe(null);
+    expect(meridiemOf("07:30", ["minute", "second"])).toBe(null);
+  });
+
+  it("0시부터 11시까지가 오전이다", () => {
+    expect(meridiemOf("2026-08-12T00:00", F)).toBe("am");
+    expect(meridiemOf("2026-08-12T11:59", F)).toBe("am");
+  });
+
+  it("12시부터 23시까지가 오후다 — 정오가 오후의 시작이다", () => {
+    expect(meridiemOf("2026-08-12T12:00", F)).toBe("pm");
+    expect(meridiemOf("2026-08-12T23:00", F)).toBe("pm");
+  });
+
+  it("값을 못 읽으면 null이다", () => {
+    expect(meridiemOf("망가진 값", F)).toBe(null);
+  });
+
+  it("instantModel을 지나서도 같다 — 기계가 부르는 경로", () => {
+    expect(instantModel.meridiem("2026-08-12T15:00", F)).toBe("pm");
   });
 });

@@ -5056,3 +5056,116 @@ describe("DateWheelPicker 12시간제 (3단계)", () => {
     expect(fieldOf("거래 날짜").textContent).toBe("2026. 08. 12.");
   });
 });
+
+// ── 3단계 — 오전/오후는 열이 아니라 **버튼**이다 (스펙 §7) ────────────────────
+//
+// 열로 두지 않은 이유 셋이 스펙에 있다: 값이 둘뿐인데 DATE_WHEEL_OFFSETS가 일곱 행을
+// 그린다 / 가장 좁을 때 정확히 한 열을 아낀다(날짜+시각이 7열 대신 6열) / 팝오버에
+// 이미 버튼 줄이 있다. 이 블록은 그 결정이 화면에 그대로 나타나는지를 고정한다.
+//
+// **버튼은 표시가 아니라 지름길이다** — 시 열 라벨이 이미 어느 절반인지 말하므로,
+// 버튼의 값어치는 12칸을 굴리지 않고 한 번에 넘기는 것과 `a`/`p` 키의 눈에 보이는
+// 짝이 되는 것이다(스펙 §7).
+describe("DateWheelPicker 오전/오후 버튼 (3단계)", () => {
+  const openAt = (value: string, extra: Partial<{ min: string; max: string; onChange: (next: string) => void; fields: WheelUnit[] }> = {}) => {
+    const onChange = extra.onChange ?? vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 시각" value={value} fields={extra.fields ?? TIME_FIELDS} min={extra.min} max={extra.max} onChange={onChange} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    return onChange;
+  };
+
+  it("대조군: 24시간제에서는 버튼이 아예 없다", () => {
+    openAt("2026-08-12T15:00:05");
+    expect(screen.queryByRole("button", { name: "오전" })).toBe(null);
+    expect(screen.queryByRole("button", { name: "오후" })).toBe(null);
+  });
+
+  it("대조군: 시 열이 없는 픽커에는 12시간제라도 버튼이 없다", () => {
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    expect(screen.queryByRole("button", { name: "오전" })).toBe(null);
+  });
+
+  it("12시간제면 두 버튼이 있고, 지금 절반이 눌린 상태로 표시된다", () => {
+    setHourFormat("12");
+    openAt("2026-08-12T15:00:05");
+    expect(screen.getByRole("button", { name: "오전" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "오후" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("반대 절반을 누르면 시가 12만큼 움직인다 — 한 번에 넘어간다", () => {
+    setHourFormat("12");
+    const onChange = openAt("2026-08-12T03:00:05");
+    fireEvent.click(screen.getByRole("button", { name: "오후" }));
+    expect(onChange).toHaveBeenLastCalledWith("2026-08-12T15:00:05");
+  });
+
+  it("오후에서 오전으로도 같다", () => {
+    setHourFormat("12");
+    const onChange = openAt("2026-08-12T15:00:05");
+    fireEvent.click(screen.getByRole("button", { name: "오전" }));
+    expect(onChange).toHaveBeenLastCalledWith("2026-08-12T03:00:05");
+  });
+
+  /* 🔴 스펙 §7이 "자리올림 없음 규칙의 유일한 예외"라고 부르는 자리다 — 오전↔오후는
+   * 시(時)라는 한 숫자의 다른 절반을 고르는 일이라 **시 값이 ±12 움직인다.** 그
+   * 예외가 열 밖으로 새면 안 된다: 날짜는 그대로여야 한다. 오후 11시에서 오전으로
+   * 넘어가는 것이 이 검사가 가장 날카로운 지점이다(시간으로 12를 빼면 전날이 되는
+   * 흔한 구현이 여기서 빨개진다). */
+  it("날짜로 자리올림하지 않는다 — 오후 11시에서 오전으로 가도 같은 날이다", () => {
+    setHourFormat("12");
+    const onChange = openAt("2026-08-12T23:30:05");
+    fireEvent.click(screen.getByRole("button", { name: "오전" }));
+    expect(onChange).toHaveBeenLastCalledWith("2026-08-12T11:30:05");
+  });
+
+  it("이미 그 절반이면 아무 일도 안 일어난다", () => {
+    setHourFormat("12");
+    const onChange = openAt("2026-08-12T15:00:05");
+    fireEvent.click(screen.getByRole("button", { name: "오후" }));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("반대 절반이 경계로 통째로 막혀 있으면 그 버튼이 disabled다 — 열의 ± 버튼과 같은 규칙", () => {
+    setHourFormat("12");
+    // max가 정오 직전이라 오후는 통째로 갈 수 없다.
+    openAt("2026-08-12T03:00:05", { max: "2026-08-12T11:59:59" });
+    expect((screen.getByRole("button", { name: "오후" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "오전" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("누르면 시 열이 휠 이동을 재생한다 — '지금' 버튼이 여러 칸을 건너뛸 때와 같은 이유", () => {
+    setHourFormat("12");
+    openAt("2026-08-12T03:00:05");
+    fireEvent.click(screen.getByRole("button", { name: "오후" }));
+    const hour = screen.getByRole("group", { name: "시 오전 03" });   // 값은 controlled라 그대로다
+    expect(/moving-\w+/.exec(hour.className)?.[0]).toBe("moving-next");
+  });
+
+  it("오전으로 되돌릴 때는 반대 방향으로 재생한다 — 열이 24칸이라 위로 올라가는 이동이다", () => {
+    setHourFormat("12");
+    openAt("2026-08-12T15:00:05");
+    fireEvent.click(screen.getByRole("button", { name: "오전" }));
+    const hour = screen.getByRole("group", { name: "시 오후 03" });
+    expect(/moving-\w+/.exec(hour.className)?.[0]).toBe("moving-previous");
+  });
+
+  /* 스펙 §7: "`오늘`·`완료`는 '확정·이동'인데 오전/오후는 **값의 절반**이라 성격이
+   * 다릅니다. 하단 줄에 섞으면 다른 종류가 한 줄에 앉습니다." — 그 결정을 마크업으로
+   * 못 박는다. 이게 없으면 다음 사람이 "버튼이니까 버튼 줄에" 옮겨도 아무도 모른다. */
+  it("하단 확정 줄(오늘·비우기·완료)에 섞이지 않는다", () => {
+    setHourFormat("12");
+    openAt("2026-08-12T15:00:05");
+    const actions = document.querySelector(".date-wheel-actions")!;
+    expect(actions.contains(screen.getByRole("button", { name: "오전" }))).toBe(false);
+    expect(actions.contains(screen.getByRole("button", { name: "오후" }))).toBe(false);
+  });
+
+  it("소비자가 바꾼 오전/오후 문구를 버튼도 쓴다", () => {
+    setHourFormat("12");
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:00:05" fields={TIME_FIELDS} onChange={() => undefined} labels={{ meridiem: { am: "AM", pm: "PM" } }} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    expect(screen.getByRole("button", { name: "PM" }).getAttribute("aria-pressed")).toBe("true");
+  });
+});

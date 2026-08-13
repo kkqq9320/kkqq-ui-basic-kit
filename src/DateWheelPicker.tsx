@@ -15,6 +15,8 @@ import { createPortal } from "react-dom";
 
 import {
   DATE_WHEEL_FILL,
+  MERIDIEM_NOTCHES,
+  MERIDIEM_UNIT,
   instantModel,
   isContiguous,
   type DateWheelUnit,
@@ -914,6 +916,24 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     return shiftedFrom(baseValue, unit, amount);
   }
 
+  /* 오전/오후(3단계, 설계 스펙 §7). 24시간제이거나 시 열이 없으면 `null`이고, 그러면
+   * 버튼 줄 자체를 안 그립니다 — "안 그린다"가 여기 한 값으로 정해집니다.
+   *
+   * **판정은 전부 모델입니다.** 기계는 "시가 24칸이다"도 "정오가 오후의 시작이다"도
+   * "±12다"도 모릅니다(§3.2) — `model.meridiem`이 절반을, `MERIDIEM_NOTCHES`가 이동
+   * 폭을, `MERIDIEM_UNIT`이 어느 열인지를 답합니다. 2b-4의 F-4(기계가 시각 단위
+   * 이름을 직접 나열하던 자리)와 같은 규칙을 처음부터 지키는 것입니다.
+   *
+   * 부호가 있는 이유는 화면입니다: 열이 오전 00…11 → 오후 12…23인 24칸이라, 오후로
+   * 갈 때는 아래로, 오전으로 되돌릴 때는 위로 도는 것이 눈에 맞습니다. 값은 어느
+   * 쪽이든 같습니다(24칸에서 +12와 −12는 같은 자리). */
+  const meridiem = hourFormat === "12" ? model.meridiem(baseValue, fields) : null;
+  const meridiemDirection = meridiem === "am" ? MERIDIEM_NOTCHES : -MERIDIEM_NOTCHES;
+  /* 반대 절반이 경계로 통째로 막혔으면 `null` — 열의 ± 버튼이 `disabled={!shifted(unit, ±1)}`로
+   * 하는 것과 **같은 판정, 같은 함수**입니다. 별도 규칙을 만들지 않습니다. */
+  const meridiemShift = meridiem ? shifted(MERIDIEM_UNIT, meridiemDirection) : null;
+  function flipMeridiem() { applyShift(MERIDIEM_UNIT, meridiemDirection); }
+
   function markColumnMotion(unit: DateWheelUnit, amount: number) {
     if (amount) {
       setColumnMotion((current) => ({
@@ -1675,6 +1695,32 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       {/* 보이는 머리말만 `heading`으로 갈립니다 — 위 `aria-label`과 `triggerName`은 계속
           `ariaLabel`을 씁니다(§11). 안 넘기면 둘이 같은 값이라 지금까지와 동일합니다. */}
       <div className="date-wheel-heading"><strong>{heading ?? ariaLabel}</strong><span>{hintText}</span></div>
+      {/* 오전/오후는 **열이 아니라 버튼**입니다(설계 스펙 §7, 오너 결정). 열로 두면 값이
+          둘뿐인데 `DATE_WHEEL_OFFSETS`가 일곱 행을 그리고, 스와이프 관성도 ±3 프리로드도
+          순환도 뜻이 없어집니다. 그리고 **가장 좁을 때 정확히 한 열을 아낍니다** —
+          날짜+시각 전체가 7열이 될 뻔한 것이 6열로 남습니다.
+
+          **자리는 시 열 근처(열 바로 위)이지 하단 줄이 아닙니다.** `오늘`·`비우기`·`완료`는
+          "확정·이동"인데 오전/오후는 **값의 절반**이라 성격이 다르고, 하단에 섞으면 다른
+          종류가 한 줄에 앉습니다. tests의 "하단 확정 줄에 섞이지 않는다"가 이걸 지킵니다.
+          ⚠️ **버튼의 정확한 위치·크기는 실기기 확인 항목입니다**(스펙 §14).
+
+          `aria-pressed`로 지금 절반을 말합니다 — 버튼은 **표시가 아니라 지름길**이고
+          (시 열 라벨이 이미 `오후 03`으로 절반을 말합니다), 그 값어치는 12칸을 굴리지
+          않고 한 번에 넘기는 것과 `a`/`p` 키의 눈에 보이는 짝이 되는 것입니다.
+
+          `tabIndex={-1}`은 팝오버 안 다른 버튼들과 같습니다 — 이 컨트롤의 포커스 자리는
+          트리거 하나뿐입니다(§6.2). */}
+      {meridiem && (
+        <div className="date-wheel-meridiem">
+          {(["am", "pm"] as const).map((half) => {
+            const pressed = meridiem === half;
+            // 반대 절반으로 못 가면(경계가 통째로 막았으면) 그 버튼은 열의 ± 버튼과
+            // **같은 규칙으로** disabled입니다 — `shifted(...) === null`이 그 판정입니다.
+            return <button type="button" tabIndex={-1} className={pressed ? "selected" : ""} aria-pressed={pressed} aria-keyshortcuts={half === "am" ? "a" : "p"} disabled={!pressed && meridiemShift === null} onClick={() => { setTyping(null); if (!pressed) flipMeridiem(); }} key={half}>{half === "am" ? labels.meridiem.am : labels.meridiem.pm}</button>;
+          })}
+        </div>
+      )}
       <div className="date-wheel-columns" data-fields={columns.length}>
         {/* 열은 **포커스를 받지 않고 키도 받지 않습니다**(설계 스펙 §5·§6.2) — `tabIndex`가
             없고 `onKeyDown`도 없습니다. 활성 표시는 `resolvedActiveUnit`이 붙이는 `.active`
