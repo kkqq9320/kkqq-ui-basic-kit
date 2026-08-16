@@ -138,7 +138,32 @@ export function snapToStep(unit: WheelUnit, amount: number, step?: WheelStep): n
   const stride = stepOf(unit, step);
   if (stride === 1) return amount;
   const floor = unitFloor(unit);
-  return floor + Math.floor((amount - floor) / stride) * stride;
+  // 🔴 **바닥값 아래로는 안 내려갑니다.** `Math.floor`가 음수 쪽으로 내리므로
+  // `amount < floor`이면 격자점이 바닥값보다 아래로 나옵니다 — `snapToStep("month", 0,
+  // { month: 3 })`이 **-2**였고, `withUnitValue`가 그걸 그대로 직렬화해
+  // **`"2026--2-12"`라는 깨진 문자열**을 냈습니다(실측). `instantModel.setUnit`은 공개
+  // API이고 `commitTyped`는 `isValid` 검사 없이 `onChange`에 넘기므로, 소비자가 직접
+  // 부르면 깨진 값이 앱으로 갑니다. 지금 UI 경로로는 도달하지 않지만(타이핑이 월·일의
+  // 0을 막습니다) 계약으로 막아 둡니다.
+  return Math.max(floor, floor + Math.floor((amount - floor) / stride) * stride);
+}
+
+/** 값 **전체**를 각 열의 격자로 내립니다. 한 열만 다루는 `snapToStep`과 달리 `fields`의
+ *  모든 열을 훑습니다 — `지금` 버튼과 빈 값의 기준값처럼 **여러 열이 한꺼번에 정해지는
+ *  자리**가 쓰는 문입니다.
+ *
+ *  🔴 **이게 없으면 같은 수에 이르는 두 경로가 갈립니다**(오너 결정 2026-08-15):
+ *  분 step 15에서 `47`을 **타이핑하면 45로 내려가는데** `지금`을 누르면 03:47이 그대로
+ *  확정됐습니다. 격자를 준 소비자는 "이 픽커는 15분 단위만 낸다"고 말한 것이고,
+ *  격자 밖 값이 허용되는 예외는 `min`/`max` 끝점 하나뿐입니다.
+ *
+ *  일은 **내려가기만** 하므로 말일을 넘길 일이 없어 다시 자를 필요가 없습니다. */
+export function snapValue(value: string, fields: WheelUnit[] = DEFAULT_FIELDS, step?: WheelStep): string {
+  const parts = parseValue(value, fields);
+  if (!parts) return value;
+  const next = { ...parts };
+  for (const unit of fields) next[unit] = snapToStep(unit, parts[unit], step);
+  return serializeValue(next, fields);
 }
 
 /** 그 열이 받는 최대 자릿수. 연도만 4자리이고 나머지는 2자리입니다. */
@@ -1032,6 +1057,9 @@ export type WheelModel = {
   parsePasted(text: string, fields: WheelUnit[], hour?: HourDisplay): string | null;
   /** 그 열의 격자 간격(설계 스펙 §8). 기계가 "이 값이 격자 위인가"를 물을 때 씁니다. */
   stepOf(unit: WheelUnit, step?: WheelStep): number;
+  /** 값 전체를 각 열의 격자로 내립니다. `지금` 버튼과 빈 값의 기준값처럼 **여러 열이
+   *  한꺼번에 정해지는 자리**가 씁니다 — 없으면 타이핑과 버튼이 같은 수에 다르게 도착합니다. */
+  snapValue(value: string, fields: WheelUnit[], step?: WheelStep): string;
 };
 
 /* 기계가 이 객체 하나만 보고 돌게 하는 것이 목적입니다. 기간(duration) 모델이
@@ -1061,4 +1089,5 @@ export const instantModel: WheelModel = {
   resetTarget,
   parsePasted,
   stepOf,
+  snapValue,
 };

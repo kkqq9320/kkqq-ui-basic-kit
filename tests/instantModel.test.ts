@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits, familyOf, parseValue, serializeValue, isContiguous, comparisonPrecision, usableBound, outOfRange, clampToRange, meridiemOf, hourFromTwelve, twelveHourText, resetTarget, parsePasted, stepOf, snapToStep } from "../src/model/instant";
+import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits, familyOf, parseValue, serializeValue, isContiguous, comparisonPrecision, usableBound, outOfRange, clampToRange, meridiemOf, hourFromTwelve, twelveHourText, resetTarget, parsePasted, stepOf, snapToStep, snapValue } from "../src/model/instant";
 import type { WheelUnit } from "../src/model/instant";
 
 const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
@@ -1028,5 +1028,47 @@ describe("withUnitValue — 타이핑은 격자로 내린다", () => {
 
   it("step이 없으면 예전 동작 그대로다", () => {
     expect(withUnitValue("2026-04-10", "day", 31)).toBe("2026-04-30");
+  });
+});
+
+describe("snapToStep — 바닥값 아래로 안 내려간다", () => {
+  /* 🔴 `Math.floor`가 음수 쪽으로 내리므로 `amount < floor`이면 격자점이 바닥값보다
+   * 아래로 나옵니다. 리뷰가 실측으로 잡았습니다: `snapToStep("month", 0, {month:3})`이
+   * **-2**였고 `withUnitValue`가 그걸 직렬화해 **"2026--2-12"**를 냈습니다. */
+  it("월: 바닥값보다 작은 수는 바닥값으로", () => {
+    expect(snapToStep("month", 0, { month: 3 })).toBe(1);
+  });
+
+  it("일: 바닥값보다 작은 수는 바닥값으로", () => {
+    expect(snapToStep("day", 0, { day: 5 })).toBe(1);
+  });
+
+  it("그 결과로 깨진 값 문자열이 안 나온다", () => {
+    expect(withUnitValue("2026-07-12", "month", 0, ["year", "month", "day"], { month: 3 })).toBe("2026-01-12");
+  });
+
+  // 대조군 — 바닥이 0인 열은 원래도 음수가 안 나옵니다.
+  it("초는 바닥이 0이라 그대로", () => {
+    expect(snapToStep("second", 0, { second: 15 })).toBe(0);
+  });
+});
+
+describe("snapValue — 값 전체를 격자로", () => {
+  const DT = ["year", "month", "day", "hour", "minute", "second"] as WheelUnit[];
+
+  it("여러 열을 한꺼번에 내린다", () => {
+    expect(snapValue("2026-08-14T03:47:22", DT, { minute: 15, second: 30 })).toBe("2026-08-14T03:45:00");
+  });
+
+  it("step이 없으면 값을 안 바꾼다", () => {
+    expect(snapValue("2026-08-14T03:47:22", DT)).toBe("2026-08-14T03:47:22");
+  });
+
+  it("fields에 없는 열은 안 본다", () => {
+    expect(snapValue("03:47", ["hour", "minute"], { minute: 15 })).toBe("03:45");
+  });
+
+  it("읽을 수 없는 값은 그대로 돌려준다", () => {
+    expect(snapValue("이건 값이 아님", ["hour", "minute"], { minute: 15 })).toBe("이건 값이 아님");
   });
 });

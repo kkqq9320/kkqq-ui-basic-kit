@@ -778,7 +778,11 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 매 호출 다시 안 적어도 되게 하는 것이 유일한 목적입니다.
   function outOfRange(v: string) { return model.outOfRange(v, { min, max }, fields); }
   function clampToRange(v: string) { return model.clampToRange(v, { min, max }, fields); }
-  const baseValue = clampToRange(model.isValid(value, fields) ? value : model.now(timeZone, fields));
+  /* ⚠️ **격자는 `now()` 대체값에만 겁니다. 소비자가 준 `value`는 안 건드립니다.**
+   * 소비자의 값을 여기서 내리면 `onChange` 없이 화면만 달라져, 트리거가 소비자가 들고
+   * 있지 않은 값을 그립니다 — 격자 밖 값을 허용하는 예외(`min`/`max` 끝점)와 같은 결로
+   * 그냥 보여 줍니다. 반면 `now()`는 **킷이 지어낸 값**이라 격자 위에 올려야 합니다. */
+  const baseValue = clampToRange(model.isValid(value, fields) ? value : model.snapValue(model.now(timeZone, fields), fields, step));
 
   // 트리거가 그릴 조각들. null이면 placeholder를 그린다는 뜻입니다.
   //
@@ -1033,12 +1037,26 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 하면 `2026-01-31 → 2026-03-31`인데, 한 칸씩 걸으면 중간에 2월 말일로 잘려
    * `2026-03-28`이 됩니다(일이 연·월에 의존하는 §3.1의 그 자리). 격자가 1이면 한 칸이
    * 곧 한 단위라 경계를 건너뛸 수 없고, 그래서 걸을 이유도 없습니다. */
+  /** `amount`칸 옮긴 값. **형식 검사까지 여기 하나에 있습니다** — 아래 두 경로가 이 가드를
+   *  나눠 갖다가 갈라지지 않도록 한 곳으로 모읍니다.
+   *
+   *  연도가 10000 이상(또는 음수)이 되면 (Task 3부터) parseValue의 `\d{4}` 정규식이 매치에
+   *  실패해 조용히 깨진 문자열이 됩니다 — `model.isValid`가 그것을 걸러냅니다. (예전엔
+   *  `Date#toISOString()`의 확장 표기(`+010000-07-12`)가 `slice(0,10)` 이후
+   *  `"+010000-07-undefined"`를 만드는 경로였는데, `shiftDateValue`가 더는 Date를 안 쓰므로
+   *  그 경로 자체가 사라졌습니다.) **`outOfRange` 판정으로는 `min`/`max`가 없는 필드에서
+   *  이 값을 걸러내지 못합니다.** */
+  function stepOnce(sourceValue: string, unit: DateWheelUnit, amount: number) {
+    const next = model.normalize(model.shift(sourceValue, unit, amount, fields, step), fields);
+    return model.isValid(next, fields) ? next : null;
+  }
+
   function walkToBound(sourceValue: string, unit: DateWheelUnit, amount: number) {
     const direction = amount > 0 ? 1 : -1;
     let current = sourceValue;
     for (let taken = 0; taken < Math.abs(amount); taken += 1) {
-      const raw = model.normalize(model.shift(current, unit, direction, fields, step), fields);
-      if (!model.isValid(raw, fields)) return null;
+      const raw = stepOnce(current, unit, direction);
+      if (raw === null) return null;
       if (!outOfRange(raw)) { current = raw; continue; }
       // 격자점이 경계 밖입니다. 경계 자신이 아직 안 쓰였으면 거기서 한 칸을 씁니다.
       const bound = clampToRange(raw);
@@ -1049,16 +1067,27 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   }
 
   function shiftedFrom(sourceValue: string, unit: DateWheelUnit, amount: number) {
-    if (model.stepOf(unit, step) !== 1 && amount !== 0) return walkToBound(sourceValue, unit, amount);
-    const next = model.normalize(model.shift(sourceValue, unit, amount, fields, step), fields);
-    // 연도가 10000 이상(또는 음수)이 되면 (Task 3부터) parseValue의 \d{4} 정규식이
-    // 매치에 실패해 next가 조용히 깨진 문자열이 됩니다 — model.isValid가 그것을
-    // 그대로 걸러냅니다. (예전엔 Date#toISOString()의 확장 표기(+010000-07-12)가
-    // slice(0,10) 이후 "+010000-07-undefined"를 만드는 경로였는데, shiftDateValue가
-    // 더는 Date를 안 쓰므로 그 경로 자체가 사라졌습니다 — validDateValue(model.isValid)는
-    // 여전히 같은 자리에서 같은 이유로 걸러냅니다.) outOfRange 판정으로는 min/max가
-    // 없는 필드에서 이 값을 걸러내지 못합니다.
-    if (!model.isValid(next, fields)) return null;
+    /* 걷는 것은 **격자가 경계를 건너뛸 때만** 뜻이 있습니다. 그래서 셋이 다 참일 때만
+     * 걷습니다:
+     *   - 격자가 1이 아님 — 1이면 한 칸이 곧 한 단위라 경계를 건너뛸 수 없습니다.
+     *   - 옮길 칸이 있음.
+     *   - **`min`이나 `max`가 있음** — 경계가 없으면 `outOfRange`가 늘 거짓이라 걷기가
+     *     한 번에 세는 것과 **같은 답을 훨씬 비싸게** 냅니다.
+     *
+     * 🔴 마지막 조건이 성능 조건입니다. 행 하나마다 `|amount|`번 왕복하므로
+     * `wheelRowsPerSide=4`면 한 열이 10회에서 **30회**로, 6열이면 렌더당 60회에서
+     * 180회로 늡니다. 이 저장소에는 드래그 성능 항목이 이미 열려 있고(55~57fps, 다음
+     * 후보가 행 렌더의 반복 파싱) 바로 이 자리입니다. 경계 없는 픽커가 대부분이라
+     * 이 한 줄이 그 대부분을 예전 비용으로 되돌립니다.
+     *
+     * 🔴 **`stride === 1`에서 걸으면 동작이 바뀝니다.** 월을 한 번에 +2 하면
+     * `2026-01-31 → 2026-03-31`인데, 한 칸씩 걸으면 중간에 2월 말일로 잘려
+     * `2026-03-28`이 됩니다(일이 연·월에 의존하는 §3.1의 그 자리). */
+    if (model.stepOf(unit, step) !== 1 && amount !== 0 && (min !== undefined || max !== undefined)) {
+      return walkToBound(sourceValue, unit, amount);
+    }
+    const next = stepOnce(sourceValue, unit, amount);
+    if (next === null) return null;
     if (outOfRange(next)) return null;
     return next;
   }
@@ -1399,6 +1428,12 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   function commitShift(sourceValue: string, unit: DateWheelUnit, amount: number, motion: "wheel" | "none" = "wheel") {
     const next = shiftedFrom(sourceValue, unit, amount);
     if (!next) return null;
+    /* **값이 그대로면 조작이 아닙니다.** 격자가 열보다 크면(예: `{ minute: 100 }`) 그 열의
+     * 격자점이 하나뿐이라 어느 쪽으로 밀어도 같은 값이 나옵니다 — 그때 행은 `—`가 아니라
+     * 눌리는 채로 남는데, 이 가드가 없으면 누를 때마다 **아무것도 안 바뀐 `onChange`가
+     * 나가고 되돌리기 스택만 쌓입니다.** (격자가 1이면 여섯 단위 중 어느 열도 칸이 하나일
+     * 수 없으므로 이 줄은 지금까지의 동작을 안 바꿉니다.) */
+    if (next === sourceValue) return null;
     // 제스처 중이면 시작할 때 이미 쌓았습니다. 화살표처럼 제스처가 아닌 경로만
     // 여기서 한 번씩 쌓습니다.
     if (!undoGestureRef.current) pushUndo(sourceValue);
@@ -1425,7 +1460,11 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 맞습니다. 열이 그리는 것이 그 열의 수이기 때문입니다.
    */
   function commitToday() {
-    const next = clampToRange(model.now(timeZone, fields));
+    /* 🔴 **격자로 내려서 확정합니다**(오너 결정 2026-08-15). 안 내리면 분 step 15에서
+     * `47`을 **타이핑하면 45가 되는데** `지금`을 누르면 03:47이 그대로 남아, 같은 수에
+     * 이르는 두 경로가 갈립니다. 격자를 준 소비자는 "이 픽커는 15분 단위만 낸다"고 말한
+     * 것이고, 격자 밖이 허용되는 예외는 `min`/`max` 끝점 하나뿐입니다. */
+    const next = clampToRange(model.snapValue(model.now(timeZone, fields), fields, step));
     // 값 분해는 모델이 합니다(설계 스펙 §12, 2b-2) — 예전에는 `value.split("-")`와
     // 고정 인덱스 표(`{year:0,month:1,day:2,hour:3,minute:4,second:5}`)로 **위치만**
     // 보고 셌는데, 그 표는 값이 늘 "YYYY-MM-DD" 세 자리일 때만 맞습니다. 값에 시각이

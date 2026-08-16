@@ -6192,3 +6192,70 @@ describe("열마다의 격자(step)", () => {
     expect(onChange).toHaveBeenCalledWith("04:00");
   });
 });
+
+/* 리뷰(2026-08-15)가 잡은 구멍들. 전부 step이 걸린 자리인데 검사가 없던 곳입니다. */
+describe("격자(step) — 리뷰가 잡은 자리", () => {
+  const col = (unit: string) => document.querySelector(`.date-wheel-column[data-unit="${unit}"]`) as HTMLElement;
+
+  /* 🔴 안 내리면 분 step 15에서 `47`을 **타이핑하면 45가 되는데** `지금`을 누르면 03:47이
+   * 그대로 남습니다 — 같은 수에 이르는 두 경로가 갈립니다(오너 결정: 내리는 쪽). */
+  it("지금 버튼이 격자로 내려서 확정한다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-14T03:47:22Z"));
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="시각" value="00:00" onChange={onChange} fields={["hour", "minute"]} timeZone="UTC" step={{ minute: 15 }} />);
+    fireEvent.keyDown(fieldOf("시각"), { key: ";", code: "Semicolon", ctrlKey: true });
+    expect(onChange).toHaveBeenCalledWith("03:45");
+  });
+
+  it("Ctrl+; 도 같은 경로다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-14T03:47:22Z"));
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="시각" value="00:00" onChange={onChange} fields={["hour", "minute"]} timeZone="UTC" step={{ minute: 15 }} />);
+    fireEvent.click(fieldOf("시각"));
+    fireEvent.click(screen.getByRole("button", { name: "지금" }));
+    expect(onChange).toHaveBeenCalledWith("03:45");
+  });
+
+  /* 열 초기화(행 길게 누르기·가운데 더블탭)도 setUnit을 지나므로 step이 걸려야 합니다.
+   * 이 검사가 없으면 그 호출부의 step 인자를 지워도 0 red였습니다(실측). */
+  it("연도 열에도 격자가 걸린다", () => {
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={onChange} step={{ year: 10 }} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    fireEvent.click(rowAt(col("year"), 1));
+    expect(onChange).toHaveBeenCalledWith("2030-07-12");
+  });
+
+  /* 🔴 격자가 열보다 크면 격자점이 하나뿐이라 어느 쪽으로 밀어도 같은 값입니다.
+   * 그때 아무것도 안 바뀐 onChange가 나가면 되돌리기 스택만 쌓입니다. */
+  it("격자점이 하나뿐인 열은 더 움직이지 않는다", () => {
+    // 03:30에서 시작하면 첫 조작이 유일한 격자점(03:00)으로 실제로 내려갑니다 —
+    // 안 움직이는 것은 그 뒤부터라, 이미 격자 위인 값으로 시작해야 이 가드만 봅니다.
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="시각" value="03:00" onChange={onChange} fields={["hour", "minute"]} step={{ minute: 100 }} />);
+    fireEvent.click(fieldOf("시각"));
+    onChange.mockClear();
+    fireEvent.click(rowAt(col("minute"), 1));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  /* 🔴 성능 계약 — 경계가 없으면 걷지 않습니다. 걷기는 행마다 |offset|번 왕복하므로
+   * 경계 없는 픽커(대부분)에서 그대로 두면 렌더 비용이 몇 배가 됩니다. */
+  it("min/max가 없으면 한 번에 세고 걷지 않는다", () => {
+    setWheelRowsPerSide(3);
+    const shiftSpy = vi.spyOn(instantModel, "shift");
+    render(<DateWheelPicker ariaLabel="시각" value="03:30" onChange={() => undefined} fields={["hour", "minute"]} step={{ minute: 15 }} />);
+    fireEvent.click(fieldOf("시각"));
+    const withoutBounds = shiftSpy.mock.calls.length;
+
+    cleanup();
+    shiftSpy.mockClear();
+    render(<DateWheelPicker ariaLabel="시각" value="03:30" onChange={() => undefined} fields={["hour", "minute"]} min="03:07" step={{ minute: 15 }} />);
+    fireEvent.click(fieldOf("시각"));
+    const withBounds = shiftSpy.mock.calls.length;
+
+    expect(withoutBounds).toBeLessThan(withBounds);
+  });
+});
