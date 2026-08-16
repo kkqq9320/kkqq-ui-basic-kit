@@ -306,10 +306,16 @@
  * 숫자는 열 한가운데에 그대로 있고, 기호는 `:`처럼 **제자리에 고정**입니다.
  *
  * 자리는 열 오른쪽 끝이 아니라 **가운데 숫자 바로 옆**입니다(오너: "너무 우측에
- * 쏠려 있어"). 값은 언제나 두 자리라(`label`이 채웁니다) 가운데에서 13px이면 숫자
- * 오른쪽에 붙고, 열 폭이 변해도 숫자를 따라갑니다. */
+ * 쏠려 있어"). 열 폭이 변해도 숫자를 따라갑니다.
+ *
+ * 🔴 **오프셋을 두 항으로 적습니다 — 재서 나온 수이고 근거가 각각 다릅니다.**
+ *   `9px` = 두 자리 숫자의 반폭. 실측 17.71px(13px/800 · tabular-nums · 선택 행의
+ *           `scale(1.025)` 포함)이라 반은 8.86px입니다.
+ *   `8px` = 숫자와 기호 사이 틈. 처음 4px이었는데 오너가 좁다고 했습니다.
+ * 합쳐서 하나로 적으면(`17px`) 다음 사람이 폰트가 바뀌었을 때 어느 쪽을 고쳐야 하는지
+ * 알 수 없습니다. */
 .wheel-column::after {
-  content: var(--wheel-unit-mark, ""); position: absolute; z-index: 1; left: calc(50% + 13px);
+  content: var(--wheel-unit-mark, ""); position: absolute; z-index: 1; left: calc(50% + 9px + 8px);
   top: calc(30px + var(--wheel-rows-h) / 2); transform: translateY(-50%);
   color: #fff; font-size: var(--action-font-size); font-weight: 700; line-height: 1; opacity: .72; pointer-events: none;
 }
