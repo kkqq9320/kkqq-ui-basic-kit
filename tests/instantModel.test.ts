@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits, familyOf, parseValue, serializeValue, isContiguous, comparisonPrecision, usableBound, outOfRange, clampToRange, meridiemOf, hourFromTwelve, twelveHourText, resetTarget, parsePasted } from "../src/model/instant";
+import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits, familyOf, parseValue, serializeValue, isContiguous, comparisonPrecision, usableBound, outOfRange, clampToRange, meridiemOf, hourFromTwelve, twelveHourText, resetTarget, parsePasted, stepOf, snapToStep, snapValue } from "../src/model/instant";
 import type { WheelUnit } from "../src/model/instant";
 
 const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
@@ -889,5 +889,186 @@ describe("parsePasted — 붙여넣은 글자 읽기", () => {
   it("윤년의 2월 29일은 읽는다 — 말일 계산이 실제로 도는지", () => {
     expect(parsePasted("2028-02-29", DATE)).toBe("2028-02-29");
     expect(parsePasted("2026-02-29", DATE)).toBe(null);
+  });
+});
+
+/* 격자(step) — 설계 스펙 §8.
+ *
+ * 계약의 핵심은 둘입니다: **격자의 기준점은 언제나 그 열의 바닥값**이고(min이 아님),
+ * **step을 안 넘기면 지금까지와 글자 하나 안 바뀐다**는 것. */
+describe("stepOf — 격자 간격 읽기", () => {
+  it("안 넘기면 1이다", () => {
+    expect(stepOf("minute")).toBe(1);
+    expect(stepOf("minute", {})).toBe(1);
+  });
+
+  it("넘긴 열만 적용된다", () => {
+    expect(stepOf("minute", { minute: 15 })).toBe(15);
+    expect(stepOf("hour", { minute: 15 })).toBe(1);
+  });
+
+  // 0으로 나누거나 무한 루프가 되는 값들. 던지지 않고 "step 없음"으로 읽습니다.
+  it("0은 1로 떨어진다", () => { expect(stepOf("minute", { minute: 0 })).toBe(1); });
+  it("음수는 1로 떨어진다", () => { expect(stepOf("minute", { minute: -5 })).toBe(1); });
+  it("소수는 내림하고, 1 미만이면 1이다", () => {
+    expect(stepOf("minute", { minute: 7.9 })).toBe(7);
+    expect(stepOf("minute", { minute: 0.5 })).toBe(1);
+  });
+  it("NaN은 1로 떨어진다", () => { expect(stepOf("minute", { minute: NaN })).toBe(1); });
+  /* Infinity가 유한성 가드의 **유일한** 사용처입니다 — NaN은 뒤의 (whole >= 1) 가드가
+   * 이미 잡습니다(NaN >= 1 은 거짓). 이 검사가 없으면 유한성 가드를 지워도 0 red라
+   * 공허했습니다(실측). Infinity면 격자 칸이 하나뿐인 열이 됩니다. */
+  it("Infinity는 1로 떨어진다", () => { expect(stepOf("minute", { minute: Infinity })).toBe(1); });
+});
+
+describe("snapToStep — 격자에 안 얹히면 내린다", () => {
+  it("격자 위면 그대로", () => { expect(snapToStep("minute", 30, { minute: 15 })).toBe(30); });
+  it("사이면 내린다 — 올림이 아니다", () => { expect(snapToStep("minute", 44, { minute: 15 })).toBe(30); });
+
+  // 🔴 기준점이 바닥값입니다. 월·일은 바닥이 1이라 격자가 1,4,7…입니다.
+  it("월·일은 바닥값 1에서 격자가 시작한다", () => {
+    expect(snapToStep("month", 5, { month: 3 })).toBe(4);
+    expect(snapToStep("day", 9, { day: 4 })).toBe(9);
+  });
+
+  it("step이 1이면 아무것도 안 바꾼다", () => { expect(snapToStep("minute", 44)).toBe(44); });
+});
+
+describe("shiftDateValue — 격자 한 칸씩", () => {
+  const DT = ["year", "month", "day", "hour", "minute", "second"] as WheelUnit[];
+
+  it("한 노치가 step 하나다", () => {
+    expect(shiftDateValue("2026-07-12T03:30:00", "minute", 1, DT, { minute: 15 })).toBe("2026-07-12T03:45:00");
+    expect(shiftDateValue("2026-07-12T03:30:00", "minute", -1, DT, { minute: 15 })).toBe("2026-07-12T03:15:00");
+  });
+
+  it("여러 칸도 격자 위에 떨어진다", () => {
+    expect(shiftDateValue("2026-07-12T03:00:00", "minute", 3, DT, { minute: 15 })).toBe("2026-07-12T03:45:00");
+  });
+
+  /* 🔴 격자 밖에서 출발하는 경우 — min이 격자 밖일 때 실제로 일어납니다.
+   * 위로는 **바로 위 격자점**, 아래로는 **바로 아래 격자점**입니다. 값 ± step이면
+   * 03:07에서 위가 03:22가 되어 같은 픽커가 min에 따라 다른 시각 집합을 내줍니다. */
+  it("격자 밖에서 위로 한 칸은 바로 위 격자점이다", () => {
+    expect(shiftDateValue("2026-07-12T03:07:00", "minute", 1, DT, { minute: 15 })).toBe("2026-07-12T03:15:00");
+  });
+
+  it("격자 밖에서 아래로 한 칸은 바로 아래 격자점이다", () => {
+    expect(shiftDateValue("2026-07-12T03:07:00", "minute", -1, DT, { minute: 15 })).toBe("2026-07-12T03:00:00");
+  });
+
+  /* 아래로 두 칸이면 03:00을 지나 **열 안에서 순환**합니다 — 시로 자리올림하지
+   * 않는 것이 이 컴포넌트의 기존 규칙이고(열 안에서만 돈다), 격자가 그 규칙을 안 바꿉니다.
+   * 처음에 02:45를 기대하는 테스트를 썼다가 이걸로 정정했습니다. */
+  it("격자 밖에서 아래로 두 칸이면 열 안에서 순환한다", () => {
+    expect(shiftDateValue("2026-07-12T03:07:00", "minute", -2, DT, { minute: 15 })).toBe("2026-07-12T03:45:00");
+  });
+
+  /* 격자가 열을 딱 나누지 못해도 허용합니다 — 분 step 7이면 0,7…56 다음이 0이고
+   * 마지막 간격만 4입니다. 금지하면 시 step 5(24를 안 나눔)가 통째로 막힙니다. */
+  it("격자가 열을 안 나눠도 순환한다 — 마지막 간격만 짧다", () => {
+    expect(shiftDateValue("2026-07-12T03:56:00", "minute", 1, DT, { minute: 7 })).toBe("2026-07-12T03:00:00");
+  });
+
+  it("아래로 순환하면 마지막 격자점으로 간다", () => {
+    expect(shiftDateValue("2026-07-12T03:00:00", "minute", -1, DT, { minute: 7 })).toBe("2026-07-12T03:56:00");
+  });
+
+  // 연도는 상한이 없어 순환하지 않습니다.
+  it("연도는 순환하지 않고 격자 위로 간다", () => {
+    expect(shiftDateValue("2026-07-12", "year", 1, ["year", "month", "day"], { year: 10 })).toBe("2030-07-12");
+  });
+
+  // 🔴 대조군 — step을 안 넘기면 예전과 완전히 같아야 합니다.
+  it("step이 없으면 예전 동작 그대로다", () => {
+    expect(shiftDateValue("2026-01-31", "month", 1)).toBe("2026-02-28");
+    expect(shiftDateValue("2026-12-15", "month", 1)).toBe("2026-01-15");
+    expect(shiftDateValue("2026-01-01", "day", -1)).toBe("2026-01-31");
+  });
+});
+
+describe("withUnitValue — 타이핑은 격자로 내린다", () => {
+  const DT = ["year", "month", "day", "hour", "minute", "second"] as WheelUnit[];
+
+  it("격자에 안 떨어지면 내린다", () => {
+    expect(withUnitValue("2026-07-12T03:00:00", "minute", 44, DT, { minute: 15 })).toBe("2026-07-12T03:30:00");
+  });
+
+  it("격자 위면 그대로", () => {
+    expect(withUnitValue("2026-07-12T03:00:00", "minute", 45, DT, { minute: 15 })).toBe("2026-07-12T03:45:00");
+  });
+
+  /* 🔴 **말일이 격자 밖이면 값은 격자 위로 내려옵니다 — 말일은 끝점이 아닙니다.**
+   *
+   * 처음에 이걸 거꾸로 적고 `2026-02-28`을 기대하는 테스트를 썼습니다. 오너가 그 문장을
+   * 의심해서 실제 열을 밟아 봤더니 **2월 일 열은 `01→06→11→16→21→26→(1로 순환)`이고
+   * 28은 아예 없었습니다.** 스펙 §8이 이미 정해 둔 규칙이기도 합니다 — 분 step 7의 열은
+   * `0…56` 다음 바로 `0`이지 상한 59를 끼워 넣지 않습니다. 상한은 `min`/`max`와 급이
+   * 다릅니다.
+   *
+   * 28에 앉으면 위로 한 칸이 **1로 튑니다**(실측) — 휠이 내줄 수 없는 값이라 그렇습니다. */
+  it("말일이 격자 밖이면 격자 위로 내려온다 — 휠이 못 내주는 값에 앉히지 않는다", () => {
+    expect(withUnitValue("2026-02-10", "day", 31, ["year", "month", "day"], { day: 5 })).toBe("2026-02-26");
+  });
+
+  /* 🔴 **이 검사가 실제 결함을 잡았습니다.** 일 분기가 `Math.min(amount, 말일)`이라
+   * 위에서 스냅한 값을 버리고 **원래 친 수를 다시 쓰고** 있었습니다 — 잘릴 일이 없는
+   * 달에서는 `step`이 통째로 무시됐습니다. 위 2월 검사만으로는 안 잡힙니다(거기서는
+   * 말일 자르기가 우연히 일어나서 결과가 달라 보입니다). */
+  it("잘릴 일이 없는 달에서도 일 타이핑이 격자로 내려간다", () => {
+    expect(withUnitValue("2026-04-10", "day", 9, ["year", "month", "day"], { day: 5 })).toBe("2026-04-06");
+  });
+
+  /* 연·월을 옮겨 일이 말일로 잘리는 경로도 격자 위에 남아야 합니다. 일 step 5의 격자에
+   * 31이 들어 있어서(1·6·…·26·31) 1월 31일이 실제로 이 경우입니다 — 2월로 옮기면 28로
+   * 잘리고, 28은 격자 밖입니다. 이 검사가 없으면 그쪽 `snapToStep`을 지워도 0 red입니다(실측). */
+  it("연·월을 옮겨 말일로 잘려도 격자 위에 남는다", () => {
+    expect(withUnitValue("2026-01-31", "month", 2, ["year", "month", "day"], { day: 5 })).toBe("2026-02-26");
+  });
+
+  it("step이 없으면 예전 동작 그대로다", () => {
+    expect(withUnitValue("2026-04-10", "day", 31)).toBe("2026-04-30");
+  });
+});
+
+describe("snapToStep — 바닥값 아래로 안 내려간다", () => {
+  /* 🔴 `Math.floor`가 음수 쪽으로 내리므로 `amount < floor`이면 격자점이 바닥값보다
+   * 아래로 나옵니다. 리뷰가 실측으로 잡았습니다: `snapToStep("month", 0, {month:3})`이
+   * **-2**였고 `withUnitValue`가 그걸 직렬화해 **"2026--2-12"**를 냈습니다. */
+  it("월: 바닥값보다 작은 수는 바닥값으로", () => {
+    expect(snapToStep("month", 0, { month: 3 })).toBe(1);
+  });
+
+  it("일: 바닥값보다 작은 수는 바닥값으로", () => {
+    expect(snapToStep("day", 0, { day: 5 })).toBe(1);
+  });
+
+  it("그 결과로 깨진 값 문자열이 안 나온다", () => {
+    expect(withUnitValue("2026-07-12", "month", 0, ["year", "month", "day"], { month: 3 })).toBe("2026-01-12");
+  });
+
+  // 대조군 — 바닥이 0인 열은 원래도 음수가 안 나옵니다.
+  it("초는 바닥이 0이라 그대로", () => {
+    expect(snapToStep("second", 0, { second: 15 })).toBe(0);
+  });
+});
+
+describe("snapValue — 값 전체를 격자로", () => {
+  const DT = ["year", "month", "day", "hour", "minute", "second"] as WheelUnit[];
+
+  it("여러 열을 한꺼번에 내린다", () => {
+    expect(snapValue("2026-08-14T03:47:22", DT, { minute: 15, second: 30 })).toBe("2026-08-14T03:45:00");
+  });
+
+  it("step이 없으면 값을 안 바꾼다", () => {
+    expect(snapValue("2026-08-14T03:47:22", DT)).toBe("2026-08-14T03:47:22");
+  });
+
+  it("fields에 없는 열은 안 본다", () => {
+    expect(snapValue("03:47", ["hour", "minute"], { minute: 15 })).toBe("03:45");
+  });
+
+  it("읽을 수 없는 값은 그대로 돌려준다", () => {
+    expect(snapValue("이건 값이 아님", ["hour", "minute"], { minute: 15 })).toBe("이건 값이 아님");
   });
 });
