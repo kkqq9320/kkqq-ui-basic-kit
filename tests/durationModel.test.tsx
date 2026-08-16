@@ -10,6 +10,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { WheelPicker } from "../src/WheelPicker";
+import { instantModel } from "../src/model/instant";
 import { durationModel, parseDuration, serializeDuration, durationCeiling } from "../src/model/duration";
 import type { WheelUnit } from "../src/model/instant";
 
@@ -125,5 +126,45 @@ describe("계약 — 기계가 기간 모델로도 돈다", () => {
     renderDuration(HM, "0000:00:00:00:30:00");
     fireEvent.click(fieldOf("기간"));
     expect(rowsOf("hour")[0]).toBe("—");
+  });
+});
+
+/* 계약을 고친 뒤 — 찢어짐 셋이 실제로 닫혔는가.
+ *
+ * 🔴 이 세 검사가 이번 라운드의 **결과**입니다. 고치기 전에는 셋 다 반대로 나왔습니다
+ * (하단 버튼이 `["지금","완료"]`, `family`가 `"time"`이라고 거짓말, `hourFromTwelve`가
+ * 안 쓰이는 채로 필수). */
+describe("계약 — 기간이 거짓말하지 않아도 되는가", () => {
+  const renderDuration = (fields: WheelUnit[] = HM) =>
+    render(<WheelPicker model={durationModel} ariaLabel="기간" value="0000:00:00:01:30:00" onChange={() => undefined} fields={fields} />);
+
+  it("씨앗 버튼이 안 그려진다 — 기간에는 '지금'이 없다", () => {
+    renderDuration();
+    fireEvent.click(fieldOf("기간"));
+    expect([...document.querySelectorAll(".wheel-actions button")].map((b) => b.textContent)).toEqual(["완료"]);
+  });
+
+  // 대조군 — 시점은 그대로 뜹니다. 버튼을 없애는 것이 아니라 **모델이 정하게** 한 것입니다.
+  it("시점 모델에서는 씨앗 버튼이 그대로 뜬다", () => {
+    render(<WheelPicker model={instantModel} ariaLabel="날짜" value="2026-08-14" onChange={() => undefined} fields={["year", "month", "day"]} />);
+    fireEvent.click(fieldOf("날짜"));
+    expect([...document.querySelectorAll(".wheel-actions button")].map((b) => b.textContent)).toEqual(["오늘", "완료"]);
+  });
+
+  it("씨앗값은 여전히 답할 수 있다 — 빈 값으로 열면 0", () => {
+    render(<WheelPicker model={durationModel} ariaLabel="기간" value="" onChange={() => undefined} fields={HM} />);
+    fireEvent.click(fieldOf("기간"));
+    // 0에서는 아래 두 칸이 전부 `—`라 인덱스로 짚으면 안 됩니다 — 선택된 행으로 봅니다.
+    expect(document.querySelector('.wheel-column[data-unit="hour"] .wheel-values button.selected')?.textContent).toBe("00");
+  });
+
+  it("hourFromTwelve를 안 내도 된다 — 계약에서 선택이다", () => {
+    expect(durationModel.hourFromTwelve).toBeUndefined();
+    expect(instantModel.hourFromTwelve).toBeTypeOf("function");
+  });
+
+  it("계열을 묻는 멤버가 계약에서 사라졌다", () => {
+    expect("family" in durationModel).toBe(false);
+    expect("family" in instantModel).toBe(false);
   });
 });

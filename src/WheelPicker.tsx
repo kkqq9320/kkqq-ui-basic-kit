@@ -409,7 +409,13 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    * `undefined` 구멍 하나입니다. */
   const meridiemLabels = labels.meridiem ?? DEFAULT_WHEEL_LABELS.meridiem;
   const hourDisplay = useMemo<HourDisplay>(() => ({ format: hourFormat, am: meridiemLabels.am, pm: meridiemLabels.pm }), [hourFormat, meridiemLabels.am, meridiemLabels.pm]);
-  const hasTimeUnit = model.family(fields) !== "date";
+  /* 팝오버 하단의 **씨앗 버튼**. `null`이면 버튼 자체를 안 그립니다 — 기간처럼 "지금"이
+   * 뜻을 갖지 않는 모델이 그렇습니다. **기계는 계열을 묻지 않습니다**: 한동안
+   * `model.family(fields) !== "date"`로 물었는데, 그 값으로 실제로 하던 일은 이 버튼과
+   * 아래 안내 문구의 이름을 고르는 것뿐이었습니다(2026-08-15, 기간 모델을 실제로 만들어
+   * 보고 드러났습니다 — 그때 기간은 `"time"`이라고 거짓말해야 했습니다). */
+  const seedAction = model.seedAction(fields);
+  const hasTimeUnit = seedAction === "now";
   const todayLabel = hasTimeUnit ? labels.now : labels.today;
   // hint의 짝 — todayLabel과 같은 기준(hasTimeUnit)으로 고릅니다(2b-4). `hintNow`는
   // 타입에서 선택이라(위 WheelLabels 주석) `labels.hintNow`가 `undefined`일 수
@@ -785,7 +791,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    * 소비자의 값을 여기서 내리면 `onChange` 없이 화면만 달라져, 트리거가 소비자가 들고
    * 있지 않은 값을 그립니다 — 격자 밖 값을 허용하는 예외(`min`/`max` 끝점)와 같은 결로
    * 그냥 보여 줍니다. 반면 `now()`는 **킷이 지어낸 값**이라 격자 위에 올려야 합니다. */
-  const baseValue = clampToRange(model.isValid(value, fields) ? value : model.snapValue(model.now(timeZone, fields), fields, step));
+  const baseValue = clampToRange(model.isValid(value, fields) ? value : model.snapValue(model.seed(timeZone, fields), fields, step));
 
   // 트리거가 그릴 조각들. null이면 placeholder를 그린다는 뜻입니다.
   //
@@ -1211,7 +1217,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    *  갈라지지 않은 적이 없습니다(`commitAndClose`가 생긴 이유가 그것입니다). */
   function resetColumn(unit: WheelUnit) {
     setTyping(null);
-    const target = model.resetTarget(unit, model.now(timeZone, fields), fields);
+    const target = model.resetTarget(unit, model.seed(timeZone, fields), fields);
     if (target === null) return;
     const from = model.parts(baseValue, fields);
     const next = clampToRange(model.setUnit(baseValue, unit, target, fields, step));
@@ -1262,7 +1268,9 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
   }
 
   function typedHourToValue(unit: WheelUnit, typed: number) {
-    return unit === MERIDIEM_UNIT && meridiem ? model.hourFromTwelve(typed, meridiem) : typed;
+    /* `hourFromTwelve`는 계약에서 **선택**입니다 — 기간에는 오전/오후가 없습니다.
+     * `meridiem`이 `null`이 아닌 모델만 그것을 내므로 둘을 함께 봅니다. */
+    return unit === MERIDIEM_UNIT && meridiem && model.hourFromTwelve ? model.hourFromTwelve(typed, meridiem) : typed;
   }
 
   function markColumnMotion(unit: WheelUnit, amount: number) {
@@ -1467,7 +1475,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
      * `47`을 **타이핑하면 45가 되는데** `지금`을 누르면 03:47이 그대로 남아, 같은 수에
      * 이르는 두 경로가 갈립니다. 격자를 준 소비자는 "이 픽커는 15분 단위만 낸다"고 말한
      * 것이고, 격자 밖이 허용되는 예외는 `min`/`max` 끝점 하나뿐입니다. */
-    const next = clampToRange(model.snapValue(model.now(timeZone, fields), fields, step));
+    const next = clampToRange(model.snapValue(model.seed(timeZone, fields), fields, step));
     // 값 분해는 모델이 합니다(설계 스펙 §12, 2b-2) — 예전에는 `value.split("-")`와
     // 고정 인덱스 표(`{year:0,month:1,day:2,hour:3,minute:4,second:5}`)로 **위치만**
     // 보고 셌는데, 그 표는 값이 늘 "YYYY-MM-DD" 세 자리일 때만 맞습니다. 값에 시각이
@@ -2273,7 +2281,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
           이 버튼들은 그 단축키의 동등물이므로(title에 단축키를 적어 뒀다), 버퍼를 안 지우면
           같은 뜻의 단축키와 버튼이 다르게 굴며, 남은 버퍼가 이 버튼이 방금 설정한 값을
           나중에(예: 다음 Tab) 도로 덮어쓸 수 있다. */}
-      <div className="wheel-actions"><button type="button" tabIndex={-1} title={`${todayLabel} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" {...tapActivation(() => { setTyping(null); commitToday(); })}>{todayLabel}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" {...tapActivation(() => { setTyping(null); clearedRef.current = true; if (value) pushUndo(value); onChange(""); })}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" aria-keyshortcuts="Enter Control+S Meta+S" {...tapActivation(commitAndClose)}>{labels.done}</button></div>
+      <div className="wheel-actions">{seedAction && <button type="button" tabIndex={-1} title={`${todayLabel} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" {...tapActivation(() => { setTyping(null); commitToday(); })}>{todayLabel}</button>}{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" {...tapActivation(() => { setTyping(null); clearedRef.current = true; if (value) pushUndo(value); onChange(""); })}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" aria-keyshortcuts="Enter Control+S Meta+S" {...tapActivation(commitAndClose)}>{labels.done}</button></div>
     </div>, document.body)}
   </div>;
 }
