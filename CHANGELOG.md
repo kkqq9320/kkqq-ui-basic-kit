@@ -15,10 +15,48 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.8.0
 
 ## 미출시
 
-**날짜 피커에 열마다의 격자(`step`)** — 휠 피커 시간 확장 5단계 중 **4단계**(설계 스펙
+**휠 피커에 열마다의 격자(`step`)** — 휠 피커 시간 확장 5단계 중 **4단계**(설계 스펙
 `docs/design/2026-08-12-wheel-picker-time-design.md` §8). **순수 추가입니다** — `step`을
 안 넘기면 지금까지와 글자 하나 안 바뀝니다(기존 검사 1345개가 그대로 초록).
 
+**휠 피커 5단계 — 이름 정리와 `TimeWheelPicker`.** 이 컨트롤은 `v0.8.0`부터 시·분·초를
+다루는데 클래스·파일·컴포넌트 이름만 "date"에 남아 있었습니다. **기능은 하나도 안
+늘어납니다** — `<DateWheelPicker fields={["hour","minute"]}>`로 이미 되던 일에 정직한
+이름을 주는 것입니다.
+
+### 🔴 깨지는 것 — 셋
+
+1. **CSS 클래스 `.date-wheel-*` → `.wheel-*`** (30종, 481건). 앱 CSS에서 킷 내부를
+   겨냥하던 곳은 고쳐야 합니다.
+2. **`css/date-picker.css` → `css/wheel-picker.css`.** `css/index.css` 한 줄로 쓰는
+   쪽은 영향 없고, **개별 import 하던 소비자만** 경로를 고칩니다. 옛 이름을
+   `@import` 한 줄로 남기지 않은 이유는 같은 일을 하는 이름이 둘이 되기 때문입니다.
+3. **공개 타입 이름 셋** — `DateWheelLabels` → `WheelLabels`,
+   `DEFAULT_DATE_WHEEL_LABELS` → `DEFAULT_WHEEL_LABELS`,
+   `DateWheelPickerProps` → `WheelPickerProps`. `DateWheelUnit`은 `WheelUnit`의
+   별칭이었을 뿐이라 **없앴습니다**(`WheelUnit`을 쓰세요).
+   측정: 소비자 사용 **0곳**(`budget`은 `labels=`를 한 건도 안 넘기고 `homa_gwangju`는
+   이 컴포넌트를 안 씁니다).
+
+### 더해진 것 (5단계)
+
+- **`TimeWheelPicker`** — 시각 쪽 구간의 래퍼. 기본 `fields`는 시·분이고
+  `["hour","minute","second"]`로 초를 켭니다(네이티브 `<input type="time">`과 같은 기본).
+- **`DateWheelPicker`는 그대로 남습니다** — 이제 **래퍼**이고, 기본 `fields`는 연·월·일.
+  **소비자의 import는 한 글자도 안 바뀝니다**(배럴 하나라 이름만 늘어납니다).
+- 🔴 **두 래퍼가 구간을 나눠 갖습니다** — 이쪽은 날짜 쪽에서 시작하는 구간, 저쪽은 시각
+  쪽에서 시작하는 구간. 겹치는 조합이 없어 **같은 일을 하는 방법이 둘 생기지 않습니다.**
+  반대쪽 구간을 주면 개발 모드에서 경고합니다(던지지 않습니다).
+
+### 바뀐 것 (5단계)
+
+- **기계가 `src/WheelPicker.tsx`로 옮겨졌고 `WheelPicker`가 됐습니다.** 배럴에서
+  **일부러 안 내보냅니다** — 기계를 직접 쓸 수 있으면 위의 구간 분할이 무의미해집니다.
+  `exports["./src/*"]`로 `src/DateWheelPicker`를 직접 import 하던 곳은 그대로 됩니다
+  (그 경로에 이제 래퍼가 있고, 옛 이름들을 다시 내보냅니다).
+- 기계의 `fields`는 **필수**가 됐습니다. 기본값을 아는 것은 래퍼의 일입니다.
+
+---
 ### 더해진 것
 
 - **`step?: Partial<Record<WheelUnit, number>>`** — `step={{ minute: 15 }}`처럼 필요한

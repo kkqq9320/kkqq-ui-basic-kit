@@ -1,13 +1,13 @@
 /* 데모 페이지 전용 스타일. 디자인 시스템의 일부가 아닙니다. */
 
 /* 6열 두 줄 접기 실험 — 설계 스펙 §16 미결 1번, 실기기에서만 판단됩니다(2b-4).
- * 한 줄 유지가 킷의 기본이고(css/date-picker.css의 `[data-fields="6"]`), 이 규칙은
+ * 한 줄 유지가 킷의 기본이고(css/wheel-picker.css의 `[data-fields="6"]`), 이 규칙은
  * 그것을 **데모에서만** 3열×2줄(날짜 줄 / 시각 줄)로 접어 오너가 폰에서 두 모양을
  * 나란히 비교할 수 있게 합니다.
  *
  * `DateWheelPicker`의 팝오버는 `document.body`에 직접 포털되므로 어떤 데모
  * 래퍼로도 감쌀 수 없습니다(포털은 React 트리가 아니라 실제 DOM 트리 기준으로
- * 조상을 끊습니다) — 그래서 두 조건을 함께 겁니다: `body.date-wheel-fold-demo`는
+ * 조상을 끊습니다) — 그래서 두 조건을 함께 겁니다: `body.wheel-fold-demo`는
  * `main.tsx`의 토글 버튼이 붙였다 뗍니다, `[aria-label="…"]`는 이 컴포넌트가 항상
  * 노출하는 유일한 인스턴스별 식별자입니다(`popoverId`는 `useId()` 기반이라 예측할
  * 수 없습니다). 데모에 이 aria-label을 가진 픽커가 정확히 하나뿐이므로 이 결합이
@@ -20,7 +20,7 @@
  * 그냥 접히지 않습니다** — 토글 버튼 라벨은 여전히 "두 줄로 접음"으로 바뀌므로
  * 오너가 상태 변화 없이 문구만 바뀐 것을 보고 "두 모양이 똑같다"고 잘못 판단할
  * 수 있습니다. 이 픽커의 `ariaLabel`을 바꾸면 이 줄의 문자열도 같이 바꾸세요. */
-body.date-wheel-fold-demo .date-wheel-popover[aria-label="초까지 예약 시각 선택"] .date-wheel-columns[data-fields="6"] {
+body.wheel-fold-demo .wheel-popover[aria-label="초까지 예약 시각 선택"] .wheel-columns[data-fields="6"] {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 /* `.demo-grid`는 킷의 `FieldGrid`(css/page.css의 `.field-grid`)로 옮겨갔습니다 —
@@ -132,8 +132,8 @@ body.date-wheel-fold-demo .date-wheel-popover[aria-label="초까지 예약 시�
 /* 오너 리포트 6번 — "휠 위아래로 보이는 숫자가 2개씩인데 1개씩만 보이게 해볼 수 있어?
  * 실제로 올려보고 결정하고 싶어" (2026-08-13).
  *
- * 킷 CSS가 토큰 둘로 묶어 뒀으므로(`css/date-picker.css`의 `--date-wheel-rows-h` /
- * `--date-wheel-rest`) 여기서 그 둘만 덮어씁니다. **팝오버는 body 포털이라** 데모의
+ * 킷 CSS가 토큰 둘로 묶어 뒀으므로(`css/wheel-picker.css`의 `--wheel-rows-h` /
+ * `--wheel-rest`) 여기서 그 둘만 덮어씁니다. **팝오버는 body 포털이라** 데모의
  * 어떤 래퍼로도 스코프가 안 잡혀서 body 클래스로 겁니다 — 6열 접기 토글과 같은 방식입니다.
  *
  * 3행(위아래 1개씩) = 90px, 정지 −60px. 선택 행이 창 한가운데 오는 값입니다.

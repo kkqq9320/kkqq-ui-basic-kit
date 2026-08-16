@@ -4,7 +4,7 @@ React + 순수 CSS로 짠 컴포넌트 모음입니다.
 빌드 단계도, 런타임 의존성도 없습니다. 소스를 그대로 내보냅니다.
 
 - 드롭다운 (`Select`)
-- 휠 날짜 피커 (`DateWheelPicker`)
+- 휠 피커 (`DateWheelPicker` · `TimeWheelPicker`) — 같은 기계를 쓰고 구간만 나눠 갖습니다
 - 접이식 사이드바 + 앱 셸 + 모바일 빠른 바 (`Sidebar`, `AppShell`, `MobileQuickBar`)
 - 모달 다이얼로그 (`Dialog`, `DialogHeading`, `DialogActions`)
 - 섹션 탭 (`SectionTabs`)
@@ -137,7 +137,7 @@ Next.js App Router처럼 마운트 지점을 직접 정할 수 없는 환경이�
 `css/index.css` 대신 필요한 파일만 import 해도 됩니다. 단:
 
 - `tokens.css`는 **항상 먼저** 와야 합니다.
-- `select.css`와 `date-picker.css`는 `surfaces.css`를 필요로 합니다.
+- `select.css`와 `wheel-picker.css`는 `surfaces.css`를 필요로 합니다.
 - `tabs.css`의 모바일 배치는 `page.css`의 `.workspace`(`position: relative`)를
   부모로 가정합니다.
 
@@ -156,7 +156,7 @@ import "kkqq-ui-basic-kit/css/surfaces.css";  // select·date-picker가 이걸 �
 import "kkqq-ui-basic-kit/css/controls.css";
 import "kkqq-ui-basic-kit/css/dialog.css";
 import "kkqq-ui-basic-kit/css/select.css";
-import "kkqq-ui-basic-kit/css/date-picker.css";
+import "kkqq-ui-basic-kit/css/wheel-picker.css";
 import "kkqq-ui-basic-kit/css/tabs.css";
 import "kkqq-ui-basic-kit/css/sidebar.css";
 import "kkqq-ui-basic-kit/css/page.css";
@@ -207,7 +207,7 @@ wght 700 : 숫자 1341 · U+2012 1341  (±0)
 wght 930 : 숫자 1404 · U+2012 1404  (±0)
 ```
 
-`.date-wheel-segment`가 거는 `font-variant-numeric: tabular-nums`는 OpenType `tnum`으로
+`.wheel-segment`가 거는 `font-variant-numeric: tabular-nums`는 OpenType `tnum`으로
 매핑되고 **`tnum`은 숫자 글리프에만** 적용됩니다 — 즉 저 등폭은 CSS가 보장하는 것이
 아니라 **그 폰트의 성질**입니다. 바꿔 넣은 폰트가 (a) U+2012을 cmap에 갖고 있지 않으면
 그 한 글자만 폴백 폰트로 새고, (b) 갖고 있어도 폭이 다르면 어긋납니다.
@@ -273,7 +273,19 @@ wght 930 : 숫자 1404 · U+2012 1404  (±0)
 <Sidebar slot={<Select ariaLabel="작업 공간" value={ws} options={list} onChange={setWs} portal />} ... />
 ```
 
-### DateWheelPicker
+### DateWheelPicker · TimeWheelPicker
+
+둘은 **같은 기계를 쓰는 래퍼**이고 다른 것은 두 가지뿐입니다 — 기본 `fields`와
+허용 구간. `DateWheelPicker`는 **날짜 쪽에서 시작하는** 구간(기본 연·월·일,
+`["year","month","day","hour","minute"]`처럼 시각을 뒤에 붙일 수 있습니다),
+`TimeWheelPicker`는 **시각 쪽에서 시작하는** 구간(기본 시·분)입니다. 겹치는 조합이
+없어서 같은 일을 하는 방법이 둘 생기지 않습니다 — 반대쪽 구간을 주면 개발 모드에서
+경고합니다(던지지는 않습니다).
+
+```tsx
+<TimeWheelPicker ariaLabel="예약 시각" value={time} onChange={setTime} />
+<TimeWheelPicker ariaLabel="알람" value={alarm} onChange={setAlarm} step={{ minute: 15 }} />
+```
 
 ```tsx
 <DateWheelPicker

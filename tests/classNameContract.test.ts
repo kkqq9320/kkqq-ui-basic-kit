@@ -102,8 +102,36 @@ describe("내보내는 컴포넌트는 전부 className을 받는다", () => {
 
   /* **exhaustive 형태입니다** — 빠진 것을 전부 나열해 비교합니다. `every(...)`로 쓰면
    * 실패가 "false"라고만 말하고 어느 컴포넌트인지는 안 알려줍니다. */
+  /* **래퍼는 rest 스프레드로 계약을 물려받습니다.** DateWheelPicker·TimeWheelPicker는
+   * 자기 DOM을 하나도 안 그리고 기계(WheelPicker)에 rest를 통째로 넘깁니다 — 거기에
+   * className을 손으로 다시 적으면 그 자체가 중복이고, 한 글자 빠뜨리면 조용히 안
+   * 붙습니다. 그래서 "이름을 적었는가"가 아니라 **"통째로 넘기는가"**를 봅니다.
+   *
+   * 판정은 셋이 다 참일 때입니다: 시그니처에 rest 파라미터가 있고, 본문이 그것을 펼치고,
+   * **자기 DOM 태그가 하나도 없다**(=붙일 자리가 자기한테 없으니 넘기는 것 말고 할 일이
+   * 없습니다). 소문자 태그를 그리면서 rest만 펼치는 컴포넌트는 해당 없습니다 — 그때는
+   * className을 직접 받아 자기 것과 **합쳐야** 하고, 그냥 펼치면 앱이 준 값이 킷의
+   * 클래스를 덮습니다. */
+  function inheritsByForwarding(component: { name: string; path: string; signature: string }) {
+    const rest = /\.\.\.(\w+)/.exec(component.signature);
+    if (!rest) return false;
+    const body = componentBody(sources[`../src/${component.path}`], component.name);
+    if (!body || OWN_DOM_TAG.test(body)) return false;
+    return body.includes(`{...${rest[1]}}`);
+  }
+
+  /* 전제 — 이 완화가 **누구에게** 적용되는지 못 박습니다. 0건이면 위 함수가 아무 일도 안
+   * 하고 있다는 뜻이고, 그러면 아래 검사는 완화 없이 통과한 것이라 이 완화가 공허합니다. */
+  it("rest로 물려받는 래퍼가 실제로 있다", () => {
+    const forwarding = components.filter(inheritsByForwarding).map((component) => component.name).sort();
+    expect(forwarding).toEqual(["DateWheelPicker", "TimeWheelPicker"]);
+  });
+
   it("빠진 컴포넌트가 없다", () => {
-    const missing = components.filter((component) => !component.signature.includes("className") && !NO_OWN_DOM.has(component.name));
+    const missing = components.filter((component) =>
+      !component.signature.includes("className")
+      && !NO_OWN_DOM.has(component.name)
+      && !inheritsByForwarding(component));
     expect(missing.map((component) => `${component.name} (${component.path})`)).toEqual([]);
   });
 

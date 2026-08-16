@@ -524,7 +524,7 @@ describe("Select", () => {
     });
 
     // 킷의 다른 컨트롤은 전부 hover/focus-visible 짝을 갖는데(page.css, sidebar.css,
-    // theme-editor.css, date-picker.css) Select 트리거만 빠져 있어서, 데스크톱에서
+    // theme-editor.css, wheel-picker.css) Select 트리거만 빠져 있어서, 데스크톱에서
     // 드롭다운만 마우스를 올려도 아무 반응이 없었다. 날짜 필드와 **같은 값**인지까지
     // 본다 — 둘은 같은 41px 티어의 팝오버 트리거라 갈라지면 그게 결함이다.
     it("트리거가 hover·focus·열림에 반응한다 — 날짜 필드와 같은 값으로", () => {

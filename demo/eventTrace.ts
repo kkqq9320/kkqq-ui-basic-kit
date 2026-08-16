@@ -591,7 +591,7 @@ type SwipeSample = { off: string; drag: boolean; mv: string; anim: number; trans
 let swipeStop: (() => void) | null = null;
 
 function readValuesEl(column: Element): HTMLElement | null {
-  return column.querySelector<HTMLElement>(".date-wheel-values");
+  return column.querySelector<HTMLElement>(".wheel-values");
 }
 
 function sampleSwipe(column: Element, values: HTMLElement, generation: number): SwipeSample {
@@ -608,7 +608,7 @@ function sampleSwipe(column: Element, values: HTMLElement, generation: number): 
   }
   const cls = column.classList;
   return {
-    off: getComputedStyle(values).getPropertyValue("--date-wheel-drag-offset").trim() || "0px",
+    off: getComputedStyle(values).getPropertyValue("--wheel-drag-offset").trim() || "0px",
     drag: cls.contains("dragging"),
     mv: cls.contains("moving-next") ? "next" : cls.contains("moving-previous") ? "prev" : "-",
     anim, trans, at, gen: generation,
@@ -688,7 +688,7 @@ function startSwipeTrace(column: Element) {
  * 그래서 **버튼이 그 사이에 움직였는지**와 **팝오버가 스크롤됐는지**를 함께 남깁니다 —
  * 손가락 아래에서 요소가 움직이면 브라우저가 click을 안 만듭니다.
  *
- * ⚠️ 휠 행(`.date-wheel-values button`)은 대상이 아닙니다. 그건 스와이프 경로라
+ * ⚠️ 휠 행(`.wheel-values button`)은 대상이 아닙니다. 그건 스와이프 경로라
  * 이미 swipe 트레이스가 봅니다. 여기가 보는 것은 **팝오버의 버튼 줄**입니다. */
 /* 🔴 **탭마다 독립된 감시자를 둡니다 — 슬롯 하나로 두면 안 됩니다.**
  * 리포트된 제스처가 바로 **"첫 탭이 안 먹고 두 번째에 된다"**입니다. 슬롯이 하나면
@@ -697,7 +697,7 @@ function startSwipeTrace(column: Element) {
  * 계측기가 재려는 사건을 스스로 지우는 자리라, 슬롯을 없애고 각자 정리하게 둡니다. */
 function startTapTrace(button: Element, x: number, y: number) {
   const started = performance.now();
-  const popover = button.closest(".date-wheel-popover");
+  const popover = button.closest(".wheel-popover");
   const startTop = popover instanceof HTMLElement ? popover.scrollTop : -1;
   const startRect = button.getBoundingClientRect();
   /* 🔴 **매 프레임 재야 합니다 — 시작과 끝만 재면 "움직였다 돌아온" 것이 안 보입니다.**
@@ -737,9 +737,9 @@ function startTapTrace(button: Element, x: number, y: number) {
   };
   raf = requestAnimationFrame(sample);
   const label = (button.textContent ?? "").trim().slice(0, 12);
-  const where = button.closest(".date-wheel-actions") ? "액션줄"
-    : button.closest(".date-wheel-meridiem") ? "오전오후"
-    : button.classList.contains("date-wheel-step") ? "±버튼" : "기타";
+  const where = button.closest(".wheel-actions") ? "액션줄"
+    : button.closest(".wheel-meridiem") ? "오전오후"
+    : button.classList.contains("wheel-step") ? "±버튼" : "기타";
   let sawClick = false;
   let sawMouseDown = false;
   let mouseDownBlocked = false;
@@ -778,7 +778,7 @@ function startTapTrace(button: Element, x: number, y: number) {
 
 /* ── 오너 리포트 1번 전용 프로브: "모바일에서 휠 애니메이션이 버벅인다" ──────────
  *
- * 휠 이동은 CSS 애니메이션(`date-wheel-slide-*` 210ms)이라 스와이프 트레이스가 안 봅니다
+ * 휠 이동은 CSS 애니메이션(`wheel-slide-*` 210ms)이라 스와이프 트레이스가 안 봅니다
  * (그쪽은 손가락이 닿아 있는 동안만 돕니다). 여기서는 **애니메이션이 시작되는 순간**
  * 프레임 샘플링을 켜고, 끝나면 숫자로 판정합니다.
  *
@@ -904,11 +904,11 @@ export function installEventTrace() {
       append(`${type.padEnd(11)} target=${describeTarget(event.target)}  menu=${menuPresent()}`);
       // 날짜 열 위에서 시작한 포인터만 프레임 트레이스를 켠다. 뗄 때(또는 취소될 때) 끈다.
       if (type === "pointerdown" && event.target instanceof Element) {
-        const column = event.target.closest(".date-wheel-column");
+        const column = event.target.closest(".wheel-column");
         if (column) startSwipeTrace(column);
         // 팝오버 안의 **버튼 줄**을 눌렀을 때만 — 휠 행은 위 swipe 트레이스 담당입니다.
         const button = event.target.closest("button");
-        if (button && button.closest(".date-wheel-popover") && !button.closest(".date-wheel-values")) {
+        if (button && button.closest(".wheel-popover") && !button.closest(".wheel-values")) {
           const point = event as PointerEvent;
           startTapTrace(button, point.clientX ?? 0, point.clientY ?? 0);
         }
@@ -929,11 +929,11 @@ export function installEventTrace() {
 
   /* 휠 이동 애니메이션이 시작되는 순간 프레임 샘플링을 켭니다(오너 리포트 1번).
    * `animationstart`는 버블하므로 document에서 한 번만 받으면 됩니다. 이름으로 걸러
-   * 진입(`date-wheel-enter`)과 선택 팝(`date-wheel-selected-pop`)은 빼고 **이동만** 봅니다. */
+   * 진입(`wheel-enter`)과 선택 팝(`wheel-selected-pop`)은 빼고 **이동만** 봅니다. */
   document.addEventListener("animationstart", (event) => {
     if (!(event instanceof AnimationEvent)) return;
-    if (event.animationName !== "date-wheel-slide-next" && event.animationName !== "date-wheel-slide-previous") return;
-    startSlideTrace(document.querySelectorAll(".date-wheel-column").length);
+    if (event.animationName !== "wheel-slide-next" && event.animationName !== "wheel-slide-previous") return;
+    startSlideTrace(document.querySelectorAll(".wheel-column").length);
   }, { capture: true, passive: true });
 
   window.addEventListener("popstate", () => {

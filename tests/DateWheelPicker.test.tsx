@@ -8,11 +8,12 @@ import { act, cleanup, createEvent, fireEvent, render, screen, waitFor } from "@
 import { useEffect, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DateWheelPicker, DEFAULT_DATE_WHEEL_LABELS, type DateWheelLabels, type DateWheelUnit } from "../src/DateWheelPicker";
+import { DateWheelPicker } from "../src/DateWheelPicker";
+import { DEFAULT_WHEEL_LABELS, type WheelLabels } from "../src/WheelPicker";
 import { instantModel, type WheelUnit } from "../src/model/instant";
 import { setHourFormat, getWheelRowsPerSide, setWheelRowsPerSide } from "../src/settings";
 import { Dialog } from "../src/Dialog";
-import datePickerCssSource from "../css/date-picker.css?raw";
+import wheelPickerCssSource from "../css/wheel-picker.css?raw";
 import tokensCssSource from "../css/tokens.css?raw";
 
 // vi.restoreAllMocks()가 필요합니다 — "지금 버튼이 시각을 가진 값에서도 열 모션을
@@ -32,7 +33,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); setHourFo
  * 문자다 — 이 폰트에서 U+2012는 `wght` 축 전 구간에서 tabular 숫자와 어드밴스가 정확히
  * 같고(1132·1258·1341·1404), 밑줄은 16~20% 좁다.
  *
- * 소스의 `DATE_WHEEL_FILL`을 import하지 않고 **따로** 선언한다 — 같은 상수를 공유하면
+ * 소스의 `WHEEL_FILL`을 import하지 않고 **따로** 선언한다 — 같은 상수를 공유하면
  * 소스가 밑줄로 되돌아갈 때 테스트가 같이 따라가 아무것도 못 잡는다.
  */
 const FILL = "\u2012";
@@ -60,7 +61,7 @@ const FILL = "\u2012";
  * 통째로 틀렸다. 인덱스를 하나씩 고쳐 두면 설정을 바꿀 때마다 또 틀린다 —
  * `.selected`에서 세면 행 수와 무관하게 같은 행을 가리킨다. */
 function rowAt(column: Element, offset: number) {
-  const rows = [...column.querySelectorAll(".date-wheel-values button")];
+  const rows = [...column.querySelectorAll(".wheel-values button")];
   const centre = rows.findIndex((row) => row.classList.contains("selected"));
   expect(centre).toBeGreaterThan(-1);
   return rows[centre + offset] as HTMLElement;
@@ -72,10 +73,10 @@ function fieldOf(name: string) {
 
 /** 지금 활성인 세그먼트의 unit. 없으면 null.
  *  `.active` 클래스는 포커스와 무관하게 붙는다 — 포커스에 따라 감추는 일은 CSS가 한다
- *  (css/date-picker.css의 `.date-wheel-trigger:focus-within …`). 그래서 이 헬퍼는
+ *  (css/wheel-picker.css의 `.wheel-trigger:focus-within …`). 그래서 이 헬퍼는
  *  "화면에 보이는가"가 아니라 "컴포넌트가 어느 세그먼트를 활성으로 보고 있는가"를 읽는다. */
 function activeSegment(): string | null {
-  return document.querySelector(".date-wheel-segment.active")?.getAttribute("data-unit") ?? null;
+  return document.querySelector(".wheel-segment.active")?.getAttribute("data-unit") ?? null;
 }
 
 /**
@@ -110,7 +111,7 @@ function ControlledDateWheel({ initialValue, allowClear }: { initialValue: strin
 // 리뷰 Finding 1 — 소비자가 런타임에 fields를 바꿀 수 있다(일간/월간 토글 등).
 // 팝오버가 열린 채로 열이 하나 사라지는 상황을 만드는 헬퍼다.
 function DateWheelFieldsShrink() {
-  const [fields, setFields] = useState<DateWheelUnit[]>(["year", "month", "day"]);
+  const [fields, setFields] = useState<WheelUnit[]>(["year", "month", "day"]);
   return <>
     <button type="button" onClick={() => setFields(["year", "month"])}>일 열 제거</button>
     <DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} fields={fields} />
@@ -148,7 +149,7 @@ describe("DateWheelPicker", () => {
     vi.setSystemTime(new Date(2026, 6, 12, 12));   // 2026-07-12
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2024-07-05" onChange={() => undefined} />);
     fireEvent.click(fieldOf("거래 날짜"));
-    const columns = [...document.querySelectorAll(".date-wheel-column")];
+    const columns = [...document.querySelectorAll(".wheel-column")];
 
     fireEvent.click(screen.getByRole("button", { name: "오늘" }));
 
@@ -162,7 +163,7 @@ describe("DateWheelPicker", () => {
     vi.setSystemTime(new Date(2026, 6, 12, 12));
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2028-09-30" onChange={() => undefined} />);
     fireEvent.click(fieldOf("거래 날짜"));
-    const columns = [...document.querySelectorAll(".date-wheel-column")];
+    const columns = [...document.querySelectorAll(".wheel-column")];
 
     fireEvent.click(screen.getByRole("button", { name: "오늘" }));
 
@@ -177,7 +178,7 @@ describe("DateWheelPicker", () => {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2024-07-05" onChange={() => undefined} />);
     const field = fieldOf("거래 날짜");
     fireEvent.click(field);
-    const columns = [...document.querySelectorAll(".date-wheel-column")];
+    const columns = [...document.querySelectorAll(".wheel-column")];
 
     fireEvent.keyDown(field, { code: "Semicolon", ctrlKey: true });
 
@@ -214,7 +215,7 @@ describe("DateWheelPicker", () => {
 
     render(<DateWheelPicker ariaLabel="거래 날짜" value="" fields={["year", "month", "day", "hour"]} onChange={() => undefined} />);
     fireEvent.click(fieldOf("거래 날짜"));
-    const columns = [...document.querySelectorAll(".date-wheel-column")];
+    const columns = [...document.querySelectorAll(".wheel-column")];
 
     mockedNow = "2026-07-12T04:00";
     // Task 3(2b-3)에서 "오늘" → "지금"으로 바뀌었다 — fields에 시간 열(hour)이
@@ -223,7 +224,7 @@ describe("DateWheelPicker", () => {
     fireEvent.click(screen.getByRole("button", { name: "지금" }));
 
     // 연 2024->2026(앞으로), 월 07->07(그대로), 일 05->12(앞으로). 시각 열(hour)은
-    // Task 3부터 실제로 그려지지만(4번째 .date-wheel-column), 이 검사가 보는 것은
+    // Task 3부터 실제로 그려지지만(4번째 .wheel-column), 이 검사가 보는 것은
     // 여전히 처음 세 열의 모션뿐이다 — 그 열의 실제 라벨은 아래 "열 라벨" 블록이 고정한다.
     expect(columns.slice(0, 3).map((column) => /moving-\w+/.exec(column.className)?.[0] ?? null)).toEqual(["moving-next", null, "moving-next"]);
 
@@ -236,21 +237,21 @@ describe("DateWheelPicker", () => {
 
     fireEvent.click(fieldOf("거래 날짜"));
     // 행 수는 이제 전역 설정에서 나온다: 보이는 2n+1 + 프리로드 둘 = 2n+3(기본 n=1 → 5).
-    expect(screen.getByRole("group", { name: "연도 2026" }).querySelectorAll(".date-wheel-values button")).toHaveLength(2 * getWheelRowsPerSide() + 3);
+    expect(screen.getByRole("group", { name: "연도 2026" }).querySelectorAll(".wheel-values button")).toHaveLength(2 * getWheelRowsPerSide() + 3);
 
     const yearPrevious = screen.getByRole("button", { name: "연도 이전" });
     fireEvent.pointerDown(yearPrevious, { pointerId: 1, clientY: 10 });
     fireEvent.pointerUp(yearPrevious, { pointerId: 1, clientY: 10 });
     fireEvent.click(yearPrevious);
     expect(onChange).toHaveBeenLastCalledWith("2025-07-12");
-    expect(yearPrevious.closest(".date-wheel-column")?.classList.contains("moving-previous")).toBe(true);
+    expect(yearPrevious.closest(".wheel-column")?.classList.contains("moving-previous")).toBe(true);
 
     const monthNext = screen.getByRole("button", { name: "월 다음" });
     fireEvent.pointerDown(monthNext, { pointerId: 2, clientY: 10 });
     fireEvent.pointerUp(monthNext, { pointerId: 2, clientY: 10 });
     fireEvent.click(monthNext);
     expect(onChange).toHaveBeenLastCalledWith("2026-08-12");
-    expect(monthNext.closest(".date-wheel-column")?.classList.contains("moving-next")).toBe(true);
+    expect(monthNext.closest(".wheel-column")?.classList.contains("moving-next")).toBe(true);
 
     const dayNext = screen.getByRole("button", { name: "일 다음" });
     fireEvent.pointerDown(dayNext, { pointerId: 3, clientY: 10 });
@@ -334,7 +335,7 @@ describe("DateWheelPicker", () => {
     expect(screen.queryByRole("button", { name: /오늘로 설정/ })).toBeNull();
     expect(screen.getAllByRole("button")).toHaveLength(1);   // 트리거 하나뿐
     // 아이콘은 트리거 버튼 안에 있어야 한다 — 클릭 타깃이 하나, 죽은 영역이 없다.
-    const icon = trigger.querySelector(".date-wheel-trigger-icon");
+    const icon = trigger.querySelector(".wheel-trigger-icon");
     expect(icon).not.toBeNull();
     expect(icon?.getAttribute("aria-hidden")).toBe("true");
   });
@@ -393,7 +394,7 @@ describe("DateWheelPicker year-month mode (fields)", () => {
     expect(screen.getByRole("group", { name: "연도 2026" })).toBeTruthy();
     expect(screen.getByRole("group", { name: "월 07" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "일 다음" })).toBeNull();   // 일 열이 아예 없음
-    const columns = screen.getByRole("dialog", { name: "예산 월 선택" }).querySelector(".date-wheel-columns");
+    const columns = screen.getByRole("dialog", { name: "예산 월 선택" }).querySelector(".wheel-columns");
     expect(columns?.getAttribute("data-fields")).toBe("2");
   });
 
@@ -486,7 +487,7 @@ describe("DateWheelPicker year-month mode (fields)", () => {
     expect(screen.getByRole("group", { name: "연도 2026" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "월 다음" })).toBeNull();   // 월 열 없음
     expect(screen.queryByRole("button", { name: "일 다음" })).toBeNull();   // 일 열 없음
-    const columns = screen.getByRole("dialog", { name: "회계 연도 선택" }).querySelector(".date-wheel-columns");
+    const columns = screen.getByRole("dialog", { name: "회계 연도 선택" }).querySelector(".wheel-columns");
     expect(columns?.getAttribute("data-fields")).toBe("1");
   });
 
@@ -504,22 +505,22 @@ describe("DateWheelPicker year-month mode (fields)", () => {
     // 자기 링을 그 안에 하나 더 그려 두 겹이 된다 — Tab으로 옮겨 다닐 때 드롭다운은
     // 강조색 링 하나, 날짜만 링 두 개가 나왔다. 실기기 관측: "하얀색 링이 보여".
     it("트리거 버튼의 기본 포커스 아웃라인을 끈다 — 링은 shell이 그린다", () => {
-      expect(datePickerCssSource.length).toBeGreaterThan(500);
+      expect(wheelPickerCssSource.length).toBeGreaterThan(500);
       // shell이 실제로 링을 그리고 있어야 이 규칙이 정당하다 — 둘을 함께 본다.
       // `[^)]*`를 쓰면 안 된다 — 선택자 안의 `:not(:disabled)`가 먼저 `)`로 끝나서
       // `:focus-visible`까지 못 간다. 실제로 그렇게 썼다가 베이스라인에서 걸렸다.
-      expect(datePickerCssSource).toMatch(/\.date-wheel-trigger-shell:has\([^{]*:focus-visible[^{]*\{[^}]*outline:\s*var\(--focus-ring\)/);
-      const suppressRule = datePickerCssSource.match(/\.date-wheel-trigger:focus-visible[^{]*\{[^}]*\}/);
+      expect(wheelPickerCssSource).toMatch(/\.wheel-trigger-shell:has\([^{]*:focus-visible[^{]*\{[^}]*outline:\s*var\(--focus-ring\)/);
+      const suppressRule = wheelPickerCssSource.match(/\.wheel-trigger:focus-visible[^{]*\{[^}]*\}/);
       expect(suppressRule).not.toBeNull();
       expect(suppressRule![0]).toMatch(/outline:\s*none/);
-      // (`.date-wheel-today:focus-visible` 단언은 삭제 — 그 버튼이 없어졌다)
+      // (`.wheel-today:focus-visible` 단언은 삭제 — 그 버튼이 없어졌다)
     });
 
     // :hover는 비활성 요소에도 매칭되므로, 빼지 않으면 흐려진 필드가 마우스만 올려도
     // 강조 테두리로 살아난다.
     it("비활성 필드가 hover에 살아나지 않는다", () => {
-      expect(datePickerCssSource).toMatch(/\.date-wheel-trigger-shell:has\(:hover:not\(:disabled\)/);
-      expect(datePickerCssSource).toMatch(/\.date-wheel-trigger-shell:has\(\.date-wheel-trigger:disabled\)\s*\{[^}]*opacity:\s*\.55/);
+      expect(wheelPickerCssSource).toMatch(/\.wheel-trigger-shell:has\(:hover:not\(:disabled\)/);
+      expect(wheelPickerCssSource).toMatch(/\.wheel-trigger-shell:has\(\.wheel-trigger:disabled\)\s*\{[^}]*opacity:\s*\.55/);
     });
   });
 });
@@ -602,7 +603,7 @@ describe("DateWheelPicker 스와이프", () => {
   // 오너 실기기 트레이스(2026-08-10, 178프레임/커밋 7회)가 그 싸움을 잡았다: 커밋 직후
   // delta가 0~2px이 되는 프레임에 `.dragging`이 빠지고(`Math.abs(offset) > 2`),
   // 그 한 프레임에 `.dragging { animation: none !important }`가 사라져 방금 리마운트된
-  // 컨테이너에서 슬라이드가 **시작**된다. `@keyframes date-wheel-slide-previous`의
+  // 컨테이너에서 슬라이드가 **시작**된다. `@keyframes wheel-slide-previous`의
   // `from`이 `translateY(-45px) scale(.975) opacity:.58`이고 애니메이션은 저자
   // 선언을 이기므로, 계산된 `translateY(-28.75px)` 대신 `-45px`가 그려진다 —
   // 16px 밖으로, 58% 투명도로 한 프레임. 캡처에서 7번.
@@ -614,16 +615,16 @@ describe("DateWheelPicker 스와이프", () => {
   // 소비자라 뮤테이션 하나에 함께 죽는다. 그래도 나눠 두는 이유는 두 가지다 —
   // `expect()`가 단락하므로 한 블록에 넣으면 뒤 단언이 실행조차 되지 않고,
   // 셋이 **서로 다른 CSS 규칙**을 가리키기 때문이다(컨테이너의 slide / 그 slide를
-  // 무장시키는 클래스 / 버튼의 `date-wheel-selected-pop`).
+  // 무장시키는 클래스 / 버튼의 `wheel-selected-pop`).
   //
   // 기존 테스트 "타이핑은 휠 이동 애니메이션을 재생하지 않는다"가 같은 문제를 이미
   // 같은 모양으로 풀어 두었다.
   it("드래그 중 커밋은 값 컨테이너를 리마운트하지 않는다", () => {
     const { year } = openWheel();
-    const rowsBefore = year.querySelector(".date-wheel-values");
+    const rowsBefore = year.querySelector(".wheel-values");
     pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerMove", year, { pointerId: 7, clientY: 60, buttons: 1 });
-    expect(year.querySelector(".date-wheel-values")).toBe(rowsBefore);
+    expect(year.querySelector(".wheel-values")).toBe(rowsBefore);
   });
 
   it("드래그 중 커밋은 moving-* 클래스를 붙이지 않는다", () => {
@@ -634,17 +635,17 @@ describe("DateWheelPicker 스와이프", () => {
   });
 
   // 액센트 행(선택 행)은 `.dragging`이 **덮지 못한다** — 그 규칙은
-  // `.date-wheel-column.dragging .date-wheel-values`라 컨테이너의 애니메이션만 끄고,
-  // `date-wheel-selected-pop`(230ms, scale .88 → 1.09 → 1)은 그 **자식 버튼**에 걸려
+  // `.wheel-column.dragging .wheel-values`라 컨테이너의 애니메이션만 끄고,
+  // `wheel-selected-pop`(230ms, scale .88 → 1.09 → 1)은 그 **자식 버튼**에 걸려
   // 있다. 그래서 드래그 중 리마운트가 나면 팝이 매 커밋마다 처음부터 다시 시작한다 —
   // 100~150ms마다 커밋되는 스와이프에서는 230ms 팝이 **끝나는 일이 없다.**
   // 리마운트가 없어지면 다시 시작할 계기 자체가 사라진다(클래스 토글로는 시작되지 않는다).
   it("드래그 중 커밋은 액센트 행을 리마운트하지 않는다", () => {
     const { year } = openWheel();
-    const selectedBefore = year.querySelector(".date-wheel-values button.selected");
+    const selectedBefore = year.querySelector(".wheel-values button.selected");
     pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerMove", year, { pointerId: 7, clientY: 60, buttons: 1 });
-    expect(year.querySelector(".date-wheel-values button.selected")).toBe(selectedBefore);
+    expect(year.querySelector(".wheel-values button.selected")).toBe(selectedBefore);
   });
 
   // ── 새 스와이프는 앞선 모션을 비우고 시작한다 ────────────────────────────────
@@ -691,7 +692,7 @@ describe("DateWheelPicker 스와이프", () => {
     const { year } = openWheel();
     pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerMove", year, { pointerId: 7, clientY: 72, buttons: 1 });   // delta -28
-    expect(year.style.getPropertyValue("--date-wheel-drag-offset")).toBe("-14px");
+    expect(year.style.getPropertyValue("--wheel-drag-offset")).toBe("-14px");
   });
 
   it("한 프레임에 크게 뛰어도 오프셋은 ±15를 넘지 않는다", () => {
@@ -699,7 +700,7 @@ describe("DateWheelPicker 스와이프", () => {
     // 100 -> 0. delta -100 -> 한 칸 커밋(start.y가 30만큼 따라옴) -> delta -70 -> 감쇠 -35 -> 클램프.
     pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerMove", year, { pointerId: 7, clientY: 0, buttons: 1 });
-    expect(year.style.getPropertyValue("--date-wheel-drag-offset")).toBe("-15px");
+    expect(year.style.getPropertyValue("--wheel-drag-offset")).toBe("-15px");
   });
   // ── 포인터 캡처는 드래그를 위한 장치다. 누름은 아직 드래그가 아니다 ──────────
   //
@@ -707,9 +708,9 @@ describe("DateWheelPicker 스와이프", () => {
   //
   //     +0ms   pointerdown target=button                    <- 행 버튼
   //     +4ms   mousedown   target=button                    <- 행 버튼
-  //     +352ms pointerup   target=section.date-wheel-column <- 열로 리타겟
-  //     +356ms mouseup     target=section.date-wheel-column
-  //     +357ms click       target=section.date-wheel-column <- 클릭이 열에 발생
+  //     +352ms pointerup   target=section.wheel-column <- 열로 리타겟
+  //     +356ms mouseup     target=section.wheel-column
+  //     +357ms click       target=section.wheel-column <- 클릭이 열에 발생
   //
   // `onPointerDown`이 누르자마자 `setPointerCapture`를 걸었고, 캡처가 걸리면 이후 포인터
   // 이벤트가 **열로 리타겟**됩니다. `mousedown`(행)과 `mouseup`(열)의 타깃이 달라지므로
@@ -942,7 +943,7 @@ describe("DateWheelPicker 스와이프", () => {
   // 뿌리는 열의 `onPointerDown`이 **대상을 안 보고** 무조건 `swipeRef`를 세우는 것이다.
   // ± 버튼은 휠 표면이 아니라 **이산 컨트롤**이므로 거기서 시작한 누름은 스와이프가 아니다.
   //
-  // ⚠️ **행 버튼(`.date-wheel-values button`)은 같이 빼면 안 된다** — 휠 표면 150px이
+  // ⚠️ **행 버튼(`.wheel-values button`)은 같이 빼면 안 된다** — 휠 표면 150px이
   // 통째로 그 버튼들이라 스와이프가 통째로 죽는다. 아래 대조군이 그것을 지킨다.
   //
   // ⚠️ 기존 `moves the year, month, and day by one with the step buttons`는 **안 움직이고**
@@ -960,11 +961,11 @@ describe("DateWheelPicker 스와이프", () => {
   });
 
   // **대조군.** 휠 표면(행 버튼) 위에서 시작한 누름은 **여전히 스와이프다.** 위 고침을
-  // `.date-wheel-values button`까지 넓히면 이것이 빨개진다 — 150px 표면이 통째로 그
+  // `.wheel-values button`까지 넓히면 이것이 빨개진다 — 150px 표면이 통째로 그
   // 버튼들이라 스와이프가 죽기 때문이다.
   it("행 버튼 위에서 시작해도 스와이프는 그대로 커밋한다", () => {
     const { onChange, year } = openWheel();
-    const row = year.querySelector(".date-wheel-values button")!;
+    const row = year.querySelector(".wheel-values button")!;
     onChange.mockClear();
     pointer("pointerDown", row, { pointerId: 5, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerMove", row, { pointerId: 5, clientY: 60, buttons: 1 });
@@ -1067,14 +1068,14 @@ describe("DateWheelPicker 포커스 불변식 — 키보드를 받는 동안 act
   // 없어 원래 포커스를 안 받으므로, 그걸 고르면 차단을 지워도 아무것도 안 달라진다.
   it("팝오버 행 버튼의 mousedown 기본 동작이 막힌다", () => {
     openWithKeyboard();
-    const row = screen.getByRole("dialog", { name: "거래 날짜 선택" }).querySelector<HTMLElement>(".date-wheel-values button")!;
+    const row = screen.getByRole("dialog", { name: "거래 날짜 선택" }).querySelector<HTMLElement>(".wheel-values button")!;
     const event = createEvent.mouseDown(row);
     fireEvent(row, event);
     expect(event.defaultPrevented).toBe(true);
   });
 
-  // 행 버튼과 다른 서브트리(.date-wheel-actions)를 하나 더 본다 — 차단을 팝오버 표면이
-  // 아니라 `.date-wheel-columns`에 다는 결함은 위 테스트만으로는 안 잡힌다.
+  // 행 버튼과 다른 서브트리(.wheel-actions)를 하나 더 본다 — 차단을 팝오버 표면이
+  // 아니라 `.wheel-columns`에 다는 결함은 위 테스트만으로는 안 잡힌다.
   it("완료 버튼의 mousedown 기본 동작도 막힌다", () => {
     openWithKeyboard();
     const done = screen.getByRole("button", { name: "완료" });
@@ -1096,7 +1097,7 @@ describe("DateWheelPicker 포커스 불변식 — 키보드를 받는 동안 act
 
 // 초판의 이 블록은 "어느 열이 포커스를 쥐고 있는가"로 세그먼트 이동을 읽었다. 열이
 // 포커스를 받지 않게 되면서(설계 스펙 §5·§6.2) 그 채널이 사라졌고, 이제 활성 세그먼트를
-// `activeSegment()`(트리거의 `.date-wheel-segment.active`)로 읽는다.
+// `activeSegment()`(트리거의 `.wheel-segment.active`)로 읽는다.
 describe("DateWheelPicker 세그먼트 이동", () => {
   async function openPicker() {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
@@ -1435,7 +1436,7 @@ describe("DateWheelPicker 닫힌 채로 조작한다", () => {
   // 아래 둘은 **같은 클릭이 한 커밋에서 함께 일으키는 두 가지**라 서로를 가린다. 한 it에
   // 두면 앞 단언이 터질 때 뒤 단언은 실행조차 되지 않는다.
   function daySegment() {
-    return document.querySelector<HTMLElement>('.date-wheel-segment[data-unit="day"]')!;
+    return document.querySelector<HTMLElement>('.wheel-segment[data-unit="day"]')!;
   }
 
   it("세그먼트를 클릭하면 그 세그먼트가 활성이 된다", () => {
@@ -1463,7 +1464,7 @@ describe("DateWheelPicker 닫힌 채로 조작한다", () => {
   it("구두점을 클릭하면 활성 세그먼트가 바뀌지 않는다", () => {
     const field = closedField();
     fireEvent.keyDown(field, { key: "ArrowRight" });
-    fireEvent.click(document.querySelector<HTMLElement>(".date-wheel-punctuation")!);
+    fireEvent.click(document.querySelector<HTMLElement>(".wheel-punctuation")!);
     expect(activeSegment()).toBe("month");
   });
 
@@ -1622,7 +1623,7 @@ describe("DateWheelPicker 모바일에서는 아래로 열고 자리를 만든�
     fireEvent.click(trigger);
     return trigger;
   }
-  const popover = () => document.querySelector<HTMLElement>(".date-wheel-popover")!;
+  const popover = () => document.querySelector<HTMLElement>(".wheel-popover")!;
 
   // 팝오버는 `position: fixed`에 좌표가 인라인으로 들어갑니다. "아래로 열렸다"는
   // **top이 트리거 아래**(bottom + gap)라는 것으로 봅니다.
@@ -1830,13 +1831,13 @@ describe("DateWheelPicker 모바일에서는 아래로 열고 자리를 만든�
   // ⚠️ jsdom은 레이아웃이 없어 sticky가 **실제로 붙는지**는 볼 수 없습니다. 여기서 보는 것은
   // 규칙의 존재와 값이고, 붙는 모습은 실기기 항목입니다.
   it("액션 행은 팝오버 바닥에 붙는다 — 잘려도 오늘·완료에 닿는다", () => {
-    const rule = /\.date-wheel-actions \{[^}]*\}/.exec(datePickerCssSource)?.[0] ?? "(액션 규칙이 없다)";
+    const rule = /\.wheel-actions \{[^}]*\}/.exec(wheelPickerCssSource)?.[0] ?? "(액션 규칙이 없다)";
     expect(rule).toMatch(/position:\s*sticky;[^}]*bottom:\s*-12px/);
   });
 
   // 붙기만 하고 배경이 없으면 아래로 지나가는 휠이 버튼 위로 비칩니다.
   it("그 행은 불투명 배경을 갖는다", () => {
-    const rule = /\.date-wheel-actions \{[^}]*\}/.exec(datePickerCssSource)?.[0] ?? "(액션 규칙이 없다)";
+    const rule = /\.wheel-actions \{[^}]*\}/.exec(wheelPickerCssSource)?.[0] ?? "(액션 규칙이 없다)";
     expect(rule).toMatch(/background:\s*var\(--surface\)/);
   });
 
@@ -1894,7 +1895,7 @@ describe("DateWheelPicker 모바일에서는 아래로 열고 자리를 만든�
 
   // 오너 실기기: **아주 아래에 있는 피커를 열면 팝오버에 스크롤바가 생깁니다.**
   // U2가 만든 자리입니다 — 스크롤을 요청해도 **호스트에 더 내려갈 범위가 없으면** 아무 일도
-  // 일어나지 않고, 아래 공간이 그대로라 `maxHeight`가 줄면서 `.date-wheel-popover`의
+  // 일어나지 않고, 아래 공간이 그대로라 `maxHeight`가 줄면서 `.wheel-popover`의
   // `overflow-y: auto`가 스크롤바를 냅니다.
   //
   // **고침: 팝오버가 열려 있는 동안 스크롤 호스트의 범위를 그만큼 늘립니다.** 이 킷이 가상
@@ -2243,9 +2244,9 @@ describe("DateWheelPicker 활성 표시는 편집 중에만", () => {
   // **포커스 게이트를 지웠는지 본다.** 게이트가 하나로 줄면 편집 중인 채 포커스를 잃는
   // 경로에서 표시가 남습니다. 규칙은 여전히 **하나**이고 조건이 하나 붙었을 뿐입니다.
   it("규칙은 하나이고, 포커스와 편집 중 둘 다 건다", () => {
-    const rules = datePickerCssSource.replace(/\/\*[\s\S]*?\*\//g, "").match(/[^{}]+(?=\{)/g) ?? [];
-    const painting = rules.map((r) => r.replace(/\s+/g, " ").trim()).filter((r) => /\.date-wheel-segment\.active/.test(r));
-    expect(painting).toEqual([".date-wheel-trigger.editing:focus-within .date-wheel-segment.active"]);
+    const rules = wheelPickerCssSource.replace(/\/\*[\s\S]*?\*\//g, "").match(/[^{}]+(?=\{)/g) ?? [];
+    const painting = rules.map((r) => r.replace(/\s+/g, " ").trim()).filter((r) => /\.wheel-segment\.active/.test(r));
+    expect(painting).toEqual([".wheel-trigger.editing:focus-within .wheel-segment.active"]);
   });
 });
 
@@ -2254,7 +2255,7 @@ describe("DateWheelPicker 세그먼트 클릭은 여닫기 토글이 아니다",
     return screen.queryByRole("dialog", { name: "거래 날짜 선택" }) !== null;
   }
   function segment(unit: string) {
-    return document.querySelector<HTMLElement>(`.date-wheel-segment[data-unit="${unit}"]`)!;
+    return document.querySelector<HTMLElement>(`.wheel-segment[data-unit="${unit}"]`)!;
   }
 
   // ⚠️ **"닫지 않는다"를 "아무것도 안 한다"로 구현하면 마우스 사용자가 팝오버를 못 엽니다.**
@@ -2309,7 +2310,7 @@ describe("DateWheelPicker 버퍼의 수명 — 확정은 버퍼 자신의 unit�
   }
 
   function segmentOf(unit: string) {
-    return document.querySelector<HTMLElement>(`.date-wheel-segment[data-unit="${unit}"]`)!;
+    return document.querySelector<HTMLElement>(`.wheel-segment[data-unit="${unit}"]`)!;
   }
 
   // ── §4.2: **자리를 옮기는 조작은 확정한다** — `→` `←` `Tab`, 그리고 **트리거의 세그먼트를
@@ -2350,7 +2351,7 @@ describe("DateWheelPicker 버퍼의 수명 — 확정은 버퍼 자신의 unit�
   it("구두점을 클릭하면 버퍼를 확정하지 않고 그대로 들고 연다", () => {
     const field = closedField();
     fireEvent.keyDown(field, { key: "3" });
-    fireEvent.click(document.querySelector<HTMLElement>(".date-wheel-punctuation")!);
+    fireEvent.click(document.querySelector<HTMLElement>(".wheel-punctuation")!);
     expect(field.textContent).toBe(`3${FILL}${FILL}${FILL}. 07. 12.`);
   });
 
@@ -2358,7 +2359,7 @@ describe("DateWheelPicker 버퍼의 수명 — 확정은 버퍼 자신의 unit�
   //    `activeUnit`에는 `resolvedActiveUnit` 클램프가 있는데 `typing.unit`에는 없었다.
   function ShrinkableInDialog({ onClose, initialValue }: { onClose: () => void; initialValue: string }) {
     const [value, setValue] = useState(initialValue);
-    const [fields, setFields] = useState<DateWheelUnit[]>(["year", "month", "day"]);
+    const [fields, setFields] = useState<WheelUnit[]>(["year", "month", "day"]);
     return <Dialog open onClose={onClose} ariaLabel="거래 수정" closeOnBack={false}>
       <button type="button" onClick={() => setFields(["year", "month"])}>일 열 제거</button>
       <DateWheelPicker ariaLabel="거래 날짜" value={value} onChange={setValue} fields={fields} />
@@ -2419,7 +2420,7 @@ describe("DateWheelPicker 버퍼의 수명 — 확정은 버퍼 자신의 unit�
   // §6.4(3)). 옮기는 것은 **사용자가 그 세그먼트에 실제로 친 경우**뿐이고 그건 진실이다.
   function ShrinkRestore({ initialValue }: { initialValue: string }) {
     const [value, setValue] = useState(initialValue);
-    const [fields, setFields] = useState<DateWheelUnit[]>(["year", "month", "day"]);
+    const [fields, setFields] = useState<WheelUnit[]>(["year", "month", "day"]);
     return <>
       <button type="button" onClick={() => setFields(["year", "month"])}>줄이기</button>
       <button type="button" onClick={() => setFields(["year", "month", "day"])}>되돌리기</button>
@@ -2714,12 +2715,12 @@ describe("DateWheelPicker 타이핑", () => {
     // markColumnMotion을 타면 숫자 하나마다 행 7개가 리마운트되고 210ms 전환이
     // 재생된다. 값만 확인하면 이 결함을 못 잡으므로 경로 자체를 고정한다.
     const field = await openAt("2026-07-12");
-    const rowsBefore = screen.getByRole("group", { name: "연도 2026" }).querySelector(".date-wheel-values");
+    const rowsBefore = screen.getByRole("group", { name: "연도 2026" }).querySelector(".wheel-values");
     for (const digit of ["2", "0", "3", "1"]) fireEvent.keyDown(field, { key: digit });
 
     await waitFor(() => expect(field.textContent).toBe("2031. 07. 12."));
     const yearAfter = screen.getByRole("group", { name: "연도 2031" });
-    expect(yearAfter.querySelector(".date-wheel-values")).toBe(rowsBefore);   // 리마운트되지 않았다
+    expect(yearAfter.querySelector(".wheel-values")).toBe(rowsBefore);   // 리마운트되지 않았다
     expect(yearAfter.classList.contains("moving-next")).toBe(false);
   });
 
@@ -2749,14 +2750,14 @@ describe("DateWheelPicker 타이핑", () => {
     const field = await openAt("2026-07-12");
     fireEvent.keyDown(field, { key: "2" });
     fireEvent.keyDown(field, { key: "Backspace" });
-    expect(screen.getByRole("group", { name: "연도 2026" }).querySelector(".date-wheel-values .selected")?.textContent).toBe("2026");
+    expect(screen.getByRole("group", { name: "연도 2026" }).querySelector(".wheel-values .selected")?.textContent).toBe("2026");
   });
 
   it("치는 동안 선택 행에 친 숫자가 그대로 보인다", async () => {
     const field = await openAt("2026-07-12");
     fireEvent.keyDown(field, { key: "2" });
     fireEvent.keyDown(field, { key: "0" });
-    expect(screen.getByRole("group", { name: "연도 2026" }).querySelector(".date-wheel-values .selected")?.textContent).toBe("20");
+    expect(screen.getByRole("group", { name: "연도 2026" }).querySelector(".wheel-values .selected")?.textContent).toBe("20");
   });
 });
 
@@ -3018,7 +3019,7 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
     // 뮤테이션이 이 줄이 아니라 쿼리에서 죽어, 이 단언 자체는 실패해 본 적이 없는 게 된다.
     // 느슨한 정규식으로 찾아, 실패가 항상 .selected 텍스트 비교에서 나게 한다.
     const reopenedYear = screen.getByRole("group", { name: /^연도/ });
-    expect(reopenedYear.querySelector(".date-wheel-values .selected")?.textContent).toBe("2031");
+    expect(reopenedYear.querySelector(".wheel-values .selected")?.textContent).toBe("2031");
   });
 
   // 완료 버튼이 flushTyping을 거치므로, 완료 테스트만으로는 **"닫히면 버퍼를 버린다" 이펙트**가
@@ -3036,13 +3037,13 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
     const reopenedYear = screen.getByRole("group", { name: /^연도/ });
-    expect(reopenedYear.querySelector(".date-wheel-values .selected")?.textContent).toBe("2026");
+    expect(reopenedYear.querySelector(".wheel-values .selected")?.textContent).toBe("2026");
   });
 
   it("포인터로 컬럼을 누르면 버퍼를 버린다", async () => {
     const { year } = await openAndType("2026-07-12", ["3"]);
     fireEvent.pointerDown(year, { pointerId: 1, clientY: 80, buttons: 1 });
-    expect(year.querySelector(".date-wheel-values .selected")?.textContent).toBe("2026");
+    expect(year.querySelector(".wheel-values .selected")?.textContent).toBe("2026");
   });
 
   // 리뷰 finding — Tab 분기 맨 앞의 flushTyping(unit)이 실제 버퍼를 상대로 실행되는
@@ -3070,7 +3071,7 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
   it("→로 세그먼트를 떠난 뒤 연도 열은 버퍼가 아니라 확정된 값을 보여준다", async () => {
     const { trigger, year } = await openAndType("2026-07-12", ["3", "1"]);
     fireEvent.keyDown(trigger, { key: "ArrowRight" });
-    expect(year.querySelector(".date-wheel-values .selected")?.textContent).toBe("2031");
+    expect(year.querySelector(".wheel-values .selected")?.textContent).toBe("2031");
   });
 
   // Shift+Tab도 확정하고 떠난다(스펙 §3 — Tab과 완전히 대칭이다). 월에서 시작하는
@@ -3181,7 +3182,7 @@ describe("DateWheelPicker 단축키", () => {
 
     // 버퍼가 안 지워지면 이 행은 여전히 버퍼 "3"을 보여준다(buffered ?? ... 가 "3"에서
     // 멈춘다). 지워지면 방금 설정된 값의 연도 "2026"이 보인다.
-    expect(year.querySelector(".date-wheel-values .selected")?.textContent).toBe("2026");
+    expect(year.querySelector(".wheel-values .selected")?.textContent).toBe("2026");
   });
 
   it("비우기 버튼을 누르면 치던 숫자를 버린다", () => {
@@ -3197,7 +3198,7 @@ describe("DateWheelPicker 단축키", () => {
 
     // 비우기는 값을 ""로 만들고, baseValue는 값이 비어 있으면 오늘로 대체된다(:203) —
     // 버퍼가 안 지워지면 이 행은 여전히 버퍼 "3"을 보여준다.
-    expect(year.querySelector(".date-wheel-values .selected")?.textContent).toBe("2026");
+    expect(year.querySelector(".wheel-values .selected")?.textContent).toBe("2026");
   });
 
   // labels.hint의 기본값이 타이핑을 포함해 바뀐다(PRINCIPLES §11 문서화 대상) —
@@ -3205,7 +3206,7 @@ describe("DateWheelPicker 단축키", () => {
   it("팝오버 안내 문구 기본값이 타이핑까지 안내한다", () => {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} />);
     fireEvent.click(fieldOf("거래 날짜"));
-    const heading = screen.getByRole("dialog", { name: "거래 날짜 선택" }).querySelector(".date-wheel-heading span");
+    const heading = screen.getByRole("dialog", { name: "거래 날짜 선택" }).querySelector(".wheel-heading span");
     // 오너 리포트 4번으로 "길게 눌러 초기화"가 들어왔다 — 그 제스처는 화면에 다른 단서가
     // 하나도 없어서 이 줄이 유일한 발견 경로다(진행 막대는 이미 누른 사람에게만 보인다).
     expect(heading?.textContent).toBe("휠·스와이프·방향키·숫자 입력 · 가운데 두 번 탭하면 초기화 · Ctrl+; 오늘");
@@ -3942,7 +3943,7 @@ describe("DateWheelPicker 트리거 접근성 이름", () => {
 //
 // **오너가 좋아한 그것은 기능이 아니라 결함이었습니다.** 새로 로드하면 어느 픽커도 하지
 // 않고, ±로 한 칸 옮긴 열만 `moving-*`를 **영원히** 달고 있다가 닫았다 열 때마다
-// `date-wheel-slide-previous`를 다시 재생했습니다(코디네이터 실브라우저 측정). 즉
+// `wheel-slide-previous`를 다시 재생했습니다(코디네이터 실브라우저 측정). 즉
 // **"값이 움직였다"는 신호가 아무것도 안 움직인 열림에서 재생**되고 있었고, 그 열만 되고
 // 나머지는 안 되던 이유도 그것입니다.
 //
@@ -3950,8 +3951,8 @@ describe("DateWheelPicker 트리거 접근성 이름", () => {
 // 애니메이션을 **모든 열에 균일하게** 따로 만듭니다.
 //
 // ⚠️ **두 신호는 이름도 대상도 달라야 합니다.** 진입을 슬라이드로 재사용하면 방금 없앤
-// 거짓 신호가 그대로 돌아옵니다. 슬라이드는 `.date-wheel-values`(값이 움직였다),
-// 진입은 `.date-wheel-column`(팝오버가 열렸다)입니다.
+// 거짓 신호가 그대로 돌아옵니다. 슬라이드는 `.wheel-values`(값이 움직였다),
+// 진입은 `.wheel-column`(팝오버가 열렸다)입니다.
 describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   function openPicker() {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} />);
@@ -3959,7 +3960,7 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
     fireEvent.click(trigger);
     return trigger;
   }
-  const columns = () => [...document.querySelectorAll(".date-wheel-column")];
+  const columns = () => [...document.querySelectorAll(".wheel-column")];
 
   // 이동 신호는 **그 이동에만** 붙어 있어야 합니다. 세션 내내 남으면 다음 열림이 그것을
   // 물려받아, 아무것도 안 움직였는데 움직였다고 말합니다.
@@ -3968,9 +3969,9 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
     fireEvent.click(screen.getByRole("button", { name: "연도 이전" }));   // 연 열을 무장시킨다
 
     fireEvent.click(screen.getByRole("button", { name: "완료" }));
-    await waitFor(() => expect(document.querySelector(".date-wheel-column")).toBeNull());
+    await waitFor(() => expect(document.querySelector(".wheel-column")).toBeNull());
     fireEvent.click(trigger);
-    await waitFor(() => expect(document.querySelector(".date-wheel-column")).not.toBeNull());
+    await waitFor(() => expect(document.querySelector(".wheel-column")).not.toBeNull());
 
     expect(columns().map((column) => /moving-\w+/.exec(column.className)?.[0] ?? null)).toEqual([null, null, null]);
   });
@@ -3984,36 +3985,36 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // 잔재가 거짓 신호로 재생되던 그 결함이 형태만 바꿔 돌아옵니다. 네 축으로 갈라 둡니다:
   //
   //   1. **모든 열이 함께** 구른다 (이동은 한 열만) — 눈에 가장 먼저 들어오는 차이
-  //   2. 다른 이름 (`date-wheel-enter` / `date-wheel-slide-*`)
+  //   2. 다른 이름 (`wheel-enter` / `wheel-slide-*`)
   //   3. 다른 **게이트** (`.entering`은 열림 창에만 / `.moving-*`은 값이 움직였을 때)
   //   4. 다른 길이·커브 (320ms 감속+멎음 / 210ms)
   //
   // ⚠️ **대상은 갈라 두지 못했습니다 — 물리적으로 불가능합니다.** 지난 라운드에는 진입이
-  // `.date-wheel-column`에 있었는데, CSS 애니메이션은 **선언된 그 요소만** 변형할 수 있고
-  // 굴러야 하는 것은 **행**(`.date-wheel-values`)입니다. 열을 세로로 옮기면 ± 버튼과
+  // `.wheel-column`에 있었는데, CSS 애니메이션은 **선언된 그 요소만** 변형할 수 있고
+  // 굴러야 하는 것은 **행**(`.wheel-values`)입니다. 열을 세로로 옮기면 ± 버튼과
   // 테두리까지 든 상자가 통째로 미끄러지는 것이지 휠이 구르는 것이 아닙니다.
   //
   // 대상을 나눠 얻으려던 것("커밋마다 진입이 재생되지 않는다")은 **다른 방법으로 지킵니다:**
   // 이동 규칙이 진입 규칙과 **같은 특이도**이고 파일에서 **뒤에** 오므로, 커밋 프레임에서는
   // 이동이 이깁니다. 아래 "이동 규칙이 뒤에 온다"가 그것을 고정합니다.
   it("진입은 값 컨테이너를 굴리고, 열의 entering이 그것을 연다", () => {
-    expect(datePickerCssSource).toMatch(/\.date-wheel-column\.entering \.date-wheel-values \{[^}]*animation: date-wheel-enter 280ms/);
+    expect(wheelPickerCssSource).toMatch(/\.wheel-column\.entering \.wheel-values \{[^}]*animation: wheel-enter 280ms/);
   });
 
   it("진입 키프레임이 있다", () => {
-    expect(datePickerCssSource).toMatch(/@keyframes date-wheel-enter/);
+    expect(wheelPickerCssSource).toMatch(/@keyframes wheel-enter/);
   });
 
   // **이제는 방향이 있어야 합니다.** 없으면 "드르륵"이 아니라 예전의 방향 없는 진입입니다.
   // 전제(키프레임이 있다)는 바로 위 테스트가 집니다.
   /* 🔴 **좌표가 리터럴에서 토큰으로 바뀌었습니다**(오너 리포트 6번, 2026-08-13) — 보이는
-   * 행 수를 실기기에서 고르는 중이라 `--date-wheel-rest`(정지 위치)와 `--date-wheel-rows-h`
+   * 행 수를 실기기에서 고르는 중이라 `--wheel-rest`(정지 위치)와 `--wheel-rows-h`
    * (창 높이)가 그 둘을 **한 벌로** 묶습니다. 그래서 이 검사도 절대 좌표가 아니라 **정지
    * 위치와의 관계**를 봅니다 — 그게 원래 이 검사가 말하려던 것이기도 합니다("한 행 위에서
    * 시작해 제자리로 멎는다"). 리터럴로 뒀으면 토큰을 바꾼 순간 통과하면서 거짓이 됩니다. */
   it("진입 키프레임은 정지 위치보다 한 행 위에서 굴러 내려온다", () => {
-    const keyframes = /@keyframes date-wheel-enter\s*\{[\s\S]*?\n\}/.exec(datePickerCssSource)?.[0] ?? "(진입 키프레임이 없다)";
-    expect(keyframes).toContain("translateY(calc(var(--date-wheel-rest) - 30px))");
+    const keyframes = /@keyframes wheel-enter\s*\{[\s\S]*?\n\}/.exec(wheelPickerCssSource)?.[0] ?? "(진입 키프레임이 없다)";
+    expect(keyframes).toContain("translateY(calc(var(--wheel-rest) - 30px))");
   });
 
   // **travel은 프리로드가 감당하는 30px이 상한입니다.** 값 컨테이너 210px(7행), 뷰포트
@@ -4021,32 +4022,32 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // 이므로 시작점은 -60px보다 위로 갈 수 없습니다 — 넘기면 뷰포트 끝에 행이 없는 빈 띠가
   // 생깁니다. F1의 드래그 클램프 ±30과 **같은 기하에서 나온 같은 수**입니다.
   it("진입은 정지 위치로 멎는다", () => {
-    const keyframes = /@keyframes date-wheel-enter\s*\{[\s\S]*?\n\}/.exec(datePickerCssSource)?.[0] ?? "(진입 키프레임이 없다)";
-    expect(keyframes).toContain("100% { opacity: 1; transform: translateY(var(--date-wheel-rest)); }");
+    const keyframes = /@keyframes wheel-enter\s*\{[\s\S]*?\n\}/.exec(wheelPickerCssSource)?.[0] ?? "(진입 키프레임이 없다)";
+    expect(keyframes).toContain("100% { opacity: 1; transform: translateY(var(--wheel-rest)); }");
   });
 
   /* 그리고 **토큰 둘이 짝을 이룬다**는 것을 따로 못 박습니다 — 이 라운드에서 새로 생긴
    * 계약이고, 하나만 고치면 선택된 행이 창 가운데에서 벗어납니다. 기본값은 지금까지와
    * 같은 5행(150px)/−30px입니다("새 축은 기본값이 지금과 같음", PRINCIPLES §14). */
   /* 🔴 창 높이는 이제 **행 수에서 파생**됩니다(오너 리포트 6번). 리터럴 150px이 아니라
-   * `--date-wheel-rows`에서 계산되고, 그 값은 전역 설정이 정해 컴포넌트가 인라인으로
+   * `--wheel-rows`에서 계산되고, 그 값은 전역 설정이 정해 컴포넌트가 인라인으로
    * 얹습니다. 그리고 **행 수가 함께 따라오므로 정지 위치는 n과 무관하게 −30px**입니다 —
    * 실험 단계(행은 일곱 고정, 창만 축소)에서 −60px이 필요했던 것이 여기서 사라집니다. */
   it("휠 창 높이는 행 수에서 파생되고, 정지 위치는 n과 무관하게 한 행이다", () => {
-    expect(datePickerCssSource).toContain(".date-wheel-column { --date-wheel-rows-h: calc((var(--date-wheel-rows, 1) * 2 + 1) * 30px); --date-wheel-rest: -30px; }");
+    expect(wheelPickerCssSource).toContain(".wheel-column { --wheel-rows-h: calc((var(--wheel-rows, 1) * 2 + 1) * 30px); --wheel-rest: -30px; }");
   });
 
   it("값 컨테이너도 같은 수에서 나온다 — 보이는 2n+1에 프리로드 둘", () => {
     // `repeat()`의 개수에는 var()를 못 쓰므로 grid-auto-rows로 간다. 리터럴 repeat(7,…)이
     // 돌아오면 설정을 바꿔도 행이 일곱에 머물러 조용히 어긋난다.
-    expect(datePickerCssSource).toContain("height: calc((var(--date-wheel-rows, 1) * 2 + 3) * 30px); display: grid; grid-auto-rows: 30px;");
+    expect(wheelPickerCssSource).toContain("height: calc((var(--wheel-rows, 1) * 2 + 3) * 30px); display: grid; grid-auto-rows: 30px;");
   });
 
   it("창 높이와 정지 위치를 쓰는 자리 셋이 리터럴로 되돌아가지 않는다", () => {
     // 뷰포트 높이 · 열 높이 · 정지 transform이 전부 토큰을 지나가야 데모 토글이 한 벌로 움직인다.
-    expect(datePickerCssSource).toContain(".date-wheel-viewport { width: 100%; height: var(--date-wheel-rows-h);");
-    expect(datePickerCssSource).toContain("height: calc(var(--date-wheel-rows-h) + 62px)");
-    expect(datePickerCssSource).toContain("transform: translateY(calc(var(--date-wheel-rest) + var(--date-wheel-drag-offset, 0px)))");
+    expect(wheelPickerCssSource).toContain(".wheel-viewport { width: 100%; height: var(--wheel-rows-h);");
+    expect(wheelPickerCssSource).toContain("height: calc(var(--wheel-rows-h) + 62px)");
+    expect(wheelPickerCssSource).toContain("transform: translateY(calc(var(--wheel-rest) + var(--wheel-drag-offset, 0px)))");
   });
 
   // **모든 열이 함께 구릅니다** — 축 1. 규칙은 하나이고, 열마다 다른 것은 **시차뿐**입니다.
@@ -4055,8 +4056,8 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // **하나로 유지**되어 그 문제가 없습니다.
   it("열마다 다른 것은 시차뿐이다", () => {
     expect([
-      /\.date-wheel-column:nth-child\(2\) \{[^}]*--date-wheel-enter-delay:\s*([^;]+)/.exec(datePickerCssSource)?.[1]?.trim() ?? null,
-      /\.date-wheel-column:nth-child\(3\) \{[^}]*--date-wheel-enter-delay:\s*([^;]+)/.exec(datePickerCssSource)?.[1]?.trim() ?? null,
+      /\.wheel-column:nth-child\(2\) \{[^}]*--wheel-enter-delay:\s*([^;]+)/.exec(wheelPickerCssSource)?.[1]?.trim() ?? null,
+      /\.wheel-column:nth-child\(3\) \{[^}]*--wheel-enter-delay:\s*([^;]+)/.exec(wheelPickerCssSource)?.[1]?.trim() ?? null,
     ]).toEqual(["40ms", "80ms"]);
   });
 
@@ -4064,20 +4065,20 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // 진입이 다시 재생되면 슬라이드와 겹칩니다. 둘은 특이도가 같으므로(둘 다 (0,3,0))
   // **파일 안의 순서**가 승부를 가릅니다. 이동을 뒤에 둡니다.
   it("이동 규칙이 진입 규칙보다 파일에서 뒤에 온다", () => {
-    const enter = datePickerCssSource.indexOf(".date-wheel-column.entering .date-wheel-values");
-    const move = datePickerCssSource.indexOf(".date-wheel-column.moving-next .date-wheel-values");
+    const enter = wheelPickerCssSource.indexOf(".wheel-column.entering .wheel-values");
+    const move = wheelPickerCssSource.indexOf(".wheel-column.moving-next .wheel-values");
     expect([enter >= 0, move >= 0, enter < move]).toEqual([true, true, true]);
   });
 
   // PRINCIPLES §12 — reduced-motion에서 **이동을 뺍니다.** 지난 판의 진입에는 이동이 없어
   // 이 조항에 안 걸렸는데, 구르는 진입은 정면으로 대상입니다.
   //
-  // ⚠️ 특이도를 맞춰야 합니다. reduced 블록의 맨 앞 `.date-wheel-values`는 (0,1,0)이라
+  // ⚠️ 특이도를 맞춰야 합니다. reduced 블록의 맨 앞 `.wheel-values`는 (0,1,0)이라
   // 진입 규칙 (0,3,0)을 **못 이깁니다.** 그래서 진입의 선택자를 그대로 목록에 넣습니다 —
   // 이웃한 이동 규칙이 이미 같은 이유로 그렇게 돼 있습니다.
   it("reduced-motion에서 진입의 이동이 제거된다", () => {
-    const reduced = /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\n\}/.exec(datePickerCssSource)?.[0] ?? "(reduced 블록이 없다)";
-    expect(reduced).toMatch(/\.date-wheel-column\.entering \.date-wheel-values/);
+    const reduced = /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\n\}/.exec(wheelPickerCssSource)?.[0] ?? "(reduced 블록이 없다)";
+    expect(reduced).toMatch(/\.wheel-column\.entering \.wheel-values/);
   });
 
   // ── DOM: 게이트가 실제로 열리고 닫히는가 ────────────────────────────────────
@@ -4113,8 +4114,8 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // 이 둘은 값을 바꾼 지금도 초록입니다(커플링이 지켜지고 있으므로). 빨개질 수 있다는
   // 것은 뮤테이션으로 확인했습니다 — JS 상수만 줄이면 앞이, 늘리면 뒤가 죽습니다.
   function enterTotalFromCss() {
-    const duration = /\.date-wheel-column\.entering \.date-wheel-values \{[^}]*animation: date-wheel-enter (\d+)ms/.exec(datePickerCssSource)?.[1];
-    const lastDelay = /\.date-wheel-column:nth-child\(3\) \{[^}]*--date-wheel-enter-delay:\s*(\d+)ms/.exec(datePickerCssSource)?.[1];
+    const duration = /\.wheel-column\.entering \.wheel-values \{[^}]*animation: wheel-enter (\d+)ms/.exec(wheelPickerCssSource)?.[1];
+    const lastDelay = /\.wheel-column:nth-child\(3\) \{[^}]*--wheel-enter-delay:\s*(\d+)ms/.exec(wheelPickerCssSource)?.[1];
     return Number(duration) + Number(lastDelay);
   }
 
@@ -4135,14 +4136,14 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
 
 describe("DateWheelPicker 트리거 세그먼트", () => {
   function segmentUnits(trigger: HTMLElement) {
-    return [...trigger.querySelectorAll(".date-wheel-segment")].map((element) => element.getAttribute("data-unit"));
+    return [...trigger.querySelectorAll(".wheel-segment")].map((element) => element.getAttribute("data-unit"));
   }
   function segmentTexts(trigger: HTMLElement) {
-    return [...trigger.querySelectorAll(".date-wheel-segment")].map((element) => element.textContent);
+    return [...trigger.querySelectorAll(".wheel-segment")].map((element) => element.textContent);
   }
   /** 개수가 아니라 **신원**으로 읽는다 — 어느 자리를 그리는가가 계약이다. */
   function segmentText(trigger: HTMLElement, unit: string) {
-    return trigger.querySelector(`.date-wheel-segment[data-unit="${unit}"]`)?.textContent ?? null;
+    return trigger.querySelector(`.wheel-segment[data-unit="${unit}"]`)?.textContent ?? null;
   }
   function container(trigger: HTMLElement) {
     return trigger.querySelector("span")!;
@@ -4186,7 +4187,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
   // 텍스트와 aria-hidden을 한 문자열로 묶어 단언 하나로 본다(단락 없이 둘 다 본다).
   it("세그먼트 사이 구두점은 aria-hidden 장식이다", () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
-    const punctuation = [...fieldOf("거래 날짜").querySelectorAll(".date-wheel-punctuation")];
+    const punctuation = [...fieldOf("거래 날짜").querySelectorAll(".wheel-punctuation")];
     expect(punctuation.map((element) => `${element.textContent}|${element.getAttribute("aria-hidden")}`)).toEqual([". |true", ". |true", ".|true"]);
   });
 
@@ -4320,14 +4321,14 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
 
   // §12의 확정 신호는 **날짜 하나에 대한 사건**이지 세그먼트에 대한 사건이 아니다. 신호를
   // 재생하는 요소가 정확히 하나이고, 그것이 세그먼트가 아니라 세그먼트 셋을 감싸는
-  // 컨테이너라는 것을 단언 하나로 본다 — className에 "date-wheel-segment"가 섞이면 조각이
+  // 컨테이너라는 것을 단언 하나로 본다 — className에 "wheel-segment"가 섞이면 조각이
   // 따로 반짝인다는 뜻이고, 안에 세 세그먼트가 다 들어 있어야 "값 전체"다.
   it("확정 신호는 세그먼트가 아니라 값 전체를 감싸는 컨테이너 하나에 붙는다", async () => {
     const trigger = await openAndBuffer("2026-07-12", ["3", "1"]);
     fireEvent.keyDown(trigger, { key: "Enter" });
 
     const pulsing = [...trigger.querySelectorAll(".dropdown-value-commit")];
-    expect(pulsing.map((element) => [element.className, [...element.querySelectorAll(".date-wheel-segment")].map((segment) => segment.getAttribute("data-unit"))]))
+    expect(pulsing.map((element) => [element.className, [...element.querySelectorAll(".wheel-segment")].map((segment) => segment.getAttribute("data-unit"))]))
       .toEqual([["dropdown-value-commit", ["year", "month", "day"]]]);
   });
 
@@ -4358,7 +4359,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
   // 잡히지만 규칙을 *덧붙이는* 결함은 통째로 새어 나간다. 실제로 세 단언이 그랬고,
   // 셋 다 브리프·주석이 이름 대고 금지한 해악을 초록으로 통과시켰다:
   //
-  //   · `>` 규칙을 그대로 둔 채 `.date-wheel-trigger span { …ellipsis… }`를 **추가**
+  //   · `>` 규칙을 그대로 둔 채 `.wheel-trigger span { …ellipsis… }`를 **추가**
   //   · 게이트를 통과한 `.active` 규칙에 `font-variant-numeric: normal`을 **추가**
   //   · 선택자 목록이 **두 줄인** `color` 규칙을 **추가**(정규식이 줄바꿈을 못 넘어 0회
   //     매칭 → `filter(...)` → `[]` → **공허 통과**)
@@ -4368,7 +4369,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
   // 형태를 이 블록에 들이지 마라.
   describe("CSS 계약", () => {
     /**
-     * `date-picker.css`를 규칙 단위로 쪼갠다.
+     * `wheel-picker.css`를 규칙 단위로 쪼갠다.
      *
      * **주석을 먼저 걷어낸다.** 이 킷의 주석은 선택자와 선언을 그대로 인용하는 관습이라
      * (바로 이 파일이 그렇다), 안 걷어내면 파서가 주석을 규칙으로 읽어 거짓 통과가 난다.
@@ -4409,43 +4410,43 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     // 자손 선택자 규칙을 하나 더 얹으면 목록이 둘이 되어 곧바로 터진다 — 지우는 결함만
     // 잡던 예전 형태가 놓치던 자리다.
     it("말줄임을 선언하는 규칙은 컨테이너를 겨냥한 자식 결합자 하나뿐이다", () => {
-      const ellipsis = cssRules(datePickerCssSource).filter((rule) => /text-overflow/.test(rule.body));
-      expect(ellipsis.map((rule) => rule.selector)).toEqual([".date-wheel-trigger > span"]);
+      const ellipsis = cssRules(wheelPickerCssSource).filter((rule) => /text-overflow/.test(rule.body));
+      expect(ellipsis.map((rule) => rule.selector)).toEqual([".wheel-trigger > span"]);
     });
 
     // 위 단언은 "말줄임을 거는 규칙이 하나"만 본다. 그 하나가 실제로 세 선언을 다 갖는지는
     // 따로 봐야 한다 — `overflow: hidden`이 빠지면 `text-overflow`는 아무 일도 안 한다.
     it("그 규칙이 말줄임에 필요한 세 선언을 다 갖는다", () => {
-      const rule = cssRules(datePickerCssSource).find((candidate) => candidate.selector === ".date-wheel-trigger > span");
+      const rule = cssRules(wheelPickerCssSource).find((candidate) => candidate.selector === ".wheel-trigger > span");
       expect(rule?.body ?? "(자식 결합자 규칙이 없다)").toMatch(/overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap/);
     });
 
-    // `tabular-nums`는 **숫자끼리** 폭을 맞춘다(빈 자리는 DATE_WHEEL_FILL이 맡는다 — 아래
+    // `tabular-nums`는 **숫자끼리** 폭을 맞춘다(빈 자리는 WHEEL_FILL이 맡는다 — 아래
     // 버퍼 테스트들이 그쪽을 고정한다). 선언을 지우는 결함뿐 아니라 **더 특이한 규칙에서
     // `normal`로 되돌리는 결함**까지 잡아야 한다: 활성 세그먼트 규칙이 (0,4,0)이라
     // (0,1,0)인 기본 규칙을 이기므로, 거기에 한 줄만 얹으면 **치는 중인 세그먼트만**
     // tabular를 잃는다. 그래서 이 선언을 하는 규칙 전부를 값까지 함께 신원으로 본다.
     it("font-variant-numeric을 선언하는 규칙은 세그먼트 기본 규칙 하나뿐이고 값이 tabular-nums다", () => {
-      const declared = cssRules(datePickerCssSource)
+      const declared = cssRules(wheelPickerCssSource)
         .filter((rule) => /font-variant-numeric/.test(rule.body))
         .map((rule) => [rule.selector, /font-variant-numeric:\s*([^;]+)/.exec(rule.body)?.[1].trim()]);
-      expect(declared).toEqual([[".date-wheel-segment", "tabular-nums"]]);
+      expect(declared).toEqual([[".wheel-segment", "tabular-nums"]]);
     });
 
     // 포커스 없는 필드에 활성 표시가 남으면 그 필드가 입력을 받는 중으로 읽힌다(§4.5).
     //
     // ⚠️ **이 테스트가 묻는 것이 바뀌었다. 지키려는 계약은 그대로다.**
-    // 예전에는 "`.date-wheel-segment.active`에 매칭되는 규칙이 통틀어 하나"였다. 반전 칩이
+    // 예전에는 "`.wheel-segment.active`에 매칭되는 규칙이 통틀어 하나"였다. 반전 칩이
     // 들어오면서 그 세그먼트를 겨냥하는 규칙이 하나 더 생겼는데(확정 펄스를 명시로 거는
     // 규칙), **그것은 정지 상태의 그림을 그리지 않는다** — `animation` 하나만 선언한다.
     // 지키려던 것은 규칙 개수가 아니라 **"활성 표시를 그리는 자리가 하나이고 그것이 포커스로
     // 게이트돼 있다"**였으므로, 이제 `background`를 선언하는 규칙으로 좁혀 같은 것을 묻는다.
-    // 스펙 §4.5가 이름 대고 금지한 `.date-wheel-picker.open …` 보정은 별도 규칙으로 오든
+    // 스펙 §4.5가 이름 대고 금지한 `.wheel-picker.open …` 보정은 별도 규칙으로 오든
     // 같은 규칙의 선택자 목록에 끼어 오든 여전히 둘 다 터진다.
     it("활성 세그먼트의 정지 그림을 그리는 규칙은 포커스로 게이트된 하나뿐이다", () => {
-      const painting = cssRules(datePickerCssSource)
-        .filter((rule) => /\.date-wheel-segment\.active/.test(rule.selector) && /(^|[\s;])background\s*:/.test(rule.body));
-      expect(painting.map((rule) => rule.selector)).toEqual([".date-wheel-trigger.editing:focus-within .date-wheel-segment.active"]);
+      const painting = cssRules(wheelPickerCssSource)
+        .filter((rule) => /\.wheel-segment\.active/.test(rule.selector) && /(^|[\s;])background\s*:/.test(rule.body));
+      expect(painting.map((rule) => rule.selector)).toEqual([".wheel-trigger.editing:focus-within .wheel-segment.active"]);
     });
 
     /** 토큰 블록 하나에서 커스텀 프로퍼티 값을 읽는다. 블록 안에 중첩 규칙이 없다는 전제. */
@@ -4492,10 +4493,10 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     // 편집 중으로 게이트된 그 자리 하나뿐이고, 그 자리는 펄스와 겹치지 않는다.** 겹치지
     // 않는다는 것은 소스로 알 수 없으므로 이 블록 바깥의 DOM 테스트가 진다.
     it("세그먼트에 닿는 규칙 둘 중 color를 선언하는 것은 편집 중으로 게이트된 활성 규칙뿐이다", () => {
-      const targeted = cssRules(datePickerCssSource).filter((rule) => /\.date-wheel-(segment|punctuation)/.test(rule.selector));
+      const targeted = cssRules(wheelPickerCssSource).filter((rule) => /\.wheel-(segment|punctuation)/.test(rule.selector));
       expect(targeted.map((rule) => [rule.selector, declaresColor(rule.body)])).toEqual([
-        [".date-wheel-segment", false],
-        [".date-wheel-trigger.editing:focus-within .date-wheel-segment.active", true],
+        [".wheel-segment", false],
+        [".wheel-trigger.editing:focus-within .wheel-segment.active", true],
       ]);
     });
 
@@ -4503,8 +4504,8 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     // 되살리려면 먼저 "칩과 펄스가 겹치는가"를 다시 재야 하고, 겹치지 않는 한 그 규칙은
     // 확정과 무관하게 계속 매칭돼 활성 세그먼트가 옮겨질 때마다 accent를 번쩍이게 한다.
     it("세그먼트 전용 확정 펄스 규칙은 없다", () => {
-      const animated = cssRules(datePickerCssSource)
-        .filter((rule) => /\.date-wheel-segment/.test(rule.selector) && /(^|[\s;])animation/.test(rule.body));
+      const animated = cssRules(wheelPickerCssSource)
+        .filter((rule) => /\.wheel-segment/.test(rule.selector) && /(^|[\s;])animation/.test(rule.body));
       expect(animated.map((rule) => rule.selector)).toEqual([]);
     });
 
@@ -4524,7 +4525,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     // 이유는 서로 다른 요구이기 때문이다 — 하나는 "칩 위 글자가 읽히는가", 다른 하나는
     // "칩이 필드에서 도드라지는가"다. 반전을 그만두는 순간 두 수는 갈라진다.
     it("활성 세그먼트의 배경과 글자색은 값을 박지 않고 토큰을 참조한다", () => {
-      const rule = cssRules(datePickerCssSource).find((candidate) => candidate.selector === ".date-wheel-trigger.editing:focus-within .date-wheel-segment.active");
+      const rule = cssRules(wheelPickerCssSource).find((candidate) => candidate.selector === ".wheel-trigger.editing:focus-within .wheel-segment.active");
       expect([
         /(^|[\s;])background:\s*([^;]+)/.exec(rule?.body ?? "")?.[2].trim() ?? null,
         /(^|[\s;])color:\s*([^;]+)/.exec(rule?.body ?? "")?.[2].trim() ?? null,
@@ -4580,7 +4581,7 @@ describe("DateWheelPicker heading — 보이는 머리말과 접근성 이름을
     fireEvent.keyDown(field, { key: "ArrowDown" });
     return field;
   }
-  const headingText = () => document.querySelector<HTMLElement>(".date-wheel-heading strong")!.textContent;
+  const headingText = () => document.querySelector<HTMLElement>(".wheel-heading strong")!.textContent;
 
   // 뮤테이션: `heading ?? ariaLabel`을 `ariaLabel`로 되돌리면 `"거래 발생 날짜"`가 나온다.
   it("heading을 넘기면 팝오버 머리말에 그 글자가 보인다", async () => {
@@ -4728,7 +4729,7 @@ describe("DateWheelPicker 값 형식은 fields를 따른다 — 트리거 조각
 });
 
 // ── 항목 3 — 열 라벨: 시·분·초는 두 자리 숫자만(일 열의 요일 같은 부가 표시
-//    없음), DEFAULT_DATE_WHEEL_LABELS.units의 hour/minute/second 채움 ──────
+//    없음), DEFAULT_WHEEL_LABELS.units의 hour/minute/second 채움 ──────
 //
 // 이 블록은 팝오버를 연다 — 열 렌더는 `model.label`(dateWheelLabel)과
 // `shifted()`(model.shift/model.isValid)를 실제로 거치므로 그 둘의 시·분·초
@@ -4741,9 +4742,9 @@ describe("DateWheelPicker 열 라벨 — 시·분·초는 두 자리 숫자만 (
     const hour = screen.getByRole("group", { name: "시 03" });
     const minute = screen.getByRole("group", { name: "분 00" });
     const second = screen.getByRole("group", { name: "초 05" });
-    expect(hour.querySelector(".date-wheel-values button.selected")?.textContent).toBe("03");
-    expect(minute.querySelector(".date-wheel-values button.selected")?.textContent).toBe("00");
-    expect(second.querySelector(".date-wheel-values button.selected")?.textContent).toBe("05");
+    expect(hour.querySelector(".wheel-values button.selected")?.textContent).toBe("03");
+    expect(minute.querySelector(".wheel-values button.selected")?.textContent).toBe("00");
+    expect(second.querySelector(".wheel-values button.selected")?.textContent).toBe("05");
   });
 
   // 대조군 — 일 열은 여전히 요일이 붙는다. 시·분·초만 "두 자리만"이지 날짜
@@ -4765,7 +4766,7 @@ describe("DateWheelPicker 열 라벨 — 시·분·초는 두 자리 숫자만 (
     render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T23:30" fields={["year", "month", "day", "hour", "minute"] as WheelUnit[]} onChange={onChange} />);
     fireEvent.click(fieldOf("거래 시각"));
     const hourButton = screen.getByRole("button", { name: "시 다음" });
-    const hourColumn = hourButton.closest(".date-wheel-column");
+    const hourColumn = hourButton.closest(".wheel-column");
 
     fireEvent.click(hourButton);
 
@@ -4852,7 +4853,7 @@ describe("DateWheelPicker '지금'/hintNow 판정은 model.family를 거친다 (
 // `npx tsc --noEmit`이 판정합니다.
 //
 // ⚠️ 브리프 Step 1이 제안한 `const fields = ["hour","minute"] as const; expect(fields.length)
-// .toBe(2)` 형태는 여기 안 넣었습니다 — 실제 `DateWheelPickerProps.fields`(WheelUnit[])와
+// .toBe(2)` 형태는 여기 안 넣었습니다 — 실제 `WheelPickerProps.fields`(WheelUnit[])와
 // 연결되지 않은 독립 배열이라 넓히기 전에도 컴파일되고 vitest도 항상 초록입니다.
 //
 // ⚠️ 렌더 기반 검사(`it(...)`로 `<DateWheelPicker fields={["hour","minute"]}>`를 실제로
@@ -4884,7 +4885,7 @@ void _2b1JsxContextTypingOnly;
 
 // ════════════════════════════════════════════════════════════════════════
 // 2b-4 — 열 폭과 데모. Task 3(2b-3)가 시·분·초를 실제로 그리게 만들었는데
-// css/date-picker.css의 `data-fields` 그리드 규칙은 1·2만 있었다(3은 기본).
+// css/wheel-picker.css의 `data-fields` 그리드 규칙은 1·2만 있었다(3은 기본).
 // 6열 픽커를 열면 기본 3열 규칙이 그대로 걸려 마지막 세 열이 다음 줄로 밀린다.
 // ════════════════════════════════════════════════════════════════════════
 
@@ -4893,21 +4894,21 @@ void _2b1JsxContextTypingOnly;
 // 세그먼트 규칙 describe에 지역 스코프라 여기서 재사용할 수 없다).
 describe("DateWheelPicker data-fields 그리드 — 4·5·6열 (2b-4)", () => {
   /**
-   * `.date-wheel-columns`(기본 3열)와 `[data-fields="N"]` 오버라이드만 골라
+   * `.wheel-columns`(기본 3열)와 `[data-fields="N"]` 오버라이드만 골라
    * `[선택자, grid-template-columns 값]`으로 정리한다.
    *
    * ⚠️ **처음엔 `.exec()`로 "규칙 하나"만 찾았는데, 그건 첫 매치만 본다 —
    * 파일 뒤에 더 구체적이거나 모순되는 규칙이 하나 더 붙어도 못 잡는다.**
-   * 실측으로 확인했다: `.date-wheel-columns[data-fields="6"] { grid-template-columns:
+   * 실측으로 확인했다: `.wheel-columns[data-fields="6"] { grid-template-columns:
    * repeat(3, …); }`를 파일 끝에 추가해도 그 버전은 초록이었다 — 이 파일 :4306
    * 주석이 이름 댄 함정("규칙을 *덧붙이는* 결함은 안 잡힌다") 그대로였다. 그래서
    * `matchAll`로 **전체 목록**을 모아 `toEqual`로 소진 비교한다 — 모순되는 규칙이
    * 하나 더 붙으면 목록 길이 자체가 달라져 시끄럽게 터진다.
    */
   function columnsGridRules() {
-    return [...datePickerCssSource.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    return [...wheelPickerCssSource.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)]
       .map((match) => ({ selector: match[1].replace(/\s+/g, " ").trim(), body: match[2] }))
-      .filter((rule) => /^\.date-wheel-columns(\[data-fields="\d"\])?$/.test(rule.selector))
+      .filter((rule) => /^\.wheel-columns(\[data-fields="\d"\])?$/.test(rule.selector))
       .map((rule) => [rule.selector, /grid-template-columns:\s*([^;]+)/.exec(rule.body)?.[1].trim() ?? null]);
   }
 
@@ -4918,12 +4919,12 @@ describe("DateWheelPicker data-fields 그리드 — 4·5·6열 (2b-4)", () => {
   // 함께 고정해 둘 다 막는다.
   it("data-fields 그리드 규칙 전체가 정확히 이 목록이다 — 기본 3열 + 1·2(기존) + 4·5·6(2b-4)", () => {
     expect(columnsGridRules()).toEqual([
-      [".date-wheel-columns", "repeat(3, minmax(0, 1fr))"],
-      [".date-wheel-columns[data-fields=\"2\"]", "repeat(2, minmax(0, 1fr))"],
-      [".date-wheel-columns[data-fields=\"1\"]", "minmax(0, 1fr)"],
-      [".date-wheel-columns[data-fields=\"4\"]", "repeat(4, minmax(0, 1fr))"],
-      [".date-wheel-columns[data-fields=\"5\"]", "repeat(5, minmax(0, 1fr))"],
-      [".date-wheel-columns[data-fields=\"6\"]", "repeat(6, minmax(0, 1fr))"],
+      [".wheel-columns", "repeat(3, minmax(0, 1fr))"],
+      [".wheel-columns[data-fields=\"2\"]", "repeat(2, minmax(0, 1fr))"],
+      [".wheel-columns[data-fields=\"1\"]", "minmax(0, 1fr)"],
+      [".wheel-columns[data-fields=\"4\"]", "repeat(4, minmax(0, 1fr))"],
+      [".wheel-columns[data-fields=\"5\"]", "repeat(5, minmax(0, 1fr))"],
+      [".wheel-columns[data-fields=\"6\"]", "repeat(6, minmax(0, 1fr))"],
     ]);
   });
 
@@ -4932,14 +4933,14 @@ describe("DateWheelPicker data-fields 그리드 — 4·5·6열 (2b-4)", () => {
   it("연·월·일·시·분·초 6열이 팝오버에 data-fields=\"6\"으로 그려진다", () => {
     render(<DateWheelPicker ariaLabel="예약 시각" value="2026-07-12T18:30:05" fields={["year", "month", "day", "hour", "minute", "second"]} onChange={() => undefined} />);
     fireEvent.click(fieldOf("예약 시각"));
-    const columns = screen.getByRole("dialog", { name: "예약 시각 선택" }).querySelector(".date-wheel-columns");
+    const columns = screen.getByRole("dialog", { name: "예약 시각 선택" }).querySelector(".wheel-columns");
     expect(columns?.getAttribute("data-fields")).toBe("6");
   });
 
   it("날짜+시각 5열이 팝오버에 data-fields=\"5\"로 그려진다", () => {
     render(<DateWheelPicker ariaLabel="약속 시각" value="2026-07-12T18:30" fields={["year", "month", "day", "hour", "minute"]} onChange={() => undefined} />);
     fireEvent.click(fieldOf("약속 시각"));
-    const columns = screen.getByRole("dialog", { name: "약속 시각 선택" }).querySelector(".date-wheel-columns");
+    const columns = screen.getByRole("dialog", { name: "약속 시각 선택" }).querySelector(".wheel-columns");
     expect(columns?.getAttribute("data-fields")).toBe("5");
   });
 });
@@ -4951,33 +4952,33 @@ describe("DateWheelPicker data-fields 그리드 — 4·5·6열 (2b-4)", () => {
 // 그대로 "…Ctrl+; 오늘"이었다 — 버튼과 안내가 서로 다른 말을 한다.
 //
 // ⚠️ **`now`가 필수 필드로 들어가면서 전체 객체를 만들던 소비자의 컴파일이
-// 깨졌다(이미 일어난 일 — DEFAULT_DATE_WHEEL_LABELS 자신이 `DateWheelLabels`로
+// 깨졌다(이미 일어난 일 — DEFAULT_WHEEL_LABELS 자신이 `WheelLabels`로
 // 타입된 "전체 객체"이고, `now`를 안 채우면 그 자리에서 tsc가 거절한다).
 // `hintNow`는 같은 실수를 반복하지 않는다 — **선택 필드**로 둔다.** 이유: `now`처럼
-// 필수로 두면 이미 어딘가(이 킷 안팎에서) `DateWheelLabels`로 완전히 타입된 라벨
+// 필수로 두면 이미 어딘가(이 킷 안팎에서) `WheelLabels`로 완전히 타입된 라벨
 // 상수를 만든 모든 소비자가 `hintNow` 없이는 컴파일이 깨진다. `labels` prop 자체는
-// `Partial<DateWheelLabels>`라 부분 override는 원래도 영향이 없지만, "완전한 타입의
-// 상수"를 만드는 소비자(DEFAULT_DATE_WHEEL_LABELS가 바로 그 모양)는 영향을 받는다 —
+// `Partial<WheelLabels>`라 부분 override는 원래도 영향이 없지만, "완전한 타입의
+// 상수"를 만드는 소비자(DEFAULT_WHEEL_LABELS가 바로 그 모양)는 영향을 받는다 —
 // 그 자리를 선택으로 열어 둔다.
 describe("DateWheelPicker 팝오버 안내 문구 — 시간 열이 있으면 hintNow를 쓴다 (2b-4)", () => {
   function hintText(ariaLabel: string) {
-    return screen.getByRole("dialog", { name: `${ariaLabel} 선택` }).querySelector(".date-wheel-heading span")?.textContent ?? null;
+    return screen.getByRole("dialog", { name: `${ariaLabel} 선택` }).querySelector(".wheel-heading span")?.textContent ?? null;
   }
 
   it("시간 열이 있으면 안내 문구가 hintNow다", () => {
     render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T03:00:05" fields={["year", "month", "day", "hour", "minute", "second"]} onChange={() => undefined} />);
     fireEvent.click(fieldOf("거래 시각"));
-    expect(hintText("거래 시각")).toBe(DEFAULT_DATE_WHEEL_LABELS.hintNow);
+    expect(hintText("거래 시각")).toBe(DEFAULT_WHEEL_LABELS.hintNow);
     // hintNow와 hint가 실제로 다른 문구여야 이 검사가 의미가 있다 — 같으면 hint
     // 그대로 둬도 통과하는 공허 검사가 된다.
-    expect(DEFAULT_DATE_WHEEL_LABELS.hintNow).not.toBe(DEFAULT_DATE_WHEEL_LABELS.hint);
+    expect(DEFAULT_WHEEL_LABELS.hintNow).not.toBe(DEFAULT_WHEEL_LABELS.hint);
   });
 
   // 대조군 — 시간 열이 없으면 지금까지처럼 hint 그대로다.
   it("시간 열이 없으면 안내 문구는 여전히 hint다 — 대조군", () => {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} />);
     fireEvent.click(fieldOf("거래 날짜"));
-    expect(hintText("거래 날짜")).toBe(DEFAULT_DATE_WHEEL_LABELS.hint);
+    expect(hintText("거래 날짜")).toBe(DEFAULT_WHEEL_LABELS.hint);
   });
 
   // hintNow가 선택 필드라는 계약의 런타임 쪽 절반 — override가 hint만 주고 hintNow를
@@ -4991,7 +4992,7 @@ describe("DateWheelPicker 팝오버 안내 문구 — 시간 열이 있으면 hi
   it("override가 hint만 주고 hintNow를 생략하면 — now/today와 같은 비대칭으로 — 기본 hintNow가 그대로 쓰인다", () => {
     render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T03:00:05" fields={["year", "month", "day", "hour", "minute", "second"]} onChange={() => undefined} labels={{ hint: "커스텀 안내" }} />);
     fireEvent.click(fieldOf("거래 시각"));
-    expect(hintText("거래 시각")).toBe(DEFAULT_DATE_WHEEL_LABELS.hintNow);
+    expect(hintText("거래 시각")).toBe(DEFAULT_WHEEL_LABELS.hintNow);
   });
 
   // `?? labels.hint`가 죽은 코드가 아님을 증명한다 — 병합 순서상(`{ ...DEFAULT,
@@ -5011,7 +5012,7 @@ describe("DateWheelPicker 팝오버 안내 문구 — 시간 열이 있으면 hi
 // 건드리지 않고 `tsc --noEmit`만으로 판정한다. hintNow가 실수로 required가 되면
 // 아래 리터럴이 그 필드를 안 채웠으므로 여기서 tsc가 거절한다 — `now`가 이미 그
 // 함정에 걸렸던 자리(위 설명)를 되밟지 않는다는 계약을 코드로 못 박는다.
-const _hintNowIsOptional: DateWheelLabels = {
+const _hintNowIsOptional: WheelLabels = {
   placeholder: "날짜 선택", hint: "안내", today: "오늘", now: "지금", clear: "비우기", done: "완료",
   previous: "이전", next: "다음", select: "선택", weekdays: ["일", "월", "화", "수", "목", "금", "토"],
   units: { year: "연도", month: "월", day: "일", hour: "시", minute: "분", second: "초" },
@@ -5074,7 +5075,7 @@ describe("DateWheelPicker 12시간제 (3단계)", () => {
 
     const hour = screen.getByRole("group", { name: "시 오전 11" });
     // 기본 설정(위아래 1줄)에서는 프리로드 둘을 포함해 다섯 행이다.
-    const rows = [...hour.querySelectorAll(".date-wheel-values button")].map((row) => row.textContent);
+    const rows = [...hour.querySelectorAll(".wheel-values button")].map((row) => row.textContent);
     expect(rows).toEqual(["09", "10", "11", "12", "01"]);
   });
 
@@ -5139,7 +5140,7 @@ describe("DateWheelPicker 12시간제 (3단계)", () => {
 
 // ── 3단계 — 오전/오후는 열이 아니라 **버튼**이다 (스펙 §7) ────────────────────
 //
-// 열로 두지 않은 이유 셋이 스펙에 있다: 값이 둘뿐인데 DATE_WHEEL_OFFSETS가 일곱 행을
+// 열로 두지 않은 이유 셋이 스펙에 있다: 값이 둘뿐인데 WHEEL_OFFSETS가 일곱 행을
 // 그린다 / 가장 좁을 때 정확히 한 열을 아낀다(날짜+시각이 7열 대신 6열) / 팝오버에
 // 이미 버튼 줄이 있다. 이 블록은 그 결정이 화면에 그대로 나타나는지를 고정한다.
 //
@@ -5256,7 +5257,7 @@ describe("DateWheelPicker 오전/오후 버튼 (3단계)", () => {
   it("하단 확정 줄(오늘·비우기·완료)에 섞이지 않는다", () => {
     setHourFormat("12");
     openAt("2026-08-12T15:00:05");
-    const actions = document.querySelector(".date-wheel-actions")!;
+    const actions = document.querySelector(".wheel-actions")!;
     expect(actions.contains(screen.getByRole("button", { name: "오전" }))).toBe(false);
     expect(actions.contains(screen.getByRole("button", { name: "오후" }))).toBe(false);
   });
@@ -5447,7 +5448,7 @@ describe("DateWheelPicker 12시간제 시 타이핑 (3단계)", () => {
 
 /* 🔴 `meridiem`을 **명시적으로 `undefined`로** override하는 경로. `hintNow`가 같은
  * 자리에서 이미 검사를 하나 갖고 있습니다("hintNow를 명시적으로 undefined로
- * override하면 hint로 대체된다") — `Partial<DateWheelLabels>`가 그것을 타입으로
+ * override하면 hint로 대체된다") — `Partial<WheelLabels>`가 그것을 타입으로
  * 허용하고(이 저장소 tsconfig에 `exactOptionalPropertyTypes`가 없습니다), 스프레드
  * 병합에서 명시적 `undefined`는 **기본값으로 안 떨어지고 덮어씁니다.**
  *
@@ -5481,13 +5482,13 @@ describe("labels.meridiem을 명시적으로 undefined로 줘도 터지지 않�
  * CSS 선택자 하나로 두 경우를 다 맞추는 자리라, 소스로 계약을 고정합니다. */
 describe("시각 묶음 경계 여백 (오너 리포트 5번)", () => {
   it("시 열이 첫 열이 아닐 때만 여백이 붙는다", () => {
-    expect(datePickerCssSource).toContain('.date-wheel-column[data-unit="hour"]:not(:first-child) { margin-left: 8px; }');
+    expect(wheelPickerCssSource).toContain('.wheel-column[data-unit="hour"]:not(:first-child) { margin-left: 8px; }');
   });
 
   it("열이 자기 단위를 마크업으로 말한다 — CSS가 지목할 수 있어야 한다", () => {
     render(<DateWheelPicker ariaLabel="교차" value="2026-08-12T03:00" fields={["day", "hour", "minute"] as WheelUnit[]} onChange={() => undefined} />);
     fireEvent.click(fieldOf("교차"));
-    const units = [...document.querySelectorAll(".date-wheel-column")].map((column) => column.getAttribute("data-unit"));
+    const units = [...document.querySelectorAll(".wheel-column")].map((column) => column.getAttribute("data-unit"));
     expect(units).toEqual(["day", "hour", "minute"]);
     // 시가 둘째 열이므로 :not(:first-child)에 걸린다 = 경계 여백이 붙는 자리다.
     expect(units.indexOf("hour")).toBe(1);
@@ -5496,7 +5497,7 @@ describe("시각 묶음 경계 여백 (오너 리포트 5번)", () => {
   it("시각 전용 픽커에서는 시가 첫 열이라 여백 대상이 아니다", () => {
     render(<DateWheelPicker ariaLabel="시각만" value="03:00" fields={["hour", "minute"] as WheelUnit[]} onChange={() => undefined} />);
     fireEvent.click(fieldOf("시각만"));
-    const units = [...document.querySelectorAll(".date-wheel-column")].map((column) => column.getAttribute("data-unit"));
+    const units = [...document.querySelectorAll(".wheel-column")].map((column) => column.getAttribute("data-unit"));
     expect(units.indexOf("hour")).toBe(0);
   });
 });
@@ -5506,7 +5507,7 @@ describe("시각 묶음 경계 여백 (오너 리포트 5번)", () => {
 // 제스처가 **± 버튼이 아니라 행**인 것은 오너 결정이다: ± 버튼에 걸면 그 버튼이 나중에
 // "꾹 눌러 연속 증감"을 가질 수 없게 되고, 그건 되돌릴 수 없는 문이다.
 describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () => {
-  // 오너 리포트 5차로 2000 → 700ms. 소스의 `DATE_WHEEL_HOLD_MS`와 같은 수여야 하고,
+  // 오너 리포트 5차로 2000 → 700ms. 소스의 `WHEEL_HOLD_MS`와 같은 수여야 하고,
   // 아래 "임계 전에 떼면"은 이 값에서 400을 빼므로 임계가 바뀌면 그 검사가 먼저 깨집니다 —
   // 실제로 깨져서 알았습니다. 그게 이 상수를 검사에 둔 값어치입니다.
   const HOLD_MS = 500;
@@ -5600,7 +5601,7 @@ describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () =
     vi.useFakeTimers();
     openTime("2026-08-12T15:07:41");
     const row = rowOf("초", 0);
-    const column = row.closest(".date-wheel-column")!;
+    const column = row.closest(".wheel-column")!;
     expect(column.classList.contains("holding")).toBe(false);
     pointer("pointerDown", row, { pointerId: 7, clientY: 100, button: 0, isPrimary: true });
     expect(column.classList.contains("holding")).toBe(true);
@@ -5637,12 +5638,12 @@ describe("DateWheelPicker 휠 행 수 설정 (오너 리포트 6번)", () => {
   it("기본은 위아래 1줄이다 — 오너 결정(지금까지의 2에서 바뀐 값)", () => {
     const year = openYear();
     // 보이는 3 + 프리로드 2 = 5
-    expect(year.querySelectorAll(".date-wheel-values button")).toHaveLength(5);
+    expect(year.querySelectorAll(".wheel-values button")).toHaveLength(5);
   });
 
   it("4로 올리면 열한 행이 된다 — 보이는 9 + 프리로드 2", () => {
     setWheelRowsPerSide(4);
-    expect(openYear().querySelectorAll(".date-wheel-values button")).toHaveLength(11);
+    expect(openYear().querySelectorAll(".wheel-values button")).toHaveLength(11);
   });
 
   /* 🔴 **프리로드 행은 접근성 트리에서 빠져야 합니다** — 화면에 없는 값입니다.
@@ -5652,7 +5653,7 @@ describe("DateWheelPicker 휠 행 수 설정 (오너 리포트 6번)", () => {
     for (const rows of [1, 2, 4] as const) {
       cleanup();
       setWheelRowsPerSide(rows);
-      const hidden = [...openYear().querySelectorAll(".date-wheel-values button")].map((row) => row.getAttribute("aria-hidden") === "true");
+      const hidden = [...openYear().querySelectorAll(".wheel-values button")].map((row) => row.getAttribute("aria-hidden") === "true");
       expect(hidden).toEqual([true, ...Array(rows * 2 + 1).fill(false), true]);
     }
   });
@@ -5661,22 +5662,22 @@ describe("DateWheelPicker 휠 행 수 설정 (오너 리포트 6번)", () => {
     for (const rows of [1, 2, 3, 4] as const) {
       cleanup();
       setWheelRowsPerSide(rows);
-      const all = [...openYear().querySelectorAll(".date-wheel-values button")];
+      const all = [...openYear().querySelectorAll(".wheel-values button")];
       expect(all.findIndex((row) => row.classList.contains("selected"))).toBe(rows + 1);
     }
   });
 
   it("설정을 바꾸면 이미 떠 있는 픽커가 따라 바뀐다 — 구독이 실제로 돈다", () => {
     const year = openYear();
-    expect(year.querySelectorAll(".date-wheel-values button")).toHaveLength(5);
+    expect(year.querySelectorAll(".wheel-values button")).toHaveLength(5);
     act(() => setWheelRowsPerSide(3));
-    expect(screen.getByRole("group", { name: "연도 2026" }).querySelectorAll(".date-wheel-values button")).toHaveLength(9);
+    expect(screen.getByRole("group", { name: "연도 2026" }).querySelectorAll(".wheel-values button")).toHaveLength(9);
   });
 
   it("컴포넌트가 행 수를 CSS에 내려보낸다 — 창 높이가 그 값에서 나온다", () => {
     setWheelRowsPerSide(3);
     openYear();
-    expect(document.querySelector(".date-wheel-columns")?.getAttribute("style")).toContain("--date-wheel-rows: 3");
+    expect(document.querySelector(".wheel-columns")?.getAttribute("style")).toContain("--wheel-rows: 3");
   });
 });
 
@@ -5690,25 +5691,25 @@ describe("오전/오후 줄의 격자 좌표 (오너 리포트 3차)", () => {
     setHourFormat("12");
     render(<DateWheelPicker ariaLabel="정렬" value={value} fields={fields} onChange={() => undefined} />);
     fireEvent.click(fieldOf("정렬"));
-    return document.querySelector(".date-wheel-meridiem")?.getAttribute("style") ?? "";
+    return document.querySelector(".wheel-meridiem")?.getAttribute("style") ?? "";
   };
 
   it("날짜+시각 6열이면 시각은 네 번째 열에서 시작한다", () => {
     const style = openAt(["year", "month", "day", "hour", "minute", "second"], "2026-08-12T15:00:05");
-    expect(style).toContain("--date-wheel-fields: 6");
-    expect(style).toContain("--date-wheel-time-start: 3");
+    expect(style).toContain("--wheel-fields: 6");
+    expect(style).toContain("--wheel-time-start: 3");
   });
 
   it("시각 전용이면 시작 인덱스가 0이라 왼쪽으로 안 밀린다", () => {
     const style = openAt(["hour", "minute"], "15:00");
-    expect(style).toContain("--date-wheel-fields: 2");
-    expect(style).toContain("--date-wheel-time-start: 0");
+    expect(style).toContain("--wheel-fields: 2");
+    expect(style).toContain("--wheel-time-start: 0");
   });
 
   it("날짜가 하루만 남아도 인덱스가 따라간다", () => {
     const style = openAt(["day", "hour", "minute"], "2026-08-12T15:00");
-    expect(style).toContain("--date-wheel-fields: 3");
-    expect(style).toContain("--date-wheel-time-start: 1");
+    expect(style).toContain("--wheel-fields: 3");
+    expect(style).toContain("--wheel-time-start: 1");
   });
 });
 
@@ -5721,7 +5722,7 @@ describe("팝오버 바닥 폭 (오너 리포트: 데스크톱에서 답답함)"
   const widthFor = (fields?: WheelUnit[], value = "2026-08-12") => {
     render(<DateWheelPicker ariaLabel="폭" value={value} fields={fields} onChange={() => undefined} />);
     fireEvent.click(fieldOf("폭"));
-    return (document.querySelector(".date-wheel-popover") as HTMLElement).style.width;
+    return (document.querySelector(".wheel-popover") as HTMLElement).style.width;
   };
 
   it("대조군: 3열 날짜 픽커는 글자 하나 안 바뀐다 — 292px 그대로", () => {
@@ -5750,9 +5751,9 @@ describe("팝오버 바닥 폭 (오너 리포트: 데스크톱에서 답답함)"
    * 묶음 마진은 두 곳에 각각 적혀 있고, 한쪽만 바뀌면 폭이 어긋난 채 그럴듯해 보입니다 —
    * 이 저장소가 트레이스 패널 상수에서 이미 두 번 경고한 모양입니다. 대조합니다. */
   it("바닥 폭이 쓰는 수는 CSS에 적힌 그 수다", () => {
-    expect(datePickerCssSource).toContain(".date-wheel-popover { position: fixed; z-index: 450; overflow-y: auto; padding: 12px;");
-    expect(datePickerCssSource).toContain('.date-wheel-column[data-unit="hour"]:not(:first-child) { margin-left: 8px; }');
-    expect(datePickerCssSource).toContain('.date-wheel-column:is([data-unit="minute"], [data-unit="second"]) { margin-left: 6px; }');
+    expect(wheelPickerCssSource).toContain(".wheel-popover { position: fixed; z-index: 450; overflow-y: auto; padding: 12px;");
+    expect(wheelPickerCssSource).toContain('.wheel-column[data-unit="hour"]:not(:first-child) { margin-left: 8px; }');
+    expect(wheelPickerCssSource).toContain('.wheel-column:is([data-unit="minute"], [data-unit="second"]) { margin-left: 6px; }');
   });
 });
 
@@ -5843,7 +5844,7 @@ describe("DateWheelPicker 더블탭 초기화 (오너 리포트 5차)", () => {
 });
 
 describe("길게 누르기 임계와 진행 막대 (오너 리포트 5·6차)", () => {
-  /* 🔴 **수 셋이 한 벌입니다:** 소스의 `DATE_WHEEL_HOLD_MS`(500) = CSS의 지연(200) +
+  /* 🔴 **수 셋이 한 벌입니다:** 소스의 `WHEEL_HOLD_MS`(500) = CSS의 지연(200) +
    * 성장(300). 하나만 바꾸면 막대가 다 찼는데 안 걸리거나, 걸렸는데 덜 찬 채 사라집니다 —
    * 이 저장소가 "조용히 거짓말하는 표시"라고 부르는 것입니다.
    *
@@ -5851,11 +5852,11 @@ describe("길게 누르기 임계와 진행 막대 (오너 리포트 5·6차)", 
    * 더블탭의 한 탭은 보통 50~120ms라 지연 안에 끝나고, 그동안 막대는 `width: 0`이라
    * 아무것도 안 그립니다. */
   it("막대의 지연과 성장을 합치면 홀드 임계 500ms다", () => {
-    expect(datePickerCssSource).toContain("animation: date-wheel-hold 300ms linear 200ms forwards;");
+    expect(wheelPickerCssSource).toContain("animation: wheel-hold 300ms linear 200ms forwards;");
   });
 
   it("움직임을 줄이는 환경에서도 지연은 남는다 — 더블탭에서 번쩍이면 안 된다", () => {
-    expect(datePickerCssSource).toContain(".date-wheel-column.holding::after { animation: date-wheel-hold 1ms linear 200ms forwards; }");
+    expect(wheelPickerCssSource).toContain(".wheel-column.holding::after { animation: wheel-hold 1ms linear 200ms forwards; }");
   });
 });
 
@@ -5954,7 +5955,7 @@ describe("팝오버 버튼은 pointerup에서 확정된다 (오너 실기기 결
  * 수준에서 살아 있는지를 보는 검사입니다 — 이 파일의 `_hintNowIsOptional`과 같은 idiom
  * 으로, `it()` 없이 모듈 스코프에 두어 `tsc --noEmit`만으로 판정합니다. 누가 셋 중
  * 하나라도 다시 선택으로 열면 **여기서 tsc가 거절합니다.** */
-const _unitsAreAllRequired: DateWheelLabels["units"] = {
+const _unitsAreAllRequired: WheelLabels["units"] = {
   year: "Year", month: "Month", day: "Day",
   // 이 셋을 지우면 tsc가 터집니다 — 그게 이 상수의 전부입니다.
   hour: "Hour", minute: "Minute", second: "Second",
@@ -5974,7 +5975,7 @@ describe("units 누수가 닫혔다 (오너 결정 2026-08-13)", () => {
         units: { year: "Year", month: "Month", day: "Day", hour: "Hour", minute: "Minute", second: "Second" },
       }} />);
     fireEvent.click(fieldOf("Logged at"));
-    const names = [...document.querySelectorAll(".date-wheel-column")].map((column) => column.getAttribute("aria-label") ?? "");
+    const names = [...document.querySelectorAll(".wheel-column")].map((column) => column.getAttribute("aria-label") ?? "");
     expect(names.some((name) => /[가-힣]/.test(name))).toBe(false);
     expect(names).toContain("Hour 15");
   });
@@ -6015,7 +6016,7 @@ describe("필드의 복사·붙여넣기·되돌리기·저장", () => {
     }));
   }
 
-  const segment = (unit: string) => document.querySelector(`.date-wheel-segment[data-unit="${unit}"]`) as HTMLElement;
+  const segment = (unit: string) => document.querySelector(`.wheel-segment[data-unit="${unit}"]`) as HTMLElement;
 
   it("Ctrl+C는 화면에 보이는 그대로를 클립보드에 쓴다", () => {
     const written = stubClipboard();
@@ -6076,7 +6077,7 @@ describe("필드의 복사·붙여넣기·되돌리기·저장", () => {
   it("휠 한 무리는 되돌리기 항목 하나다 — 한 번에 세 칸 전부 되돌아온다", () => {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
     fireEvent.click(fieldOf("거래 날짜"));
-    const column = document.querySelector('.date-wheel-column[data-unit="day"]') as HTMLElement;
+    const column = document.querySelector('.wheel-column[data-unit="day"]') as HTMLElement;
     for (let notch = 0; notch < 3; notch += 1) fireEvent.wheel(column, { deltaY: 1 });
     expect(fieldOf("거래 날짜").textContent).toContain("2026. 07. 15.");
     fireEvent.keyDown(fieldOf("거래 날짜"), { key: "z", code: "KeyZ", ctrlKey: true });
@@ -6096,7 +6097,7 @@ describe("필드의 복사·붙여넣기·되돌리기·저장", () => {
   it("닫힌 빈 필드에서 Ctrl+S는 값을 만들지 않는다", () => {
     render(<ControlledDateWheel initialValue="" />);
     fireEvent.keyDown(fieldOf("거래 날짜"), { key: "s", code: "KeyS", ctrlKey: true });
-    expect(fieldOf("거래 날짜").textContent).toContain(DEFAULT_DATE_WHEEL_LABELS.placeholder);
+    expect(fieldOf("거래 날짜").textContent).toContain(DEFAULT_WHEEL_LABELS.placeholder);
   });
 
   it("손가락에서는 세그먼트를 눌러도 그 세그먼트를 고르지 않는다", () => {
@@ -6139,7 +6140,7 @@ describe("필드의 복사·붙여넣기·되돌리기·저장", () => {
 
 /* 격자(step) — 설계 스펙 §8. 기계 쪽 계약입니다(모델 쪽은 instantModel.test.ts). */
 describe("열마다의 격자(step)", () => {
-  const col = (unit: string) => document.querySelector(`.date-wheel-column[data-unit="${unit}"]`) as HTMLElement;
+  const col = (unit: string) => document.querySelector(`.wheel-column[data-unit="${unit}"]`) as HTMLElement;
 
   it("한 노치가 step 하나다", () => {
     const onChange = vi.fn();
@@ -6195,7 +6196,7 @@ describe("열마다의 격자(step)", () => {
 
 /* 리뷰(2026-08-15)가 잡은 구멍들. 전부 step이 걸린 자리인데 검사가 없던 곳입니다. */
 describe("격자(step) — 리뷰가 잡은 자리", () => {
-  const col = (unit: string) => document.querySelector(`.date-wheel-column[data-unit="${unit}"]`) as HTMLElement;
+  const col = (unit: string) => document.querySelector(`.wheel-column[data-unit="${unit}"]`) as HTMLElement;
 
   /* 🔴 안 내리면 분 step 15에서 `47`을 **타이핑하면 45가 되는데** `지금`을 누르면 03:47이
    * 그대로 남습니다 — 같은 수에 이르는 두 경로가 갈립니다(오너 결정: 내리는 쪽). */
