@@ -7,12 +7,8 @@
  * (lastDayOf, 윤년). 월의 상한은 12로 상수, 연은 상한이 없습니다. 설계 스펙 §3.1.
  */
 export type WheelUnit = "year" | "month" | "day" | "hour" | "minute" | "second";
-/** 기존 이름. **2b-1부터 `WheelUnit`의 별칭입니다.** 2a에서는 별칭으로 넓히면 컴포넌트의
- *  3키짜리 `Record<DateWheelUnit, …>`(컬럼 모션 상태 등)가 깨져서 "부분집합, 별칭 아님"으로
- *  남겨야 했습니다 — 그때는 컴포넌트를 못 건드리는 제약이 있었습니다. 2b는 컴포넌트를 고칠 수
- *  있으므로 그 자리들을 여섯 단위로 채우고 여기서 별칭으로 통일합니다. `export`는 그대로
- *  유지합니다 — tests/DateWheelPicker.test.tsx와 컴포넌트가 이 이름으로 가져옵니다. */
-export type DateWheelUnit = WheelUnit;
+/* 옛 이름 `DateWheelUnit`은 5단계에서 없앴습니다 — `WheelUnit`의 별칭일 뿐이었고,
+ * 이 컨트롤이 시각까지 다루게 된 뒤로는 이름이 거짓이었습니다. */
 
 /** 여섯 단위의 순서. 큰 단위부터 작은 단위로. */
 export const UNIT_LADDER = ["year", "month", "day", "hour", "minute", "second"] as const satisfies readonly WheelUnit[];
@@ -519,8 +515,8 @@ const WAIT = (digits: string): TypingStep => ({ digits, commit: null, advance: f
 const DONE = (commit: number): TypingStep => ({ digits: "", commit, advance: true });
 
 /** 버퍼에 숫자 하나를 더한 결과. `digit`은 "0"~"9" 한 글자여야 합니다.
- *  인자가 `DateWheelUnit`이 아니라 `WheelUnit`인 것은 의도입니다 — 이 함수는 시·분·초로도
- *  불립니다. `DateWheelUnit`(3단위)은 `WheelUnit`의 부분집합이라 기존 호출부는 그대로 통과합니다. */
+ *  인자가 `WheelUnit`이 아니라 `WheelUnit`인 것은 의도입니다 — 이 함수는 시·분·초로도
+ *  불립니다. `WheelUnit`(3단위)은 `WheelUnit`의 부분집합이라 기존 호출부는 그대로 통과합니다. */
 export function typeDigit(unit: WheelUnit, buffer: string, digit: string, hourFormat: HourFormat = "24"): TypingStep {
   if (unit === "year") {
     const next = buffer + digit;
@@ -594,7 +590,7 @@ export function lastDayOf(year: number, monthIndex: number) {
  * Task 3부터 `new Date(...)`를 쓰지 않습니다 — parseValue/serializeValue로
  * 값을 드나들어 `fields`의 계열(date/time/datetime) 무엇이든 다룹니다(§5).
  */
-export function withUnitValue(value: string, unit: DateWheelUnit, amount: number, fields: WheelUnit[] = DEFAULT_FIELDS, step?: WheelStep): string {
+export function withUnitValue(value: string, unit: WheelUnit, amount: number, fields: WheelUnit[] = DEFAULT_FIELDS, step?: WheelStep): string {
   const parts = parseValue(value, fields);
   if (!parts) return value;
   // 격자에 안 얹힌 값은 **내립니다**(스펙 §8).
@@ -667,7 +663,7 @@ export function todayIn(timeZone: string, fields: WheelUnit[] = DEFAULT_FIELDS):
  * 그냥 매치 실패로 걸러내고, `shiftedFrom`의 `model.isValid` 가드가 null로
  * 받아냅니다 — 별도 방어 코드가 필요 없습니다.
  */
-export function shiftDateValue(value: string, unit: DateWheelUnit, direction: number, fields: WheelUnit[] = DEFAULT_FIELDS, step?: WheelStep): string {
+export function shiftDateValue(value: string, unit: WheelUnit, direction: number, fields: WheelUnit[] = DEFAULT_FIELDS, step?: WheelStep): string {
   const parts = parseValue(value, fields);
   if (!parts) return value;
   const next = { ...parts };
@@ -722,7 +718,7 @@ export function validDateValue(value: string, fields: WheelUnit[] = DEFAULT_FIEL
 /** 남은 최소 단위 기준 비교 길이. 일 있으면 10(YYYY-MM-DD), 월까지면 7(YYYY-MM), 연만이면 4.
  *  연·월 픽커(일 없음)에서 min/max를 "월" 단위로 비교하게 만드는 핵심입니다 —
  *  일이 01로 고정돼도, 예산이 7월 중순부터 시작(min="2026-07-15")하면 7월 전체가 선택 가능해야 합니다. */
-export function rangeKeyLength(fields: DateWheelUnit[]) {
+export function rangeKeyLength(fields: WheelUnit[]) {
   return fields.includes("day") ? 10 : fields.includes("month") ? 7 : 4;
 }
 
@@ -740,7 +736,7 @@ export function rangeKeyLength(fields: DateWheelUnit[]) {
  * 돌려줍니다 — 예전에도 형식을 검증하지 않았으므로 이 자리에서 새로 던지지
  * 않습니다.
  */
-export function normalizeToFields(value: string, fields: DateWheelUnit[]): string {
+export function normalizeToFields(value: string, fields: WheelUnit[]): string {
   const parts = parseValue(value, fields);
   return parts ? serializeValue(parts, fields) : value;
 }
@@ -759,7 +755,7 @@ function weekdayIndex(year: number, month: number, day: number): number {
  * 일 두 자리 + 요일), **시·분·초는 두 자리 숫자만입니다** — 일 열의 요일 같은
  * 부가 표시가 없습니다.
  */
-export function dateWheelLabel(value: string, unit: DateWheelUnit, weekdays: string[], fields: WheelUnit[] = DEFAULT_FIELDS, hour: HourDisplay = DEFAULT_HOUR_DISPLAY): string {
+export function dateWheelLabel(value: string, unit: WheelUnit, weekdays: string[], fields: WheelUnit[] = DEFAULT_FIELDS, hour: HourDisplay = DEFAULT_HOUR_DISPLAY): string {
   const parts = parseValue(value, fields);
   if (!parts) return "";
   if (unit === "year") return String(parts.year);
@@ -803,10 +799,10 @@ export function dateWheelLabel(value: string, unit: DateWheelUnit, weekdays: str
  * 글리프를 그대로 쓰지 않고 코드포인트 이스케이프로 적습니다 — `‒`(U+2012)는 `-`(U+002D)·
  * `–`(U+2013)와 화면에서 구별되지 않아, 눈으로는 못 잡는 조용한 폭 회귀가 됩니다.
  */
-export const DATE_WHEEL_FILL = "\u2012";
+export const WHEEL_FILL = "\u2012";
 
 /** 트리거를 이루는 조각. `unit: null`이 구두점(`. `)이고, 렌더에서 aria-hidden으로 나갑니다. */
-export type DateTriggerPart = { unit: DateWheelUnit | null; text: string };
+export type DateTriggerPart = { unit: WheelUnit | null; text: string };
 
 const TRIGGER_DATE_UNITS: WheelUnit[] = ["year", "month", "day"];
 const TRIGGER_TIME_UNITS: WheelUnit[] = ["hour", "minute", "second"];
@@ -822,13 +818,13 @@ const TRIGGER_TIME_UNITS: WheelUnit[] = ["hour", "minute", "second"];
  * 옮기면 그 등가성이 조용히 깨집니다.
  *
  * **버퍼는 자리를 지켜 그립니다** — "20" → `20‒‒`, "203" → `203‒`, 월 "1" → `1‒`
- * (채움 문자는 `DATE_WHEEL_FILL`, U+2012), **시각 세그먼트도 마찬가지입니다**(Task 3
+ * (채움 문자는 `WHEEL_FILL`, U+2012), **시각 세그먼트도 마찬가지입니다**(Task 3
  * 항목 2). 친 만큼만 그리는 안(`203. 07. 12.`)은 기각됐습니다: 자릿수가 늘었다 줄었다
  * 하며 필드 폭이 요동치고, 세 자리 `203`이 순간적으로 유효한 연도처럼 읽힙니다.
  *
  * **폭을 지키는 장치가 둘이고 역할이 다릅니다.** `css/wheel-picker.css`의
  * `.wheel-segment`가 거는 `tabular-nums`는 **숫자끼리** 폭을 맞추고(이 폰트에서
- * 비례폭 `1`은 898, `4`는 1278로 크게 다릅니다), `DATE_WHEEL_FILL`은 **빈 자리를 숫자
+ * 비례폭 `1`은 898, `4`는 1278로 크게 다릅니다), `WHEEL_FILL`은 **빈 자리를 숫자
  * 폭에** 맞춥니다. `tabular-nums`는 숫자 글리프에만 적용되므로 채움 문자를 덮지
  * **않습니다** — 그래서 둘 다 필요하고, 하나만으로는 폭이 흔들립니다.
  *
@@ -849,7 +845,7 @@ const TRIGGER_TIME_UNITS: WheelUnit[] = ["hour", "minute", "second"];
  * 컴포넌트는 이미 유효성을 확인한 값만 이 함수에 넘깁니다(`hasDateValue`/
  * `baseValue`).
  */
-export function dateTriggerParts(source: string, fields: DateWheelUnit[], typing: { unit: DateWheelUnit; digits: string } | null, hour: HourDisplay = DEFAULT_HOUR_DISPLAY): DateTriggerPart[] {
+export function dateTriggerParts(source: string, fields: WheelUnit[], typing: { unit: WheelUnit; digits: string } | null, hour: HourDisplay = DEFAULT_HOUR_DISPLAY): DateTriggerPart[] {
   const parsed = parseValue(source, fields);
   if (!parsed) return [];
   const values: UnitParts = parsed;   // 아래 중첩 함수로 좁혀진 타입을 넘기려면 새 바인딩이 필요합니다 — TS는 중첩 함수 클로저까지 좁히지 않습니다.
@@ -868,7 +864,7 @@ export function dateTriggerParts(source: string, fields: DateWheelUnit[], typing
     const digits = unit === "hour" && hour.format === "12"
       ? pad(values.hour % 12 === 0 ? 12 : values.hour % 12, 2)
       : pad(values[unit], unitDigits(unit));
-    const shown = typing?.unit === unit && typing.digits ? typing.digits.padEnd(unitDigits(unit), DATE_WHEEL_FILL) : digits;
+    const shown = typing?.unit === unit && typing.digits ? typing.digits.padEnd(unitDigits(unit), WHEEL_FILL) : digits;
     return { unit, text: `${meridiemPrefix(unit)}${shown}` };
   }
 
@@ -1001,7 +997,7 @@ export function parsePasted(text: string, fields: WheelUnit[], hour: HourDisplay
 /** 기계(컴포넌트)가 시점 값 모델에 기대하는 계약. 기간(duration) 모델이 생기면
  *  같은 모양을 구현합니다 — 설계 스펙 §3.3·§12. */
 export type WheelModel = {
-  units: DateWheelUnit[];                                   // 사다리 순서
+  units: WheelUnit[];                                   // 사다리 순서
   // 그릴 열. 2b-1에서 `WheelUnit`(여섯 단위)까지 넓혔습니다 — 컴포넌트가 이 반환값을
   // 그대로 받습니다(§2b-1). 이 타입은 나중 단계에서 다시 넓어집니다 — 오전/오후는
   // 단위가 아니라서 WheelUnit[]에 담을 수 없습니다(설계 스펙 §7).
@@ -1011,20 +1007,20 @@ export type WheelModel = {
   // 이 다섯을 fields 없이 직접(그리고 instantModel을 거쳐) 부르는 기존 호출을
   // 그대로 유지합니다.
   isValid(value: string, fields?: WheelUnit[]): boolean;
-  normalize(value: string, fields: DateWheelUnit[]): string;
-  keyLength(fields: DateWheelUnit[]): number;
-  shift(value: string, unit: DateWheelUnit, direction: number, fields?: WheelUnit[], step?: WheelStep): string;
-  setUnit(value: string, unit: DateWheelUnit, amount: number, fields?: WheelUnit[], step?: WheelStep): string;
+  normalize(value: string, fields: WheelUnit[]): string;
+  keyLength(fields: WheelUnit[]): number;
+  shift(value: string, unit: WheelUnit, direction: number, fields?: WheelUnit[], step?: WheelStep): string;
+  setUnit(value: string, unit: WheelUnit, amount: number, fields?: WheelUnit[], step?: WheelStep): string;
   /* `hour`는 3단계에서 붙었습니다(스펙 §7·§10) — 안 넘기면 24시간제로, 지금까지와
    * 글자 하나도 다르지 않습니다. **모델은 전역 설정을 읽지 않습니다**: 기계가
    * 구독해서 읽고 인자로 내려보냅니다(이 파일은 아무것도 import 하지 않습니다). */
-  label(value: string, unit: DateWheelUnit, weekdays: string[], fields?: WheelUnit[], hour?: HourDisplay): string;
-  triggerParts(source: string, fields: DateWheelUnit[], typing: { unit: DateWheelUnit; digits: string } | null, hour?: HourDisplay): DateTriggerPart[];
+  label(value: string, unit: WheelUnit, weekdays: string[], fields?: WheelUnit[], hour?: HourDisplay): string;
+  triggerParts(source: string, fields: WheelUnit[], typing: { unit: WheelUnit; digits: string } | null, hour?: HourDisplay): DateTriggerPart[];
   /* `hourFormat`은 3단계에서 붙었습니다(스펙 §7) — 12시간제면 시 열의 타이핑 상한이
    * 12이고, 그때 확정되는 수는 **값이 아니라 12시간 읽기**입니다. 그것을 값으로
    * 되돌리는 것이 `hourFromTwelve`입니다. 안 넘기면 24시간제로, 지금까지와 같습니다. */
-  typeDigit(unit: DateWheelUnit, buffer: string, digit: string, hourFormat?: HourFormat): TypingStep;
-  flushBuffer(unit: DateWheelUnit, buffer: string, hourFormat?: HourFormat): number | null;
+  typeDigit(unit: WheelUnit, buffer: string, digit: string, hourFormat?: HourFormat): TypingStep;
+  flushBuffer(unit: WheelUnit, buffer: string, hourFormat?: HourFormat): number | null;
   hourFromTwelve(reading: number, half: "am" | "pm"): number;
   now(timeZone: string, fields?: WheelUnit[]): string;
   // 값 지식 둘이 기계(DateWheelPicker.tsx)에 남아 있었습니다(설계 스펙 §1단계 측정·

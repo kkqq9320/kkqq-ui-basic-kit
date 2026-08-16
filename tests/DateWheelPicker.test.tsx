@@ -8,7 +8,7 @@ import { act, cleanup, createEvent, fireEvent, render, screen, waitFor } from "@
 import { useEffect, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DateWheelPicker, DEFAULT_DATE_WHEEL_LABELS, type DateWheelLabels, type DateWheelUnit } from "../src/DateWheelPicker";
+import { DateWheelPicker, DEFAULT_WHEEL_LABELS, type WheelLabels } from "../src/DateWheelPicker";
 import { instantModel, type WheelUnit } from "../src/model/instant";
 import { setHourFormat, getWheelRowsPerSide, setWheelRowsPerSide } from "../src/settings";
 import { Dialog } from "../src/Dialog";
@@ -32,7 +32,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); setHourFo
  * 문자다 — 이 폰트에서 U+2012는 `wght` 축 전 구간에서 tabular 숫자와 어드밴스가 정확히
  * 같고(1132·1258·1341·1404), 밑줄은 16~20% 좁다.
  *
- * 소스의 `DATE_WHEEL_FILL`을 import하지 않고 **따로** 선언한다 — 같은 상수를 공유하면
+ * 소스의 `WHEEL_FILL`을 import하지 않고 **따로** 선언한다 — 같은 상수를 공유하면
  * 소스가 밑줄로 되돌아갈 때 테스트가 같이 따라가 아무것도 못 잡는다.
  */
 const FILL = "\u2012";
@@ -110,7 +110,7 @@ function ControlledDateWheel({ initialValue, allowClear }: { initialValue: strin
 // 리뷰 Finding 1 — 소비자가 런타임에 fields를 바꿀 수 있다(일간/월간 토글 등).
 // 팝오버가 열린 채로 열이 하나 사라지는 상황을 만드는 헬퍼다.
 function DateWheelFieldsShrink() {
-  const [fields, setFields] = useState<DateWheelUnit[]>(["year", "month", "day"]);
+  const [fields, setFields] = useState<WheelUnit[]>(["year", "month", "day"]);
   return <>
     <button type="button" onClick={() => setFields(["year", "month"])}>일 열 제거</button>
     <DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" onChange={() => undefined} fields={fields} />
@@ -2358,7 +2358,7 @@ describe("DateWheelPicker 버퍼의 수명 — 확정은 버퍼 자신의 unit�
   //    `activeUnit`에는 `resolvedActiveUnit` 클램프가 있는데 `typing.unit`에는 없었다.
   function ShrinkableInDialog({ onClose, initialValue }: { onClose: () => void; initialValue: string }) {
     const [value, setValue] = useState(initialValue);
-    const [fields, setFields] = useState<DateWheelUnit[]>(["year", "month", "day"]);
+    const [fields, setFields] = useState<WheelUnit[]>(["year", "month", "day"]);
     return <Dialog open onClose={onClose} ariaLabel="거래 수정" closeOnBack={false}>
       <button type="button" onClick={() => setFields(["year", "month"])}>일 열 제거</button>
       <DateWheelPicker ariaLabel="거래 날짜" value={value} onChange={setValue} fields={fields} />
@@ -2419,7 +2419,7 @@ describe("DateWheelPicker 버퍼의 수명 — 확정은 버퍼 자신의 unit�
   // §6.4(3)). 옮기는 것은 **사용자가 그 세그먼트에 실제로 친 경우**뿐이고 그건 진실이다.
   function ShrinkRestore({ initialValue }: { initialValue: string }) {
     const [value, setValue] = useState(initialValue);
-    const [fields, setFields] = useState<DateWheelUnit[]>(["year", "month", "day"]);
+    const [fields, setFields] = useState<WheelUnit[]>(["year", "month", "day"]);
     return <>
       <button type="button" onClick={() => setFields(["year", "month"])}>줄이기</button>
       <button type="button" onClick={() => setFields(["year", "month", "day"])}>되돌리기</button>
@@ -4420,7 +4420,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
       expect(rule?.body ?? "(자식 결합자 규칙이 없다)").toMatch(/overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap/);
     });
 
-    // `tabular-nums`는 **숫자끼리** 폭을 맞춘다(빈 자리는 DATE_WHEEL_FILL이 맡는다 — 아래
+    // `tabular-nums`는 **숫자끼리** 폭을 맞춘다(빈 자리는 WHEEL_FILL이 맡는다 — 아래
     // 버퍼 테스트들이 그쪽을 고정한다). 선언을 지우는 결함뿐 아니라 **더 특이한 규칙에서
     // `normal`로 되돌리는 결함**까지 잡아야 한다: 활성 세그먼트 규칙이 (0,4,0)이라
     // (0,1,0)인 기본 규칙을 이기므로, 거기에 한 줄만 얹으면 **치는 중인 세그먼트만**
@@ -4728,7 +4728,7 @@ describe("DateWheelPicker 값 형식은 fields를 따른다 — 트리거 조각
 });
 
 // ── 항목 3 — 열 라벨: 시·분·초는 두 자리 숫자만(일 열의 요일 같은 부가 표시
-//    없음), DEFAULT_DATE_WHEEL_LABELS.units의 hour/minute/second 채움 ──────
+//    없음), DEFAULT_WHEEL_LABELS.units의 hour/minute/second 채움 ──────
 //
 // 이 블록은 팝오버를 연다 — 열 렌더는 `model.label`(dateWheelLabel)과
 // `shifted()`(model.shift/model.isValid)를 실제로 거치므로 그 둘의 시·분·초
@@ -4852,7 +4852,7 @@ describe("DateWheelPicker '지금'/hintNow 판정은 model.family를 거친다 (
 // `npx tsc --noEmit`이 판정합니다.
 //
 // ⚠️ 브리프 Step 1이 제안한 `const fields = ["hour","minute"] as const; expect(fields.length)
-// .toBe(2)` 형태는 여기 안 넣었습니다 — 실제 `DateWheelPickerProps.fields`(WheelUnit[])와
+// .toBe(2)` 형태는 여기 안 넣었습니다 — 실제 `WheelPickerProps.fields`(WheelUnit[])와
 // 연결되지 않은 독립 배열이라 넓히기 전에도 컴파일되고 vitest도 항상 초록입니다.
 //
 // ⚠️ 렌더 기반 검사(`it(...)`로 `<DateWheelPicker fields={["hour","minute"]}>`를 실제로
@@ -4951,13 +4951,13 @@ describe("DateWheelPicker data-fields 그리드 — 4·5·6열 (2b-4)", () => {
 // 그대로 "…Ctrl+; 오늘"이었다 — 버튼과 안내가 서로 다른 말을 한다.
 //
 // ⚠️ **`now`가 필수 필드로 들어가면서 전체 객체를 만들던 소비자의 컴파일이
-// 깨졌다(이미 일어난 일 — DEFAULT_DATE_WHEEL_LABELS 자신이 `DateWheelLabels`로
+// 깨졌다(이미 일어난 일 — DEFAULT_WHEEL_LABELS 자신이 `WheelLabels`로
 // 타입된 "전체 객체"이고, `now`를 안 채우면 그 자리에서 tsc가 거절한다).
 // `hintNow`는 같은 실수를 반복하지 않는다 — **선택 필드**로 둔다.** 이유: `now`처럼
-// 필수로 두면 이미 어딘가(이 킷 안팎에서) `DateWheelLabels`로 완전히 타입된 라벨
+// 필수로 두면 이미 어딘가(이 킷 안팎에서) `WheelLabels`로 완전히 타입된 라벨
 // 상수를 만든 모든 소비자가 `hintNow` 없이는 컴파일이 깨진다. `labels` prop 자체는
-// `Partial<DateWheelLabels>`라 부분 override는 원래도 영향이 없지만, "완전한 타입의
-// 상수"를 만드는 소비자(DEFAULT_DATE_WHEEL_LABELS가 바로 그 모양)는 영향을 받는다 —
+// `Partial<WheelLabels>`라 부분 override는 원래도 영향이 없지만, "완전한 타입의
+// 상수"를 만드는 소비자(DEFAULT_WHEEL_LABELS가 바로 그 모양)는 영향을 받는다 —
 // 그 자리를 선택으로 열어 둔다.
 describe("DateWheelPicker 팝오버 안내 문구 — 시간 열이 있으면 hintNow를 쓴다 (2b-4)", () => {
   function hintText(ariaLabel: string) {
@@ -4967,17 +4967,17 @@ describe("DateWheelPicker 팝오버 안내 문구 — 시간 열이 있으면 hi
   it("시간 열이 있으면 안내 문구가 hintNow다", () => {
     render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T03:00:05" fields={["year", "month", "day", "hour", "minute", "second"]} onChange={() => undefined} />);
     fireEvent.click(fieldOf("거래 시각"));
-    expect(hintText("거래 시각")).toBe(DEFAULT_DATE_WHEEL_LABELS.hintNow);
+    expect(hintText("거래 시각")).toBe(DEFAULT_WHEEL_LABELS.hintNow);
     // hintNow와 hint가 실제로 다른 문구여야 이 검사가 의미가 있다 — 같으면 hint
     // 그대로 둬도 통과하는 공허 검사가 된다.
-    expect(DEFAULT_DATE_WHEEL_LABELS.hintNow).not.toBe(DEFAULT_DATE_WHEEL_LABELS.hint);
+    expect(DEFAULT_WHEEL_LABELS.hintNow).not.toBe(DEFAULT_WHEEL_LABELS.hint);
   });
 
   // 대조군 — 시간 열이 없으면 지금까지처럼 hint 그대로다.
   it("시간 열이 없으면 안내 문구는 여전히 hint다 — 대조군", () => {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} />);
     fireEvent.click(fieldOf("거래 날짜"));
-    expect(hintText("거래 날짜")).toBe(DEFAULT_DATE_WHEEL_LABELS.hint);
+    expect(hintText("거래 날짜")).toBe(DEFAULT_WHEEL_LABELS.hint);
   });
 
   // hintNow가 선택 필드라는 계약의 런타임 쪽 절반 — override가 hint만 주고 hintNow를
@@ -4991,7 +4991,7 @@ describe("DateWheelPicker 팝오버 안내 문구 — 시간 열이 있으면 hi
   it("override가 hint만 주고 hintNow를 생략하면 — now/today와 같은 비대칭으로 — 기본 hintNow가 그대로 쓰인다", () => {
     render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T03:00:05" fields={["year", "month", "day", "hour", "minute", "second"]} onChange={() => undefined} labels={{ hint: "커스텀 안내" }} />);
     fireEvent.click(fieldOf("거래 시각"));
-    expect(hintText("거래 시각")).toBe(DEFAULT_DATE_WHEEL_LABELS.hintNow);
+    expect(hintText("거래 시각")).toBe(DEFAULT_WHEEL_LABELS.hintNow);
   });
 
   // `?? labels.hint`가 죽은 코드가 아님을 증명한다 — 병합 순서상(`{ ...DEFAULT,
@@ -5011,7 +5011,7 @@ describe("DateWheelPicker 팝오버 안내 문구 — 시간 열이 있으면 hi
 // 건드리지 않고 `tsc --noEmit`만으로 판정한다. hintNow가 실수로 required가 되면
 // 아래 리터럴이 그 필드를 안 채웠으므로 여기서 tsc가 거절한다 — `now`가 이미 그
 // 함정에 걸렸던 자리(위 설명)를 되밟지 않는다는 계약을 코드로 못 박는다.
-const _hintNowIsOptional: DateWheelLabels = {
+const _hintNowIsOptional: WheelLabels = {
   placeholder: "날짜 선택", hint: "안내", today: "오늘", now: "지금", clear: "비우기", done: "완료",
   previous: "이전", next: "다음", select: "선택", weekdays: ["일", "월", "화", "수", "목", "금", "토"],
   units: { year: "연도", month: "월", day: "일", hour: "시", minute: "분", second: "초" },
@@ -5139,7 +5139,7 @@ describe("DateWheelPicker 12시간제 (3단계)", () => {
 
 // ── 3단계 — 오전/오후는 열이 아니라 **버튼**이다 (스펙 §7) ────────────────────
 //
-// 열로 두지 않은 이유 셋이 스펙에 있다: 값이 둘뿐인데 DATE_WHEEL_OFFSETS가 일곱 행을
+// 열로 두지 않은 이유 셋이 스펙에 있다: 값이 둘뿐인데 WHEEL_OFFSETS가 일곱 행을
 // 그린다 / 가장 좁을 때 정확히 한 열을 아낀다(날짜+시각이 7열 대신 6열) / 팝오버에
 // 이미 버튼 줄이 있다. 이 블록은 그 결정이 화면에 그대로 나타나는지를 고정한다.
 //
@@ -5447,7 +5447,7 @@ describe("DateWheelPicker 12시간제 시 타이핑 (3단계)", () => {
 
 /* 🔴 `meridiem`을 **명시적으로 `undefined`로** override하는 경로. `hintNow`가 같은
  * 자리에서 이미 검사를 하나 갖고 있습니다("hintNow를 명시적으로 undefined로
- * override하면 hint로 대체된다") — `Partial<DateWheelLabels>`가 그것을 타입으로
+ * override하면 hint로 대체된다") — `Partial<WheelLabels>`가 그것을 타입으로
  * 허용하고(이 저장소 tsconfig에 `exactOptionalPropertyTypes`가 없습니다), 스프레드
  * 병합에서 명시적 `undefined`는 **기본값으로 안 떨어지고 덮어씁니다.**
  *
@@ -5506,7 +5506,7 @@ describe("시각 묶음 경계 여백 (오너 리포트 5번)", () => {
 // 제스처가 **± 버튼이 아니라 행**인 것은 오너 결정이다: ± 버튼에 걸면 그 버튼이 나중에
 // "꾹 눌러 연속 증감"을 가질 수 없게 되고, 그건 되돌릴 수 없는 문이다.
 describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () => {
-  // 오너 리포트 5차로 2000 → 700ms. 소스의 `DATE_WHEEL_HOLD_MS`와 같은 수여야 하고,
+  // 오너 리포트 5차로 2000 → 700ms. 소스의 `WHEEL_HOLD_MS`와 같은 수여야 하고,
   // 아래 "임계 전에 떼면"은 이 값에서 400을 빼므로 임계가 바뀌면 그 검사가 먼저 깨집니다 —
   // 실제로 깨져서 알았습니다. 그게 이 상수를 검사에 둔 값어치입니다.
   const HOLD_MS = 500;
@@ -5843,7 +5843,7 @@ describe("DateWheelPicker 더블탭 초기화 (오너 리포트 5차)", () => {
 });
 
 describe("길게 누르기 임계와 진행 막대 (오너 리포트 5·6차)", () => {
-  /* 🔴 **수 셋이 한 벌입니다:** 소스의 `DATE_WHEEL_HOLD_MS`(500) = CSS의 지연(200) +
+  /* 🔴 **수 셋이 한 벌입니다:** 소스의 `WHEEL_HOLD_MS`(500) = CSS의 지연(200) +
    * 성장(300). 하나만 바꾸면 막대가 다 찼는데 안 걸리거나, 걸렸는데 덜 찬 채 사라집니다 —
    * 이 저장소가 "조용히 거짓말하는 표시"라고 부르는 것입니다.
    *
@@ -5954,7 +5954,7 @@ describe("팝오버 버튼은 pointerup에서 확정된다 (오너 실기기 결
  * 수준에서 살아 있는지를 보는 검사입니다 — 이 파일의 `_hintNowIsOptional`과 같은 idiom
  * 으로, `it()` 없이 모듈 스코프에 두어 `tsc --noEmit`만으로 판정합니다. 누가 셋 중
  * 하나라도 다시 선택으로 열면 **여기서 tsc가 거절합니다.** */
-const _unitsAreAllRequired: DateWheelLabels["units"] = {
+const _unitsAreAllRequired: WheelLabels["units"] = {
   year: "Year", month: "Month", day: "Day",
   // 이 셋을 지우면 tsc가 터집니다 — 그게 이 상수의 전부입니다.
   hour: "Hour", minute: "Minute", second: "Second",
@@ -6096,7 +6096,7 @@ describe("필드의 복사·붙여넣기·되돌리기·저장", () => {
   it("닫힌 빈 필드에서 Ctrl+S는 값을 만들지 않는다", () => {
     render(<ControlledDateWheel initialValue="" />);
     fireEvent.keyDown(fieldOf("거래 날짜"), { key: "s", code: "KeyS", ctrlKey: true });
-    expect(fieldOf("거래 날짜").textContent).toContain(DEFAULT_DATE_WHEEL_LABELS.placeholder);
+    expect(fieldOf("거래 날짜").textContent).toContain(DEFAULT_WHEEL_LABELS.placeholder);
   });
 
   it("손가락에서는 세그먼트를 눌러도 그 세그먼트를 고르지 않는다", () => {

@@ -29,7 +29,7 @@ const sources = import.meta.glob("../src/*.{ts,tsx}", { query: "?raw", import: "
  * 트리거 버튼과 메뉴에 각각) 그대로 2입니다. **이 숫자가 늘면 §2.1의 표를 다시
  * 재야 합니다.** */
 const KNOWN_CONSUMERS: Record<string, number> = {
-  "../src/DateWheelPicker.tsx": 1,
+  "../src/WheelPicker.tsx": 1,
   "../src/Select.tsx": 2,
   "../src/Dialog.tsx": 1,
   "../src/hooks.ts": 1,
