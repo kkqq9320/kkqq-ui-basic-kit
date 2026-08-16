@@ -9,7 +9,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { WheelPicker } from "../src/WheelPicker";
+import { WheelPicker, DEFAULT_WHEEL_LABELS } from "../src/WheelPicker";
+import { DEFAULT_DURATION_LABELS } from "../src/DurationWheelPicker";
 import { instantModel } from "../src/model/instant";
 import { durationModel, parseDuration, serializeDuration, durationCeiling } from "../src/model/duration";
 import type { WheelUnit } from "../src/model/instant";
@@ -257,5 +258,55 @@ describe("트리거의 꼬리 0 (오너 리포트 2026-08-16)", () => {
 
   it("치는 중이면 버퍼가 없는 꼬리 0도 남는다", () => {
     expect(text("00:00:03:00:00:00", D3, { unit: "day", digits: "5" })).toBe("5d 0h 0m");
+  });
+});
+
+/* ── 기본 라벨이 **안 그리는 이름을 안 싣는다** ──
+ *
+ * 이 상수는 공개 API(`src/index.ts`)라 소비자가 라벨을 바꿀 때 **출발점으로 복사**하는
+ * 자리입니다. 한동안 `DEFAULT_WHEEL_LABELS`를 통째로 펼쳐서, 기간이 그리지도 않는
+ * 요일 일곱 개와 오전/오후와 `오늘`·`지금`을 지고 나갔습니다 — 그때는 타입이 넷을
+ * 요구해서 뺄 수도 없었습니다.
+ *
+ * 🔴 **"안 쓰니까 그냥 두자"가 아닌 이유:** 라벨을 영어로 바꾸는 소비자가 이 상수를
+ * 복사해 놓고 요일을 번역합니다. 그리고 그 번역은 **아무 데도 안 나타납니다** —
+ * 무엇이 틀렸는지 알 방법이 없는 자리입니다. */
+describe("DEFAULT_DURATION_LABELS — 기간이 그리는 이름만 싣는다", () => {
+  // 전제 — 상수가 실제로 라벨을 들고 있어야 아래 단정이 공허하지 않습니다.
+  it("그리는 이름은 실제로 들어 있다", () => {
+    expect(DEFAULT_DURATION_LABELS.placeholder).toBe("기간 선택");
+    expect(DEFAULT_DURATION_LABELS.units.month).toBe("개월");
+    expect(DEFAULT_DURATION_LABELS.done).toBe(DEFAULT_WHEEL_LABELS.done);
+  });
+
+  /* 넷을 **한 it에 몰지 않습니다** — `expect`는 첫 실패에서 던지므로, 몰아 두면
+   * `weekdays`만 남아 있어도 나머지 셋은 **실행조차 안 됩니다.** */
+  it("weekdays를 안 싣는다 — 모델의 label이 요일을 안 그린다", () => {
+    expect("weekdays" in DEFAULT_DURATION_LABELS).toBe(false);
+  });
+
+  it("meridiem을 안 싣는다 — 모델의 meridiem()이 null이다", () => {
+    expect("meridiem" in DEFAULT_DURATION_LABELS).toBe(false);
+    expect(durationModel.meridiem("00:00:00:01:30:00", HM)).toBe(null);
+  });
+
+  it("today를 안 싣는다 — seedAction이 null이라 씨앗 버튼이 없다", () => {
+    expect("today" in DEFAULT_DURATION_LABELS).toBe(false);
+  });
+
+  it("now를 안 싣는다 — 같은 이유다", () => {
+    expect("now" in DEFAULT_DURATION_LABELS).toBe(false);
+    expect(durationModel.seedAction(HM)).toBe(null);
+  });
+
+  /* 그리고 **화면에서도** 확인합니다 — 상수만 보면 "기계가 어딘가에서 채워 넣는다"는
+   * 가능성이 남습니다. 씨앗 버튼이 실제로 안 그려져야 위 넷이 의미를 갖습니다. */
+  it("기간 픽커에는 씨앗 버튼이 아예 없다", () => {
+    render(<WheelPicker model={durationModel} ariaLabel="기간" value="00:00:00:01:30:00" fields={HM} labels={DEFAULT_DURATION_LABELS} onChange={() => undefined} />);
+    fireEvent.click(fieldOf("기간"));
+    expect(screen.queryByRole("button", { name: "오늘" })).toBe(null);
+    expect(screen.queryByRole("button", { name: "지금" })).toBe(null);
+    // 대조군 — 팝오버는 실제로 열려 있습니다(안 열렸으면 위 둘은 공허합니다).
+    expect(screen.getByRole("button", { name: "완료" })).toBeTruthy();
   });
 });
