@@ -5308,8 +5308,8 @@ describe("DateWheelPicker 시 세그먼트의 a/p 키 (3단계)", () => {
     const blocked = () => {
       setHourFormat("12");
       const onChange = vi.fn();
-      // 09:00~11:30이면 오전뿐입니다 — 오후로 갈 수 있는 값이 없습니다.
-      render(<DateWheelPicker ariaLabel="거래 시각" value="10:00" fields={["hour", "minute"]} min="09:00" max="11:30" onChange={onChange} />);
+      // 00:00~11:59면 오전뿐입니다 — 오후로 갈 수 있는 값이 아예 없습니다.
+      render(<DateWheelPicker ariaLabel="거래 시각" value="10:00" fields={["hour", "minute"]} min="00:00" max="11:59" onChange={onChange} />);
       const field = fieldOf("거래 시각");
       field.focus();
       return { onChange, field };
@@ -5337,13 +5337,26 @@ describe("DateWheelPicker 시 세그먼트의 a/p 키 (3단계)", () => {
     });
 
     /* 🔴 **파괴적 no-op이었습니다.** 뒤집기는 실패하는데 `setTyping(null)`은 실행돼서
-     * 반쯤 친 숫자를 **버려 놓고** 아무 일도 안 했습니다. */
+     * 반쯤 친 숫자를 **버려 놓고** 아무 일도 안 했습니다.
+     *
+     * ⚠️ **이 검사를 두 번 잘못 썼습니다. 둘 다 변이가 잡아 줬습니다.**
+     *  1. `1`을 치고 `toContain("1")` — 값이 `10:00`이라 **값 자체로 만족**되는 공허한
+     *     검사였습니다(버퍼를 통째로 버려도 통과).
+     *  2. 그래서 값에 없는 `7`로 바꿨더니 이번엔 **버퍼로 안 남습니다** — 12시간제 시
+     *     열은 상한이 12라 `7`은 두 자리가 될 수 없어 **그 자리에서 확정**됩니다. 그리고
+     *     `value`가 프롭으로 고정이라(스파이 `onChange`) 화면은 그대로입니다.
+     *
+     * 그래서 **특정 글자를 안 박고 "버퍼가 살아 있는 화면"을 통째로 붙듭니다.** 치기 전과
+     * 다르다는 전제를 먼저 두어, 버퍼가 애초에 안 잡혔으면 공허하게 통과하지 않게 합니다.
+     * (시 열이어야 합니다 — 분으로 옮기면 `a`/`p` 분기 자체가 안 돌아 무엇이든 통과합니다.) */
     it("치던 버퍼를 버리지 않는다", () => {
       const { field } = blocked();
+      const clean = field.textContent;
       fireEvent.keyDown(field, { key: "1" });
-      expect(field.textContent).toContain("1");
+      const buffering = field.textContent;
+      expect(buffering).not.toBe(clean);              // 전제 — 버퍼가 실제로 화면에 있다
       fireEvent.keyDown(field, { key: "p" });
-      expect(field.textContent).toContain("1");
+      expect(field.textContent).toBe(buffering);
     });
 
     // 대조군 — 이미 그 절반이면 버튼도 안 죽어 있고(`!pressed` 조건) 키도 우리 것입니다.
