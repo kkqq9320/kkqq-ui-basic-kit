@@ -6447,7 +6447,18 @@ describe("비보안 컨텍스트 — 클립보드 API가 없을 때", () => {
     };
     return copied;
   }
-  afterEach(() => { Reflect.deleteProperty(document, "execCommand"); Reflect.deleteProperty(navigator, "clipboard"); });
+  /* 🔴 **임시 요소는 `document.body`에 붙으므로 RTL의 `cleanup`이 안 걷습니다.**
+   * 붙여넣기 쪽 임시 textarea는 `setTimeout` 안에서 지워지는데, 타이머를 안 돌리는
+   * 검사(예: `preventDefault`만 보는 것)는 그것을 남깁니다. 실제로 그 누수가 **다음
+   * 검사를 엉뚱하게 빨갛게** 만들었습니다 — "임시 textarea를 남기지 않는다"가 자기가
+   * 만들지도 않은 요소를 보고 실패했습니다. 검사끼리 새지 않게 여기서 걷습니다.
+   *
+   * ⚠️ 이건 제품 결함이 아닙니다 — 제품에서는 그 `setTimeout`이 언제나 돕니다. */
+  afterEach(() => {
+    Reflect.deleteProperty(document, "execCommand");
+    Reflect.deleteProperty(navigator, "clipboard");
+    for (const leftover of document.querySelectorAll('textarea[aria-hidden="true"]')) leftover.remove();
+  });
 
   // 전제 — jsdom에는 원래 `navigator.clipboard`가 없습니다. 즉 이 describe는 스텁을
   // 안 걸어도 비보안 컨텍스트와 같은 상태이고, 그게 이 검사들이 재는 조건입니다.
@@ -6509,6 +6520,64 @@ describe("비보안 컨텍스트 — 클립보드 API가 없을 때", () => {
     expect(fieldOf("거래 날짜").textContent).toContain("2026. 07. 12.");
   });
 
+  /* ── 🔴 근본 원인 — 읽지도 못하면서 기본 동작을 막던 것 (오너 실기기 TRACE 2026-08-16) ──
+   *
+   * `Ctrl+V` 분기가 `preventDefault()`를 **조건 없이** 불렀습니다. 보안 컨텍스트에서는
+   * 우리가 클립보드를 직접 읽으니 맞는 코드인데, 비보안에서는 `navigator.clipboard`가
+   * 아예 없어 **읽지도 못하면서 브라우저의 기본 붙여넣기까지 막았습니다.** 그러면
+   * `paste` 이벤트 자체가 안 생기므로 어떤 폴백도 걸 자리가 없습니다.
+   *
+   *     keydown key="v" mods=Ctrl → 처리됨=Y (preventDefault 호출됨)
+   *     (paste 줄 없음)  ← 같은 캡처에서 copy 줄은 찍혔으므로 계측기는 멀쩡했다
+   *
+   * **이 검사가 그 결함을 직접 겨냥합니다.** 아래 동작 검사들보다 이것이 먼저입니다 —
+   * 기본 동작이 막히면 그 뒤 무엇을 하든 소용이 없습니다. */
+  it("비보안에서 Ctrl+V는 preventDefault를 부르지 않는다 — 브라우저가 붙여넣게 둔다", () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const event = createEvent.keyDown(fieldOf("거래 날짜"), { key: "v", code: "KeyV", ctrlKey: true });
+    fireEvent(fieldOf("거래 날짜"), event);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("비보안에서 Ctrl+V가 쓸 수 있는 임시 textarea에 포커스를 준다", () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "v", code: "KeyV", ctrlKey: true });
+    const scratch = document.activeElement as HTMLTextAreaElement;
+    expect(scratch.tagName).toBe("TEXTAREA");
+    // 🔴 **읽기 전용이면 붙여넣기가 안 됩니다.** 복사 쪽 임시 요소와 갈리는 유일한 자리라
+    // 여기서 못 박습니다.
+    expect(scratch.hasAttribute("readonly")).toBe(false);
+  });
+
+  it("비보안에서 브라우저가 임시 textarea에 넣어 준 글자가 값이 된다", () => {
+    vi.useFakeTimers();
+    try {
+      render(<ControlledDateWheel initialValue="2026-07-12" />);
+      fireEvent.keyDown(fieldOf("거래 날짜"), { key: "v", code: "KeyV", ctrlKey: true });
+      // 브라우저의 기본 동작을 흉내 냅니다 — 포커스된 textarea에 글자가 들어갑니다.
+      (document.activeElement as HTMLTextAreaElement).value = "2031. 03. 05.";
+      act(() => { vi.runAllTimers(); });
+      expect(fieldOf("거래 날짜").textContent).toContain("2031. 03. 05.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("비보안 붙여넣기 뒤 포커스가 돌아오고 임시 요소가 안 남는다", () => {
+    vi.useFakeTimers();
+    try {
+      render(<ControlledDateWheel initialValue="2026-07-12" />);
+      const trigger = fieldOf("거래 날짜");
+      trigger.focus();
+      fireEvent.keyDown(trigger, { key: "v", code: "KeyV", ctrlKey: true });
+      act(() => { vi.runAllTimers(); });
+      expect(document.activeElement).toBe(trigger);
+      expect(document.querySelector('textarea[aria-hidden="true"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   /* 대조군 — 보안 컨텍스트에서는 **API를 쓰고 폴백을 안 씁니다.** 이게 없으면 위 검사들은
    * "언제나 execCommand를 쓴다"는 구현으로도 전부 통과합니다. */
   it("clipboard API가 있으면 execCommand를 안 쓴다", () => {
@@ -6522,5 +6591,18 @@ describe("비보안 컨텍스트 — 클립보드 API가 없을 때", () => {
     fireEvent.keyDown(fieldOf("거래 날짜"), { key: "c", code: "KeyC", ctrlKey: true });
     expect(written).toEqual(["2026. 07. 12."]);
     expect(copied).toEqual([]);
+  });
+
+  // 대조군의 짝 — 보안 컨텍스트에서는 우리가 직접 읽으므로 **막는 것이 맞습니다.**
+  // 이게 없으면 위 근본 원인 검사는 "언제나 안 막는다"는 구현으로도 통과합니다.
+  it("보안 컨텍스트에서는 Ctrl+V가 preventDefault를 부른다 — 대조군", () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: () => Promise.resolve(), readText: () => Promise.resolve("") },
+    });
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const event = createEvent.keyDown(fieldOf("거래 날짜"), { key: "v", code: "KeyV", ctrlKey: true });
+    fireEvent(fieldOf("거래 날짜"), event);
+    expect(event.defaultPrevented).toBe(true);
   });
 });

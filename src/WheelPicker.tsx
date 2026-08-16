@@ -1462,19 +1462,34 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    * 이나 화면 밖이면 브라우저가 선택을 안 만들어 `execCommand`가 실패하고, 화면 밖으로
    * 밀면 iOS가 거기로 스크롤합니다. 그리고 **포커스를 반드시 되돌립니다** — 안 그러면
    * 복사 한 번에 키보드 조작이 통째로 죽습니다(이 컨트롤은 키를 트리거가 받습니다). */
-  function writeClipboard(text: string) {
-    if (navigator.clipboard?.writeText) {
-      void navigator.clipboard.writeText(text).catch(() => { /* 권한 거절 — 무시 */ });
-      return;
-    }
-    const active = document.activeElement as HTMLElement | null;
+  /** 🔴 **`lib.dom`은 `navigator.clipboard`를 언제나 있는 것으로 선언하는데, 실측은**
+   *  **반대입니다** — 비보안 컨텍스트에서는 `undefined`입니다(`http://10.1.1.254:15277`에서
+   *  잰 값). 그 사실을 타입으로 적어 둡니다. 안 그러면 `if (navigator.clipboard?.readText)`가
+   *  `TS2774: This condition will always return true`로 거절당하고, 더 나쁘게는 **읽는
+   *  사람이 그 가드를 군더더기로 보고 지웁니다.** */
+  const clipboardApi = (): Clipboard | undefined => navigator.clipboard as Clipboard | undefined;
+
+  /** 복사와 붙여넣기가 **같은 임시 요소**를 씁니다. 다른 것은 `readonly` 하나인데,
+   *  그게 결정적입니다 — **읽기 전용 textarea에는 붙여넣기가 안 됩니다.** */
+  function makeScratchTextarea(text: string, readOnly: boolean) {
     const scratch = document.createElement("textarea");
     scratch.value = text;
-    scratch.setAttribute("readonly", "");
+    if (readOnly) scratch.setAttribute("readonly", "");
     scratch.setAttribute("aria-hidden", "true");
     scratch.tabIndex = -1;
     scratch.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;padding:0;border:0;opacity:0;";
     document.body.appendChild(scratch);
+    return scratch;
+  }
+
+  function writeClipboard(text: string) {
+    const api = clipboardApi();
+    if (api?.writeText) {
+      void api.writeText(text).catch(() => { /* 권한 거절 — 무시 */ });
+      return;
+    }
+    const active = document.activeElement as HTMLElement | null;
+    const scratch = makeScratchTextarea(text, true);
     try {
       /* ⚠️ **`focus()`를 명시로 부릅니다 — `select()`에 맡기지 않습니다.** 데모의 검증된
        * 폴백이 그렇게 하고 있고(`demo/EventTracePanel.tsx`), 엔진마다 `select()`가 포커스를
@@ -1492,7 +1507,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     }
   }
   async function readClipboard(): Promise<string | null> {
-    try { return (await navigator.clipboard?.readText()) ?? null; } catch { return null; }
+    try { return (await clipboardApi()?.readText()) ?? null; } catch { return null; }
   }
 
   /** Ctrl+C — **화면에 보이는 그대로** 씁니다(오너: "포맷된 날짜를 클립보드에"). 치던
@@ -1522,6 +1537,48 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
 
   async function pasteValue() {
     applyPastedText(await readClipboard());
+  }
+
+  /**
+   * `Ctrl+V`의 두 경로. **어느 쪽을 갈지는 `preventDefault`를 부를지와 같은 판단입니다** —
+   * 그래서 한 함수 안에 있습니다.
+   *
+   * 🔴 **한동안 `preventDefault()`를 조건 없이 불렀고, 그것이 결함이었습니다.**
+   * 보안 컨텍스트에서는 우리가 클립보드를 직접 읽으니 기본 동작을 막는 것이 맞습니다.
+   * 그런데 비보안 컨텍스트에서는 `navigator.clipboard`가 **아예 없어서** 읽지도 못하면서
+   * **브라우저의 기본 붙여넣기까지 막고** 있었습니다. 그러면 `paste` 이벤트 자체가 안
+   * 생기므로 **어떤 폴백도 걸 자리가 없습니다.**
+   *
+   * 오너 실기기 TRACE(2026-08-16, `http://10.1.1.254:15277`)가 그대로 찍었습니다:
+   *
+   *     keydown key="v" mods=Ctrl  tgt=button.wheel-trigger.editing
+   *       ↳ 처리됨=Y (preventDefault 호출됨)
+   *     (paste 줄 없음)
+   *
+   * 같은 캡처에서 `copy`는 줄이 찍혔으므로 **계측기는 멀쩡했고**, `paste`가 없는 것은
+   * 이벤트가 실제로 안 왔다는 뜻입니다.
+   *
+   * 그래서 비보안 경로는 **막지 않습니다.** 대신 쓸 수 있는 임시 textarea에 포커스를
+   * 옮겨 두고, 브라우저가 기본 동작으로 거기에 붙여넣게 한 뒤 다음 틱에 읽습니다.
+   * 편집 불가 요소(`<button>`)에 `paste`가 오는지에 **기대지 않는 것**이 요점입니다 —
+   * textarea는 편집 가능하므로 거기로는 확실히 옵니다.
+   */
+  function pasteFromKeydown(event: ReactKeyboardEvent) {
+    if (clipboardApi()?.readText) {
+      event.preventDefault();
+      void pasteValue();
+      return;
+    }
+    const active = document.activeElement as HTMLElement | null;
+    const scratch = makeScratchTextarea("", false);
+    scratch.focus();
+    // ⚠️ `preventDefault`를 **안 부릅니다.** 이 줄이 이 분기의 전부입니다.
+    window.setTimeout(() => {
+      const text = scratch.value;
+      scratch.remove();
+      active?.focus?.();
+      applyPastedText(text);
+    }, 0);
   }
 
   /* 🔴 **비보안 컨텍스트의 붙여넣기 경로**(2026-08-16). 읽기에는 복사 같은 폴백이
@@ -1766,9 +1823,12 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
       copyValue();
       return true;
     }
+    /* ⚠️ 여기만 `preventDefault`가 **분기 안에 있습니다**(`pasteFromKeydown`). 비보안
+     * 컨텍스트에서는 막으면 안 되기 때문입니다 — 그 함수의 주석에 실기기 캡처가 있습니다.
+     * `return true`는 그대로입니다: 호출부는 `if (handleShortcut(event)) return;`로
+     * **뒤 처리를 건너뛸 뿐** 자기가 `preventDefault`를 걸지 않습니다. */
     if ((event.ctrlKey || event.metaKey) && event.code === "KeyV") {
-      event.preventDefault();
-      void pasteValue();
+      pasteFromKeydown(event);
       return true;
     }
     if ((event.ctrlKey || event.metaKey) && event.code === "KeyZ") {

@@ -916,9 +916,18 @@ export function installEventTrace() {
   for (const type of ["copy", "paste", "cut"] as const) {
     document.addEventListener(type, (event) => {
       const data = (event as ClipboardEvent).clipboardData;
-      const text = data ? data.getData("text") : null;
+      /* 🔴 **`copy`에서 `getData`는 언제나 빈 문자열입니다 — 실패가 아닙니다.**
+       * 복사 이벤트의 `clipboardData`는 **쓰는 자리**이고, 그 시점엔 아직 아무도 안
+       * 채웠습니다(브라우저가 기본 동작에서 선택 영역으로 채웁니다). 첫 판이 그걸
+       * 그대로 찍어서 `글자=""`가 **복사 실패처럼 읽혔습니다.** 그래서 복사·잘라내기는
+       * `getData` 대신 **지금 선택된 글자**를 보여 줍니다 — 그게 실제로 복사될 것입니다. */
+      const pasted = type === "paste" ? (data ? data.getData("text") : null) : null;
+      const selected = type === "paste" ? null : (window.getSelection()?.toString() ?? "");
       append(`${type.padEnd(11)} tgt=${describeTarget(event.target)}  보안컨텍스트=${window.isSecureContext ? "Y" : "N"}`
-        + `  clipboardData=${data ? "있음" : "없음"} 글자=${text === null ? "(못 읽음)" : JSON.stringify(text)}`);
+        + `  clipboardData=${data ? "있음" : "없음"}`
+        + (type === "paste"
+          ? `  받은글자=${pasted === null ? "(못 읽음)" : JSON.stringify(pasted)}`
+          : `  선택된글자=${JSON.stringify(selected)} (getData는 이 시점에 비어 있는 것이 정상)`));
     }, { capture: true, passive: true });
   }
 
