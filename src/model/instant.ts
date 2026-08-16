@@ -1064,6 +1064,13 @@ export type WheelModel = {
   parsePasted(text: string, fields: WheelUnit[], hour?: HourDisplay): string | null;
   /** 그 열의 격자 간격(설계 스펙 §8). 기계가 "이 값이 격자 위인가"를 물을 때 씁니다. */
   stepOf(unit: WheelUnit, step?: WheelStep): number;
+  /** 팝오버에서 **그 열 뒤에 붙일 기호**(기간의 `d`·`h`·`m`). `null`이면 안 그립니다.
+   *
+   *  🔴 시각 열 사이의 `:`와는 **다른 것**입니다. 저건 두 열을 잇는 **구분자**라 열
+   *  앞에 오고 CSS가 `data-unit`으로 직접 그립니다. 이건 각 열이 무엇인지 말하는
+   *  **단위 표시**라 열 뒤에 옵니다. 기간은 열 조합이 자유로워서(연·월만, 일·시만 …)
+   *  **자리만으로는 어느 열인지 못 읽습니다** — 트리거와 같은 이유입니다. */
+  columnMark?(unit: WheelUnit, fields: WheelUnit[]): string | null;
   /** 값 전체를 각 열의 격자로 내립니다. `지금` 버튼과 빈 값의 기준값처럼 **여러 열이
    *  한꺼번에 정해지는 자리**가 씁니다 — 없으면 타이핑과 버튼이 같은 수에 다르게 도착합니다. */
   snapValue(value: string, fields: WheelUnit[], step?: WheelStep): string;

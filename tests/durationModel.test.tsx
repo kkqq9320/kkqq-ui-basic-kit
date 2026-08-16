@@ -105,7 +105,7 @@ describe("계약 — 기계가 기간 모델로도 돈다", () => {
 
   it("트리거가 기간을 그린다", () => {
     renderDuration();
-    expect(fieldOf("기간").textContent).toContain("01:30");
+    expect(fieldOf("기간").textContent).toContain("1h 30m");
   });
 
   it("그리는 열이 fields를 따른다", () => {
@@ -173,31 +173,31 @@ describe("계약 — 기간이 거짓말하지 않아도 되는가", () => {
  *
  * `03:04:00`은 어느 자리가 일인지 알 수가 없습니다. 기간은 열 조합이 자유로워서
  * (연·월만, 일·시만 …) **자리만으로는 절대 못 읽습니다** — 시점과 다른 점입니다. */
-describe("기간 표기 — 일 위로는 단위 글자, 시 아래로는 콜론", () => {
+describe("기간 표기 — 모든 열에 단위 글자, 자리 안 채움", () => {
   const text = (value: string, fields: WheelUnit[]) =>
     durationModel.triggerParts(value, fields, null).map((p) => p.text).join("");
 
   it("일·시·분", () => {
-    expect(text("00:00:03:04:00:00", ["day", "hour", "minute"])).toBe("03d 04:00");
+    expect(text("00:00:03:04:10:00", ["day", "hour", "minute"])).toBe("3d 4h 10m");
   });
 
   it("연·월", () => {
-    expect(text("02:03:00:00:00:00", ["year", "month"])).toBe("02y 03mo");
+    expect(text("02:03:00:00:00:00", ["year", "month"])).toBe("2y 3mo");
   });
 
-  it("시·분은 콜론만 — 지금까지와 같다", () => {
-    expect(text("00:00:00:01:30:00", ["hour", "minute"])).toBe("01:30");
+  it("시·분도 단위 글자를 단다", () => {
+    expect(text("00:00:00:01:30:00", ["hour", "minute"])).toBe("1h 30m");
   });
 
   it("여섯 열 전부", () => {
-    expect(text("02:03:04:05:06:07", ["year", "month", "day", "hour", "minute", "second"])).toBe("02y 03mo 04d 05:06:07");
+    expect(text("02:03:04:05:06:07", ["year", "month", "day", "hour", "minute", "second"])).toBe("2y 3mo 4d 5h 6m 7s");
   });
 
   /* 단위 글자는 **세그먼트 안**입니다 — 구두점으로 쪼개면 그 글자를 눌렀을 때 어느 열이
    * 활성이 되는지가 갈립니다(오전/오후 접두사가 시 세그먼트 안인 것과 같은 이유). */
   it("단위 글자가 세그먼트 안에 있다", () => {
     const parts = durationModel.triggerParts("00:00:03:04:00:00", ["day", "hour"], null);
-    expect(parts.find((p) => p.unit === "day")?.text).toBe("03d");
+    expect(parts.find((p) => p.unit === "day")?.text).toBe("3d");
   });
 });
 

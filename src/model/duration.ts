@@ -213,25 +213,47 @@ function label(value: string, unit: WheelUnit): string {
  * ⚠️ **자리는 채웁니다**(`02y`, `2y` 아님). 안 채우면 값이 바뀔 때마다 필드 폭이
  * 요동치고, 치는 동안 버퍼가 자리를 지키는 장치(`DATE_WHEEL_FILL`)도 폭을 전제합니다 —
  * `dateTriggerParts`가 같은 이유로 같은 선택을 했습니다. */
-const SUFFIX: Partial<Record<WheelUnit, string>> = { year: "y", month: "mo", day: "d" };
+/** 단위 글자. **여섯 전부** 있습니다 — 기간은 열 조합이 자유로워서 자리만으로는 어느
+ *  열인지 못 읽습니다(오너 리포트 2026-08-16: `03:04:00`이 안 읽힌다).
+ *
+ *  ⚠️ **`month`가 `mo`인 이유.** 오너가 `8y 1m`을 제안하면서 `m`이 분과 겹치는 것을
+ *  스스로 짚고 "month를 아예 빼는 것도 고려해볼 만하다"고 했습니다. `mo`면 **단위를
+ *  잃지 않고** 겹침이 사라집니다 — 오너가 앞서 고른 "여섯 단위"가 그대로 살아남는
+ *  쪽입니다(`2년 3개월` 계약 기간이 그 결정의 이유였습니다).
+ *
+ *  ⚠️ **ASCII입니다.** 이 저장소는 `units`의 한국어 누수를 이미 치렀습니다(v0.8.0
+ *  BREAKING 5) — 트리거에 한국어를 박으면 영어 라벨을 준 소비자가 같은 자리에 걸립니다. */
+const SUFFIX: Record<WheelUnit, string> = { year: "y", month: "mo", day: "d", hour: "h", minute: "m", second: "s" };
 
-function triggerParts(source: string, fields: WheelUnit[]): DateTriggerPart[] {
+/** 트리거 문구 — `3d 4h 10m`.
+ *
+ * 🔴 **자리를 안 채웁니다**(`3d`, `03d` 아님). 시점 모델은 채우는데(`2026. 08. 14.`)
+ * 이유가 **폭 안정**이었습니다 — 숫자만 있으면 `1`과 `10` 사이에서 필드가 요동칩니다.
+ * 기간은 **단위 글자가 각 조각을 붙들어** 읽는 사람이 자리를 세지 않으므로 그 대가가
+ * 사라지고, 오너가 두 번 같은 모양(`3d 4h`)으로 적었습니다.
+ *
+ * 치는 동안에는 버퍼를 그대로 보여 줍니다 — 자리를 안 채우므로 `DATE_WHEEL_FILL`
+ * 같은 채움 문자가 필요 없습니다. */
+function triggerParts(source: string, fields: WheelUnit[], typing: { unit: WheelUnit; digits: string } | null): DateTriggerPart[] {
   const parts = parseDuration(source);
   if (!parts) return [];
   const drawn = LADDER.filter((unit) => fields.includes(unit));
   const out: DateTriggerPart[] = [];
   drawn.forEach((unit, index) => {
-    // 단위 글자는 **세그먼트 안**입니다 — 구두점으로 쪼개면 그 글자를 눌렀을 때
-    // 어느 열이 활성이 되는지가 갈립니다(오전/오후 접두사가 시 세그먼트 안인 것과 같은 이유).
-    out.push({ unit, text: pad(parts[unit], WIDTH[unit]) + (SUFFIX[unit] ?? "") });
-    if (index === drawn.length - 1) return;
-    // 다음 조각이 시각 쪽이고 지금도 시각 쪽이면 콜론, 아니면 공백.
-    const bothTime = SUFFIX[unit] === undefined && SUFFIX[drawn[index + 1]] === undefined;
-    out.push({ unit: null, text: bothTime ? ":" : " " });
+    // 단위 글자는 **세그먼트 안**입니다 — 구두점으로 쪼개면 그 글자를 눌렀을 때 어느 열이
+    // 활성이 되는지가 갈립니다(오전/오후 접두사가 시 세그먼트 안인 것과 같은 이유).
+    const shown = typing?.unit === unit && typing.digits ? typing.digits : String(parts[unit]);
+    out.push({ unit, text: shown + SUFFIX[unit] });
+    if (index < drawn.length - 1) out.push({ unit: null, text: " " });
   });
   return out;
 }
 
+/** 팝오버에서 그 열 뒤에 붙일 기호. 트리거와 **같은 글자**를 씁니다 — 두 곳이 다른 글자를
+ *  쓰면 같은 열을 두 이름으로 부르는 것이 됩니다. */
+function columnMark(unit: WheelUnit): string {
+  return SUFFIX[unit];
+}
 function parsePasted(text: string, fields: WheelUnit[]): string | null {
   const runs = (text.match(/\d+/g) ?? []).map(Number);
   if (runs.length === 0) return null;
@@ -265,6 +287,7 @@ export const durationModel: WheelModel = {
   parts: (value) => parseDuration(value),
   parsePasted,
   stepOf,
+  columnMark,
   snapValue: (value, fields, step) => {
     const parts = parseDuration(value);
     if (!parts) return value;

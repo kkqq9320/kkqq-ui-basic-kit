@@ -292,6 +292,20 @@
  * 불편한데? 너무 답답한 느낌이야." 그래서 `:`가 읽힐 만큼만 벌리고 더는 안 씁니다 —
  * 기본 간격 6px에 6px을 더해 12px, `:`(폭 6px)가 그 한가운데입니다. */
 .wheel-column:is([data-unit="minute"], [data-unit="second"]) { margin-left: 6px; }
+
+/* 🔴 **열 뒤의 단위 표시**(기간의 `d`·`h`·`m`). 위 `:`와는 다른 것입니다 — 저건 두 열을
+ * 잇는 **구분자**라 열 **앞**에 오고, 이건 그 열이 무엇인지 말하는 **단위 표시**라 열
+ * **뒤**에 옵니다. 기간은 열 조합이 자유로워서(연·월만, 일·시만 …) 자리만으로는 어느
+ * 열인지 못 읽습니다(오너 리포트 2026-08-16).
+ *
+ * 값은 모델이 정하고 기계가 `--wheel-unit-mark`로 내려보냅니다 — CSS가 단위 이름을
+ * 알지 않게 하려는 것입니다(`:`는 시점 전용이라 `data-unit`으로 그려도 됐지만, 이건
+ * 모델마다 다릅니다). 값이 빈 문자열이면 아무것도 안 그립니다. */
+.wheel-column::after {
+  content: var(--wheel-unit-mark, ""); position: absolute; z-index: 1; right: 3px;
+  top: calc(30px + var(--wheel-rows-h) / 2); transform: translateY(-50%);
+  color: var(--muted); font-size: var(--action-font-size); font-weight: 700; line-height: 1; pointer-events: none;
+}
 .wheel-column:is([data-unit="minute"], [data-unit="second"])::before {
   content: ":"; position: absolute; z-index: 1; left: -9px; top: calc(30px + var(--wheel-rows-h) / 2);
   transform: translateY(-50%); width: 6px; text-align: center; color: var(--muted); font-size: var(--font-size-control); font-weight: 700; line-height: 1; pointer-events: none;
