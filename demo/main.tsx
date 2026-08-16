@@ -593,6 +593,8 @@ function Demo() {
   const [long, setLong] = useState("item-0");
   const [date, setDate] = useState("2026-07-23");
   const [optionalDate, setOptionalDate] = useState("");
+  // 🔬 a/p 재현용 — 09:00~11:30 범위 안이라야 시작부터 유효합니다.
+  const [amOnly, setAmOnly] = useState("10:00");
   const [raceDate, setRaceDate] = useState("2026-07-23");
   // Task 3(2b-3)가 시·분·초를 실제로 그리게 만들고 나서 처음 여는 시각 픽커들(2b-4).
   // 값 형식은 fields가 가르는 계열을 그대로 따른다(model/instant.ts의 familyOf) —
@@ -632,7 +634,7 @@ function Demo() {
   const [raceDisabled, setRaceDisabled] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [memo, setMemo] = useState("");
-  const [dialog, setDialog] = useState<"none" | "basic" | "scroll">("none");
+  const [dialog, setDialog] = useState<"none" | "basic" | "scroll" | "hidden-first">("none");
   const [panelOrder, setPanelOrder] = useState(["messages", "short", "form"]);
   const [panelStretch, setPanelStretch] = useState(false);
   const [navHidden] = useScrollDirectionHidden();
@@ -809,6 +811,11 @@ function Demo() {
                 <label>필수 날짜<DateWheelPicker ariaLabel="거래 날짜" value={date} onChange={setDate} /></label>
                 <label>선택 날짜 (비우기 가능)<DateWheelPicker ariaLabel="종료일" value={optionalDate} onChange={setOptionalDate} allowClear /></label>
                 <label>범위 제한 (2026년만)<DateWheelPicker ariaLabel="제한 날짜" value={date} onChange={setDate} min="2026-01-01" max="2026-12-31" /></label>
+                {/* 🔬 결함 재현용(2026-08-16, PR #106). 09:00~11:30이면 **오후로 갈 수 있는
+                    값이 없습니다.** 위 "시간 표기"를 12시간제로 바꾸고 이 필드에 포커스를 준 뒤
+                    `p`를 눌러 보세요 — 팝오버의 오후 버튼은 회색인데, 고치기 전에는 키만 눌리는
+                    척했습니다. 숫자를 치다 말고 `p`를 누르면 치던 것까지 사라졌습니다. */}
+                <label>오후가 불가능한 범위 (a/p 재현)<TimeWheelPicker ariaLabel="오전 전용" value={amOnly} onChange={setAmOnly} min="09:00" max="11:30" /></label>
                 <label>연·월만 (fields)<DateWheelPicker ariaLabel="예산 월" value={date} onChange={setDate} fields={["year", "month"]} /></label>
                 <label>연도만 (fields)<DateWheelPicker ariaLabel="회계 연도" value={date} onChange={setDate} fields={["year"]} /></label>
                 <label>영어 라벨<DateWheelPicker ariaLabel="Date" value={date} onChange={setDate} labels={{ placeholder: "Pick a date", hint: "Scroll, swipe, arrow keys, or type digits · Ctrl+; today", today: "Today", clear: "Clear", done: "Done", previous: "previous", next: "next", select: "picker", weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], units: { year: "Year", month: "Month", day: "Day", hour: "Hour", minute: "Minute", second: "Second" } }} /></label>
@@ -940,6 +947,11 @@ function Demo() {
               <div className="button-row" style={{ marginTop: 16 }}>
                 <button type="button" className="secondary-button" onClick={() => setDialog("scroll")}>긴 다이얼로그</button>
                 <button type="button" className="primary" onClick={() => setDialog("basic")}>다이얼로그 열기</button>
+                {/* 🔬 결함 재현용(2026-08-16, PR #106). 첫 포커스 후보가 `type="hidden"`이라
+                    FOCUSABLE 선택자에는 걸리지만 포커스는 못 받습니다. 고치기 전에는
+                    (1) 열자마자 포커스가 다이얼로그 밖에 남고 (2) 마지막 버튼에서 Tab이
+                    죽었습니다. 지금은 이름 칸이 잡히고 Tab이 감싸야 합니다. */}
+                <button type="button" className="secondary-button" onClick={() => setDialog("hidden-first")}>숨은 입력이 첫 요소인 다이얼로그</button>
               </div>
             </Panel>
           </PanelGrid>
@@ -1081,6 +1093,18 @@ function Demo() {
         키보드를 올려 보세요 — 위에 붙은 채 안에서 스크롤되고, 키보드는 계속 보이고,
         액션 줄은 바닥에 붙어 있어야 합니다. 맨 아래 칸까지 스크롤해서 눌러 보면
         키보드가 올라온 상태에서의 스크롤도 확인됩니다. */}
+    {/* 🔬 결함 재현용 — 위 버튼 주석을 보세요. `<input type="hidden">`이 첫 포커스
+        후보입니다(폼에 흔한 CSRF 토큰 모양). */}
+    <Dialog open={dialog === "hidden-first"} onClose={() => setDialog("none")} ariaLabel="숨은 입력 재현">
+      <DialogHeading eyebrow="REPRO" title="숨은 입력이 첫 요소" />
+      <input type="hidden" name="csrf" defaultValue="token" />
+      <label>이름<input placeholder="여기에 포커스가 잡혀야 합니다" /></label>
+      <DialogActions>
+        <button type="button" onClick={() => setDialog("none")}>취소</button>
+        <button type="button" className="primary" onClick={() => setDialog("none")}>확인</button>
+      </DialogActions>
+    </Dialog>
+
     <Dialog open={dialog === "scroll"} onClose={() => setDialog("none")} ariaLabel="긴 다이얼로그" wide scroll>
       <DialogHeading eyebrow="SETTINGS" title="항목 설정" />
       <p className="muted-copy">입력칸을 눌러 키보드를 올린 채 위아래로 스크롤해 보세요.</p>
