@@ -23,7 +23,7 @@ import {
   type HourDisplay,
   type WheelStep,
 } from "./model/instant";
-import { getHourFormat, getWheelRowsPerSide, subscribeHourFormat, subscribeWheelRowsPerSide } from "./settings";
+import { getHourFormat, getHourFormatServerSnapshot, getWheelRowsPerSide, getWheelRowsPerSideServerSnapshot, subscribeHourFormat, subscribeWheelRowsPerSide } from "./settings";
 import { useBackToClose, useEscapeToClose } from "./hooks";
 import { dropdownViewportSpace, focusTriggerOnClick, isPrimaryButton, onViewportChange } from "./positioning";
 
@@ -414,14 +414,17 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    * 한 화면 안에서 어떤 픽커는 12시간제, 어떤 픽커는 24시간제인 것은 설정이 아니라
    * 사고입니다. `useSyncExternalStore`인 이유: `useEffect` + `useState`로 손수
    * 구독하면 React 19에서 첫 페인트가 옛 값으로 나가는 tearing이 생깁니다.
-   * 세 번째 인자(서버 스냅샷)도 같은 함수입니다 — 이 값은 서버·클라이언트가 다르지
-   * 않습니다(지속성이 없으므로 언제나 기본 `"24"`에서 시작합니다). */
-  const hourFormat = useSyncExternalStore(subscribeHourFormat, getHourFormat, getHourFormat);
+   * 🔴 **세 번째 인자(서버 스냅샷)는 이제 다른 함수입니다.** 한동안 `getHourFormat`을
+   * 그대로 넘겼고, 그때는 그것이 맞았습니다 — 지속성이 없어서 서버든 클라이언트든 언제나
+   * 기본 `"24"`였습니다. 2026-08-16에 지속성이 붙으면서(스펙 §16-3) 클라이언트 모듈은
+   * 뜰 때 저장값을 읽습니다. 같은 함수를 그대로 두면 **서버가 그린 HTML은 기본값인데**
+   * **하이드레이션 첫 렌더가 저장값**이 되어 어긋납니다. */
+  const hourFormat = useSyncExternalStore(subscribeHourFormat, getHourFormat, getHourFormatServerSnapshot);
   /* 위아래로 보이는 행 수도 킷 전역 설정입니다(오너 리포트 6번) — 한 화면에서 픽커마다
    * 행 수가 다른 것은 설정이 아니라 사고입니다. 🔴 **기본 1은 오너가 실기기에서 정한
    * 것이고, "새 축은 기본값이 지금과 같음"(PRINCIPLES §14)을 의도적으로 깬 자리입니다** —
    * 핀을 올리는 소비자는 다른 휠을 봅니다. */
-  const rowsPerSide = useSyncExternalStore(subscribeWheelRowsPerSide, getWheelRowsPerSide, getWheelRowsPerSide);
+  const rowsPerSide = useSyncExternalStore(subscribeWheelRowsPerSide, getWheelRowsPerSide, getWheelRowsPerSideServerSnapshot);
   const offsets = useMemo(() => wheelOffsets(rowsPerSide), [rowsPerSide]);
   // 모델은 전역 설정을 안 읽습니다(`src/model/instant.ts`는 아무것도 import 하지
   // 않는 것이 계약입니다) — 기계가 읽어서 인자로 내려보냅니다. 매 렌더 새 객체를

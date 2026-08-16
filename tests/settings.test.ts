@@ -1,12 +1,16 @@
 /* 킷 전역 설정 — 3단계는 `hourFormat` 하나뿐입니다.
  *
  * 설계 스펙 §11이 정한 것: 인스턴스 prop이 아니라 **킷 전역 설정**, 기본 `"24"`,
- * 컴포넌트는 **구독해서 읽습니다**. 정하지 않은 것: 어디에 어떤 형식으로 저장하는가 —
- * 지속성은 테마 설정 작업에 입주하기로 했습니다. 그래서 이 모듈은 **인메모리만**
- * 갖고, `localStorage`도 프로바이더도 없습니다.
+ * 컴포넌트는 **구독해서 읽습니다**. 프로바이더는 없습니다.
  *
- * ⚠️ 이 파일은 jsdom을 요구하지 않습니다(모듈이 DOM을 안 만집니다). 환경 주석이 없는
- * 것은 빠뜨린 게 아닙니다. */
+ * ⚠️ **이 파일은 jsdom을 요구하지 않습니다**(모듈이 DOM을 안 만집니다). 환경 주석이
+ * 없는 것은 빠뜨린 게 아닙니다.
+ *
+ * 🔴 **그래서 여기서는 지속성을 못 봅니다 — 그건 `settingsPersistence.test.ts`입니다.**
+ * jsdom이 아니면 `localStorage`가 **아예 없어서** 모듈의
+ * `typeof localStorage === "undefined"` 가지만 밟습니다. 즉 지속성 검사를 여기 두면
+ * 저장이 통째로 망가져도 **전부 초록입니다.** 실제로 지속성을 붙인 직후 기존 검사
+ * 1454개가 다 초록이었고, 그 이유가 이것이었습니다. */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { getHourFormat, setHourFormat, subscribeHourFormat, getWheelRowsPerSide, setWheelRowsPerSide, subscribeWheelRowsPerSide } from "../src/settings";
