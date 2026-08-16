@@ -899,6 +899,29 @@ export function installEventTrace() {
     append(`  ↳ 처리됨=${event.defaultPrevented ? "Y (preventDefault 호출됨)" : "N (아무도 안 잡았다)"}`);
   });
 
+  /* 🔴 **클립보드 이벤트 — 비보안 컨텍스트에서 붙여넣기가 되는지를 가르는 자리입니다.**
+   *
+   * `http://<LAN-IP>:15277`은 보안 컨텍스트가 아니라 `navigator.clipboard`가 아예 없고,
+   * 그때 남는 유일한 붙여넣기 경로가 **브라우저가 Ctrl+V의 기본 동작으로 보내는 `paste`
+   * 이벤트**입니다. 그런데 휠 피커의 트리거는 `<button>`이라 **편집 가능한 요소가
+   * 아니고**, 브라우저가 그런 요소에도 이 이벤트를 보내는지는 브라우저 pane으로 못
+   * 잽니다(문서 포커스를 못 잡아 진짜 Ctrl+V를 못 밉니다).
+   *
+   * 이 줄이 있으면 LAN 주소에서 한 번 눌러 보고 **셋을 가를 수 있습니다**:
+   *   줄이 아예 없음        → 이벤트가 안 온다. 이 경로는 없고 다른 답을 찾아야 한다
+   *   줄은 있는데 값 그대로 → 이벤트는 왔고 `parsePasted`가 거절했다. 파싱을 고치면 된다
+   *   줄도 있고 값도 바뀜   → 동작한다
+   *
+   * **이 구분이 없으면 "안 된다"는 보고에서 아무것도 못 읽습니다.** */
+  for (const type of ["copy", "paste", "cut"] as const) {
+    document.addEventListener(type, (event) => {
+      const data = (event as ClipboardEvent).clipboardData;
+      const text = data ? data.getData("text") : null;
+      append(`${type.padEnd(11)} tgt=${describeTarget(event.target)}  보안컨텍스트=${window.isSecureContext ? "Y" : "N"}`
+        + `  clipboardData=${data ? "있음" : "없음"} 글자=${text === null ? "(못 읽음)" : JSON.stringify(text)}`);
+    }, { capture: true, passive: true });
+  }
+
   for (const type of POINTER_LIKE_EVENTS) {
     document.addEventListener(type, (event) => {
       append(`${type.padEnd(11)} target=${describeTarget(event.target)}  menu=${menuPresent()}`);

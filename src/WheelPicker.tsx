@@ -10,7 +10,7 @@
  *     절대 다른 컬럼으로 자리올림하지 않습니다
  *   · 데스크톱 휠·화살표는 커서가 있는 컬럼만, 모바일 스와이프·키보드는 활성 컬럼만
  */
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
 import { createPortal } from "react-dom";
 
 import {
@@ -23,7 +23,7 @@ import {
   type HourDisplay,
   type WheelStep,
 } from "./model/instant";
-import { getHourFormat, getWheelRowsPerSide, subscribeHourFormat, subscribeWheelRowsPerSide } from "./settings";
+import { getHourFormat, getHourFormatServerSnapshot, getWheelRowsPerSide, getWheelRowsPerSideServerSnapshot, subscribeHourFormat, subscribeWheelRowsPerSide } from "./settings";
 import { useBackToClose, useEscapeToClose } from "./hooks";
 import { dropdownViewportSpace, focusTriggerOnClick, isPrimaryButton, onViewportChange } from "./positioning";
 
@@ -414,14 +414,17 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    * 한 화면 안에서 어떤 픽커는 12시간제, 어떤 픽커는 24시간제인 것은 설정이 아니라
    * 사고입니다. `useSyncExternalStore`인 이유: `useEffect` + `useState`로 손수
    * 구독하면 React 19에서 첫 페인트가 옛 값으로 나가는 tearing이 생깁니다.
-   * 세 번째 인자(서버 스냅샷)도 같은 함수입니다 — 이 값은 서버·클라이언트가 다르지
-   * 않습니다(지속성이 없으므로 언제나 기본 `"24"`에서 시작합니다). */
-  const hourFormat = useSyncExternalStore(subscribeHourFormat, getHourFormat, getHourFormat);
+   * 🔴 **세 번째 인자(서버 스냅샷)는 이제 다른 함수입니다.** 한동안 `getHourFormat`을
+   * 그대로 넘겼고, 그때는 그것이 맞았습니다 — 지속성이 없어서 서버든 클라이언트든 언제나
+   * 기본 `"24"`였습니다. 2026-08-16에 지속성이 붙으면서(스펙 §16-3) 클라이언트 모듈은
+   * 뜰 때 저장값을 읽습니다. 같은 함수를 그대로 두면 **서버가 그린 HTML은 기본값인데**
+   * **하이드레이션 첫 렌더가 저장값**이 되어 어긋납니다. */
+  const hourFormat = useSyncExternalStore(subscribeHourFormat, getHourFormat, getHourFormatServerSnapshot);
   /* 위아래로 보이는 행 수도 킷 전역 설정입니다(오너 리포트 6번) — 한 화면에서 픽커마다
    * 행 수가 다른 것은 설정이 아니라 사고입니다. 🔴 **기본 1은 오너가 실기기에서 정한
    * 것이고, "새 축은 기본값이 지금과 같음"(PRINCIPLES §14)을 의도적으로 깬 자리입니다** —
    * 핀을 올리는 소비자는 다른 휠을 봅니다. */
-  const rowsPerSide = useSyncExternalStore(subscribeWheelRowsPerSide, getWheelRowsPerSide, getWheelRowsPerSide);
+  const rowsPerSide = useSyncExternalStore(subscribeWheelRowsPerSide, getWheelRowsPerSide, getWheelRowsPerSideServerSnapshot);
   const offsets = useMemo(() => wheelOffsets(rowsPerSide), [rowsPerSide]);
   // 모델은 전역 설정을 안 읽습니다(`src/model/instant.ts`는 아무것도 import 하지
   // 않는 것이 계약입니다) — 기계가 읽어서 인자로 내려보냅니다. 매 렌더 새 객체를
@@ -1445,8 +1448,48 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    * 없거나 거절당하면 **조용히 아무것도 하지 않습니다.** 폰에는 Ctrl 키가 없어 이
    * 경로는 데스크톱 전용이고, 데스크톱에서 실패하는 경우는 권한 거절뿐입니다.
    */
+  /* 🔴 **비보안 컨텍스트 폴백**(2026-08-16). 위 문단이 잰 그대로 —
+   * `http://<LAN-IP>:15277`에서는 `navigator.clipboard`가 **아예 없습니다**(실측:
+   * `isSecureContext: false`). 즉 API만 쓰면 이 기능은 **정확히 필요한 그 환경에서만**
+   * 조용히 아무 일도 안 합니다.
+   *
+   * `execCommand`는 폐기 예정이지만 **비보안 컨텍스트에서 동작하는 유일한 경로**이고,
+   * 이 저장소가 이미 같은 자리에서 같은 폴백을 쓰고 있습니다 — 데모의 TRACE 패널
+   * 복사 버튼(`demo/EventTracePanel.tsx`)이 그것이고, 오너가 폰에서 실제로 써 왔습니다.
+   * 즉 **추측이 아니라 이 저장소에서 이미 동작이 확인된 패턴**입니다.
+   *
+   * ⚠️ 임시 `<textarea>`는 화면 밖이 아니라 **투명하게 제자리**에 둡니다. `display: none`
+   * 이나 화면 밖이면 브라우저가 선택을 안 만들어 `execCommand`가 실패하고, 화면 밖으로
+   * 밀면 iOS가 거기로 스크롤합니다. 그리고 **포커스를 반드시 되돌립니다** — 안 그러면
+   * 복사 한 번에 키보드 조작이 통째로 죽습니다(이 컨트롤은 키를 트리거가 받습니다). */
   function writeClipboard(text: string) {
-    void navigator.clipboard?.writeText(text).catch(() => { /* 권한 거절 — 무시 */ });
+    if (navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(text).catch(() => { /* 권한 거절 — 무시 */ });
+      return;
+    }
+    const active = document.activeElement as HTMLElement | null;
+    const scratch = document.createElement("textarea");
+    scratch.value = text;
+    scratch.setAttribute("readonly", "");
+    scratch.setAttribute("aria-hidden", "true");
+    scratch.tabIndex = -1;
+    scratch.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;padding:0;border:0;opacity:0;";
+    document.body.appendChild(scratch);
+    try {
+      /* ⚠️ **`focus()`를 명시로 부릅니다 — `select()`에 맡기지 않습니다.** 데모의 검증된
+       * 폴백이 그렇게 하고 있고(`demo/EventTracePanel.tsx`), 엔진마다 `select()`가 포커스를
+       * 옮기는지가 다릅니다. 실제로 이것 없이 쓴 첫 판은 **아래 포커스 복원이 검사로
+       * 증명될 수 없었습니다** — jsdom의 `select()`는 포커스를 안 옮겨서 트리거가 포커스를
+       * 잃은 적이 없었고, `active?.focus?.()`를 지우는 변이가 **0 red**였습니다. */
+      scratch.focus();
+      scratch.select();
+      document.execCommand("copy");
+    } catch {
+      /* 폴백도 막혔습니다 — 조용히 넘어갑니다. 이 경로에는 알릴 자리가 없습니다. */
+    } finally {
+      scratch.remove();
+      active?.focus?.();
+    }
   }
   async function readClipboard(): Promise<string | null> {
     try { return (await navigator.clipboard?.readText()) ?? null; } catch { return null; }
@@ -1464,8 +1507,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
 
   /** Ctrl+V — 읽을 수 없으면 **아무것도 하지 않습니다.** 값을 지우지 않는 것이
    *  `parsePasted`가 빈 문자열이 아니라 `null`을 돌려주는 이유입니다. */
-  async function pasteValue() {
-    const text = await readClipboard();
+  function applyPastedText(text: string | null) {
     if (!text) return;
     const parsed = model.parsePasted(text, fields, hourDisplay);
     if (parsed === null) return;
@@ -1476,6 +1518,30 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     clearedRef.current = false;
     pushUndo(valueRef.current);
     onChange(next);
+  }
+
+  async function pasteValue() {
+    applyPastedText(await readClipboard());
+  }
+
+  /* 🔴 **비보안 컨텍스트의 붙여넣기 경로**(2026-08-16). 읽기에는 복사 같은 폴백이
+   * 없습니다 — `execCommand("paste")`는 웹 콘텐츠에서 막혀 있고 `navigator.clipboard`는
+   * 여기 없습니다. 남는 길은 **브라우저가 Ctrl+V의 기본 동작으로 보내 주는 `paste`
+   * 이벤트**뿐이고, 그 이벤트의 `clipboardData`는 보안 컨텍스트를 안 따집니다.
+   *
+   * ⚠️ **이 경로가 실제로 오는지는 아직 확인 못 했습니다.** 트리거가 `<button>`이라
+   * 편집 가능한 요소가 아니고, 브라우저가 편집 불가 요소에도 `paste`를 보내는지는
+   * 브라우저 pane으로 못 잽니다(문서 포커스를 못 잡아 진짜 Ctrl+V를 못 밉니다 —
+   * 계측기 한계입니다). 그래서 **덧대기만 합니다**: 이벤트가 안 오면 지금까지와 정확히
+   * 같고, 오면 그때부터 동작합니다. 실기기 확인 항목입니다.
+   *
+   * 보안 컨텍스트에서는 keydown 쪽 비동기 읽기와 **둘 다** 돌 수 있는데, 뒤엣것이
+   * `next === valueRef.current`에서 그냥 빠집니다 — 되돌리기 스택도 안 쌓입니다. */
+  function handlePaste(event: ReactClipboardEvent<HTMLElement>) {
+    const text = event.clipboardData?.getData("text") ?? null;
+    if (!text) return;
+    event.preventDefault();
+    applyPastedText(text);
   }
 
   function commitShift(sourceValue: string, unit: WheelUnit, amount: number, motion: "wheel" | "none" = "wheel") {
@@ -2148,7 +2214,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
         포커스된 버튼을 언마운트하면 focus만 기록되고 blur는 없으며 activeElement는 body로
         갑니다). 그래서 이 핸들러와 그 규칙이 충돌하지 않습니다. tests의 "버퍼를 든 채
         언마운트되면 확정하지 않고 버린다"가 그 전제까지 함께 지킵니다. */}
-    <div className="wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className={editing ? "wheel-trigger editing" : "wheel-trigger"} aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onBlur={() => { setEditing(false); flushTyping(); }} onClick={(event) => {
+    <div className="wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className={editing ? "wheel-trigger editing" : "wheel-trigger"} aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onPaste={handlePaste} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onBlur={() => { setEditing(false); flushTyping(); }} onClick={(event) => {
       // 맨 앞이어야 합니다 — 아래 어느 갈래로 빠지든 포커스는 트리거에 와야 합니다.
       // 근거는 positioning.ts의 헬퍼 주석(맥은 mousedown에서 포커스를 걷어갑니다).
       focusTriggerOnClick(event.currentTarget);

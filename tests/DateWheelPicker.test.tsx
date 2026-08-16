@@ -6377,3 +6377,150 @@ const _fourLabelsAreOptional: WheelLabels = {
   // weekdays·meridiem·today·now 없음 — 필수가 되면 여기서 tsc가 터진다.
 };
 void _fourLabelsAreOptional;
+
+/* ── 팝오버의 위아래 여백이 **같다** (오너 리포트 2026-08-16) ──
+ *
+ * "아랫 부분 너무 붙어있는거같은데 위에 항목 떨어진거랑 똑같이 조금 떨어트려놔."
+ * 즉 계약은 "10px"이 아니라 **"위와 같다"**입니다. 그래서 한쪽 수를 박는 대신
+ * **두 수가 같은지**를 봅니다 — 어느 쪽이 드리프트해도 빨개집니다.
+ *
+ * ⚠️ 소스 텍스트를 통째로 grep하면 안 됩니다. 이 저장소는 주석이 두꺼워서 바로 위
+ * 주석이 `margin`과 숫자를 **설명하고** 있고, 실제로 그 함정을 한 번 밟았습니다.
+ * 그래서 `^`로 줄 시작에 앵커해 **규칙 본문만** 꺼냅니다(주석 줄은 ` *`로 시작). */
+describe("팝오버 CSS 계약 — 열 위아래 여백이 같다", () => {
+  const bodyOf = (match: RegExpMatchArray | null) => {
+    expect(match, "규칙을 못 찾았습니다").not.toBeNull();
+    return match![1];
+  };
+  // `margin: 10px -12px -12px` / `padding: 1px 2px 10px`에서 각각 필요한 자리를 뽑습니다.
+  const px = (value: string | undefined) => {
+    expect(value, "px 값을 못 읽었습니다").toBeDefined();
+    return parseFloat(value!);
+  };
+
+  const actions = bodyOf(wheelPickerCssSource.match(/^\.wheel-actions \{([^}]*)\}/m));
+  const heading = bodyOf(wheelPickerCssSource.match(/^\.wheel-heading \{([^}]*)\}/m));
+
+  // 전제 — 규칙 본문을 실제로 읽었는가. 빈 문자열이면 아래가 전부 공허하게 통과합니다.
+  it("두 규칙의 본문을 실제로 읽었다", () => {
+    expect(actions).toMatch(/position:\s*sticky/);
+    expect(heading).toMatch(/display:\s*flex/);
+  });
+
+  /* 위쪽 여백은 머리말의 `padding-bottom`(세 값 중 셋째)에서 나옵니다 —
+   * `.wheel-heading`의 상자 자체는 열에 붙어 있어서, 눈에 보이는 간격이 거기입니다. */
+  const headingBottom = () => px(heading.match(/padding:\s*\S+\s+\S+\s+(\S+);/)?.[1]);
+  /* 아래쪽은 `margin-top`(세 값 중 첫째)입니다. **`padding-top`이 아닙니다** —
+   * 패딩은 선 아래의 버튼만 밀고, 눈에 붙어 보이는 것은 `border-top` 선입니다. */
+  const actionsTop = () => px(actions.match(/margin:\s*(\S+)\s+/)?.[1]);
+
+  it("확정 줄 위 여백이 머리말 아래 여백과 같다", () => {
+    expect(actionsTop()).toBe(headingBottom());
+  });
+
+  // 0 == 0으로는 "같다"가 공허하게 통과합니다 — 실제로 띄우고 있어야 합니다.
+  it("그 여백이 0이 아니다", () => {
+    expect(actionsTop()).toBeGreaterThan(0);
+  });
+});
+
+/* ── 비보안 컨텍스트의 복사·붙여넣기 (2026-08-16, 보류분 해제) ──
+ *
+ * 🔴 **오너 환경에서 이 기능은 통째로 죽어 있었습니다.** 폰·다른 기기에서 데모를 여는
+ * 주소가 `http://<LAN-IP>:15277`인데 그건 보안 컨텍스트가 아니라(`localhost`와 `https`만
+ * 해당) `navigator.clipboard`가 **아예 없습니다**(실측: `isSecureContext: false`).
+ * 즉 API만 쓰면 이 기능은 **정확히 필요한 그 환경에서만** 조용히 아무 일도 안 합니다.
+ *
+ * ⚠️ **`localhost`에서는 이 결함이 재현되지 않습니다** — 거기는 보안 컨텍스트입니다.
+ * 그래서 데모를 눈으로 보는 것으로는 절대 못 잡습니다. */
+describe("비보안 컨텍스트 — 클립보드 API가 없을 때", () => {
+  /** `execCommand`를 스텁하고, **불리는 순간의 textarea 값**을 잡습니다.
+   *  소스가 `finally`에서 그 요소를 지우므로 나중에 찾으면 이미 없습니다. */
+  function stubExecCommand() {
+    const copied: string[] = [];
+    (document as unknown as { execCommand: (c: string) => boolean }).execCommand = (command: string) => {
+      if (command === "copy") {
+        const scratch = document.querySelector('textarea[aria-hidden="true"]') as HTMLTextAreaElement | null;
+        copied.push(scratch ? scratch.value : "<textarea 없음>");
+      }
+      return true;
+    };
+    return copied;
+  }
+  afterEach(() => { Reflect.deleteProperty(document, "execCommand"); Reflect.deleteProperty(navigator, "clipboard"); });
+
+  // 전제 — jsdom에는 원래 `navigator.clipboard`가 없습니다. 즉 이 describe는 스텁을
+  // 안 걸어도 비보안 컨텍스트와 같은 상태이고, 그게 이 검사들이 재는 조건입니다.
+  it("전제: 이 환경에는 navigator.clipboard가 없다", () => {
+    expect(navigator.clipboard).toBeUndefined();
+  });
+
+  it("Ctrl+C가 execCommand로 화면에 보이는 그대로를 쓴다", () => {
+    const copied = stubExecCommand();
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "c", code: "KeyC", ctrlKey: true });
+    expect(copied).toEqual(["2026. 07. 12."]);
+  });
+
+  /* 🔴 **포커스를 안 돌려주면 복사 한 번에 키보드 조작이 통째로 죽습니다** — 이 컨트롤은
+   * 키를 트리거가 받습니다(`positioning.ts`가 그 계약을 적어 뒀습니다). 임시 textarea를
+   * 만들었다가 지우는 구현이라 놓치기 쉬운 자리입니다. */
+  it("복사 뒤 포커스가 트리거로 돌아온다", () => {
+    stubExecCommand();
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = fieldOf("거래 날짜");
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "c", code: "KeyC", ctrlKey: true });
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  // 임시 요소를 남기면 폼마다 유령 textarea가 쌓입니다.
+  it("임시 textarea를 남기지 않는다", () => {
+    stubExecCommand();
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "c", code: "KeyC", ctrlKey: true });
+    expect(document.querySelector('textarea[aria-hidden="true"]')).toBeNull();
+  });
+
+  // 폴백까지 막힌 브라우저 — 조용히 넘어가야지 죽으면 안 됩니다.
+  it("execCommand가 던져도 죽지 않고 임시 요소도 안 남는다", () => {
+    (document as unknown as { execCommand: () => boolean }).execCommand = () => { throw new Error("blocked"); };
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    expect(() => fireEvent.keyDown(fieldOf("거래 날짜"), { key: "c", code: "KeyC", ctrlKey: true })).not.toThrow();
+    expect(document.querySelector('textarea[aria-hidden="true"]')).toBeNull();
+  });
+
+  /* 붙여넣기는 폴백이 없습니다 — `execCommand("paste")`는 웹 콘텐츠에서 막혀 있습니다.
+   * 남는 길은 브라우저가 Ctrl+V의 기본 동작으로 보내는 `paste` 이벤트뿐이고, 그
+   * `clipboardData`는 보안 컨텍스트를 안 따집니다.
+   *
+   * ⚠️ **이 검사가 증명하는 것은 "이벤트가 오면 처리한다"까지입니다.** 편집 불가 요소인
+   * `<button>`에 브라우저가 실제로 그 이벤트를 보내는지는 여기서 못 잽니다 — 실기기
+   * 확인 항목입니다. 계측기 한계를 결함 없음으로 읽지 않기 위해 적어 둡니다. */
+  it("paste 이벤트가 오면 값이 된다", () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.paste(fieldOf("거래 날짜"), { clipboardData: { getData: () => "2031. 03. 05." } });
+    expect(fieldOf("거래 날짜").textContent).toContain("2031. 03. 05.");
+  });
+
+  it("읽을 수 없는 글자가 오면 값을 그대로 둔다", () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.paste(fieldOf("거래 날짜"), { clipboardData: { getData: () => "점심 약속" } });
+    expect(fieldOf("거래 날짜").textContent).toContain("2026. 07. 12.");
+  });
+
+  /* 대조군 — 보안 컨텍스트에서는 **API를 쓰고 폴백을 안 씁니다.** 이게 없으면 위 검사들은
+   * "언제나 execCommand를 쓴다"는 구현으로도 전부 통과합니다. */
+  it("clipboard API가 있으면 execCommand를 안 쓴다", () => {
+    const copied = stubExecCommand();
+    const written: string[] = [];
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: (text: string) => { written.push(text); return Promise.resolve(); }, readText: () => Promise.resolve("") },
+    });
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "c", code: "KeyC", ctrlKey: true });
+    expect(written).toEqual(["2026. 07. 12."]);
+    expect(copied).toEqual([]);
+  });
+});
