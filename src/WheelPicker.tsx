@@ -36,7 +36,6 @@ export { todayIn, type WheelUnit } from "./model/instant";
  *  타입은 `WheelUnit`(여섯 단위)까지 넓고, Task 3부터 컴포넌트가 시·분·초를 실제로
  *  그립니다 — 기본값 자체는 그대로 3열입니다(연·월·일이 아닌 조합을 쓰려면
  *  `fields`를 명시해야 합니다). */
-const DEFAULT_WHEEL_FIELDS: WheelUnit[] = ["year", "month", "day"];
 
 export type WheelLabels = {
   /** 값이 비었을 때 트리거 문구 */
@@ -498,12 +497,12 @@ export function WheelPicker({ value, onChange, min, max, fields, allowClear = fa
     const timer = window.setTimeout(() => setEntering(false), WHEEL_ENTER_TOTAL_MS);
     return () => window.clearTimeout(timer);
   }, [open]);
-  const [activeUnit, setActiveUnit] = useState<WheelUnit>(fields[0] ?? "year");
+  const [activeUnit, setActiveUnit] = useState<WheelUnit>(fields[0] ?? model.units[0]);
   // activeUnit은 소비자가 런타임에 fields를 바꿀 수 있어(예: 일간/월간 토글) fields
   // 밖의 열을 계속 가리킬 수 있습니다. 그 원본 상태를 그대로 믿지 않고, 매 렌더
   // fields 안으로 클램프한 값을 씁니다 — 그렇지 않으면 키가 사라진 열에 가서 아무 일도
   // 일어나지 않고, 트리거와 팝오버 어느 쪽에도 활성 표시가 남지 않습니다.
-  const resolvedActiveUnit = fields.includes(activeUnit) ? activeUnit : (fields[0] ?? "year");
+  const resolvedActiveUnit = fields.includes(activeUnit) ? activeUnit : (fields[0] ?? model.units[0]);
   // 지금 치고 있는 열과 그 자릿수. 자릿수가 차면 model.typeDigit이 곧바로 확정하고 비웁니다.
   //
   // **덜 찬 채로 버퍼가 어떻게 되는지는 "무엇을 가리킨 조작인가"로 갈립니다**(설계 스펙
