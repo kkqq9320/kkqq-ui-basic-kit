@@ -11,9 +11,6 @@
 import { WheelPicker, type WheelPickerProps } from "./WheelPicker";
 import type { WheelUnit } from "./model/instant";
 
-/** 이 래퍼가 쓰지 않아도 되게 다시 내보냅니다 — `src/DateWheelPicker`를 직접 import 하던
- *  소비자와 이 저장소의 검사들이 그대로 돌아갑니다. */
-export { DEFAULT_WHEEL_LABELS, todayIn, type WheelLabels, type WheelUnit, type WheelPickerProps } from "./WheelPicker";
 
 const DATE_FIELDS: WheelUnit[] = ["year", "month", "day"];
 

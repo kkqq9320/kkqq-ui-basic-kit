@@ -8,7 +8,8 @@ import { act, cleanup, createEvent, fireEvent, render, screen, waitFor } from "@
 import { useEffect, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DateWheelPicker, DEFAULT_WHEEL_LABELS, type WheelLabels } from "../src/DateWheelPicker";
+import { DateWheelPicker } from "../src/DateWheelPicker";
+import { DEFAULT_WHEEL_LABELS, type WheelLabels } from "../src/WheelPicker";
 import { instantModel, type WheelUnit } from "../src/model/instant";
 import { setHourFormat, getWheelRowsPerSide, setWheelRowsPerSide } from "../src/settings";
 import { Dialog } from "../src/Dialog";
