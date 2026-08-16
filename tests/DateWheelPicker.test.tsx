@@ -6316,3 +6316,64 @@ describe("빈 값으로 열었을 때의 기준값과 격자", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 });
+
+// ── 라벨 넷이 선택이 됐다 — `weekdays`·`meridiem`·`today`·`now` ──
+//
+// 🔴 **모델이 "안 그린다"고 말할 수 있는 이름은 라벨도 선택이어야 합니다.** 계약은
+// 이미 그렇게 말하고 있었는데(`seedAction`이 `null`, `meridiem()`이 `null`, 기간의
+// `label`은 인자를 둘만 받음) 라벨만 필수로 남아 어긋나 있었고, 그래서
+// `DEFAULT_DURATION_LABELS`가 **안 쓰는 이름 넷을 지고** 나갔습니다.
+//
+// 여기 검사는 그 대가로 열린 **명시적 `undefined` 구멍**이 닫혀 있는지를 봅니다.
+// 병합이 `{ ...DEFAULT, ...override }`라 키를 안 건드리면 기본값이 남으므로, 폴백이
+// 실제로 실행되는 유일한 길이 그것뿐입니다(`hintNow`가 같은 자리에 같은 검사를
+// 갖고 있습니다).
+describe("라벨 넷이 선택 필드다 — 폴백이 죽은 코드가 아니다", () => {
+  const dayRowText = () =>
+    document.querySelector('.wheel-column[data-unit="day"] .wheel-values button.selected')?.textContent ?? null;
+
+  /* 🔴 **이 검사가 가장 중요합니다 — 없으면 크래시가 한참 뒤에, 한 조합에서만 납니다.**
+   * `weekdays`는 `model.label`로 넘어가 시점 모델의 **일 열에서만** 인덱싱됩니다
+   * (`src/model/instant.ts`의 `weekdays[weekdayIndex(…)]`). 즉 시각 픽커·기간 픽커는
+   * 멀쩡하고 날짜 픽커가 일 열을 그릴 때만 터집니다. */
+  it("weekdays를 명시적으로 undefined로 override해도 일 열이 기본 요일로 그려진다", () => {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} labels={{ weekdays: undefined }} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    expect(dayRowText()).toBe(instantModel.label("2026-08-12", "day", DEFAULT_WHEEL_LABELS.weekdays, ["year", "month", "day"]));
+  });
+
+  // 양성 대조군 — 폴백이 **늘** 이기는 것이 아니라, 준 값은 실제로 쓰입니다.
+  // 이게 없으면 위 검사는 `weekdays`를 통째로 무시해도 통과합니다.
+  it("weekdays를 주면 그 값이 일 열에 쓰인다 — 양성 대조군", () => {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} labels={{ weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] }} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    expect(dayRowText()).toBe("12 Wed");
+  });
+
+  /* 🔴 **tsc가 못 잡는 자리입니다.** `todayLabel`은 템플릿 문자열(`title`)과 버튼의
+   * 자식으로만 쓰이는데 **둘 다 `undefined`를 받아 줍니다** — 폴백을 빠뜨리면 타입은
+   * 초록인 채 **이름 없는 버튼**이 나갑니다. 그래서 런타임 검사여야 합니다. */
+  it("today를 명시적으로 undefined로 override해도 씨앗 버튼에 이름이 남는다", () => {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} labels={{ today: undefined }} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    expect(screen.getByRole("button", { name: DEFAULT_WHEEL_LABELS.today })).toBeTruthy();
+  });
+
+  // `now`도 같은 자리 — 시각 단위가 있으면 버튼이 이쪽을 씁니다.
+  it("now를 명시적으로 undefined로 override해도 씨앗 버튼에 이름이 남는다", () => {
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T03:00:05" fields={["year", "month", "day", "hour", "minute", "second"]} onChange={() => undefined} labels={{ now: undefined }} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    expect(screen.getByRole("button", { name: DEFAULT_WHEEL_LABELS.now })).toBeTruthy();
+  });
+});
+
+// 타입 쪽 절반. 위 `_hintNowIsOptional`과 같은 idiom — 모듈 스코프에 두어 vitest
+// 개수를 안 건드리고 `tsc --noEmit`만으로 판정합니다. 넷 중 **하나라도 다시 필수가
+// 되면** 아래 리터럴이 그 필드를 안 채웠으므로 여기서 tsc가 거절합니다.
+const _fourLabelsAreOptional: WheelLabels = {
+  placeholder: "기간 선택", hint: "안내", clear: "비우기", done: "완료",
+  previous: "이전", next: "다음", select: "선택",
+  units: { year: "년", month: "개월", day: "일", hour: "시간", minute: "분", second: "초" },
+  // weekdays·meridiem·today·now 없음 — 필수가 되면 여기서 tsc가 터진다.
+};
+void _fourLabelsAreOptional;

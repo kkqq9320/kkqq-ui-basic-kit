@@ -54,19 +54,43 @@ export type WheelLabels = {
    *  깨집니다. 같은 실수를 한 번 더 반복할 이유가 없어 이번엔 선택으로 엽니다 —
    *  없으면 컴포넌트가 `hint`로 그대로 대체합니다(아래 `hintText`). */
   hintNow?: string;
-  today: string;
+  /** 팝오버 하단 **씨앗 버튼**의 이름.
+   *
+   *  🔴 **`now`와 함께 선택입니다 — `weekdays`·`meridiem`과 같은 이유입니다.**
+   *  `model.seedAction(fields)`가 `null`을 내면 **버튼 자체가 안 그려집니다**(기간이
+   *  그렇습니다 — "지금"이 뜻을 갖지 않습니다). 계약은 이미 "씨앗 버튼이 없는 모델"을
+   *  인정하고 있었는데 **라벨만 필수로 남아 어긋나 있었습니다.**
+   *
+   *  없으면 기계가 기본값으로 떨어집니다(아래 `todayLabel`) — 병합이
+   *  `{ ...DEFAULT, ...override }`라 실제로 비는 길은 명시적 `undefined` 하나뿐입니다. */
+  today?: string;
   /** `today`의 짝 — `fields`에 시각 단위(시·분·초) 중 하나라도 있으면 팝오버의
    *  "오늘/지금" 버튼이 이걸 씁니다(Task 3 항목, 설계 스펙 §9). 라벨을 둘 다 두고
-   *  `fields`가 고릅니다 — 인스턴스별로 하나를 고정하지 않습니다. */
-  now: string;
+   *  `fields`가 고릅니다 — 인스턴스별로 하나를 고정하지 않습니다.
+   *  선택인 이유는 `today`와 같습니다(위). */
+  now?: string;
   clear: string;
   done: string;
   previous: string;
   next: string;
   /** 팝오버 자체의 접근성 이름에 붙는 접미사 */
   select: string;
-  /** 일요일부터 7개 */
-  weekdays: string[];
+  /** 일요일부터 7개.
+   *
+   *  🔴 **선택입니다 — 이 이름을 쓰는 모델이 시점 하나뿐이기 때문입니다.** 기간 모델의
+   *  `label`은 인자를 두 개만 받고 요일을 안 그립니다(`src/model/duration.ts`). 필수로
+   *  두면 기간의 기본 라벨이 **안 쓰는 요일 일곱 개를 지고 나갑니다.**
+   *
+   *  ⚠️ **`units`의 누수 함정은 여기 안 생깁니다 — 병합 방식이 다릅니다.** 저건 키마다
+   *  펼쳐(`{ ...DEFAULT.units, ...override.units }`) 연·월·일만 영어로 준 소비자에게
+   *  한국어 `"시"`가 남는 것이었습니다. 요일은 **배열 통째 교체**라 "절반만 영어"인
+   *  상태를 만들 수 없습니다 — `meridiem`이 `am`·`pm`을 함께 요구해 같은 이유로 안전한
+   *  것과 정확히 같습니다.
+   *
+   *  없으면 기계가 기본값으로 떨어집니다(아래 `weekdayLabels`). 실제로 `undefined`가
+   *  되는 길은 override가 **명시적으로** `undefined`를 주는 것뿐입니다 — 병합이
+   *  `{ ...DEFAULT, ...override }`라 키를 안 건드리면 기본값이 그대로 남습니다. */
+  weekdays?: string[];
   /** 열의 `aria-label` 접두사. **여섯 다 필수입니다.**
    *
    *  🔴 **한동안 시·분·초만 선택이었고, 그게 스크린리더로 새는 결함이었습니다.**
@@ -89,25 +113,32 @@ export type WheelLabels = {
   /** 12시간제(`hourFormat === "12"`)에서 시 앞에 붙는 두 글자 — 트리거와 시 열이 같이
    *  씁니다(설계 스펙 §7·§10).
    *
-   *  🔴 **필수이고, 둘을 한 덩어리로 받습니다 — 둘 다 일부러입니다.**
-   *  이 저장소는 이미 같은 모양의 결함을 하나 갖고 있습니다: `units`의 시·분·초가
-   *  **선택**이라, 라벨을 영어로 override 한 소비자가 시각 열을 쓰면 병합
-   *  (`{ ...DEFAULT.units, ...override.units }`)이 한국어 `"시"`를 남겨 열의
-   *  `aria-label`이 `"시 03"`이 됩니다 — 스크린리더에 그대로 나갑니다.
-   *  `meridiem`은 **그려지는 글자**이고, 이 저장소 규칙이 "그려지거나 충돌할 수 있는
-   *  이름만 필수"라 필수가 맞습니다. 그리고 병합이 **통째 교체**(위 `labels` 병합에서
-   *  `units`처럼 따로 펼치지 않습니다)라 한쪽만 영어인 상태가 아예 만들어지지 않습니다.
+   *  🔴 **선택이지만 둘을 한 덩어리로 받습니다 — 둘 다 일부러입니다.**
    *
-   *  ⚠️ 필수 필드를 더하는 것은 `WheelLabels`로 **완전히 타입된 라벨 상수**를 만드는
-   *  소비자의 컴파일을 깹니다(`now`가 같은 이유로 깼습니다) — 미출시분의 BREAKING 목록에
-   *  한 줄로 들어갑니다. `labels` prop 자체는 `Partial<…>`이라 부분 override는 영향 없습니다.
+   *  **선택인 이유**는 `weekdays`와 같습니다(위) — 오전/오후가 없는 모델이 있습니다.
+   *  계약도 이미 그렇게 말하고 있었습니다: `model.meridiem()`은 `null`을 낼 수 있고
+   *  `hourFromTwelve`는 선택입니다. **라벨만 필수로 남아 계약과 어긋나 있었습니다.**
+   *  기간 모델이 그 어긋남을 드러냈습니다 — 90시간짜리 기간에 오전/오후가 없는데
+   *  타입이 두 글자를 요구했습니다.
+   *
+   *  **덩어리인 이유**는 `units`가 가진 결함을 안 만들려는 것입니다: 저건 시·분·초가
+   *  **선택**이고 병합이 키마다 펼쳐(`{ ...DEFAULT.units, ...override.units }`) 연·월·일만
+   *  영어로 준 소비자에게 한국어 `"시"`가 남아, 열의 `aria-label`이 `"시 03"`으로
+   *  **스크린리더에 나갑니다.** 이쪽은 **통째 교체**라 한쪽만 영어인 상태가 아예 안
+   *  만들어집니다 — `weekdays`가 배열 통째라 같은 이유로 안전한 것과 같습니다.
    *
    *  ⚠️ **`tabular-nums`의 폭 보장 밖입니다**(스펙 §10) — 한국어는 두 글자로 같지만
    *  `AM`/`PM`으로 바꾸면 폭이 달라집니다. 라벨을 바꾸는 소비자가 알아야 할 항목입니다. */
-  meridiem: { am: string; pm: string };
+  meridiem?: { am: string; pm: string };
 };
 
-export const DEFAULT_WHEEL_LABELS: WheelLabels = {
+/* 🔴 **`: WheelLabels`가 아니라 `satisfies WheelLabels`입니다**(아래 닫는 줄).
+ * `weekdays`·`meridiem`·`today`·`now`가 선택이 되면서, 주석 타입으로 두면 이 상수의
+ * 그 필드들까지 `| undefined`가 되어 **폴백이 폴백 노릇을 못 합니다** —
+ * `labels.meridiem ?? DEFAULT_WHEEL_LABELS.meridiem`이 여전히 `undefined` 가능이
+ * 됩니다(실측: tsc가 그 자리에서만 오류 여덟 개). `satisfies`는 적합성은 그대로
+ * 검사하면서 **여기 실제로 적힌 구체 타입**을 남깁니다. */
+export const DEFAULT_WHEEL_LABELS = {
   placeholder: "날짜 선택",
   /* "길게 눌러 초기화"가 여기 있는 이유: 그 제스처는 **화면에 아무 단서가 없습니다.**
    * 누르기 시작하면 열 바닥에 진행 막대가 뜨지만, 그건 이미 누른 사람에게만 보입니다 —
@@ -127,7 +158,7 @@ export const DEFAULT_WHEEL_LABELS: WheelLabels = {
   // 돌려주고, model.label이 시·분·초를 두 자리 숫자로 낸다) 라벨도 필요하다.
   units: { year: "연도", month: "월", day: "일", hour: "시", minute: "분", second: "초" },
   meridiem: { am: "오전", pm: "오후" },
-};
+} satisfies WheelLabels;
 
 /** 양끝 ±3은 보이지 않지만 미리 그려두는 프리로드 행입니다. */
 /** 휠의 행을 이만큼 누르고 있으면 그 열이 초기화됩니다(오너 리포트 4번, 오너 결정
@@ -409,6 +440,13 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    * `undefined` 구멍 하나입니다. */
   const meridiemLabels = labels.meridiem ?? DEFAULT_WHEEL_LABELS.meridiem;
   const hourDisplay = useMemo<HourDisplay>(() => ({ format: hourFormat, am: meridiemLabels.am, pm: meridiemLabels.pm }), [hourFormat, meridiemLabels.am, meridiemLabels.pm]);
+  /* 요일도 같은 이유로 같은 모양입니다(위 `meridiemLabels`). 다만 **터지는 방식이**
+   * **다릅니다** — `meridiem`은 의존성 배열이라 어느 픽커든 매 렌더 크래시인데, 요일은
+   * `model.label`에 넘어가 시점 모델의 **일 열에서만** `weekdays[…]`로 인덱싱됩니다
+   * (`src/model/instant.ts`). 즉 날짜 픽커에서 일 열을 그릴 때만 터지고, 시각·기간
+   * 픽커는 아무 일도 없습니다. **그래서 더 나쁩니다: 한참 뒤에, 한 조합에서만 납니다.**
+   * 여기서 한 번 떨어뜨려 두 호출부가 같은 값을 보게 합니다. */
+  const weekdayLabels = labels.weekdays ?? DEFAULT_WHEEL_LABELS.weekdays;
   /* 팝오버 하단의 **씨앗 버튼**. `null`이면 버튼 자체를 안 그립니다 — 기간처럼 "지금"이
    * 뜻을 갖지 않는 모델이 그렇습니다. **기계는 계열을 묻지 않습니다**: 한동안
    * `model.family(fields) !== "date"`로 물었는데, 그 값으로 실제로 하던 일은 이 버튼과
@@ -416,7 +454,11 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    * 보고 드러났습니다 — 그때 기간은 `"time"`이라고 거짓말해야 했습니다). */
   const seedAction = model.seedAction(fields);
   const hasTimeUnit = seedAction === "now";
-  const todayLabel = hasTimeUnit ? labels.now : labels.today;
+  /* ⚠️ `?? DEFAULT`가 여기서 특히 중요합니다 — **없으면 tsc가 안 잡습니다.** 이 값은
+   * 템플릿 문자열(`title`)과 버튼의 자식으로만 쓰이는데, 둘 다 `undefined`를 **받아**
+   * **줍니다**(템플릿은 `"undefined"`로 찍고 React는 아무것도 안 그립니다). 즉 폴백을
+   * 빠뜨리면 타입은 초록인 채 **이름 없는 버튼**이 나갑니다. */
+  const todayLabel = hasTimeUnit ? (labels.now ?? DEFAULT_WHEEL_LABELS.now) : (labels.today ?? DEFAULT_WHEEL_LABELS.today);
   // hint의 짝 — todayLabel과 같은 기준(hasTimeUnit)으로 고릅니다(2b-4). `hintNow`는
   // 타입에서 선택이라(위 WheelLabels 주석) `labels.hintNow`가 `undefined`일 수
   // 있어 `now`처럼 값을 바로 못 믿고 `?? labels.hint`로 떨어집니다.
@@ -1186,7 +1228,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    * **빼고** 읽습니다(§8) — 눈으로 보라고 넣은 것이 귀로도 읽혀야 할 이유가 없다는 근거로.
    * 여기는 그 반대 방향이고 근거는 같습니다: **화면과 귀는 서로 다른 것을 놓칩니다.** */
   function columnName(unit: WheelUnit) {
-    const drawn = model.label(baseValue, unit, labels.weekdays, fields, hourDisplay);
+    const drawn = model.label(baseValue, unit, weekdayLabels, fields, hourDisplay);
     if (unit !== MERIDIEM_UNIT || !meridiem) return `${labels.units[unit]} ${drawn}`;
     return `${labels.units[unit]} ${meridiem === "am" ? meridiemLabels.am : meridiemLabels.pm} ${drawn}`;
   }
@@ -2273,7 +2315,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
               컨테이너의 key가 바뀌어 행이 통째로 리마운트되므로 포커스를 둘 수도 없습니다. */}
-          <div className="wheel-viewport"><div className="wheel-values" key={`${unit}-${motion.sequence}`}>{offsets.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === rowsPerSide + 1; const buffered = offset === 0 && resolvedTyping?.unit === unit ? resolvedTyping.digits : null; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={(event) => { if (offset === 0 && centreTapped(unit, event.timeStamp)) return; if (rowValue) applyShift(unit, offset); }} key={offset}>{buffered ?? (rowValue ? model.label(rowValue, unit, labels.weekdays, fields, hourDisplay) : "—")}</button>; })}</div></div>
+          <div className="wheel-viewport"><div className="wheel-values" key={`${unit}-${motion.sequence}`}>{offsets.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === rowsPerSide + 1; const buffered = offset === 0 && resolvedTyping?.unit === unit ? resolvedTyping.digits : null; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={(event) => { if (offset === 0 && centreTapped(unit, event.timeStamp)) return; if (rowValue) applyShift(unit, offset); }} key={offset}>{buffered ?? (rowValue ? model.label(rowValue, unit, weekdayLabels, fields, hourDisplay) : "—")}</button>; })}</div></div>
           <button type="button" className="wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.next}`} disabled={!shifted(unit, 1)} onClick={() => applyShift(unit, 1)}><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></button>
         </section>; })}
       </div>

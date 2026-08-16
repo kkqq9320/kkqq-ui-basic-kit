@@ -16,15 +16,26 @@ import type { WheelUnit } from "./model/instant";
 
 const DURATION_FIELDS: WheelUnit[] = ["hour", "minute"];
 
-/** 기간의 기본 라벨. 시점의 것에서 **세는 이름**과 안내 문구만 갈아 끼웁니다 — 나머지
- *  (`clear`·`done`·`previous`·`next`·`select`)는 뜻이 같아 그대로 씁니다.
+/** 기간의 기본 라벨.
  *
- *  ⚠️ `weekdays`와 `meridiem`은 기간이 **안 쓰는데도** 타입이 요구합니다. `WheelLabels`가
- *  아직 시점 쪽으로 기울어 있다는 뜻이고, 계약 정리의 다음 후보입니다. */
+ *  🔴 **`DEFAULT_WHEEL_LABELS`를 펼치지 않고 필요한 것만 적습니다.** 한동안 펼쳤는데,
+ *  그러면 기간이 **안 그리는 이름 넷**(`weekdays`·`meridiem`·`today`·`now`)을 지고
+ *  나갔습니다 — 그때는 타입이 요구해서 뺄 수도 없었습니다. 그 넷이 선택이 되면서
+ *  (`WheelPicker.tsx`의 `WheelLabels`) 이제 **안 쓰는 것은 적지 않습니다.**
+ *
+ *  안 적는 이유는 기간이 그것들을 그리지 않는다고 **모델이 이미 말하고 있기**
+ *  때문입니다: `seedAction`이 `null`(씨앗 버튼 없음), `meridiem`이 `null`(오전/오후
+ *  없음), `label`은 인자를 둘만 받습니다(요일 없음). 라벨이 그 말과 어긋나 있었습니다.
+ *
+ *  뜻이 같은 것(`clear`·`done`·`previous`·`next`·`select`)은 그대로 가져옵니다. */
 export const DEFAULT_DURATION_LABELS: WheelLabels = {
-  ...DEFAULT_WHEEL_LABELS,
   placeholder: "기간 선택",
   hint: "휠·스와이프·방향키·숫자 입력 · 가운데 두 번 탭하면 0으로",
+  clear: DEFAULT_WHEEL_LABELS.clear,
+  done: DEFAULT_WHEEL_LABELS.done,
+  previous: DEFAULT_WHEEL_LABELS.previous,
+  next: DEFAULT_WHEEL_LABELS.next,
+  select: DEFAULT_WHEEL_LABELS.select,
   units: { year: "년", month: "개월", day: "일", hour: "시간", minute: "분", second: "초" },
 };
 
