@@ -18,6 +18,7 @@ import {
   AutoGrowTextarea,
   DateWheelPicker,
   TimeWheelPicker,
+  DurationWheelPicker,
   Dialog,
   DialogActions,
   DialogHeading,
@@ -600,6 +601,10 @@ function Demo() {
    *  자리(docs/design/2026-08-12-wheel-picker-time-design.md §1) — 이 킷으로 옮기면
    *  이 모양이 된다. */
   const [reservationTime, setReservationTime] = useState("18:30");
+  // 기간 — 값은 고정폭 YYYY:MM:DD:HH:MM:SS 입니다. 아래 셋이 같은 모델을 다른 fields로 씁니다.
+  const [workDuration, setWorkDuration] = useState("0000:00:00:01:30:00");     // 1시간 30분
+  const [longDuration, setLongDuration] = useState("0000:00:03:04:00:00");     // 3일 4시간
+  const [contractTerm, setContractTerm] = useState("0002:03:00:00:00:00");     // 2년 3개월
   const [meetingAt, setMeetingAt] = useState("2026-07-23T14:30");
   const [loggedAt, setLoggedAt] = useState("2026-07-23T14:30:05");
   /** 6열(연·월·일·시·분·초)을 한 줄로 둘지 두 줄(날짜 줄/시각 줄)로 접을지 —
@@ -850,6 +855,9 @@ function Demo() {
             <Panel title="시각 피커" hint="TIME WHEEL" className="demo-time-panel">
               <FieldGrid>
                 <label>시각만 — <code>TimeWheelPicker</code> (budget 백업 예약 화면이 지금 &lt;input type=&quot;number&quot;&gt; 둘로 받는 모양)<TimeWheelPicker ariaLabel="예약 시각" value={reservationTime} onChange={(next) => { logTraceNote(`예약 시각 onChange → ${next}`); setReservationTime(next); }} /></label>
+                <label>기간 — <code>DurationWheelPicker</code> 기본(시·분). 맨 위 열이 무제한이라 <strong>90시간 30분</strong>도 됩니다<DurationWheelPicker ariaLabel="작업 시간" value={workDuration} onChange={(next) => { logTraceNote(`작업 시간 onChange → ${next}`); setWorkDuration(next); }} /></label>
+                <label>기간 — 일·시·분. 여기서는 시가 0~23으로 순환합니다(맨 위가 일이라)<DurationWheelPicker ariaLabel="소요 기간" value={longDuration} onChange={setLongDuration} fields={["day", "hour", "minute"]} /></label>
+                <label>기간 — 연·개월. "2년 3개월" 같은 계약 기간<DurationWheelPicker ariaLabel="계약 기간" value={contractTerm} onChange={setContractTerm} fields={["year", "month"]} /></label>
                 <label>날짜+시각 (fields)<DateWheelPicker ariaLabel="약속 시각" value={meetingAt} onChange={(next) => { logTraceNote(`약속 시각 onChange → ${next}`); setMeetingAt(next); }} fields={["year", "month", "day", "hour", "minute"]} /></label>
                 <label>초까지 — 6열 (fields)<DateWheelPicker ariaLabel="초까지 예약 시각" value={loggedAt} onChange={(next) => { logTraceNote(`초까지 예약 시각 onChange → ${next}`); setLoggedAt(next); }} fields={["year", "month", "day", "hour", "minute", "second"]} /></label>
               </FieldGrid>

@@ -124,7 +124,7 @@ describe("내보내는 컴포넌트는 전부 className을 받는다", () => {
    * 하고 있다는 뜻이고, 그러면 아래 검사는 완화 없이 통과한 것이라 이 완화가 공허합니다. */
   it("rest로 물려받는 래퍼가 실제로 있다", () => {
     const forwarding = components.filter(inheritsByForwarding).map((component) => component.name).sort();
-    expect(forwarding).toEqual(["DateWheelPicker", "TimeWheelPicker"]);
+    expect(forwarding).toEqual(["DateWheelPicker", "DurationWheelPicker", "TimeWheelPicker"]);
   });
 
   it("빠진 컴포넌트가 없다", () => {
