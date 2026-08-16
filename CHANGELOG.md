@@ -3,7 +3,7 @@
 버전은 태그로 답니다. 소비 프로젝트는 SHA 대신 태그로 걸 수 있습니다:
 
 ```bash
-npm i github:kkqq9320/kkqq-ui-basic-kit#v0.8.0
+npm i github:kkqq9320/kkqq-ui-basic-kit#v0.9.0
 ```
 
 `0.x`에서는 **minor 자리가 breaking 자리**입니다(semver의 0.x 규칙).
@@ -13,7 +13,24 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.8.0
 
 ---
 
-## 미출시
+## v0.9.0 — 2026-08-16
+
+[전체 diff: v0.8.0...v0.9.0](https://github.com/kkqq9320/kkqq-ui-basic-kit/compare/v0.8.0...v0.9.0)
+
+**커밋 35개. 휠 피커가 시점 전용 컨트롤에서 벗어난 릴리스입니다.** 새 컴포넌트가 둘
+(**`TimeWheelPicker`**, **`DurationWheelPicker`**), 열마다의 격자(`step`)가 생겼고,
+기계가 **모델을 프롭으로 받게** 되었습니다 — `WheelModel`의 구현이 하나에서 둘이
+되면서 계약이 어디서 시점 쪽으로 기울어 있었는지가 드러났습니다.
+
+**minor인 이유 — BREAKING이 여섯입니다.** `0.x`에서 minor가 breaking 자리입니다.
+
+⚠️ **여섯 중 소비자에게 닿는 것은 셋뿐입니다** — 아래 "깨지는 것 — 셋"의 이름 정리
+(CSS 클래스 · CSS 파일명 · 공개 타입 셋)입니다. 나머지 셋은 `WheelModel` 계약인데
+**그 타입은 배럴에 없습니다**(`src/index.ts`가 일부러 안 내보냅니다) — 자기 모델을
+구현한 쪽만 해당하고, 지금 그런 소비자는 없습니다.
+
+**소비자의 `import`는 한 글자도 안 바뀝니다** — `DateWheelPicker`는 이름도 경로도
+그대로입니다(이제 래퍼입니다). 실제로 고칠 곳은 **앱 CSS가 킷 내부를 겨냥한 자리**입니다.
 
 **휠 피커에 열마다의 격자(`step`)** — 휠 피커 시간 확장 5단계 중 **4단계**(설계 스펙
 `docs/design/2026-08-12-wheel-picker-time-design.md` §8). **순수 추가입니다** — `step`을
