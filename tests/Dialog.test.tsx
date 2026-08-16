@@ -242,6 +242,71 @@ describe("Dialog", () => {
     expect(document.activeElement).toBe(last);
   });
 
+  /* ── 🔴 포커스 못 받는 요소가 목록에 섞였을 때 (2026-08-16) ──
+   *
+   * `FOCUSABLE`은 가시성도 포커스 가능성도 안 봅니다. `<input type="hidden">`은
+   * `input:not([disabled])`에 **글자 그대로 매치되는데**(폼 안에 흔합니다) `focus()`를
+   * 불러도 조용히 아무 일도 안 합니다. 감싸기가 `preventDefault()`를 먼저 부르고
+   * `focus()`를 뒤에 부르면 **기본 이동은 막혔고 대신 갈 곳으로도 못 가서 Tab이 죽습니다.**
+   *
+   * ⚠️ **위의 "Tab이 다이얼로그 안에 갇힌다"는 이것을 못 잡습니다** — 항목 목록을
+   * `querySelectorAll("input, button")`으로 **직접** 만들어서 구멍 있는 `FOCUSABLE`
+   * 선택자를 아예 안 지나갑니다.
+   *
+   * ⚠️ **jsdom이 만들 수 있는 조건은 `type="hidden"`뿐입니다.** `display:none`은
+   * 레이아웃이 없어서 jsdom이 **포커스를 줘 버립니다**(실측). 그 경로는 여기서 못 덮으니
+   * 덮은 척하지 않습니다 — 소스가 정적 규칙이 아니라 **넣어 보고 `activeElement`를
+   * 확인하는** 판정을 쓰는 이유가 그것입니다(두 환경에서 다 맞습니다). */
+  describe("포커스 못 받는 요소가 첫/마지막일 때", () => {
+    function WithHiddenFirst() {
+      return (
+        <Dialog open onClose={() => undefined} ariaLabel="저장">
+          <input type="hidden" name="csrf" defaultValue="x" />
+          <input aria-label="이름" />
+          <button className="primary">저장</button>
+        </Dialog>
+      );
+    }
+
+    // 전제 — 그 요소가 정말 선택자에 걸리고, 정말 포커스를 못 받는가.
+    // 이게 없으면 아래 검사들이 무엇을 재는지 알 수 없습니다.
+    it("전제: hidden 입력이 FOCUSABLE에 걸리고 포커스는 못 받는다", () => {
+      render(<WithHiddenFirst />);
+      const dialog = screen.getByRole("dialog");
+      const hidden = dialog.querySelector<HTMLInputElement>('input[type="hidden"]')!;
+      expect(hidden.matches("input:not([disabled])")).toBe(true);
+      const name = screen.getByLabelText("이름");
+      name.focus();
+      hidden.focus();
+      expect(document.activeElement).toBe(name);
+    });
+
+    it("마지막에서 Tab이 죽지 않고 진짜 포커스 가능한 첫 요소로 감싼다", () => {
+      render(<WithHiddenFirst />);
+      const last = screen.getByRole("button", { name: "저장" });
+      last.focus();
+      fireEvent.keyDown(document, { key: "Tab" });
+      expect(document.activeElement).toBe(screen.getByLabelText("이름"));
+    });
+
+    /* 🔴 **경계 계산에서도 걷어야 합니다.** 숨은 입력이 `items[0]`이면
+     * `activeElement === first`가 영영 거짓이라 진짜 첫 요소에서 Shift+Tab이 **아예 안
+     * 걸리고 포커스가 모달 밖으로 샙니다.** 위 검사만으로는 이 절반이 안 잡힙니다. */
+    it("진짜 첫 요소에서 Shift+Tab이 마지막으로 감싼다 — 밖으로 안 샌다", () => {
+      render(<WithHiddenFirst />);
+      screen.getByLabelText("이름").focus();
+      fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "저장" }));
+    });
+
+    // 열 때의 초기 포커스도 같은 맹점이었습니다 — `?? node`는 "후보가 없을 때"만
+    // 발동하지 "후보가 포커스를 못 받을 때"는 아닙니다.
+    it("열 때 초기 포커스가 숨은 입력에서 멈추지 않는다", () => {
+      render(<WithHiddenFirst />);
+      expect(document.activeElement).toBe(screen.getByLabelText("이름"));
+    });
+  });
+
   it("onSubmit을 주면 form으로 렌더하고 기본 동작을 막는다", () => {
     const onSubmit = vi.fn();
     render(<Dialog open onClose={() => undefined} ariaLabel="저장" onSubmit={onSubmit}>

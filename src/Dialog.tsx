@@ -63,17 +63,60 @@ export function Dialog({ open, onClose, ariaLabel, children, onSubmit, wide = fa
     // 열자마자 첫 입력칸을 잡아 바로 타이핑할 수 있게 합니다. 포커스만으로는
     // 레이아웃이 바뀌지 않습니다 — 위치는 오직 키보드 감지(useVirtualKeyboard)가
     // 결정합니다. autoFocus로 이미 안쪽이 잡혔으면 건드리지 않습니다.
+    /* ⚠️ **`?? node` 폴백은 "후보가 없을 때"만 발동합니다 — "후보가 포커스를 못 받을
+     * 때"는 아닙니다.** 첫 매치가 `<input type="hidden">`이면 `querySelector`가 그것을
+     * 돌려주므로 `??`가 안 타고, `focus()`는 조용히 실패하며, **포커스는 다이얼로그 밖에
+     * 그대로 남습니다.** 아래 Tab 감싸기와 같은 맹점이라 같은 방식으로 고칩니다 —
+     * 하나씩 넣어 보고, 아무도 못 받으면 컨테이너로 떨어집니다. */
     if (node && !node.contains(document.activeElement)) {
-      (node.querySelector<HTMLElement>(FOCUSABLE) ?? node).focus({ preventScroll: true });
+      const candidates = [...node.querySelectorAll<HTMLElement>(FOCUSABLE)]
+        .filter((item) => !(item instanceof HTMLInputElement && item.type === "hidden"));
+      const landed = candidates.some((candidate) => {
+        candidate.focus({ preventScroll: true });
+        return document.activeElement === candidate;
+      });
+      if (!landed) node.focus({ preventScroll: true });
+    }
+    /* 🔴 **`FOCUSABLE`에 걸린다고 포커스를 받는 것이 아닙니다.** 그 선택자는 가시성도
+     * 포커스 가능성도 안 봅니다 — `<input type="hidden">`은 `input:not([disabled])`에
+     * **글자 그대로 매치되고**(폼 안에 흔합니다), `display:none` 서브트리 안의 버튼·앵커도
+     * 그대로 걸립니다. 그런 요소에 `focus()`를 부르면 **예외도 안 던지고 조용히 아무 일도
+     * 안 합니다**(이 저장소가 `src/shortcuts.ts`에서 이미 실측해 적어 둔 사실입니다).
+     *
+     * 그게 왜 결함이었나: 감싸기가 `preventDefault()`를 **먼저** 부르고 `focus()`를 뒤에
+     * 불렀습니다. 옮기기가 조용히 실패하면 **기본 이동은 이미 막혔고 대신 갈 곳으로도 못
+     * 가서, 그 지점에서 Tab이 죽습니다.** 되돌릴 방법도 없습니다.
+     *
+     * 그래서 **정하고 나서 막습니다** — 실제로 포커스가 옮겨진 뒤에만 `preventDefault`.
+     * 판정은 정적 규칙이 아니라 **넣어 보고 `activeElement`를 확인**합니다. 레이아웃을
+     * 아는 판정(`offsetParent === null`)을 쓰면 jsdom에서는 레이아웃이 없어 **언제나
+     * 참**이라 검사 환경에서 후보를 전부 배제해 버립니다 — 실측 판정이 두 환경에서 다 맞습니다.
+     *
+     * ⚠️ **`type="hidden"`만은 목록에서 미리 걷습니다.** 시도조차 무의미하고, 무엇보다
+     * `first`/`last`의 **경계 계산**에 들어가면 안 되기 때문입니다 — 숨은 입력이 맨 앞이면
+     * `activeElement === first`가 영영 거짓이라 진짜 첫 요소에서 Shift+Tab이 안 걸려
+     * **포커스가 모달 밖으로 샙니다.** 그건 아래 폴백으로도 못 고치는 별개의 새는 자리입니다. */
+    function focusFirstThatTakes(candidates: HTMLElement[]) {
+      for (const candidate of candidates) {
+        candidate.focus();
+        if (document.activeElement === candidate) return true;
+      }
+      return false;
     }
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key !== "Tab" || !node) return;
-      const items = [...node.querySelectorAll<HTMLElement>(FOCUSABLE)];
+      const items = [...node.querySelectorAll<HTMLElement>(FOCUSABLE)]
+        .filter((item) => !(item instanceof HTMLInputElement && item.type === "hidden"));
       if (!items.length) { event.preventDefault(); node.focus({ preventScroll: true }); return; }
       const first = items[0];
       const last = items[items.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      /* 감쌀 방향의 **끝에서부터** 실제로 받는 요소를 찾습니다 — 첫 후보가 숨어 있으면
+       * 그다음이 받습니다. 아무도 못 받으면 **막지 않고** 브라우저에 맡깁니다. */
+      if (event.shiftKey && document.activeElement === first) {
+        if (focusFirstThatTakes([...items].reverse())) event.preventDefault();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        if (focusFirstThatTakes(items)) event.preventDefault();
+      }
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => {

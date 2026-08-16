@@ -5296,6 +5296,76 @@ describe("DateWheelPicker 시 세그먼트의 a/p 키 (3단계)", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  /* ── 🔴 뒤집을 수 없으면 키를 먹지 않는다 (2026-08-16) ──
+   *
+   * `min`/`max`가 반대 절반을 통째로 막으면 `flipMeridiem()`이 `commitShift`에서 `null`로
+   * 빠져 `onChange`가 아예 안 나갑니다. 그런데 `preventDefault`는 이미 걸린 뒤였습니다 —
+   * **회색으로 죽어 있는 버튼 옆에서 키만 눌리는 척했습니다.**
+   *
+   * 킷은 그 판정을 **이미 갖고 있었습니다**(`meridiemShift`). 버튼은 그것으로
+   * `disabled`가 되는데 **키 경로만 안 봤습니다.** */
+  describe("min/max가 반대 절반을 막았을 때", () => {
+    const blocked = () => {
+      setHourFormat("12");
+      const onChange = vi.fn();
+      // 09:00~11:30이면 오전뿐입니다 — 오후로 갈 수 있는 값이 없습니다.
+      render(<DateWheelPicker ariaLabel="거래 시각" value="10:00" fields={["hour", "minute"]} min="09:00" max="11:30" onChange={onChange} />);
+      const field = fieldOf("거래 시각");
+      field.focus();
+      return { onChange, field };
+    };
+
+    // 전제 — 화면의 버튼은 실제로 막혀 있는가. 이게 없으면 아래가 무엇과의 비대칭인지
+    // 알 수 없습니다.
+    it("전제: 팝오버의 오후 버튼이 disabled다", () => {
+      const { field } = blocked();
+      fireEvent.click(field);
+      expect(screen.getByRole("button", { name: "오후" })).toHaveProperty("disabled", true);
+    });
+
+    it("p는 preventDefault를 부르지 않는다 — 버튼과 같은 판정", () => {
+      const { field } = blocked();
+      const event = createEvent.keyDown(field, { key: "p" });
+      fireEvent(field, event);
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    it("p를 눌러도 값이 안 바뀐다", () => {
+      const { onChange } = blocked();
+      fireEvent.keyDown(fieldOf("거래 시각"), { key: "p" });
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    /* 🔴 **파괴적 no-op이었습니다.** 뒤집기는 실패하는데 `setTyping(null)`은 실행돼서
+     * 반쯤 친 숫자를 **버려 놓고** 아무 일도 안 했습니다. */
+    it("치던 버퍼를 버리지 않는다", () => {
+      const { field } = blocked();
+      fireEvent.keyDown(field, { key: "1" });
+      expect(field.textContent).toContain("1");
+      fireEvent.keyDown(field, { key: "p" });
+      expect(field.textContent).toContain("1");
+    });
+
+    // 대조군 — 이미 그 절반이면 버튼도 안 죽어 있고(`!pressed` 조건) 키도 우리 것입니다.
+    it("이미 오전인데 a를 누르면 여전히 우리 키다 — 대조군", () => {
+      const { field } = blocked();
+      const event = createEvent.keyDown(field, { key: "a" });
+      fireEvent(field, event);
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    // 대조군 — 경계가 없으면 예전처럼 그대로 먹습니다.
+    it("min/max가 없으면 p가 오후로 넘긴다 — 대조군", () => {
+      setHourFormat("12");
+      const onChange = vi.fn();
+      render(<DateWheelPicker ariaLabel="자유 시각" value="10:00" fields={["hour", "minute"]} onChange={onChange} />);
+      const field = fieldOf("자유 시각");
+      field.focus();
+      fireEvent.keyDown(field, { key: "p" });
+      expect(onChange).toHaveBeenCalledWith("22:00");
+    });
+  });
+
   it("p는 오후로 넘긴다 — 그리고 팝오버를 열지 않는다", () => {
     setHourFormat("12");
     const { onChange, field } = typeInto("03:00:05", ["p"]);
