@@ -17,7 +17,7 @@ import {
   WHEEL_FILL,
   MERIDIEM_NOTCHES,
   MERIDIEM_UNIT,
-  instantModel,
+  type WheelModel,
   isContiguous,
   type WheelUnit,
   type HourDisplay,
@@ -281,6 +281,9 @@ export type WheelPickerProps = {
    *  ⚠️ 사다리(`UNIT_LADDER`)에서 잘라낸 **연속 구간**이어야 합니다 — 아래 개발 모드
    *  경고가 그것을 봅니다. */
   fields: WheelUnit[];
+  /** 값 모델. **래퍼가 정합니다** — 기계는 이 객체 하나만 보고 돕니다(설계 스펙 §3.2).
+   *  `instantModel`(시점)과 `durationModel`(기간)이 같은 계약을 구현합니다. */
+  model: WheelModel;
   /** 열마다의 격자 간격(설계 스펙 §8). 안 넘긴 열은 1이라 **지금까지와 글자 하나 안
    *  바뀝니다.** 격자의 기준점은 언제나 그 열의 바닥값(시·분·초는 0, 월·일은 1)이고
    *  min/max가 아닙니다 — 경계로 잡으면 같은 step을 준 픽커가 min에 따라 다른 값 집합을
@@ -306,7 +309,7 @@ export type WheelPickerProps = {
   mobileBottomInset?: number;
 };
 
-export function WheelPicker({ value, onChange, min, max, fields, allowClear = false, step, ariaLabel, heading, id, disabled = false, labels: labelOverrides, timeZone = "Asia/Seoul", mobileBottomInset = 78, className = "" }: WheelPickerProps) {
+export function WheelPicker({ model, value, onChange, min, max, fields, allowClear = false, step, ariaLabel, heading, id, disabled = false, labels: labelOverrides, timeZone = "Asia/Seoul", mobileBottomInset = 78, className = "" }: WheelPickerProps) {
   // fields는 UNIT_LADDER에서 잘라낸 연속 구간이어야 합니다(설계 스펙 §4) — 지금
   // 소스는 불연속 조합(예: ["year","hour"])을 그리지 못하고, 그린다고 해도 트리거와
   // 팝오버가 서로 다른 열 개수를 말하는 등 정의되지 않은 동작이 됩니다. 타입
@@ -364,7 +367,6 @@ export function WheelPicker({ value, onChange, min, max, fields, allowClear = fa
       console.warn(`DateWheelPicker: fields는 연·월·일·시·분·초 사다리에서 잘라낸 연속 구간이어야 합니다. 받은 값: [${fields.join(", ")}]`);
     }
   }
-  const model = instantModel;
   const labels = { ...DEFAULT_WHEEL_LABELS, ...labelOverrides, units: { ...DEFAULT_WHEEL_LABELS.units, ...labelOverrides?.units } };
   // "오늘"의 짝 — fields에 시각 단위가 하나라도 있으면 팝오버 버튼이 "지금"이
   // 됩니다(Task 3, 설계 스펙 §9).

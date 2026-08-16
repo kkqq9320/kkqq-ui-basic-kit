@@ -9,7 +9,7 @@
  * 사라지므로 `WheelPicker`는 배럴에서 내보내지 않습니다.
  */
 import { WheelPicker, type WheelPickerProps } from "./WheelPicker";
-import type { WheelUnit } from "./model/instant";
+import { instantModel, type WheelUnit } from "./model/instant";
 
 
 const DATE_FIELDS: WheelUnit[] = ["year", "month", "day"];
@@ -17,7 +17,7 @@ const DATE_FIELDS: WheelUnit[] = ["year", "month", "day"];
 /** 날짜 쪽에서 시작하는가. 사다리의 앞 셋 중 하나로 시작하면 이 래퍼의 것입니다. */
 const DATE_SIDE: WheelUnit[] = ["year", "month", "day"];
 
-export type DateWheelPickerProps = Omit<WheelPickerProps, "fields"> & {
+export type DateWheelPickerProps = Omit<WheelPickerProps, "fields" | "model"> & {
   /** 그릴 열. **기본은 연·월·일**이라 지금까지의 호출부는 글자 하나 안 바뀝니다.
    *  시각 단위를 뒤에 붙일 수 있습니다(`["year","month","day","hour","minute"]`) —
    *  **시작이 날짜 쪽이면 이 래퍼의 것**입니다. 시각만 필요하면 `TimeWheelPicker`. */
@@ -35,5 +35,5 @@ export function DateWheelPicker({ fields = DATE_FIELDS, ...rest }: DateWheelPick
   if (importMetaEnv?.DEV && fields.length > 0 && !DATE_SIDE.includes(fields[0])) {
     console.warn(`[kkqq-ui-basic-kit] DateWheelPicker는 날짜 쪽에서 시작하는 구간을 그립니다 — fields[0]이 "${fields[0]}"입니다. 시각 쪽에서 시작하는 구간은 TimeWheelPicker를 쓰세요.`);
   }
-  return <WheelPicker fields={fields} {...rest} />;
+  return <WheelPicker model={instantModel} fields={fields} {...rest} />;
 }

@@ -1,0 +1,278 @@
+/* 기간(duration) 값 모델 — `WheelModel`의 두 번째 구현.
+ *
+ * 이 파일도 `instant.ts`처럼 **아무것도 import 하지 않습니다**(타입 제외). DOM도 React도
+ * 설정 모듈도 모릅니다 — 기계가 구독해서 인자로 내려보냅니다(설계 스펙 §3.2).
+ *
+ * ## 기간은 시점과 무엇이 다른가
+ *
+ * **단위 이름은 같고 뜻이 다릅니다.** 시점의 `month`는 "몇 월"(1~12)이고 기간의 `month`는
+ * "몇 개월"(0~)입니다. 그래서 바닥값이 전부 **0**이고(시점은 월·일이 1), 상한 규칙도
+ * 다릅니다.
+ *
+ * ## 오너가 정한 것 (2026-08-15)
+ *
+ * 1. **단위 여섯** — 연·월·일·시·분·초. ISO 8601의 `P1Y2M3DT4H5M6S`와 같은 구성입니다.
+ * 2. **값은 고정폭 `YYYY:MM:DD:HH:MM:SS`** (19자). `fields`가 무엇이든 **모양이 하나**이고,
+ *    안 그리는 열은 0으로 눌립니다 — 시점 모델이 날짜 계열을 항상 `YYYY-MM-DD`로 쓰는 것과
+ *    같은 결입니다. 고정폭이어야 하는 이유는 `min`/`max` 비교가 **문자열 접두 슬라이스**라
+ *    ISO 8601(`P1Y2M`처럼 길이가 들쭉날쭉)로는 성립하지 않기 때문입니다(설계 스펙 §12).
+ * 3. **자리올림 없음. 그리는 열 중 맨 위만 무제한.** 59분에서 +1이면 0분으로 순환하고
+ *    시는 그대로입니다. 시·분만 그리면 시가 무제한이라 "90시간 30분"이 됩니다. 시점 모델의
+ *    연도 열이 지금도 그렇게 동작하고, ISO 8601도 자리올림을 안 합니다.
+ *
+ * ⚠️ **하나만 자의적입니다 — 월 아래 일의 상한.** 달은 28~31일이라 "한 달에 며칠"이
+ * 정해지지 않습니다. 가장 긴 달을 따라 **0~30**으로 둡니다. 자리올림이 없으므로 이 수가
+ * 하는 일은 **휠이 어디서 순환하는가**뿐이고, 45일이 필요하면 월을 안 그리면 됩니다
+ * (그때 일이 맨 위라 무제한입니다).
+ */
+import type { WheelUnit, UnitParts, WheelModel, WheelStep, DateTriggerPart, TypingStep, HourDisplay, ValueFamily } from "./instant";
+
+/** 사다리. 시점과 **같은 순서**입니다 — 큰 단위가 앞. */
+const LADDER: WheelUnit[] = ["year", "month", "day", "hour", "minute", "second"];
+
+/** 고정폭. 연만 4자리이고 나머지는 2자리입니다 — 시점의 `unitDigits`와 같은 규칙. */
+const WIDTH: Record<WheelUnit, number> = { year: 4, month: 2, day: 2, hour: 2, minute: 2, second: 2 };
+
+/** 그 단위가 **자기 위 단위 하나에 몇 개 들어가는가.** 맨 위 열에는 안 씁니다(무제한).
+ *  `day`의 30은 위 머리말이 적어 둔 유일한 자의적 수입니다. */
+const PER_PARENT: Record<WheelUnit, number | null> = { year: null, month: 12, day: 31, hour: 24, minute: 60, second: 60 };
+
+const pad = (n: number, width: number) => String(n).padStart(width, "0");
+
+function deepestIndex(fields: WheelUnit[]): number {
+  return fields.reduce((deepest, unit) => Math.max(deepest, LADDER.indexOf(unit)), -1);
+}
+function topIndex(fields: WheelUnit[]): number {
+  return fields.reduce((top, unit) => Math.min(top, LADDER.indexOf(unit)), LADDER.length);
+}
+
+const ZERO: UnitParts = { year: 0, month: 0, day: 0, hour: 0, minute: 0, second: 0 };
+
+/** 값 → 단위별 수. 고정폭이라 정규식 하나면 됩니다. */
+export function parseDuration(value: string): UnitParts | null {
+  const match = /^(\d{4}):(\d{2}):(\d{2}):(\d{2}):(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+  return {
+    year: Number(match[1]), month: Number(match[2]), day: Number(match[3]),
+    hour: Number(match[4]), minute: Number(match[5]), second: Number(match[6]),
+  };
+}
+
+export function serializeDuration(parts: UnitParts): string {
+  return LADDER.map((unit) => pad(parts[unit], WIDTH[unit])).join(":");
+}
+
+/** 그 열의 상한. **맨 위 열은 상한이 없습니다**(`null`) — 그게 "자리올림 없음"의 다른
+ *  얼굴입니다. 아래 열은 자기 위 단위에 들어가는 개수 - 1. */
+export function durationCeiling(unit: WheelUnit, fields: WheelUnit[]): number | null {
+  if (LADDER.indexOf(unit) === topIndex(fields)) return null;
+  const per = PER_PARENT[unit];
+  return per === null ? null : per - 1;
+}
+
+/** 기간은 **모든 열의 바닥이 0**입니다 — 0개월도, 0일도 유효한 기간입니다.
+ *  시점의 `unitFloor`가 월·일에 1을 주는 것과 여기서 갈립니다. */
+export const durationFloor = 0;
+
+function stepOf(unit: WheelUnit, step?: WheelStep): number {
+  const wanted = step?.[unit];
+  if (typeof wanted !== "number" || !Number.isFinite(wanted)) return 1;
+  const whole = Math.floor(wanted);
+  return whole >= 1 ? whole : 1;
+}
+
+function snapToStep(unit: WheelUnit, amount: number, step?: WheelStep): number {
+  const stride = stepOf(unit, step);
+  if (stride === 1) return amount;
+  return Math.max(0, Math.floor(amount / stride) * stride);
+}
+
+/** 그리지 않는 열을 0으로 누릅니다 — 시점의 `normalizeToFields`와 같은 일입니다. */
+function normalize(value: string, fields: WheelUnit[]): string {
+  const parts = parseDuration(value);
+  if (!parts) return value;
+  const next = { ...ZERO };
+  for (const unit of fields) next[unit] = parts[unit];
+  return serializeDuration(next);
+}
+
+/** 비교 정밀도 — 그리는 열 중 **가장 깊은** 것까지의 접두 길이. 고정폭이라 단순 합입니다. */
+function comparisonPrecision(fields: WheelUnit[]): number {
+  const deepest = deepestIndex(fields);
+  if (deepest < 0) return 0;
+  // 각 칸의 폭 + 그 앞의 콜론들
+  return LADDER.slice(0, deepest + 1).reduce((sum, unit) => sum + WIDTH[unit], 0) + deepest;
+}
+
+function usableBound(bound: string | undefined): string | null {
+  if (!bound) return null;
+  return parseDuration(bound) ? bound : null;   // 형식이 안 맞으면 없는 것으로 봅니다(§6.1과 같은 규칙)
+}
+
+function outOfRange(value: string, bounds: { min?: string; max?: string }, fields: WheelUnit[]): boolean {
+  const length = comparisonPrecision(fields);
+  const key = value.slice(0, length);
+  const min = usableBound(bounds.min);
+  const max = usableBound(bounds.max);
+  if (min && key < min.slice(0, length)) return true;
+  if (max && key > max.slice(0, length)) return true;
+  return false;
+}
+
+function clampToRange(value: string, bounds: { min?: string; max?: string }, fields: WheelUnit[]): string {
+  const length = comparisonPrecision(fields);
+  const key = value.slice(0, length);
+  const min = usableBound(bounds.min);
+  const max = usableBound(bounds.max);
+  if (min && key < min.slice(0, length)) return normalize(min, fields);
+  if (max && key > max.slice(0, length)) return normalize(max, fields);
+  return value;
+}
+
+function shift(value: string, unit: WheelUnit, amount: number, fields: WheelUnit[] = LADDER, step?: WheelStep): string {
+  const parts = parseDuration(value);
+  if (!parts) return value;
+  const stride = stepOf(unit, step);
+  const below = Math.floor(parts[unit] / stride);
+  const onGrid = parts[unit] % stride === 0;
+  const from = onGrid ? below : (amount > 0 ? below : below + 1);
+  const index = from + amount;
+
+  const ceiling = durationCeiling(unit, fields);
+  const next = { ...parts };
+  if (ceiling === null) {
+    /* 🔴 **맨 위 열은 순환하지 않고, 0 아래는 "없는 값"입니다.**
+     *
+     * 여기 한동안 `Math.max(0, …)`가 있었는데 **틀렸습니다** — 기계에 실제로 꽂아 보니
+     * 시 열 행이 `["00","00","01","02","03"]`으로 나왔습니다. 0에서 아래 칸이 `—`가
+     * 아니라 **또 하나의 00**이 된 것입니다. 클램프는 "못 간다"가 아니라 "제자리"라고
+     * 말합니다.
+     *
+     * 답은 이미 이 저장소에 있습니다 — 시점의 연도 열이 같은 자리에서 같은 일을 합니다.
+     * **범위를 벗어나면 형식이 깨진 문자열이 나오고, 기계의 `model.isValid` 가드가
+     * 그것을 `null`로 받아 그 행을 `—`로 그리고 비활성화합니다**(설계 스펙 §12가
+     * "모델이 null을 주면"이라고 적어 둔 그 자리). 음수는 `padStart`가 못 채워
+     * `\d{2}`에 안 맞습니다. */
+    next[unit] = index * stride;
+  } else {
+    const count = Math.floor(ceiling / stride) + 1;
+    next[unit] = (((index % count) + count) % count) * stride;
+  }
+  return serializeDuration(next);
+}
+
+function setUnit(value: string, unit: WheelUnit, amount: number, fields: WheelUnit[] = LADDER, step?: WheelStep): string {
+  const parts = parseDuration(value);
+  if (!parts) return value;
+  const ceiling = durationCeiling(unit, fields);
+  const capped = ceiling === null ? amount : Math.min(amount, ceiling);
+  return serializeDuration({ ...parts, [unit]: snapToStep(unit, Math.max(0, capped), step) });
+}
+
+function typeDigit(unit: WheelUnit, buffer: string, digit: string): TypingStep {
+  const digits = buffer + digit;
+  if (digits.length >= WIDTH[unit]) return { digits: "", commit: Number(digits), advance: true };
+  return { digits, commit: null, advance: false };
+}
+
+function flushBuffer(unit: WheelUnit, buffer: string): number | null {
+  return buffer === "" ? null : Number(buffer);
+}
+
+function label(value: string, unit: WheelUnit): string {
+  const parts = parseDuration(value);
+  return parts ? pad(parts[unit], WIDTH[unit]) : "";
+}
+
+function triggerParts(source: string, fields: WheelUnit[]): DateTriggerPart[] {
+  const parts = parseDuration(source);
+  if (!parts) return [];
+  const drawn = LADDER.filter((unit) => fields.includes(unit));
+  const out: DateTriggerPart[] = [];
+  drawn.forEach((unit, index) => {
+    out.push({ unit, text: pad(parts[unit], WIDTH[unit]) });
+    if (index < drawn.length - 1) out.push({ unit: null, text: ":" });
+  });
+  return out;
+}
+
+function parsePasted(text: string, fields: WheelUnit[]): string | null {
+  const runs = (text.match(/\d+/g) ?? []).map(Number);
+  if (runs.length === 0) return null;
+  const drawn = LADDER.filter((unit) => fields.includes(unit));
+  if (runs.length < drawn.length) return null;
+  const next = { ...ZERO };
+  drawn.forEach((unit, index) => { next[unit] = runs[index]; });
+  for (const unit of drawn) {
+    const ceiling = durationCeiling(unit, fields);
+    if (next[unit] < 0) return null;
+    if (ceiling !== null && next[unit] > ceiling) return null;
+    if (next[unit] >= 10 ** WIDTH[unit]) return null;
+  }
+  return serializeDuration(next);
+}
+
+export const durationModel: WheelModel = {
+  units: LADDER,
+  columns: (fields) => LADDER.filter((unit) => fields.includes(unit)),
+  isValid: (value) => parseDuration(value) !== null,
+  normalize,
+  keyLength: comparisonPrecision,
+  shift,
+  setUnit,
+  label,
+  triggerParts,
+  typeDigit,
+  flushBuffer,
+  outOfRange,
+  clampToRange,
+  parts: (value) => parseDuration(value),
+  parsePasted,
+  stepOf,
+  snapValue: (value, fields, step) => {
+    const parts = parseDuration(value);
+    if (!parts) return value;
+    const next = { ...parts };
+    for (const unit of fields) next[unit] = snapToStep(unit, parts[unit], step);
+    return serializeDuration(next);
+  },
+
+  /* ══════════════════════════════════════════════════════════════════════
+   * 여기부터가 **계약이 찢어지는 자리**입니다. 억지로 맞추지 않고 표시합니다 —
+   * 이 목록이 이번 라운드의 산출물입니다.
+   * ════════════════════════════════════════════════════════════════════ */
+
+  /** 🔴 **기간에는 "지금"이 없습니다.** `timeZone`을 받는 시그니처 자체가 시점의 개념입니다.
+   *  기계는 이걸 **세 가지 다른 일**에 씁니다:
+   *    1. 빈 값으로 열었을 때의 **씨앗값** — 기간에는 "0"이 정답이라 답할 수 있습니다.
+   *    2. **`지금` 버튼**이 확정하는 값 — 기간에는 그 버튼 자체가 없어야 합니다.
+   *    3. `resetTarget`에 넘기는 **기준값** — 기간은 안 씁니다.
+   *  한 멤버가 셋을 겸하고 있어서, 기간은 2번을 거절할 방법이 없습니다. */
+  now: () => serializeDuration(ZERO),
+
+  /** 🔴 **12시간 읽기가 없습니다.** 90시간짜리 기간에 오전/오후가 없습니다. 계약이 이걸
+   *  **필수**로 요구해서 안 쓰이는 구현을 둬야 합니다. 선택 멤버여야 합니다. */
+  hourFromTwelve: (reading) => reading,
+
+  /** ⭕ 이건 계약이 이미 열어 뒀습니다 — "시 열이 없으면 null". 기간은 언제나 null입니다. */
+  meridiem: () => null,
+
+  /** 🔴 **`ValueFamily`가 `"date" | "time" | "datetime"` 셋뿐이라 기간을 표현할 수
+   *  없습니다.** 기계는 이 값으로 **`오늘`/`지금` 버튼의 이름**을 고릅니다(그게 전부입니다).
+   *  즉 이 멤버가 실제로 답하는 질문은 "계열이 무엇인가"가 아니라 **"씨앗 버튼을 뭐라고
+   *  부르나"**이고, 기간의 답은 **"버튼이 없다"**입니다. `"time"`은 거짓말입니다. */
+  family: (): ValueFamily => "time",
+
+  /** 🔴 **시그니처가 `nowValue`를 요구합니다.** 기간은 그 인자를 안 봅니다 — 모든 열의
+   *  초기화 목표가 0입니다. 인자를 무시하면 되지만 **계약이 거짓말을 합니다**(시점 모델만
+   *  연도에서 그 값을 씁니다). */
+  resetTarget: () => 0,
+};
+
+/** 계약이 요구하지만 기간에는 뜻이 없어 안 쓰이는 것들. 기계가 부르면 안 되는 자리를
+ *  검사가 붙잡을 수 있게 이름으로 내놓습니다. */
+export const DURATION_UNSUPPORTED = ["now(지금 버튼)", "hourFromTwelve", "family"] as const;
+
+/** 위 `HourDisplay`는 이 모델이 안 쓰지만, 계약의 `label`·`triggerParts` 시그니처가
+ *  선택 인자로 들고 있어 import가 필요합니다 — 그 자체가 계약이 시점에 기운 증거입니다. */
+export type { HourDisplay };

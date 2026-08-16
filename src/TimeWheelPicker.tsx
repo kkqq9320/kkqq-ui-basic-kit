@@ -10,14 +10,14 @@
  * 기본으로 안 그리는 것과 같습니다 — 초가 필요하면 `["hour","minute","second"]`.
  */
 import { WheelPicker, type WheelPickerProps } from "./WheelPicker";
-import type { WheelUnit } from "./model/instant";
+import { instantModel, type WheelUnit } from "./model/instant";
 
 const TIME_FIELDS: WheelUnit[] = ["hour", "minute"];
 
 /** 시각 쪽에서 시작하는가. 사다리의 뒤 셋 중 하나로 시작하면 이 래퍼의 것입니다. */
 const TIME_SIDE: WheelUnit[] = ["hour", "minute", "second"];
 
-export type TimeWheelPickerProps = Omit<WheelPickerProps, "fields"> & {
+export type TimeWheelPickerProps = Omit<WheelPickerProps, "fields" | "model"> & {
   /** 그릴 열. **기본은 시·분.** `["hour","minute","second"]`로 초까지, `["minute","second"]`
    *  처럼 더 아래에서 시작하는 구간도 됩니다 — **시작이 시각 쪽이면 이 래퍼의 것**입니다.
    *  날짜가 앞에 붙는 구간은 `DateWheelPicker`. */
@@ -35,5 +35,5 @@ export function TimeWheelPicker({ fields = TIME_FIELDS, ...rest }: TimeWheelPick
   if (importMetaEnv?.DEV && fields.length > 0 && !TIME_SIDE.includes(fields[0])) {
     console.warn(`[kkqq-ui-basic-kit] TimeWheelPicker는 시각 쪽에서 시작하는 구간을 그립니다 — fields[0]이 "${fields[0]}"입니다. 날짜가 앞에 붙는 구간은 DateWheelPicker를 쓰세요.`);
   }
-  return <WheelPicker fields={fields} {...rest} />;
+  return <WheelPicker model={instantModel} fields={fields} {...rest} />;
 }
