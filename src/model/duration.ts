@@ -237,7 +237,26 @@ const SUFFIX: Record<WheelUnit, string> = { year: "y", month: "mo", day: "d", ho
 function triggerParts(source: string, fields: WheelUnit[], typing: { unit: WheelUnit; digits: string } | null): DateTriggerPart[] {
   const parts = parseDuration(source);
   if (!parts) return [];
-  const drawn = LADDER.filter((unit) => fields.includes(unit));
+  const all = LADDER.filter((unit) => fields.includes(unit));
+
+  /* 🔴 **꼬리의 0은 안 그립니다**(오너 리포트 2026-08-16: "초가 없고 0m이 제일 마지막값이면
+   * 필드에서 안 보였으면 좋겠어"). `3d 4h 0m` → `3d 4h`.
+   *
+   * ⚠️ **꼬리만입니다 — 가운데는 남깁니다.** `3d 0h 10m`에서 `0h`를 빼면 `3d 10m`이 되는데,
+   * 트리거의 조각은 **누르면 그 열이 활성이 되는 자리**이기도 합니다(가는 포인터에서).
+   * 가운데를 빼면 그 열을 마우스로 고를 방법이 없어집니다 — 꼬리는 `←`/`→`로 여전히 닿습니다.
+   *
+   * ⚠️ **치는 중에는 안 뺍니다.** 버퍼가 살아 있는 열은 사용자가 지금 보고 있는 자리라,
+   * 0이라고 지우면 치던 것이 눈앞에서 사라집니다.
+   *
+   * 전부 0이면 **가장 작은 열 하나**를 남깁니다 — 안 그러면 필드가 빈 문자열이 됩니다. */
+  let drawn = all;
+  if (!typing) {
+    let end = all.length;
+    while (end > 0 && parts[all[end - 1]] === 0) end -= 1;
+    drawn = end === 0 ? all.slice(-1) : all.slice(0, end);
+  }
+
   const out: DateTriggerPart[] = [];
   drawn.forEach((unit, index) => {
     // 단위 글자는 **세그먼트 안**입니다 — 구두점으로 쪼개면 그 글자를 눌렀을 때 어느 열이

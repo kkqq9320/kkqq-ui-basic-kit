@@ -223,3 +223,38 @@ describe("기간 타이핑 — 두 자리를 다 안 채워도 확정한다", ()
     expect(durationModel.typeDigit("hour", "", "9", undefined, HMS)).toEqual({ digits: "9", commit: null, advance: false });
   });
 });
+
+describe("트리거의 꼬리 0 (오너 리포트 2026-08-16)", () => {
+  const D3: WheelUnit[] = ["day", "hour", "minute"];
+  const text = (value: string, fields: WheelUnit[], typing: { unit: WheelUnit; digits: string } | null = null) =>
+    durationModel.triggerParts(value, fields, typing).map((p) => p.text).join("");
+
+  it("꼬리의 0은 안 그린다", () => {
+    expect(text("00:00:03:04:00:00", D3)).toBe("3d 4h");
+  });
+
+  it("꼬리가 여러 칸이어도 전부 뺀다", () => {
+    expect(text("00:00:03:00:00:00", D3)).toBe("3d");
+  });
+
+  /* 🔴 **가운데는 남깁니다.** 트리거의 조각은 누르면 그 열이 활성이 되는 자리이기도 해서
+   * (가는 포인터), 가운데를 빼면 그 열을 마우스로 고를 방법이 없어집니다. 꼬리는
+   * `←`/`→`로 여전히 닿습니다. */
+  it("가운데 0은 남긴다 — 누를 자리가 사라지면 안 된다", () => {
+    expect(text("00:00:03:00:10:00", D3)).toBe("3d 0h 10m");
+  });
+
+  it("전부 0이면 가장 작은 열 하나가 남는다 — 빈 필드가 되면 안 된다", () => {
+    expect(text("00:00:00:00:00:00", D3)).toBe("0m");
+  });
+
+  /* 치는 중에는 안 뺍니다 — 버퍼가 살아 있는 열은 사용자가 지금 보고 있는 자리라,
+   * 0이라고 지우면 치던 것이 눈앞에서 사라집니다. */
+  it("치는 중에는 꼬리 0도 남긴다", () => {
+    expect(text("00:00:03:04:00:00", D3, { unit: "minute", digits: "1" })).toBe("3d 4h 1m");
+  });
+
+  it("치는 중이면 버퍼가 없는 꼬리 0도 남는다", () => {
+    expect(text("00:00:03:00:00:00", D3, { unit: "day", digits: "5" })).toBe("5d 0h 0m");
+  });
+});

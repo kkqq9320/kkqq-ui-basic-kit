@@ -302,7 +302,10 @@
  * 알지 않게 하려는 것입니다(`:`는 시점 전용이라 `data-unit`으로 그려도 됐지만, 이건
  * 모델마다 다릅니다). 값이 빈 문자열이면 아무것도 안 그립니다. */
 .wheel-column::after {
-  content: var(--wheel-unit-mark, ""); position: absolute; z-index: 1; right: 3px;
+  /* 🔴 열 오른쪽 끝이 아니라 **가운데 숫자 바로 옆**입니다(오너: "너무 우측에 쏠려
+   * 있어"). 값은 언제나 두 자리라(`label`이 채웁니다) 가운데에서 13px이면 숫자 오른쪽에
+   * 딱 붙습니다 — 열 폭이 변해도 숫자를 따라갑니다. */
+  content: var(--wheel-unit-mark, ""); position: absolute; z-index: 1; left: calc(50% + 13px);
   top: calc(30px + var(--wheel-rows-h) / 2); transform: translateY(-50%);
   color: var(--muted); font-size: var(--action-font-size); font-weight: 700; line-height: 1; pointer-events: none;
 }
