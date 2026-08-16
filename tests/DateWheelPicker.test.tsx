@@ -6377,3 +6377,49 @@ const _fourLabelsAreOptional: WheelLabels = {
   // weekdays·meridiem·today·now 없음 — 필수가 되면 여기서 tsc가 터진다.
 };
 void _fourLabelsAreOptional;
+
+/* ── 팝오버의 위아래 여백이 **같다** (오너 리포트 2026-08-16) ──
+ *
+ * "아랫 부분 너무 붙어있는거같은데 위에 항목 떨어진거랑 똑같이 조금 떨어트려놔."
+ * 즉 계약은 "10px"이 아니라 **"위와 같다"**입니다. 그래서 한쪽 수를 박는 대신
+ * **두 수가 같은지**를 봅니다 — 어느 쪽이 드리프트해도 빨개집니다.
+ *
+ * ⚠️ 소스 텍스트를 통째로 grep하면 안 됩니다. 이 저장소는 주석이 두꺼워서 바로 위
+ * 주석이 `margin`과 숫자를 **설명하고** 있고, 실제로 그 함정을 한 번 밟았습니다.
+ * 그래서 `^`로 줄 시작에 앵커해 **규칙 본문만** 꺼냅니다(주석 줄은 ` *`로 시작). */
+describe("팝오버 CSS 계약 — 열 위아래 여백이 같다", () => {
+  const bodyOf = (match: RegExpMatchArray | null) => {
+    expect(match, "규칙을 못 찾았습니다").not.toBeNull();
+    return match![1];
+  };
+  // `margin: 10px -12px -12px` / `padding: 1px 2px 10px`에서 각각 필요한 자리를 뽑습니다.
+  const px = (value: string | undefined) => {
+    expect(value, "px 값을 못 읽었습니다").toBeDefined();
+    return parseFloat(value!);
+  };
+
+  const actions = bodyOf(wheelPickerCssSource.match(/^\.wheel-actions \{([^}]*)\}/m));
+  const heading = bodyOf(wheelPickerCssSource.match(/^\.wheel-heading \{([^}]*)\}/m));
+
+  // 전제 — 규칙 본문을 실제로 읽었는가. 빈 문자열이면 아래가 전부 공허하게 통과합니다.
+  it("두 규칙의 본문을 실제로 읽었다", () => {
+    expect(actions).toMatch(/position:\s*sticky/);
+    expect(heading).toMatch(/display:\s*flex/);
+  });
+
+  /* 위쪽 여백은 머리말의 `padding-bottom`(세 값 중 셋째)에서 나옵니다 —
+   * `.wheel-heading`의 상자 자체는 열에 붙어 있어서, 눈에 보이는 간격이 거기입니다. */
+  const headingBottom = () => px(heading.match(/padding:\s*\S+\s+\S+\s+(\S+);/)?.[1]);
+  /* 아래쪽은 `margin-top`(세 값 중 첫째)입니다. **`padding-top`이 아닙니다** —
+   * 패딩은 선 아래의 버튼만 밀고, 눈에 붙어 보이는 것은 `border-top` 선입니다. */
+  const actionsTop = () => px(actions.match(/margin:\s*(\S+)\s+/)?.[1]);
+
+  it("확정 줄 위 여백이 머리말 아래 여백과 같다", () => {
+    expect(actionsTop()).toBe(headingBottom());
+  });
+
+  // 0 == 0으로는 "같다"가 공허하게 통과합니다 — 실제로 띄우고 있어야 합니다.
+  it("그 여백이 0이 아니다", () => {
+    expect(actionsTop()).toBeGreaterThan(0);
+  });
+});

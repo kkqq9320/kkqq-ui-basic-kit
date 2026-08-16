@@ -392,7 +392,19 @@
  *
  * ⚠️ **불투명 배경이 필요합니다.** 팝오버 표면은 반투명 유리라, 배경이 없으면 아래로
  * 지나가는 휠 숫자가 버튼 위로 비칩니다. */
-.wheel-actions { position: sticky; z-index: 1; bottom: -12px; display: flex; justify-content: flex-end; gap: 6px; margin: 0 -12px -12px; padding: 10px 12px 12px; border-top: 1px solid color-mix(in srgb, var(--line) 68%, transparent); background: var(--surface); }
+/* 🔴 **`margin-top: 10px`은 위쪽 여백과 짝을 맞추는 것입니다**(오너 리포트 2026-08-16:
+ * "아랫 부분 너무 붙어있는거같은데 위에 항목 떨어진거랑 똑같이").
+ *
+ * 상자로만 보면 위아래가 **둘 다 0**이라 안 보입니다 — 실제로 눈에 보이는 간격은
+ * 각자 다른 데서 나옵니다(실측):
+ *
+ *     머리말 글자 → 열      10px   ← `.wheel-heading`의 `padding-bottom`
+ *     열 → 경계선            0px   ← 이 줄의 `border-top`이 열에 딱 붙음
+ *     열 → 버튼             11px   ← 이 줄의 `padding-top`
+ *
+ * 즉 **버튼은 이미 떨어져 있었고 선이 붙어 있었습니다.** 그래서 `padding`이 아니라
+ * `margin`입니다 — 패딩을 늘리면 선은 그대로 붙은 채 버튼만 더 내려갑니다. */
+.wheel-actions { position: sticky; z-index: 1; bottom: -12px; display: flex; justify-content: flex-end; gap: 6px; margin: 10px -12px -12px; padding: 10px 12px 12px; border-top: 1px solid color-mix(in srgb, var(--line) 68%, transparent); background: var(--surface); }
 /* 🔴 **`touch-action: manipulation` — 이 버튼들에 더블탭 줌 제스처를 붙이지 않습니다.**
  *
  * 오너 실기기 캡처(2026-08-13)에서 "지금"을 탭했는데 **mousedown·mouseup·click이 하나도
