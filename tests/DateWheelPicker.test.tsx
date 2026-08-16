@@ -6259,3 +6259,59 @@ describe("격자(step) — 리뷰가 잡은 자리", () => {
     expect(withoutBounds).toBeLessThan(withBounds);
   });
 });
+
+/* 열 초기화(행 길게 누르기)와 격자.
+ *
+ * 🔴 **이 검사가 왜 필요한지가 요점입니다.** `resetTarget`은 대부분의 열에서 **바닥값**을
+ * 돌려주는데 바닥값은 언제나 격자 위라, 그 경로의 `step` 인자는 아무 일도 안 합니다 —
+ * 실제로 그 인자를 지워도 **0 red**였습니다(뮤테이션 실측). **연도만 다릅니다**: 거기서만
+ * `resetTarget`이 "지금 연도"를 돌려주므로 격자에 안 걸릴 수 있습니다. */
+describe("열 초기화와 격자", () => {
+  it("연도 초기화가 격자로 내려간다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-14T03:00:00Z"));
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="1999-07-12" onChange={onChange} timeZone="UTC" step={{ year: 10 }} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    const column = screen.getByRole("group", { name: (name: string) => name.startsWith("연도") });
+    pointer("pointerDown", rowAt(column, 0), { pointerId: 1, clientY: 100, button: 0, isPrimary: true });
+    act(() => { vi.advanceTimersByTime(500); });
+    expect(onChange).toHaveBeenLastCalledWith("2020-07-12");
+  });
+
+  // 대조군 — 바닥값을 쓰는 열은 격자와 무관하게 바닥값입니다(바닥값이 늘 격자 위라서).
+  it("초 초기화는 격자와 무관하게 0이다", () => {
+    vi.useFakeTimers();
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:07:41" fields={["year", "month", "day", "hour", "minute", "second"]} onChange={onChange} step={{ second: 15 }} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    const column = screen.getByRole("group", { name: (name: string) => name.startsWith("초") });
+    pointer("pointerDown", rowAt(column, 0), { pointerId: 1, clientY: 100, button: 0, isPrimary: true });
+    act(() => { vi.advanceTimersByTime(500); });
+    expect(onChange).toHaveBeenLastCalledWith("2026-08-12T15:07:00");
+  });
+});
+
+describe("빈 값으로 열었을 때의 기준값과 격자", () => {
+  /* 빈 값이면 킷이 `now()`로 기준값을 **지어냅니다.** 그건 소비자가 준 값이 아니라 킷의
+   * 값이므로 격자 위에 있어야 합니다 — `완료`가 그대로 확정하는 값이기도 합니다.
+   * (소비자가 준 값은 반대로 안 건드립니다: 내리면 `onChange` 없이 화면만 달라져
+   * 트리거가 소비자가 안 들고 있는 값을 그립니다.) */
+  it("빈 값으로 열어 완료하면 격자 위 값이 확정된다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-14T03:47:22Z"));
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="시각" value="" onChange={onChange} fields={["hour", "minute"]} timeZone="UTC" step={{ minute: 15 }} />);
+    fireEvent.click(fieldOf("시각"));
+    fireEvent.click(screen.getByRole("button", { name: "완료" }));
+    expect(onChange).toHaveBeenCalledWith("03:45");
+  });
+
+  // 대조군 — 소비자가 준 격자 밖 값은 그대로 그립니다.
+  it("소비자가 준 격자 밖 값은 안 내린다", () => {
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="시각" value="03:47" onChange={onChange} fields={["hour", "minute"]} step={{ minute: 15 }} />);
+    expect(fieldOf("시각").textContent).toContain("03:47");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
