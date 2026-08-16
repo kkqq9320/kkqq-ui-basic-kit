@@ -6423,3 +6423,104 @@ describe("팝오버 CSS 계약 — 열 위아래 여백이 같다", () => {
     expect(actionsTop()).toBeGreaterThan(0);
   });
 });
+
+/* ── 비보안 컨텍스트의 복사·붙여넣기 (2026-08-16, 보류분 해제) ──
+ *
+ * 🔴 **오너 환경에서 이 기능은 통째로 죽어 있었습니다.** 폰·다른 기기에서 데모를 여는
+ * 주소가 `http://<LAN-IP>:15277`인데 그건 보안 컨텍스트가 아니라(`localhost`와 `https`만
+ * 해당) `navigator.clipboard`가 **아예 없습니다**(실측: `isSecureContext: false`).
+ * 즉 API만 쓰면 이 기능은 **정확히 필요한 그 환경에서만** 조용히 아무 일도 안 합니다.
+ *
+ * ⚠️ **`localhost`에서는 이 결함이 재현되지 않습니다** — 거기는 보안 컨텍스트입니다.
+ * 그래서 데모를 눈으로 보는 것으로는 절대 못 잡습니다. */
+describe("비보안 컨텍스트 — 클립보드 API가 없을 때", () => {
+  /** `execCommand`를 스텁하고, **불리는 순간의 textarea 값**을 잡습니다.
+   *  소스가 `finally`에서 그 요소를 지우므로 나중에 찾으면 이미 없습니다. */
+  function stubExecCommand() {
+    const copied: string[] = [];
+    (document as unknown as { execCommand: (c: string) => boolean }).execCommand = (command: string) => {
+      if (command === "copy") {
+        const scratch = document.querySelector('textarea[aria-hidden="true"]') as HTMLTextAreaElement | null;
+        copied.push(scratch ? scratch.value : "<textarea 없음>");
+      }
+      return true;
+    };
+    return copied;
+  }
+  afterEach(() => { Reflect.deleteProperty(document, "execCommand"); Reflect.deleteProperty(navigator, "clipboard"); });
+
+  // 전제 — jsdom에는 원래 `navigator.clipboard`가 없습니다. 즉 이 describe는 스텁을
+  // 안 걸어도 비보안 컨텍스트와 같은 상태이고, 그게 이 검사들이 재는 조건입니다.
+  it("전제: 이 환경에는 navigator.clipboard가 없다", () => {
+    expect(navigator.clipboard).toBeUndefined();
+  });
+
+  it("Ctrl+C가 execCommand로 화면에 보이는 그대로를 쓴다", () => {
+    const copied = stubExecCommand();
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "c", code: "KeyC", ctrlKey: true });
+    expect(copied).toEqual(["2026. 07. 12."]);
+  });
+
+  /* 🔴 **포커스를 안 돌려주면 복사 한 번에 키보드 조작이 통째로 죽습니다** — 이 컨트롤은
+   * 키를 트리거가 받습니다(`positioning.ts`가 그 계약을 적어 뒀습니다). 임시 textarea를
+   * 만들었다가 지우는 구현이라 놓치기 쉬운 자리입니다. */
+  it("복사 뒤 포커스가 트리거로 돌아온다", () => {
+    stubExecCommand();
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const trigger = fieldOf("거래 날짜");
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "c", code: "KeyC", ctrlKey: true });
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  // 임시 요소를 남기면 폼마다 유령 textarea가 쌓입니다.
+  it("임시 textarea를 남기지 않는다", () => {
+    stubExecCommand();
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "c", code: "KeyC", ctrlKey: true });
+    expect(document.querySelector('textarea[aria-hidden="true"]')).toBeNull();
+  });
+
+  // 폴백까지 막힌 브라우저 — 조용히 넘어가야지 죽으면 안 됩니다.
+  it("execCommand가 던져도 죽지 않고 임시 요소도 안 남는다", () => {
+    (document as unknown as { execCommand: () => boolean }).execCommand = () => { throw new Error("blocked"); };
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    expect(() => fireEvent.keyDown(fieldOf("거래 날짜"), { key: "c", code: "KeyC", ctrlKey: true })).not.toThrow();
+    expect(document.querySelector('textarea[aria-hidden="true"]')).toBeNull();
+  });
+
+  /* 붙여넣기는 폴백이 없습니다 — `execCommand("paste")`는 웹 콘텐츠에서 막혀 있습니다.
+   * 남는 길은 브라우저가 Ctrl+V의 기본 동작으로 보내는 `paste` 이벤트뿐이고, 그
+   * `clipboardData`는 보안 컨텍스트를 안 따집니다.
+   *
+   * ⚠️ **이 검사가 증명하는 것은 "이벤트가 오면 처리한다"까지입니다.** 편집 불가 요소인
+   * `<button>`에 브라우저가 실제로 그 이벤트를 보내는지는 여기서 못 잽니다 — 실기기
+   * 확인 항목입니다. 계측기 한계를 결함 없음으로 읽지 않기 위해 적어 둡니다. */
+  it("paste 이벤트가 오면 값이 된다", () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.paste(fieldOf("거래 날짜"), { clipboardData: { getData: () => "2031. 03. 05." } });
+    expect(fieldOf("거래 날짜").textContent).toContain("2031. 03. 05.");
+  });
+
+  it("읽을 수 없는 글자가 오면 값을 그대로 둔다", () => {
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.paste(fieldOf("거래 날짜"), { clipboardData: { getData: () => "점심 약속" } });
+    expect(fieldOf("거래 날짜").textContent).toContain("2026. 07. 12.");
+  });
+
+  /* 대조군 — 보안 컨텍스트에서는 **API를 쓰고 폴백을 안 씁니다.** 이게 없으면 위 검사들은
+   * "언제나 execCommand를 쓴다"는 구현으로도 전부 통과합니다. */
+  it("clipboard API가 있으면 execCommand를 안 쓴다", () => {
+    const copied = stubExecCommand();
+    const written: string[] = [];
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: (text: string) => { written.push(text); return Promise.resolve(); }, readText: () => Promise.resolve("") },
+    });
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "c", code: "KeyC", ctrlKey: true });
+    expect(written).toEqual(["2026. 07. 12."]);
+    expect(copied).toEqual([]);
+  });
+});
