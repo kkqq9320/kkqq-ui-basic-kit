@@ -17,6 +17,7 @@ import {
   AppShell,
   AutoGrowTextarea,
   DateWheelPicker,
+  TimeWheelPicker,
   Dialog,
   DialogActions,
   DialogHeading,
@@ -848,7 +849,7 @@ function Demo() {
                 familyOf. */}
             <Panel title="시각 피커" hint="TIME WHEEL" className="demo-time-panel">
               <FieldGrid>
-                <label>시각만 (fields — budget 백업 예약 화면이 지금 &lt;input type=&quot;number&quot;&gt; 둘로 받는 모양)<DateWheelPicker ariaLabel="예약 시각" value={reservationTime} onChange={(next) => { logTraceNote(`예약 시각 onChange → ${next}`); setReservationTime(next); }} fields={["hour", "minute"]} /></label>
+                <label>시각만 — <code>TimeWheelPicker</code> (budget 백업 예약 화면이 지금 &lt;input type=&quot;number&quot;&gt; 둘로 받는 모양)<TimeWheelPicker ariaLabel="예약 시각" value={reservationTime} onChange={(next) => { logTraceNote(`예약 시각 onChange → ${next}`); setReservationTime(next); }} /></label>
                 <label>날짜+시각 (fields)<DateWheelPicker ariaLabel="약속 시각" value={meetingAt} onChange={(next) => { logTraceNote(`약속 시각 onChange → ${next}`); setMeetingAt(next); }} fields={["year", "month", "day", "hour", "minute"]} /></label>
                 <label>초까지 — 6열 (fields)<DateWheelPicker ariaLabel="초까지 예약 시각" value={loggedAt} onChange={(next) => { logTraceNote(`초까지 예약 시각 onChange → ${next}`); setLoggedAt(next); }} fields={["year", "month", "day", "hour", "minute", "second"]} /></label>
               </FieldGrid>

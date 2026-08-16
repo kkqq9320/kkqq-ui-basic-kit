@@ -4,7 +4,7 @@ React + 순수 CSS로 짠 컴포넌트 모음입니다.
 빌드 단계도, 런타임 의존성도 없습니다. 소스를 그대로 내보냅니다.
 
 - 드롭다운 (`Select`)
-- 휠 날짜 피커 (`DateWheelPicker`)
+- 휠 피커 (`DateWheelPicker` · `TimeWheelPicker`) — 같은 기계를 쓰고 구간만 나눠 갖습니다
 - 접이식 사이드바 + 앱 셸 + 모바일 빠른 바 (`Sidebar`, `AppShell`, `MobileQuickBar`)
 - 모달 다이얼로그 (`Dialog`, `DialogHeading`, `DialogActions`)
 - 섹션 탭 (`SectionTabs`)
@@ -273,7 +273,19 @@ wght 930 : 숫자 1404 · U+2012 1404  (±0)
 <Sidebar slot={<Select ariaLabel="작업 공간" value={ws} options={list} onChange={setWs} portal />} ... />
 ```
 
-### DateWheelPicker
+### DateWheelPicker · TimeWheelPicker
+
+둘은 **같은 기계를 쓰는 래퍼**이고 다른 것은 두 가지뿐입니다 — 기본 `fields`와
+허용 구간. `DateWheelPicker`는 **날짜 쪽에서 시작하는** 구간(기본 연·월·일,
+`["year","month","day","hour","minute"]`처럼 시각을 뒤에 붙일 수 있습니다),
+`TimeWheelPicker`는 **시각 쪽에서 시작하는** 구간(기본 시·분)입니다. 겹치는 조합이
+없어서 같은 일을 하는 방법이 둘 생기지 않습니다 — 반대쪽 구간을 주면 개발 모드에서
+경고합니다(던지지는 않습니다).
+
+```tsx
+<TimeWheelPicker ariaLabel="예약 시각" value={time} onChange={setTime} />
+<TimeWheelPicker ariaLabel="알람" value={alarm} onChange={setAlarm} step={{ minute: 15 }} />
+```
 
 ```tsx
 <DateWheelPicker
