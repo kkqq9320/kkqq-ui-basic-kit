@@ -18,6 +18,10 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.9.0
 **모델이 "안 그린다"고 말할 수 있는 라벨 넷을 선택으로 엽니다** — `weekdays`,
 `meridiem`, `today`, `now`. `v0.9.0`이 **알려진 잔여**로 적어 둔 자리입니다.
 
+⚠️ **`v0.9.0`의 노트는 이것을 `weekdays`·`meridiem` 둘로 적었습니다 — 재 보니 넷이었습니다.**
+`today`·`now`도 같은 자리였습니다: `seedAction`이 `null`을 내면 **씨앗 버튼 자체가 안**
+**그려지는데** 그 이름만 필수였습니다. 노트를 diff와 맞춰 보는 분을 위해 적어 둡니다.
+
 계약은 이미 그 넷이 없을 수 있다고 말하고 있었습니다: `seedAction`이 `null`을 내고
 (씨앗 버튼 없음), `meridiem()`이 `null`을 내고, `hourFromTwelve`는 선택이고, 기간
 모델의 `label`은 인자를 둘만 받습니다(요일 없음). **라벨만 필수로 남아 계약과 어긋나**

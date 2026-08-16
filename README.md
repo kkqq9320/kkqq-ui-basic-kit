@@ -330,9 +330,16 @@ labels={{
   today: "Today", clear: "Clear", done: "Done",
   previous: "previous", next: "next", select: "picker",
   weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
-  units: { year: "Year", month: "Month", day: "Day" },
+  // ⚠️ units는 **여섯을 다 줘야 합니다** — 연·월·일만 그리는 픽커여도 그렇습니다.
+  // 이 병합만 키마다 펼쳐지므로 셋만 주면 나머지 셋이 한국어로 남아 열의
+  // aria-label로 **스크린리더에 나갑니다**(화면에는 안 보입니다). 타입도 거절합니다.
+  units: { year: "Year", month: "Month", day: "Day", hour: "Hour", minute: "Minute", second: "Second" },
 }}
 ```
+
+최상위 키는 **필요한 것만** 주면 됩니다. `weekdays`·`meridiem`·`today`·`now`는 그리지
+않는 모델이면 아예 안 줘도 됩니다 — `DurationWheelPicker`가 그렇습니다(씨앗 버튼도
+오전/오후도 요일도 없습니다).
 
 #### 키보드
 
