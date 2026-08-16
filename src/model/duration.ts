@@ -12,7 +12,7 @@
  * ## 오너가 정한 것 (2026-08-15)
  *
  * 1. **단위 여섯** — 연·월·일·시·분·초. ISO 8601의 `P1Y2M3DT4H5M6S`와 같은 구성입니다.
- * 2. **값은 고정폭 `YYYY:MM:DD:HH:MM:SS`** (19자). `fields`가 무엇이든 **모양이 하나**이고,
+ * 2. **값은 고정폭 `YY:MM:DD:HH:MM:SS`** (17자). `fields`가 무엇이든 **모양이 하나**이고,
  *    안 그리는 열은 0으로 눌립니다 — 시점 모델이 날짜 계열을 항상 `YYYY-MM-DD`로 쓰는 것과
  *    같은 결입니다. 고정폭이어야 하는 이유는 `min`/`max` 비교가 **문자열 접두 슬라이스**라
  *    ISO 8601(`P1Y2M`처럼 길이가 들쭉날쭉)로는 성립하지 않기 때문입니다(설계 스펙 §12).
@@ -31,7 +31,12 @@ import type { WheelUnit, UnitParts, WheelModel, WheelStep, DateTriggerPart, Typi
 const LADDER: WheelUnit[] = ["year", "month", "day", "hour", "minute", "second"];
 
 /** 고정폭. 연만 4자리이고 나머지는 2자리입니다 — 시점의 `unitDigits`와 같은 규칙. */
-const WIDTH: Record<WheelUnit, number> = { year: 4, month: 2, day: 2, hour: 2, minute: 2, second: 2 };
+/** 고정폭. **전부 2자리입니다** — 시점의 연도가 4자리인 것과 여기서 갈립니다.
+ *
+ * 🔴 처음에 시점을 따라 연을 4자리로 뒀다가 오너가 잡았습니다("설정하기도 불편하다").
+ * 기간의 연은 "몇 년"이라 2년을 치려면 `0002`를 **네 번** 눌러야 했습니다. 99년이면
+ * 어떤 계약 기간도 덮고, 값도 19자에서 17자로 줄어듭니다. */
+const WIDTH: Record<WheelUnit, number> = { year: 2, month: 2, day: 2, hour: 2, minute: 2, second: 2 };
 
 /** 그 단위가 **자기 위 단위 하나에 몇 개 들어가는가.** 맨 위 열에는 안 씁니다(무제한).
  *  `day`의 30은 위 머리말이 적어 둔 유일한 자의적 수입니다. */
@@ -50,7 +55,7 @@ const ZERO: UnitParts = { year: 0, month: 0, day: 0, hour: 0, minute: 0, second:
 
 /** 값 → 단위별 수. 고정폭이라 정규식 하나면 됩니다. */
 export function parseDuration(value: string): UnitParts | null {
-  const match = /^(\d{4}):(\d{2}):(\d{2}):(\d{2}):(\d{2}):(\d{2})$/.exec(value);
+  const match = /^(\d{2}):(\d{2}):(\d{2}):(\d{2}):(\d{2}):(\d{2})$/.exec(value);
   if (!match) return null;
   return {
     year: Number(match[1]), month: Number(match[2]), day: Number(match[3]),
@@ -169,9 +174,20 @@ function setUnit(value: string, unit: WheelUnit, amount: number, fields: WheelUn
   return serializeDuration({ ...parts, [unit]: snapToStep(unit, Math.max(0, capped), step) });
 }
 
-function typeDigit(unit: WheelUnit, buffer: string, digit: string): TypingStep {
+/** 🔴 **두 자리를 다 안 채워도 확정합니다.** 상한이 있는 열에서 첫 자리가 이미 두 자리
+ * 수를 만들 수 없으면(분 열에서 `6` → 60분 이상은 없음) 그 자리에서 확정하고 다음 열로
+ * 넘어갑니다. 시점의 `typeDigit`이 월 열에서 `2`를 즉시 확정하는 것과 같은 규칙입니다.
+ *
+ * 안 하면 30분을 넣으려고 `3`을 친 뒤 **`0`을 한 번 더** 쳐야 합니다 — 오너가 지적한
+ * "설정하기도 불편하다"의 절반이 이것이었습니다. 상한이 없는 맨 위 열은 두 자리를
+ * 다 받습니다(90시간을 칠 수 있어야 하므로).
+ */
+function typeDigit(unit: WheelUnit, buffer: string, digit: string, _hourFormat?: unknown, fields: WheelUnit[] = LADDER): TypingStep {
   const digits = buffer + digit;
   if (digits.length >= WIDTH[unit]) return { digits: "", commit: Number(digits), advance: true };
+  const ceiling = durationCeiling(unit, fields);
+  // 첫 자리에 10을 곱한 것이 이미 상한을 넘으면 두 자리가 될 수 없습니다.
+  if (ceiling !== null && Number(digits) * 10 > ceiling) return { digits: "", commit: Number(digits), advance: true };
   return { digits, commit: null, advance: false };
 }
 
@@ -184,14 +200,34 @@ function label(value: string, unit: WheelUnit): string {
   return parts ? pad(parts[unit], WIDTH[unit]) : "";
 }
 
+/** 일 위로는 **단위 글자**, 시 아래로는 **콜론**. `02y 03mo 04d 05:06`처럼 읽힙니다.
+ *
+ * 🔴 처음엔 전부 콜론이었는데 오너가 잡았습니다 — `03:04:00`은 어느 자리가 일인지
+ * 알 수가 없습니다. 시점 모델이 날짜를 `. `로, 시각을 `:`로 잇는 것과 같은 판단이고,
+ * 기간은 열 조합이 자유로워서(연·월만, 일·시만 …) **자리만으로는 절대 못 읽습니다.**
+ *
+ * ⚠️ **글자는 ASCII입니다**(`y`·`mo`·`d`). 이 저장소는 `units`의 한국어 누수를 이미
+ * 한 번 치렀습니다(v0.8.0의 BREAKING 5) — 트리거에 한국어를 박으면 영어 라벨을 준
+ * 소비자가 다시 같은 자리에 걸립니다. 오너가 든 예(`xd`)도 이 모양입니다.
+ *
+ * ⚠️ **자리는 채웁니다**(`02y`, `2y` 아님). 안 채우면 값이 바뀔 때마다 필드 폭이
+ * 요동치고, 치는 동안 버퍼가 자리를 지키는 장치(`DATE_WHEEL_FILL`)도 폭을 전제합니다 —
+ * `dateTriggerParts`가 같은 이유로 같은 선택을 했습니다. */
+const SUFFIX: Partial<Record<WheelUnit, string>> = { year: "y", month: "mo", day: "d" };
+
 function triggerParts(source: string, fields: WheelUnit[]): DateTriggerPart[] {
   const parts = parseDuration(source);
   if (!parts) return [];
   const drawn = LADDER.filter((unit) => fields.includes(unit));
   const out: DateTriggerPart[] = [];
   drawn.forEach((unit, index) => {
-    out.push({ unit, text: pad(parts[unit], WIDTH[unit]) });
-    if (index < drawn.length - 1) out.push({ unit: null, text: ":" });
+    // 단위 글자는 **세그먼트 안**입니다 — 구두점으로 쪼개면 그 글자를 눌렀을 때
+    // 어느 열이 활성이 되는지가 갈립니다(오전/오후 접두사가 시 세그먼트 안인 것과 같은 이유).
+    out.push({ unit, text: pad(parts[unit], WIDTH[unit]) + (SUFFIX[unit] ?? "") });
+    if (index === drawn.length - 1) return;
+    // 다음 조각이 시각 쪽이고 지금도 시각 쪽이면 콜론, 아니면 공백.
+    const bothTime = SUFFIX[unit] === undefined && SUFFIX[drawn[index + 1]] === undefined;
+    out.push({ unit: null, text: bothTime ? ":" : " " });
   });
   return out;
 }

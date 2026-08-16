@@ -1019,7 +1019,11 @@ export type WheelModel = {
   /* `hourFormat`은 3단계에서 붙었습니다(스펙 §7) — 12시간제면 시 열의 타이핑 상한이
    * 12이고, 그때 확정되는 수는 **값이 아니라 12시간 읽기**입니다. 그것을 값으로
    * 되돌리는 것이 `hourFromTwelve`입니다. 안 넘기면 24시간제로, 지금까지와 같습니다. */
-  typeDigit(unit: WheelUnit, buffer: string, digit: string, hourFormat?: HourFormat): TypingStep;
+  /** ⚠️ **`fields`가 필요한 이유는 기간 모델이 알려 줬습니다.** 그 모델은 상한이 열 조합에
+   *  달려 있어(그리는 열 중 맨 위가 무제한) `fields` 없이는 "이 첫 자리로 두 자리가 될 수
+   *  있나"를 답할 수 없습니다. 시점 모델은 상한이 문맥과 무관해서 이 인자 없이도 됐고,
+   *  그래서 계약이 오랫동안 시점 모양이었습니다 — 두 번째 구현이 드러낸 네 번째 자리입니다. */
+  typeDigit(unit: WheelUnit, buffer: string, digit: string, hourFormat?: HourFormat, fields?: WheelUnit[]): TypingStep;
   flushBuffer(unit: WheelUnit, buffer: string, hourFormat?: HourFormat): number | null;
   /** 12시간 읽기를 값으로. **선택입니다** — 기간처럼 오전/오후가 없는 모델은 안 냅니다.
    *  기계는 `meridiem`이 `null`이 아닐 때만 부릅니다. */

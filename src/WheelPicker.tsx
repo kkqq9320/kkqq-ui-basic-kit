@@ -1785,7 +1785,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
       setActiveUnit(unit);
       setEditing(true);
       const buffer = resolvedTyping?.unit === unit ? resolvedTyping.digits : "";
-      const step = model.typeDigit(unit, buffer, key, hourFormat);
+      const step = model.typeDigit(unit, buffer, key, hourFormat, fields);
       if (step.commit !== null) {
         setTyping(null);
         commitTyped(unit, typedHourToValue(unit, step.commit));

@@ -602,9 +602,9 @@ function Demo() {
    *  이 모양이 된다. */
   const [reservationTime, setReservationTime] = useState("18:30");
   // 기간 — 값은 고정폭 YYYY:MM:DD:HH:MM:SS 입니다. 아래 셋이 같은 모델을 다른 fields로 씁니다.
-  const [workDuration, setWorkDuration] = useState("0000:00:00:01:30:00");     // 1시간 30분
-  const [longDuration, setLongDuration] = useState("0000:00:03:04:00:00");     // 3일 4시간
-  const [contractTerm, setContractTerm] = useState("0002:03:00:00:00:00");     // 2년 3개월
+  const [workDuration, setWorkDuration] = useState("00:00:00:01:30:00");     // 1시간 30분
+  const [longDuration, setLongDuration] = useState("00:00:03:04:00:00");     // 3일 4시간
+  const [contractTerm, setContractTerm] = useState("02:03:00:00:00:00");     // 2년 3개월
   const [meetingAt, setMeetingAt] = useState("2026-07-23T14:30");
   const [loggedAt, setLoggedAt] = useState("2026-07-23T14:30:05");
   /** 6열(연·월·일·시·분·초)을 한 줄로 둘지 두 줄(날짜 줄/시각 줄)로 접을지 —

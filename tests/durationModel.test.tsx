@@ -24,17 +24,17 @@ const fieldOf = (name: string) =>
 const rowsOf = (unit: string) =>
   [...document.querySelectorAll(`.wheel-column[data-unit="${unit}"] .wheel-values button`)].map((b) => b.textContent);
 
-describe("기간 값 — 고정폭 YYYY:MM:DD:HH:MM:SS", () => {
+describe("기간 값 — 고정폭 YY:MM:DD:HH:MM:SS", () => {
   it("왕복한다", () => {
-    const parts = parseDuration("0002:03:04:05:06:07");
+    const parts = parseDuration("02:03:04:05:06:07");
     expect(parts).toEqual({ year: 2, month: 3, day: 4, hour: 5, minute: 6, second: 7 });
-    expect(serializeDuration(parts!)).toBe("0002:03:04:05:06:07");
+    expect(serializeDuration(parts!)).toBe("02:03:04:05:06:07");
   });
 
   // 고정폭이라야 min/max 접두 슬라이스 비교가 성립합니다(설계 스펙 §12).
-  it("길이가 언제나 19자다", () => {
-    expect(serializeDuration({ year: 0, month: 0, day: 0, hour: 0, minute: 0, second: 0 })).toHaveLength(19);
-    expect(serializeDuration({ year: 9999, month: 11, day: 30, hour: 23, minute: 59, second: 59 })).toHaveLength(19);
+  it("길이가 언제나 17자다", () => {
+    expect(serializeDuration({ year: 0, month: 0, day: 0, hour: 0, minute: 0, second: 0 })).toHaveLength(17);
+    expect(serializeDuration({ year: 99, month: 11, day: 30, hour: 23, minute: 59, second: 59 })).toHaveLength(17);
   });
 
   it("형식이 안 맞으면 null", () => {
@@ -64,18 +64,18 @@ describe("상한 — 그리는 열 중 맨 위만 무제한 (오너 결정: 자�
 
 describe("이동 — 자리올림하지 않는다", () => {
   it("59분에서 +1은 0분이고 시는 그대로다", () => {
-    expect(durationModel.shift("0000:00:00:01:59:00", "minute", 1, HM)).toBe("0000:00:00:01:00:00");
+    expect(durationModel.shift("00:00:00:01:59:00", "minute", 1, HM)).toBe("00:00:00:01:00:00");
   });
 
   it("맨 위 열은 순환하지 않고 위로 계속 간다", () => {
-    expect(durationModel.shift("0000:00:00:08:00:00", "hour", 1, HM)).toBe("0000:00:00:09:00:00");
+    expect(durationModel.shift("00:00:00:08:00:00", "hour", 1, HM)).toBe("00:00:00:09:00:00");
   });
 
   /* 🔴 **"무제한"은 칸 너비까지입니다.** 고정폭과 무제한은 끝에서 부딪히는데, 답은 아래
    * 0과 같습니다 — 넘치면 형식이 깨지고 기계가 `—`로 그립니다. 시가 맨 위면 99시간,
    * 연이 맨 위면 9999년이 천장입니다. 시점 모델의 연도가 10000에서 같은 일을 합니다. */
   it("맨 위 열도 칸 너비를 넘으면 유효하지 않은 값이 된다", () => {
-    const over = durationModel.shift("0000:00:00:99:00:00", "hour", 1, HM);
+    const over = durationModel.shift("00:00:00:99:00:00", "hour", 1, HM);
     expect(durationModel.isValid(over, HM)).toBe(false);
   });
 
@@ -84,15 +84,15 @@ describe("이동 — 자리올림하지 않는다", () => {
    * (아래 렌더 검사가 그 자리를 고정합니다). 형식이 깨진 값을 내면 기계의 `isValid`
    * 가드가 `null`로 받아 그 행을 `—`로 그립니다. */
   it("맨 위 열에서 0 아래로 가면 유효하지 않은 값이 된다", () => {
-    const below = durationModel.shift("0000:00:00:00:00:00", "hour", -1, HM);
+    const below = durationModel.shift("00:00:00:00:00:00", "hour", -1, HM);
     expect(durationModel.isValid(below, HM)).toBe(false);
   });
 });
 
 describe("바닥값 — 기간은 전부 0에서 시작한다", () => {
   it("월·일도 0이 유효하다 (시점은 1부터)", () => {
-    expect(durationModel.isValid("0000:00:00:00:00:00", YMD)).toBe(true);
-    expect(parseDuration("0000:00:00:00:00:00")).toEqual({ year: 0, month: 0, day: 0, hour: 0, minute: 0, second: 0 });
+    expect(durationModel.isValid("00:00:00:00:00:00", YMD)).toBe(true);
+    expect(parseDuration("00:00:00:00:00:00")).toEqual({ year: 0, month: 0, day: 0, hour: 0, minute: 0, second: 0 });
   });
 });
 
@@ -100,7 +100,7 @@ describe("바닥값 — 기간은 전부 0에서 시작한다", () => {
  * 계약 검사 — **진짜 기계에 꽂아서** 봅니다. 여기가 이 파일의 요점입니다.
  * ════════════════════════════════════════════════════════════════════════ */
 describe("계약 — 기계가 기간 모델로도 돈다", () => {
-  const renderDuration = (fields: WheelUnit[] = HM, value = "0000:00:00:01:30:00") =>
+  const renderDuration = (fields: WheelUnit[] = HM, value = "00:00:00:01:30:00") =>
     render(<WheelPicker model={durationModel} ariaLabel="기간" value={value} onChange={() => undefined} fields={fields} />);
 
   it("트리거가 기간을 그린다", () => {
@@ -123,7 +123,7 @@ describe("계약 — 기계가 기간 모델로도 돈다", () => {
   /* 🔴 위 "0 아래는 없는 값"이 화면에서 실제로 무엇이 되는지 — 이걸 안 보면 모델이
    * 옳은지 알 수 없습니다. 클램프하던 판에서는 여기가 `["00","00","01",…]`였습니다. */
   it("0에서 아래 칸은 —로 비활성된다", () => {
-    renderDuration(HM, "0000:00:00:00:30:00");
+    renderDuration(HM, "00:00:00:00:30:00");
     fireEvent.click(fieldOf("기간"));
     expect(rowsOf("hour")[0]).toBe("—");
   });
@@ -136,7 +136,7 @@ describe("계약 — 기계가 기간 모델로도 돈다", () => {
  * 안 쓰이는 채로 필수). */
 describe("계약 — 기간이 거짓말하지 않아도 되는가", () => {
   const renderDuration = (fields: WheelUnit[] = HM) =>
-    render(<WheelPicker model={durationModel} ariaLabel="기간" value="0000:00:00:01:30:00" onChange={() => undefined} fields={fields} />);
+    render(<WheelPicker model={durationModel} ariaLabel="기간" value="00:00:00:01:30:00" onChange={() => undefined} fields={fields} />);
 
   it("씨앗 버튼이 안 그려진다 — 기간에는 '지금'이 없다", () => {
     renderDuration();
@@ -166,5 +166,60 @@ describe("계약 — 기간이 거짓말하지 않아도 되는가", () => {
   it("계열을 묻는 멤버가 계약에서 사라졌다", () => {
     expect("family" in durationModel).toBe(false);
     expect("family" in instantModel).toBe(false);
+  });
+});
+
+/* 표기와 타이핑 — 오너 리포트 2026-08-16.
+ *
+ * `03:04:00`은 어느 자리가 일인지 알 수가 없습니다. 기간은 열 조합이 자유로워서
+ * (연·월만, 일·시만 …) **자리만으로는 절대 못 읽습니다** — 시점과 다른 점입니다. */
+describe("기간 표기 — 일 위로는 단위 글자, 시 아래로는 콜론", () => {
+  const text = (value: string, fields: WheelUnit[]) =>
+    durationModel.triggerParts(value, fields, null).map((p) => p.text).join("");
+
+  it("일·시·분", () => {
+    expect(text("00:00:03:04:00:00", ["day", "hour", "minute"])).toBe("03d 04:00");
+  });
+
+  it("연·월", () => {
+    expect(text("02:03:00:00:00:00", ["year", "month"])).toBe("02y 03mo");
+  });
+
+  it("시·분은 콜론만 — 지금까지와 같다", () => {
+    expect(text("00:00:00:01:30:00", ["hour", "minute"])).toBe("01:30");
+  });
+
+  it("여섯 열 전부", () => {
+    expect(text("02:03:04:05:06:07", ["year", "month", "day", "hour", "minute", "second"])).toBe("02y 03mo 04d 05:06:07");
+  });
+
+  /* 단위 글자는 **세그먼트 안**입니다 — 구두점으로 쪼개면 그 글자를 눌렀을 때 어느 열이
+   * 활성이 되는지가 갈립니다(오전/오후 접두사가 시 세그먼트 안인 것과 같은 이유). */
+  it("단위 글자가 세그먼트 안에 있다", () => {
+    const parts = durationModel.triggerParts("00:00:03:04:00:00", ["day", "hour"], null);
+    expect(parts.find((p) => p.unit === "day")?.text).toBe("03d");
+  });
+});
+
+describe("기간 타이핑 — 두 자리를 다 안 채워도 확정한다", () => {
+  const HMS: WheelUnit[] = ["hour", "minute", "second"];
+
+  /* 분 열에서 `6`은 60분 이상을 만들 수 없으므로 그 자리에서 확정합니다. 안 하면 30분을
+   * 넣으려고 `3`을 친 뒤 `0`을 한 번 더 쳐야 합니다 — 오너: "설정하기도 불편하다". */
+  it("상한을 넘길 수 없는 첫 자리는 즉시 확정된다", () => {
+    expect(durationModel.typeDigit("minute", "", "6", undefined, HMS)).toEqual({ digits: "", commit: 6, advance: true });
+  });
+
+  it("두 자리가 될 수 있으면 기다린다", () => {
+    expect(durationModel.typeDigit("minute", "", "3", undefined, HMS)).toEqual({ digits: "3", commit: null, advance: false });
+  });
+
+  it("두 번째 자리로 완성된다", () => {
+    expect(durationModel.typeDigit("minute", "3", "0", undefined, HMS)).toEqual({ digits: "", commit: 30, advance: true });
+  });
+
+  // 대조군 — 상한이 없는 맨 위 열은 두 자리를 다 받습니다(90시간을 칠 수 있어야 하므로).
+  it("맨 위 열은 조기 확정하지 않는다", () => {
+    expect(durationModel.typeDigit("hour", "", "9", undefined, HMS)).toEqual({ digits: "9", commit: null, advance: false });
   });
 });
