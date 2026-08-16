@@ -1476,6 +1476,12 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     scratch.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;padding:0;border:0;opacity:0;";
     document.body.appendChild(scratch);
     try {
+      /* ⚠️ **`focus()`를 명시로 부릅니다 — `select()`에 맡기지 않습니다.** 데모의 검증된
+       * 폴백이 그렇게 하고 있고(`demo/EventTracePanel.tsx`), 엔진마다 `select()`가 포커스를
+       * 옮기는지가 다릅니다. 실제로 이것 없이 쓴 첫 판은 **아래 포커스 복원이 검사로
+       * 증명될 수 없었습니다** — jsdom의 `select()`는 포커스를 안 옮겨서 트리거가 포커스를
+       * 잃은 적이 없었고, `active?.focus?.()`를 지우는 변이가 **0 red**였습니다. */
+      scratch.focus();
       scratch.select();
       document.execCommand("copy");
     } catch {
