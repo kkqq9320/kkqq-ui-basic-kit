@@ -1981,10 +1981,28 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
      * 썼습니다** — AZERTY에서 `KeyA`는 `q` 자리라, 재보지 않은 함정을 재보지 않은
      * 함정으로 바꾸는 것이 됩니다. 데모가 오너에게 이 재현을 물어봅니다. */
     if (meridiem && resolvedActiveUnit === MERIDIEM_UNIT && (key.toLowerCase() === "a" || key.toLowerCase() === "p") && key.length === 1) {
+      /* 🔴 **화면의 버튼과 같은 판정을 씁니다**(아래 `.wheel-meridiem`의
+       * `disabled={!pressed && meridiemShift === null}`). 한동안 **버튼만 그 판정을 보고
+       * 키는 안 봤습니다** — `min`/`max`가 반대 절반을 통째로 막으면 `flipMeridiem()`이
+       * `commitShift`에서 `null`로 빠져 `onChange`가 아예 안 나갑니다. 그런데
+       * `preventDefault`는 이미 걸린 뒤라, **회색으로 죽어 있는 버튼 옆에서 키만 눌리는
+       * 척했습니다.**
+       *
+       * 대가가 둘이었습니다: (1) 위 `setTyping(null)`이 치던 버퍼를 **버려 놓고** 절반
+       * 전환은 실패하는 **파괴적 no-op**, (2) `defaultPrevented`를 단축키 모듈이 신호로
+       * 읽으므로(`shortcuts.ts`의 규칙 1) 앱이 그 구역에 걸어 둔 **맨 `a`/`p` 액션까지
+       * 삼켰습니다 — 픽커에 포커스가 있는 동안만 그 키가 죽습니다.
+       *
+       * 이 분기는 "여기서 a/p는 뜻이 없다"는 다른 두 조건(24시간제·활성 세그먼트가 시가
+       * 아님)에서는 이미 키를 그대로 흘려보냅니다. 세 번째 무의미 조건만 안 흘려보내고
+       * 있었습니다. */
+      const wantsHalf = key.toLowerCase() === "a" ? "am" : "pm";
+      // 이미 그 절반이면 뒤집을 것이 없고, 그때는 버튼도 안 죽어 있습니다(`!pressed` 조건).
+      if (meridiem !== wantsHalf && meridiemShift === null) return;
       event.preventDefault();
       setEditing(true);
       setTyping(null);
-      if (meridiem !== (key.toLowerCase() === "a" ? "am" : "pm")) flipMeridiem();
+      if (meridiem !== wantsHalf) flipMeridiem();
       return;
     }
 
