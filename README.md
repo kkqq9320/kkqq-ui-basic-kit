@@ -137,7 +137,7 @@ Next.js App Router처럼 마운트 지점을 직접 정할 수 없는 환경이�
 `css/index.css` 대신 필요한 파일만 import 해도 됩니다. 단:
 
 - `tokens.css`는 **항상 먼저** 와야 합니다.
-- `select.css`와 `date-picker.css`는 `surfaces.css`를 필요로 합니다.
+- `select.css`와 `wheel-picker.css`는 `surfaces.css`를 필요로 합니다.
 - `tabs.css`의 모바일 배치는 `page.css`의 `.workspace`(`position: relative`)를
   부모로 가정합니다.
 
@@ -156,7 +156,7 @@ import "kkqq-ui-basic-kit/css/surfaces.css";  // select·date-picker가 이걸 �
 import "kkqq-ui-basic-kit/css/controls.css";
 import "kkqq-ui-basic-kit/css/dialog.css";
 import "kkqq-ui-basic-kit/css/select.css";
-import "kkqq-ui-basic-kit/css/date-picker.css";
+import "kkqq-ui-basic-kit/css/wheel-picker.css";
 import "kkqq-ui-basic-kit/css/tabs.css";
 import "kkqq-ui-basic-kit/css/sidebar.css";
 import "kkqq-ui-basic-kit/css/page.css";
@@ -207,7 +207,7 @@ wght 700 : 숫자 1341 · U+2012 1341  (±0)
 wght 930 : 숫자 1404 · U+2012 1404  (±0)
 ```
 
-`.date-wheel-segment`가 거는 `font-variant-numeric: tabular-nums`는 OpenType `tnum`으로
+`.wheel-segment`가 거는 `font-variant-numeric: tabular-nums`는 OpenType `tnum`으로
 매핑되고 **`tnum`은 숫자 글리프에만** 적용됩니다 — 즉 저 등폭은 CSS가 보장하는 것이
 아니라 **그 폰트의 성질**입니다. 바꿔 넣은 폰트가 (a) U+2012을 cmap에 갖고 있지 않으면
 그 한 글자만 폴백 폰트로 새고, (b) 갖고 있어도 폭이 다르면 어긋납니다.

@@ -603,7 +603,7 @@ function Demo() {
   const [loggedAt, setLoggedAt] = useState("2026-07-23T14:30:05");
   /** 6열(연·월·일·시·분·초)을 한 줄로 둘지 두 줄(날짜 줄/시각 줄)로 접을지 —
    *  설계 스펙 §16 미결 1번, 실기기에서만 판단됩니다(2b-4). 기본은 한 줄이고, 이
-   *  토글이 켜지면 demo.css의 데모 전용 규칙이 `.date-wheel-columns[data-fields="6"]`를
+   *  토글이 켜지면 demo.css의 데모 전용 규칙이 `.wheel-columns[data-fields="6"]`를
    *  3열×2줄로 접습니다. 킷 컴포넌트의 팝오버는 body 포털이라 이 컴포넌트를 감싸는
    *  것으로는 스코프를 못 잡고, 그래서 body 클래스로 토글합니다(아래 useEffect). */
   const [foldSixColumns, setFoldSixColumns] = useState(false);
@@ -678,8 +678,8 @@ function Demo() {
   // 가능한 훅은 body 클래스뿐이다. demo.css가 이 클래스와 팝오버의 aria-label을
   // 함께 조건으로 걸어 정확히 그 픽커의 그리드만 3열×2줄로 접는다.
   useEffect(() => {
-    document.body.classList.toggle("date-wheel-fold-demo", foldSixColumns);
-    return () => document.body.classList.remove("date-wheel-fold-demo");
+    document.body.classList.toggle("wheel-fold-demo", foldSixColumns);
+    return () => document.body.classList.remove("wheel-fold-demo");
   }, [foldSixColumns]);
 
   // 6번은 이제 데모 CSS 흉내가 아니라 **킷 전역 설정**이라, body 클래스가 필요 없습니다.

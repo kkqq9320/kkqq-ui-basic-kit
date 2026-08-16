@@ -4,8 +4,8 @@
  *
  * 오너 실기기 캡처(macOS, 2026-08-11)가 잡은 결함입니다. 같은 동작의 두 트레이스:
  *
- *   맥    click target=button.date-wheel-trigger → keydown … tgt=body    처리됨=N
- *   윈도우 click target=span                     → keydown … tgt=button.date-wheel-trigger.editing  처리됨=Y
+ *   맥    click target=button.wheel-trigger → keydown … tgt=body    처리됨=N
+ *   윈도우 click target=span                     → keydown … tgt=button.wheel-trigger.editing  처리됨=Y
  *
  * **맥 브라우저는 `mousedown`의 기본 동작으로 버튼에서 포커스를 걷어냅니다.**
  * `DateWheelPicker`는 키 핸들러가 **트리거 하나에만** 걸려 있으므로(설계 스펙 §6.2)
@@ -72,7 +72,7 @@ describe("DateWheelPicker: 마우스로 눌러도 포커스가 트리거에 온�
    * 포커스가 잡혀야 하므로, 자식에서 쏜 경우를 따로 고정합니다. */
   it("트리거 안의 세그먼트를 눌러도 트리거가 활성 요소가 된다", () => {
     const { container } = render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-23" onChange={() => undefined} />);
-    const segment = container.querySelector(".date-wheel-segment");
+    const segment = container.querySelector(".wheel-segment");
     expect(segment).not.toBeNull();
     fireEvent.click(segment!);
     expect(document.activeElement).toBe(byPrefix("거래 날짜"));

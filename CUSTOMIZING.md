@@ -398,7 +398,7 @@ body::-webkit-scrollbar,
 
 > 새 프롭을 더했으면 원본 앱이 자기 CSS 사본을 들고 있는 컴포넌트는 **양쪽 CSS를
 > 함께** 고쳐야 합니다. 예: `DateWheelPicker`의 `data-fields` 그리드 규칙은 키트
-> `css/date-picker.css`와 앱 `frontend/src/styles.css` 둘 다에 있습니다.
+> `css/wheel-picker.css`와 앱 `frontend/src/styles.css` 둘 다에 있습니다.
 
 ---
 

@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 
 import controlsCssSource from "../css/controls.css?raw";
-import datePickerCssSource from "../css/date-picker.css?raw";
+import wheelPickerCssSource from "../css/wheel-picker.css?raw";
 import sidebarCssSource from "../css/sidebar.css?raw";
 import tabsCssSource from "../css/tabs.css?raw";
 import tokensCssSource from "../css/tokens.css?raw";
@@ -74,7 +74,7 @@ describe("키보드 포커스 표시", () => {
 describe("포커스 링은 토큰 하나가 정한다", () => {
   const NEEDS_RING = [
     "primary", "secondary-button", "danger-button", "file-button", "link-button", "text-button",
-    "sidebar-collapse-button", "mobile-sidebar-close", "date-wheel-step",
+    "sidebar-collapse-button", "mobile-sidebar-close", "wheel-step",
     "mobile-page-tabs-button", "mobile-tab-card",
   ];
 
@@ -89,7 +89,7 @@ describe("포커스 링은 토큰 하나가 정한다", () => {
   // 테두리를 강조색으로 바꾸는 컨트롤에만 남겼다(소유자 결정). 그래서 "어떤 처리인지"가
   // 아니라 **"처리가 있는가"** 를 이름별로 고정한다.
   it.each(NEEDS_RING)("%s에 포커스 처리가 있다", (name) => {
-    const all = controlsCssSource + sidebarCssSource + datePickerCssSource + tabsCssSource;
+    const all = controlsCssSource + sidebarCssSource + wheelPickerCssSource + tabsCssSource;
     expect(all.length).toBeGreaterThan(4000);
     expect(all).toContain(`.${name}:focus-visible`);
   });
@@ -128,14 +128,14 @@ describe("포커스 링은 토큰 하나가 정한다", () => {
   // 예외를 정규식에서 조용히 빼지 않고 이름으로 적어 둔다 — 새로 생기면 여기서 실패하고,
   // 그때 "이것도 부모가 그려 주는가"를 사람이 판단하게 된다.
   it("outline: none만 남기고 끝나는 규칙은 부모가 대신 그려 주는 곳뿐이다 — §11", () => {
-    const all = controlsCssSource + sidebarCssSource + datePickerCssSource + tabsCssSource;
+    const all = controlsCssSource + sidebarCssSource + wheelPickerCssSource + tabsCssSource;
     const bare = (all.match(/[^{}]*:focus-visible[^{]*\{\s*outline:\s*none;\s*\}/g) ?? [])
       .map((rule) => rule.slice(rule.lastIndexOf("*/") + 2).trim());
     expect(bare).toEqual([
-      ".date-wheel-trigger:focus-visible { outline: none; }",
+      ".wheel-trigger:focus-visible { outline: none; }",
     ]);
     // 그 예외가 성립하려면 부모가 실제로 링을 그려야 한다.
-    expect(datePickerCssSource).toMatch(/\.date-wheel-trigger-shell:has\([^{]*:focus-visible[^{]*\{[^}]*outline:\s*var\(--focus-ring\)/);
+    expect(wheelPickerCssSource).toMatch(/\.wheel-trigger-shell:has\([^{]*:focus-visible[^{]*\{[^}]*outline:\s*var\(--focus-ring\)/);
   });
 
   // 사이드바 슬롯이 select.css의 강조색 테두리를 덮어쓰고 있었다 — 특이도가 같은데

@@ -826,8 +826,8 @@ const TRIGGER_TIME_UNITS: WheelUnit[] = ["hour", "minute", "second"];
  * 항목 2). 친 만큼만 그리는 안(`203. 07. 12.`)은 기각됐습니다: 자릿수가 늘었다 줄었다
  * 하며 필드 폭이 요동치고, 세 자리 `203`이 순간적으로 유효한 연도처럼 읽힙니다.
  *
- * **폭을 지키는 장치가 둘이고 역할이 다릅니다.** `css/date-picker.css`의
- * `.date-wheel-segment`가 거는 `tabular-nums`는 **숫자끼리** 폭을 맞추고(이 폰트에서
+ * **폭을 지키는 장치가 둘이고 역할이 다릅니다.** `css/wheel-picker.css`의
+ * `.wheel-segment`가 거는 `tabular-nums`는 **숫자끼리** 폭을 맞추고(이 폰트에서
  * 비례폭 `1`은 898, `4`는 1278로 크게 다릅니다), `DATE_WHEEL_FILL`은 **빈 자리를 숫자
  * 폭에** 맞춥니다. `tabular-nums`는 숫자 글리프에만 적용되므로 채움 문자를 덮지
  * **않습니다** — 그래서 둘 다 필요하고, 하나만으로는 폭이 흔들립니다.

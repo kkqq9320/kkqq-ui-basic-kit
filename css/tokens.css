@@ -160,7 +160,7 @@
    * 검은 글자가 안 읽히고, 연하게 하면 필드에서 안 도드라집니다. 글자색을 함께 뒤집으면
    * 그 저울이 사라져 두 축이 **동시에** 13:1을 넘습니다.
    *
-   * 글자색을 쓸 수 있게 된 근거는 `css/date-picker.css`에 있습니다 — 확정 펄스를 그
+   * 글자색을 쓸 수 있게 된 근거는 `css/wheel-picker.css`에 있습니다 — 확정 펄스를 그
    * 세그먼트에 명시로 걸어, `color` 금지가 막으려던 결과를 다른 방법으로 막습니다. */
   --date-segment-active-background: var(--text);
   --date-segment-active-text: var(--input);

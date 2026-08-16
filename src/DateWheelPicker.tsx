@@ -1,5 +1,5 @@
 /* 3열 휠 날짜 선택기 — 원본: frontend/src/components/DateWheelPicker.tsx
- * 필요한 CSS: tokens.css, surfaces.css, date-picker.css
+ * 필요한 CSS: tokens.css, surfaces.css, wheel-picker.css
  *
  * 네이티브 <input type="date">를 쓰지 않는 이유: 브라우저마다 캘린더 UI가 달라
  * 디자인을 통일할 수 없고, min/max 처리와 모바일 동작이 제각각이기 때문입니다.
@@ -160,11 +160,11 @@ const DATE_WHEEL_UNDO_LIMIT = 50;
 /** 휠 한 무리를 한 조작으로 묶는 꼬리 시간. 휠에는 `pointerup`에 해당하는 "뗌"이 없어
  *  경계를 시간으로 볼 수밖에 없습니다 — 드래그·홀드와 달리 여기만 타이머입니다. */
 const DATE_WHEEL_UNDO_WHEEL_MS = 200;
-/** `css/date-picker.css`의 `.date-wheel-popover { padding: 12px }`와 같은 값.
+/** `css/wheel-picker.css`의 `.wheel-popover { padding: 12px }`와 같은 값.
  *  ⚠️ 한쪽만 바꾸면 바닥 폭이 조용히 어긋납니다 — 검사가 둘을 대조합니다. */
 const POPOVER_PADDING = 12;
 
-/** 열 하나가 잃을 수 있는 **최대** 가로 여백. `css/date-picker.css`의 마진과 같은 값이고,
+/** 열 하나가 잃을 수 있는 **최대** 가로 여백. `css/wheel-picker.css`의 마진과 같은 값이고,
  *  검사가 둘을 대조합니다 — 한쪽만 바뀌면 바닥 폭이 조용히 어긋납니다.
  *
  *  🔴 **최대인 것이 요점입니다.** 그리드가 트랙을 **똑같이** 나누므로, 여백 예산을 총합으로
@@ -247,7 +247,7 @@ const SWIPE_SLOP = 18;
  * 팝오버 진입 애니메이션이 **다 끝나는** 시각(ms) — 마지막 열의 시차까지 포함합니다
  * (280ms + 40ms x 2). 이 시각에 `entering`을 걷습니다.
  *
- * ⚠️ **이 수는 css/date-picker.css의 지속시간·시차와 같은 수입니다.** 두 파일에 흩어져
+ * ⚠️ **이 수는 css/wheel-picker.css의 지속시간·시차와 같은 수입니다.** 두 파일에 흩어져
  * 있으므로 테스트가 CSS에서 유도해 이 값과 비교합니다 — 한쪽만 바꾸면 빨개집니다.
  * 짧으면 마지막 열이 멎기 전에 애니메이션이 잘리고, 길면 그 초과 구간에서 아래 함정에
  * 걸립니다.
@@ -255,7 +255,7 @@ const SWIPE_SLOP = 18;
  * ⚠️ **걷는 것이 중요합니다.** 남겨 두면 스와이프 pointerdown이 `moving-*`을 떼는 순간
  * 값 컨테이너의 animation-name이 이동 → 진입으로 **바뀌면서 진입이 세션 도중에**
  * **재생됩니다.** 애니메이션 종료 이벤트로 걷지 않는 이유: `animationend`는 자식의
- * `date-wheel-selected-pop`에서도 버블해 올라오고, `prefers-reduced-motion`에서는
+ * `wheel-selected-pop`에서도 버블해 올라오고, `prefers-reduced-motion`에서는
  * 애니메이션이 아예 안 돌아 **영영 안 옵니다.** 시간으로 걷으면 두 경우 다 성립합니다.
  */
 const DATE_WHEEL_ENTER_TOTAL_MS = 360;
@@ -480,7 +480,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   });
   /**
    * 팝오버가 막 열렸는가. 열 셋이 함께 굴러 들어오는 진입 애니메이션의 **게이트**입니다
-   * (css/date-picker.css의 `.date-wheel-column.entering .date-wheel-values`).
+   * (css/wheel-picker.css의 `.wheel-column.entering .wheel-values`).
    *
    * `useLayoutEffect`인 이유는 **첫 페인트 전에** 클래스가 붙어야 하기 때문입니다.
    * `useEffect`로 붙이면 한 프레임은 제자리로 그려졌다가 다음 프레임에 시작 위치로
@@ -708,8 +708,8 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     // 그 클래스를 **세션 내내** 달고 있었고, 팝오버는 닫힐 때 언마운트되므로 **다시 열 때
     // 새 노드에서 슬라이드가 처음부터 재생**됐습니다 — 아무것도 안 움직인 열림에서
     // "값이 움직였다"가 재생된 것입니다. 오너가 그것을 기능으로 보고 "다른 픽커에도
-    // 적용해 달라"고 했는데(진짜 진입 애니메이션은 css/date-picker.css의
-    // `date-wheel-enter`가 따로 맡습니다), 신호로서는 거짓말이었습니다.
+    // 적용해 달라"고 했는데(진짜 진입 애니메이션은 css/wheel-picker.css의
+    // `wheel-enter`가 따로 맡습니다), 신호로서는 거짓말이었습니다.
     //
     // `sequence`는 건드리지 않습니다 — 그것은 값 컨테이너의 key이고, 여기서 0으로
     // 되돌리면 R1에서 고친 리마운트 결함이 그대로 돌아옵니다.
@@ -882,7 +882,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     const popover = popoverRef.current;
     if (!open || !position || !popover) return;
     function preventPageWheel(event: WheelEvent) {
-      if (event.target instanceof Element && event.target.closest(".date-wheel-column")) event.preventDefault();
+      if (event.target instanceof Element && event.target.closest(".wheel-column")) event.preventDefault();
     }
     popover.addEventListener("wheel", preventPageWheel, { passive: false });
     return () => popover.removeEventListener("wheel", preventPageWheel);
@@ -1939,7 +1939,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     // `mousedown`은 행에 `mouseup`은 열에 도착하고 브라우저가 `click`을 **공통 조상인 열**에
     // 발생시킵니다 — **행의 `onClick`이 호출될 수가 없습니다.** 오너 실기기 TRACE가 그것을
     // 잡았습니다(pointerdown/mousedown target=button, pointerup/mouseup/click
-    // target=section.date-wheel-column, 그 사이 offset은 59프레임 내내 0px).
+    // target=section.wheel-column, 그 사이 offset은 59프레임 내내 0px).
     //
     // ⚠️ **대상은 그대로 열(`currentTarget`)입니다. 바꾼 것은 시점뿐입니다.** 행(`target`)에
     // 걸면 한 칸 커밋마다 행이 리마운트되면서 캡처가 풀려, 포인터가 픽커 밖으로 나가는 순간
@@ -1963,7 +1963,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
       // 아니다"). 오너 실기기 트레이스(2026-08-10)가 그 싸움을 두 가지로 잡았습니다:
       // 커밋 직후 delta가 0~2px이 되는 프레임에 `.dragging`이 빠지면서 슬라이드가
       // `from`(`translateY(-45px)`, `opacity: .58`)으로 한 프레임 번쩍이고,
-      // 리마운트된 액센트 행에서 230ms `date-wheel-selected-pop`이 매 커밋마다 처음부터
+      // 리마운트된 액센트 행에서 230ms `wheel-selected-pop`이 매 커밋마다 처음부터
       // 다시 시작합니다 — 커밋 간격이 100~150ms이라 그 팝은 **끝나는 일이 없습니다.**
       //
       // **CSS로 끄지 않고 여기서 안 붙이는 이유:** `.dragging`은 컨테이너만 덮고
@@ -2009,7 +2009,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
     // 안쪽이라 뷰포트 끝에 빈 띠가 생기지 않습니다.
     const offset = Math.max(-15, Math.min(15, delta * 0.5));
     column.classList.toggle("dragging", Math.abs(offset) > 2);
-    column.style.setProperty("--date-wheel-drag-offset", `${offset}px`);
+    column.style.setProperty("--wheel-drag-offset", `${offset}px`);
   }
 
   /**
@@ -2021,17 +2021,17 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
    * 흔들리는 게 정상**이라 데스크톱에서 "± 버튼이 안 먹는다"로 나타납니다
    * (오너 리포트, 프레임 단위 재현: 가만히 클릭하면 4회 다 바뀌고 3px 움직이면 안 바뀜).
    *
-   * ⚠️ **행 버튼(`.date-wheel-values button`)은 여기 넣으면 안 됩니다.** 휠 표면 150px이
+   * ⚠️ **행 버튼(`.wheel-values button`)은 여기 넣으면 안 됩니다.** 휠 표면 150px이
    * 통째로 그 버튼들이라 스와이프가 죽습니다. ± 버튼만 빼는 근거는 그것이 휠 표면이
    * 아니라 **이산 컨트롤**이라는 것입니다 — 한 번 눌러 한 칸, 끄는 거리가 없습니다.
    */
   function startsOnStepControl(target: EventTarget | null) {
-    return target instanceof Element && !!target.closest(".date-wheel-step");
+    return target instanceof Element && !!target.closest(".wheel-step");
   }
 
   function clearSwipeVisual(column: HTMLElement) {
     column.classList.remove("dragging");
-    column.style.removeProperty("--date-wheel-drag-offset");
+    column.style.removeProperty("--wheel-drag-offset");
   }
 
   function releaseColumnClickSuppression() {
@@ -2060,7 +2060,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
   // 붙어 model.columns(fields)가 fields와 갈라지면, 지역 변수 하나로 묶어 두지 않으면
   // CSS 열 폭을 정하는 data-fields만 옛 값을 씁니다.
   const columns = model.columns(fields);
-  return <div className={`date-wheel-picker${open ? " open" : ""} ${className}`.trim()} ref={rootRef}>
+  return <div className={`wheel-picker${open ? " open" : ""} ${className}`.trim()} ref={rootRef}>
     {/* onFocus는 세션 기준값을 찍는 두 지점 중 나머지 하나입니다(다른 하나는 위의 닫힘
         이펙트) — 설계 스펙 §6.4. React의 onFocus는 native focusin에 대응합니다.
 
@@ -2095,7 +2095,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         포커스된 버튼을 언마운트하면 focus만 기록되고 blur는 없으며 activeElement는 body로
         갑니다). 그래서 이 핸들러와 그 규칙이 충돌하지 않습니다. tests의 "버퍼를 든 채
         언마운트되면 확정하지 않고 버린다"가 그 전제까지 함께 지킵니다. */}
-    <div className="date-wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className={editing ? "date-wheel-trigger editing" : "date-wheel-trigger"} aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onBlur={() => { setEditing(false); flushTyping(); }} onClick={(event) => {
+    <div className="wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className={editing ? "wheel-trigger editing" : "wheel-trigger"} aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onBlur={() => { setEditing(false); flushTyping(); }} onClick={(event) => {
       // 맨 앞이어야 합니다 — 아래 어느 갈래로 빠지든 포커스는 트리거에 와야 합니다.
       // 근거는 positioning.ts의 헬퍼 주석(맥은 mousedown에서 포커스를 걷어갑니다).
       focusTriggerOnClick(event.currentTarget);
@@ -2171,7 +2171,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         어디 붙느냐**입니다 — 컨테이너가 리마운트되면 자식은 어차피 전부 새로 만들어집니다.
         아래 세그먼트의 key는 위치가 고정된 이름표일 뿐이고 commitPulse와 아무 관계가 없습니다.)
 
-        말줄임은 css/date-picker.css의 `.date-wheel-trigger > span`이 이 컨테이너에 겁니다.
+        말줄임은 css/wheel-picker.css의 `.wheel-trigger > span`이 이 컨테이너에 겁니다.
         **지금 DOM에서는 `>`를 지워도 그림이 바뀌지 않습니다** — 세그먼트는 display를 선언하지
         않은 인라인 박스이고, `overflow`·`text-overflow`·`min-width`는 non-replaced 인라인
         박스에 **적용되지 않습니다**(`white-space: nowrap`은 상속이라 `>`와 무관하게 이미
@@ -2180,20 +2180,20 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         "20…. 0…. 1…."처럼 조각조각 잘리기 때문입니다. 그 날은 오면 안 되지만(§4.5가 금지),
         규칙이 싸므로 남깁니다.
 
-        `.placeholder`(css/date-picker.css의 `.date-wheel-trigger .placeholder`, 흐린 색)는
+        `.placeholder`(css/wheel-picker.css의 `.wheel-trigger .placeholder`, 흐린 색)는
         **날짜도 버퍼도 없을 때만** 붙습니다 — 버퍼가 있으면 placeholder를 버리고 baseValue
         세그먼트를 그리기 때문입니다(§4.5). 판정은 문구와 같은 validDateValue(model.isValid)입니다. */}
       <span className={[triggerParts ? "" : "placeholder", commitPulse ? "dropdown-value-commit" : ""].filter(Boolean).join(" ")} key={commitPulse}>{triggerParts
         ? triggerParts.map((part, index) => part.unit === null
-          ? <span className="date-wheel-punctuation" aria-hidden="true" key={`gap${index}`}>{part.text}</span>
+          ? <span className="wheel-punctuation" aria-hidden="true" key={`gap${index}`}>{part.text}</span>
           /* 활성 표시는 resolvedActiveUnit으로 판정합니다(원본 activeUnit이 아니라) — 소비자가
              런타임에 fields를 줄이면 activeUnit이 사라진 열을 계속 가리키고, 그러면 어느
              세그먼트도 활성이 아니게 되어 닫힌 채로 트리거에 활성 표시가 통째로 사라집니다.
              `.active` 클래스 자체는 포커스와 무관하게 붙고, **감추는 일은 CSS가 합니다**
-             (`.date-wheel-trigger:focus-within` — §4.5: 포커스 없는 필드에 활성 표시가 남으면
+             (`.wheel-trigger:focus-within` — §4.5: 포커스 없는 필드에 활성 표시가 남으면
              그 필드가 입력을 받는 중으로 읽힙니다). */
-          : <span className={`date-wheel-segment${resolvedActiveUnit === part.unit ? " active" : ""}`} data-unit={part.unit} key={part.unit}>{part.text}</span>)
-        : labels.placeholder}</span><i className="date-wheel-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm2-2v4m10-4v4M3 9h18" /></svg></i></button></div>
+          : <span className={`wheel-segment${resolvedActiveUnit === part.unit ? " active" : ""}`} data-unit={part.unit} key={part.unit}>{part.text}</span>)
+        : labels.placeholder}</span><i className="wheel-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm2-2v4m10-4v4M3 9h18" /></svg></i></button></div>
     {/* onMouseDown의 기본 동작을 막는 것이 §6.2의 불변식("키보드를 받는 동안
         activeElement는 언제나 트리거")을 **팝오버 쪽에서** 지키는 장치입니다 — 설계 스펙 §6.3.
         포커스 이동과 텍스트 선택이 mousedown의 기본 동작입니다. `click`은 그대로
@@ -2204,24 +2204,24 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
         있었고, 그것이 §6.2 불변식의 나머지 절반이었습니다. 그 문장은 Windows에서만
         참입니다.** macOS 브라우저는 버튼을 클릭해도 포커스를 주지 않아서, 맥에서는
         팝오버를 열어도 `activeElement`가 `body`에 남고 **키가 하나도 안 닿았습니다**
-        (오너 캡처 2026-08-11: `click target=button.date-wheel-trigger` → `keydown …
+        (오너 캡처 2026-08-11: `click target=button.wheel-trigger` → `keydown …
         tgt=body` `처리됨=N`). 이 절반은 이제 트리거의 `onPointerDown`이 명시적으로
         지킵니다 — `positioning.ts`의 `focusTriggerOnPointerDown`. **막는 것만으로는
         불변식이 성립하지 않습니다. 옮기는 쪽도 있어야 합니다.**
 
         ⚠️ **`pointerdown`이 아니라 `mousedown`이어야 합니다.** 스와이프가
         `pointerdown` → `setPointerCapture` → `pointermove` 사슬이고 열은
-        `touch-action: none`입니다(css/date-picker.css). `pointerdown`을 막으면 그 사슬을
+        `touch-action: none`입니다(css/wheel-picker.css). `pointerdown`을 막으면 그 사슬을
         건드립니다. `mousedown`은 포인터 이벤트보다 **뒤**에 오고(터치에서는 `touchend`
         뒤의 호환 이벤트) 포인터 캡처는 이미 걸린 뒤입니다.
 
         ⚠️ PRINCIPLES §5의 passive 함정과는 **다른 자리**입니다 — 그 조항은
         `wheel`·`touchstart`·`touchmove`에 대한 것이고 `mousedown`은 passive로 등록되지
         않으므로 여기서 preventDefault가 실제로 먹습니다. */}
-    {open && position && createPortal(<div ref={popoverRef} id={popoverId} className="date-wheel-popover dropdown-menu-surface" role="dialog" aria-modal="false" aria-label={`${ariaLabel} ${labels.select}`} onMouseDown={(event) => event.preventDefault()} style={{ top: position.top, bottom: position.bottom, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
+    {open && position && createPortal(<div ref={popoverRef} id={popoverId} className="wheel-popover dropdown-menu-surface" role="dialog" aria-modal="false" aria-label={`${ariaLabel} ${labels.select}`} onMouseDown={(event) => event.preventDefault()} style={{ top: position.top, bottom: position.bottom, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
       {/* 보이는 머리말만 `heading`으로 갈립니다 — 위 `aria-label`과 `triggerName`은 계속
           `ariaLabel`을 씁니다(§11). 안 넘기면 둘이 같은 값이라 지금까지와 동일합니다. */}
-      <div className="date-wheel-heading"><strong>{heading ?? ariaLabel}</strong><span>{hintText}</span></div>
+      <div className="wheel-heading"><strong>{heading ?? ariaLabel}</strong><span>{hintText}</span></div>
       {/* 오전/오후는 **열이 아니라 버튼**입니다(설계 스펙 §7, 오너 결정). 열로 두면 값이
           둘뿐인데 `DATE_WHEEL_OFFSETS`가 일곱 행을 그리고, 스와이프 관성도 ±3 프리로드도
           순환도 뜻이 없어집니다. 그리고 **가장 좁을 때 정확히 한 열을 아낍니다** —
@@ -2239,7 +2239,7 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
           `tabIndex={-1}`은 팝오버 안 다른 버튼들과 같습니다 — 이 컨트롤의 포커스 자리는
           트리거 하나뿐입니다(§6.2). */}
       {meridiem && (
-        <div className="date-wheel-meridiem" style={{ "--date-wheel-fields": columns.length, "--date-wheel-time-start": columns.indexOf(MERIDIEM_UNIT) } as CSSProperties}>
+        <div className="wheel-meridiem" style={{ "--wheel-fields": columns.length, "--wheel-time-start": columns.indexOf(MERIDIEM_UNIT) } as CSSProperties}>
           {(["am", "pm"] as const).map((half) => {
             const pressed = meridiem === half;
             // 반대 절반으로 못 가면(경계가 통째로 막았으면) 그 버튼은 열의 ± 버튼과
@@ -2248,29 +2248,29 @@ export function DateWheelPicker({ value, onChange, min, max, fields = DEFAULT_DA
           })}
         </div>
       )}
-      <div className="date-wheel-columns" data-fields={columns.length} style={{ "--date-wheel-rows": rowsPerSide } as CSSProperties}>
+      <div className="wheel-columns" data-fields={columns.length} style={{ "--wheel-rows": rowsPerSide } as CSSProperties}>
         {/* 열은 **포커스를 받지 않고 키도 받지 않습니다**(설계 스펙 §5·§6.2) — `tabIndex`가
             없고 `onKeyDown`도 없습니다. 활성 표시는 `resolvedActiveUnit`이 붙이는 `.active`
-            클래스 하나로만 그려집니다. css/date-picker.css의 `.date-wheel-column:focus-visible`
+            클래스 하나로만 그려집니다. css/wheel-picker.css의 `.wheel-column:focus-visible`
             선택자는 **남겨 둡니다** — 지우면 다음에 열을 포커스 가능하게 되돌릴 때 표시가
             조용히 사라집니다(스펙 §5).
 
             `onPointerDown`의 `setActiveUnit(unit)`이 **포인터 경로가 활성 세그먼트를 따라가는
             유일한 길**입니다(열의 `onFocus`가 하던 일). 지우지 마세요. */}
-        {columns.map((unit) => { const motion = columnMotion[unit]; return <section className={`date-wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}${holdingUnit === unit ? " holding" : ""}`} aria-label={columnName(unit)} data-unit={unit} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); beginUndoGesture(); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; armHold(unit, event.pointerId, event.clientY); }} onPointerMove={(event) => { const hold = holdRef.current; if (hold && hold.pointerId === event.pointerId && Math.abs(event.clientY - hold.y) > 4) cancelHold(); moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget); }} onPointerUp={(event) => { cancelHold(); finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget); endUndoGesture(); }} onPointerCancel={(event) => { cancelHold(); endUndoGesture(); swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
-          <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
+        {columns.map((unit) => { const motion = columnMotion[unit]; return <section className={`wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}${holdingUnit === unit ? " holding" : ""}`} aria-label={columnName(unit)} data-unit={unit} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); beginUndoGesture(); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; armHold(unit, event.pointerId, event.clientY); }} onPointerMove={(event) => { const hold = holdRef.current; if (hold && hold.pointerId === event.pointerId && Math.abs(event.clientY - hold.y) > 4) cancelHold(); moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget); }} onPointerUp={(event) => { cancelHold(); finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget); endUndoGesture(); }} onPointerCancel={(event) => { cancelHold(); endUndoGesture(); swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+          <button type="button" className="wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
               컨테이너의 key가 바뀌어 행이 통째로 리마운트되므로 포커스를 둘 수도 없습니다. */}
-          <div className="date-wheel-viewport"><div className="date-wheel-values" key={`${unit}-${motion.sequence}`}>{offsets.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === rowsPerSide + 1; const buffered = offset === 0 && resolvedTyping?.unit === unit ? resolvedTyping.digits : null; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={(event) => { if (offset === 0 && centreTapped(unit, event.timeStamp)) return; if (rowValue) applyShift(unit, offset); }} key={offset}>{buffered ?? (rowValue ? model.label(rowValue, unit, labels.weekdays, fields, hourDisplay) : "—")}</button>; })}</div></div>
-          <button type="button" className="date-wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.next}`} disabled={!shifted(unit, 1)} onClick={() => applyShift(unit, 1)}><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></button>
+          <div className="wheel-viewport"><div className="wheel-values" key={`${unit}-${motion.sequence}`}>{offsets.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === rowsPerSide + 1; const buffered = offset === 0 && resolvedTyping?.unit === unit ? resolvedTyping.digits : null; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={(event) => { if (offset === 0 && centreTapped(unit, event.timeStamp)) return; if (rowValue) applyShift(unit, offset); }} key={offset}>{buffered ?? (rowValue ? model.label(rowValue, unit, labels.weekdays, fields, hourDisplay) : "—")}</button>; })}</div></div>
+          <button type="button" className="wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.next}`} disabled={!shifted(unit, 1)} onClick={() => applyShift(unit, 1)}><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></button>
         </section>; })}
       </div>
       {/* setTyping(null)을 먼저 부르는 이유는 handleShortcut의 Ctrl+;/Delete 분기와 같다 —
           이 버튼들은 그 단축키의 동등물이므로(title에 단축키를 적어 뒀다), 버퍼를 안 지우면
           같은 뜻의 단축키와 버튼이 다르게 굴며, 남은 버퍼가 이 버튼이 방금 설정한 값을
           나중에(예: 다음 Tab) 도로 덮어쓸 수 있다. */}
-      <div className="date-wheel-actions"><button type="button" tabIndex={-1} title={`${todayLabel} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" {...tapActivation(() => { setTyping(null); commitToday(); })}>{todayLabel}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" {...tapActivation(() => { setTyping(null); clearedRef.current = true; if (value) pushUndo(value); onChange(""); })}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" aria-keyshortcuts="Enter Control+S Meta+S" {...tapActivation(commitAndClose)}>{labels.done}</button></div>
+      <div className="wheel-actions"><button type="button" tabIndex={-1} title={`${todayLabel} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" {...tapActivation(() => { setTyping(null); commitToday(); })}>{todayLabel}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" {...tapActivation(() => { setTyping(null); clearedRef.current = true; if (value) pushUndo(value); onChange(""); })}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" aria-keyshortcuts="Enter Control+S Meta+S" {...tapActivation(commitAndClose)}>{labels.done}</button></div>
     </div>, document.body)}
   </div>;
 }

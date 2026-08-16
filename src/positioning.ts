@@ -100,14 +100,14 @@ export function captureScrollSnapshot(scrollRootId = "root"): ScrollSnapshot {
  * 방향키·숫자·Enter·`Ctrl+;`가 **전부** 닿지 않습니다.
  *
  * 오너 실기기 캡처(2026-08-11)가 같은 동작의 두 트레이스로 잡았습니다:
- *   맥     `click target=button.date-wheel-trigger` → `keydown … tgt=body`  처리됨=N
+ *   맥     `click target=button.wheel-trigger` → `keydown … tgt=body`  처리됨=N
  *   윈도우 `click target=span`                      → `keydown … tgt=button…` 처리됨=Y
  *
  * ⚠️ **`pointerdown`에서 부르면 안 됩니다 — 3ms만 살아 있습니다.** 첫 판이 그랬고,
  * 두 번째 맥 캡처가 그 이유를 그대로 찍었습니다:
  *
  *     +0ms  pointerdown target=span
- *     +4ms  focusin  foc=button.date-wheel-trigger   ← 여기서 우리가 줬다
+ *     +4ms  focusin  foc=button.wheel-trigger   ← 여기서 우리가 줬다
  *     +7ms  mousedown target=span
  *     +9ms  focusout foc=body                        ← mousedown 기본 동작이 도로 걷어간다
  *
