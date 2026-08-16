@@ -17,7 +17,7 @@ import {
   WHEEL_FILL,
   MERIDIEM_NOTCHES,
   MERIDIEM_UNIT,
-  instantModel,
+  type WheelModel,
   isContiguous,
   type WheelUnit,
   type HourDisplay,
@@ -36,7 +36,6 @@ export { todayIn, type WheelUnit } from "./model/instant";
  *  타입은 `WheelUnit`(여섯 단위)까지 넓고, Task 3부터 컴포넌트가 시·분·초를 실제로
  *  그립니다 — 기본값 자체는 그대로 3열입니다(연·월·일이 아닌 조합을 쓰려면
  *  `fields`를 명시해야 합니다). */
-const DEFAULT_WHEEL_FIELDS: WheelUnit[] = ["year", "month", "day"];
 
 export type WheelLabels = {
   /** 값이 비었을 때 트리거 문구 */
@@ -282,6 +281,9 @@ export type WheelPickerProps = {
    *  ⚠️ 사다리(`UNIT_LADDER`)에서 잘라낸 **연속 구간**이어야 합니다 — 아래 개발 모드
    *  경고가 그것을 봅니다. */
   fields: WheelUnit[];
+  /** 값 모델. **래퍼가 정합니다** — 기계는 이 객체 하나만 보고 돕니다(설계 스펙 §3.2).
+   *  `instantModel`(시점)과 `durationModel`(기간)이 같은 계약을 구현합니다. */
+  model: WheelModel;
   /** 열마다의 격자 간격(설계 스펙 §8). 안 넘긴 열은 1이라 **지금까지와 글자 하나 안
    *  바뀝니다.** 격자의 기준점은 언제나 그 열의 바닥값(시·분·초는 0, 월·일은 1)이고
    *  min/max가 아닙니다 — 경계로 잡으면 같은 step을 준 픽커가 min에 따라 다른 값 집합을
@@ -307,7 +309,7 @@ export type WheelPickerProps = {
   mobileBottomInset?: number;
 };
 
-export function WheelPicker({ value, onChange, min, max, fields, allowClear = false, step, ariaLabel, heading, id, disabled = false, labels: labelOverrides, timeZone = "Asia/Seoul", mobileBottomInset = 78, className = "" }: WheelPickerProps) {
+export function WheelPicker({ model, value, onChange, min, max, fields, allowClear = false, step, ariaLabel, heading, id, disabled = false, labels: labelOverrides, timeZone = "Asia/Seoul", mobileBottomInset = 78, className = "" }: WheelPickerProps) {
   // fields는 UNIT_LADDER에서 잘라낸 연속 구간이어야 합니다(설계 스펙 §4) — 지금
   // 소스는 불연속 조합(예: ["year","hour"])을 그리지 못하고, 그린다고 해도 트리거와
   // 팝오버가 서로 다른 열 개수를 말하는 등 정의되지 않은 동작이 됩니다. 타입
@@ -365,7 +367,6 @@ export function WheelPicker({ value, onChange, min, max, fields, allowClear = fa
       console.warn(`DateWheelPicker: fields는 연·월·일·시·분·초 사다리에서 잘라낸 연속 구간이어야 합니다. 받은 값: [${fields.join(", ")}]`);
     }
   }
-  const model = instantModel;
   const labels = { ...DEFAULT_WHEEL_LABELS, ...labelOverrides, units: { ...DEFAULT_WHEEL_LABELS.units, ...labelOverrides?.units } };
   // "오늘"의 짝 — fields에 시각 단위가 하나라도 있으면 팝오버 버튼이 "지금"이
   // 됩니다(Task 3, 설계 스펙 §9).
@@ -408,7 +409,13 @@ export function WheelPicker({ value, onChange, min, max, fields, allowClear = fa
    * `undefined` 구멍 하나입니다. */
   const meridiemLabels = labels.meridiem ?? DEFAULT_WHEEL_LABELS.meridiem;
   const hourDisplay = useMemo<HourDisplay>(() => ({ format: hourFormat, am: meridiemLabels.am, pm: meridiemLabels.pm }), [hourFormat, meridiemLabels.am, meridiemLabels.pm]);
-  const hasTimeUnit = model.family(fields) !== "date";
+  /* 팝오버 하단의 **씨앗 버튼**. `null`이면 버튼 자체를 안 그립니다 — 기간처럼 "지금"이
+   * 뜻을 갖지 않는 모델이 그렇습니다. **기계는 계열을 묻지 않습니다**: 한동안
+   * `model.family(fields) !== "date"`로 물었는데, 그 값으로 실제로 하던 일은 이 버튼과
+   * 아래 안내 문구의 이름을 고르는 것뿐이었습니다(2026-08-15, 기간 모델을 실제로 만들어
+   * 보고 드러났습니다 — 그때 기간은 `"time"`이라고 거짓말해야 했습니다). */
+  const seedAction = model.seedAction(fields);
+  const hasTimeUnit = seedAction === "now";
   const todayLabel = hasTimeUnit ? labels.now : labels.today;
   // hint의 짝 — todayLabel과 같은 기준(hasTimeUnit)으로 고릅니다(2b-4). `hintNow`는
   // 타입에서 선택이라(위 WheelLabels 주석) `labels.hintNow`가 `undefined`일 수
@@ -498,12 +505,12 @@ export function WheelPicker({ value, onChange, min, max, fields, allowClear = fa
     const timer = window.setTimeout(() => setEntering(false), WHEEL_ENTER_TOTAL_MS);
     return () => window.clearTimeout(timer);
   }, [open]);
-  const [activeUnit, setActiveUnit] = useState<WheelUnit>(fields[0] ?? "year");
+  const [activeUnit, setActiveUnit] = useState<WheelUnit>(fields[0] ?? model.units[0]);
   // activeUnit은 소비자가 런타임에 fields를 바꿀 수 있어(예: 일간/월간 토글) fields
   // 밖의 열을 계속 가리킬 수 있습니다. 그 원본 상태를 그대로 믿지 않고, 매 렌더
   // fields 안으로 클램프한 값을 씁니다 — 그렇지 않으면 키가 사라진 열에 가서 아무 일도
   // 일어나지 않고, 트리거와 팝오버 어느 쪽에도 활성 표시가 남지 않습니다.
-  const resolvedActiveUnit = fields.includes(activeUnit) ? activeUnit : (fields[0] ?? "year");
+  const resolvedActiveUnit = fields.includes(activeUnit) ? activeUnit : (fields[0] ?? model.units[0]);
   // 지금 치고 있는 열과 그 자릿수. 자릿수가 차면 model.typeDigit이 곧바로 확정하고 비웁니다.
   //
   // **덜 찬 채로 버퍼가 어떻게 되는지는 "무엇을 가리킨 조작인가"로 갈립니다**(설계 스펙
@@ -784,7 +791,7 @@ export function WheelPicker({ value, onChange, min, max, fields, allowClear = fa
    * 소비자의 값을 여기서 내리면 `onChange` 없이 화면만 달라져, 트리거가 소비자가 들고
    * 있지 않은 값을 그립니다 — 격자 밖 값을 허용하는 예외(`min`/`max` 끝점)와 같은 결로
    * 그냥 보여 줍니다. 반면 `now()`는 **킷이 지어낸 값**이라 격자 위에 올려야 합니다. */
-  const baseValue = clampToRange(model.isValid(value, fields) ? value : model.snapValue(model.now(timeZone, fields), fields, step));
+  const baseValue = clampToRange(model.isValid(value, fields) ? value : model.snapValue(model.seed(timeZone, fields), fields, step));
 
   // 트리거가 그릴 조각들. null이면 placeholder를 그린다는 뜻입니다.
   //
@@ -1210,7 +1217,7 @@ export function WheelPicker({ value, onChange, min, max, fields, allowClear = fa
    *  갈라지지 않은 적이 없습니다(`commitAndClose`가 생긴 이유가 그것입니다). */
   function resetColumn(unit: WheelUnit) {
     setTyping(null);
-    const target = model.resetTarget(unit, model.now(timeZone, fields), fields);
+    const target = model.resetTarget(unit, model.seed(timeZone, fields), fields);
     if (target === null) return;
     const from = model.parts(baseValue, fields);
     const next = clampToRange(model.setUnit(baseValue, unit, target, fields, step));
@@ -1261,7 +1268,9 @@ export function WheelPicker({ value, onChange, min, max, fields, allowClear = fa
   }
 
   function typedHourToValue(unit: WheelUnit, typed: number) {
-    return unit === MERIDIEM_UNIT && meridiem ? model.hourFromTwelve(typed, meridiem) : typed;
+    /* `hourFromTwelve`는 계약에서 **선택**입니다 — 기간에는 오전/오후가 없습니다.
+     * `meridiem`이 `null`이 아닌 모델만 그것을 내므로 둘을 함께 봅니다. */
+    return unit === MERIDIEM_UNIT && meridiem && model.hourFromTwelve ? model.hourFromTwelve(typed, meridiem) : typed;
   }
 
   function markColumnMotion(unit: WheelUnit, amount: number) {
@@ -1466,7 +1475,7 @@ export function WheelPicker({ value, onChange, min, max, fields, allowClear = fa
      * `47`을 **타이핑하면 45가 되는데** `지금`을 누르면 03:47이 그대로 남아, 같은 수에
      * 이르는 두 경로가 갈립니다. 격자를 준 소비자는 "이 픽커는 15분 단위만 낸다"고 말한
      * 것이고, 격자 밖이 허용되는 예외는 `min`/`max` 끝점 하나뿐입니다. */
-    const next = clampToRange(model.snapValue(model.now(timeZone, fields), fields, step));
+    const next = clampToRange(model.snapValue(model.seed(timeZone, fields), fields, step));
     // 값 분해는 모델이 합니다(설계 스펙 §12, 2b-2) — 예전에는 `value.split("-")`와
     // 고정 인덱스 표(`{year:0,month:1,day:2,hour:3,minute:4,second:5}`)로 **위치만**
     // 보고 셌는데, 그 표는 값이 늘 "YYYY-MM-DD" 세 자리일 때만 맞습니다. 값에 시각이
@@ -1776,7 +1785,7 @@ export function WheelPicker({ value, onChange, min, max, fields, allowClear = fa
       setActiveUnit(unit);
       setEditing(true);
       const buffer = resolvedTyping?.unit === unit ? resolvedTyping.digits : "";
-      const step = model.typeDigit(unit, buffer, key, hourFormat);
+      const step = model.typeDigit(unit, buffer, key, hourFormat, fields);
       if (step.commit !== null) {
         setTyping(null);
         commitTyped(unit, typedHourToValue(unit, step.commit));
@@ -2259,7 +2268,7 @@ export function WheelPicker({ value, onChange, min, max, fields, allowClear = fa
 
             `onPointerDown`의 `setActiveUnit(unit)`이 **포인터 경로가 활성 세그먼트를 따라가는
             유일한 길**입니다(열의 `onFocus`가 하던 일). 지우지 마세요. */}
-        {columns.map((unit) => { const motion = columnMotion[unit]; return <section className={`wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}${holdingUnit === unit ? " holding" : ""}`} aria-label={columnName(unit)} data-unit={unit} role="group" onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); beginUndoGesture(); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; armHold(unit, event.pointerId, event.clientY); }} onPointerMove={(event) => { const hold = holdRef.current; if (hold && hold.pointerId === event.pointerId && Math.abs(event.clientY - hold.y) > 4) cancelHold(); moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget); }} onPointerUp={(event) => { cancelHold(); finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget); endUndoGesture(); }} onPointerCancel={(event) => { cancelHold(); endUndoGesture(); swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {columns.map((unit) => { const motion = columnMotion[unit]; const unitMark = model.columnMark?.(unit, fields) ?? ""; return <section className={`wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}${holdingUnit === unit ? " holding" : ""}`} aria-label={columnName(unit)} data-unit={unit} role="group" style={{ "--wheel-unit-mark": JSON.stringify(unitMark) } as CSSProperties} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); beginUndoGesture(); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; armHold(unit, event.pointerId, event.clientY); }} onPointerMove={(event) => { const hold = holdRef.current; if (hold && hold.pointerId === event.pointerId && Math.abs(event.clientY - hold.y) > 4) cancelHold(); moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget); }} onPointerUp={(event) => { cancelHold(); finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget); endUndoGesture(); }} onPointerCancel={(event) => { cancelHold(); endUndoGesture(); swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <button type="button" className="wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
@@ -2272,7 +2281,7 @@ export function WheelPicker({ value, onChange, min, max, fields, allowClear = fa
           이 버튼들은 그 단축키의 동등물이므로(title에 단축키를 적어 뒀다), 버퍼를 안 지우면
           같은 뜻의 단축키와 버튼이 다르게 굴며, 남은 버퍼가 이 버튼이 방금 설정한 값을
           나중에(예: 다음 Tab) 도로 덮어쓸 수 있다. */}
-      <div className="wheel-actions"><button type="button" tabIndex={-1} title={`${todayLabel} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" {...tapActivation(() => { setTyping(null); commitToday(); })}>{todayLabel}</button>{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" {...tapActivation(() => { setTyping(null); clearedRef.current = true; if (value) pushUndo(value); onChange(""); })}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" aria-keyshortcuts="Enter Control+S Meta+S" {...tapActivation(commitAndClose)}>{labels.done}</button></div>
+      <div className="wheel-actions">{seedAction && <button type="button" tabIndex={-1} title={`${todayLabel} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" {...tapActivation(() => { setTyping(null); commitToday(); })}>{todayLabel}</button>}{allowClear && <button type="button" tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" {...tapActivation(() => { setTyping(null); clearedRef.current = true; if (value) pushUndo(value); onChange(""); })}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="primary" aria-keyshortcuts="Enter Control+S Meta+S" {...tapActivation(commitAndClose)}>{labels.done}</button></div>
     </div>, document.body)}
   </div>;
 }

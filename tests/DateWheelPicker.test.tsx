@@ -211,7 +211,7 @@ describe("DateWheelPicker", () => {
   // 두면 이 검사가 **진짜 `shiftDateValue`를 한 번도 안 밟는** 채로 남는다.
   it("지금 버튼이 시각을 가진 값에서도 열 모션을 만든다", () => {
     let mockedNow = "2024-07-05T03:00";
-    const nowSpy = vi.spyOn(instantModel, "now").mockImplementation(() => mockedNow);
+    const nowSpy = vi.spyOn(instantModel, "seed").mockImplementation(() => mockedNow);
 
     render(<DateWheelPicker ariaLabel="거래 날짜" value="" fields={["year", "month", "day", "hour"]} onChange={() => undefined} />);
     fireEvent.click(fieldOf("거래 날짜"));
@@ -4824,9 +4824,9 @@ describe("DateWheelPicker '지금' — 시간 열이 있으면 오늘 버튼이 
 // 나온다"만 보므로, 그 판정을 기계가 다시 로컬로 손으로 짜도 여전히 통과한다
 // — 이 테스트만 "**모델을 실제로 거쳤는가**"를 본다(:197의 `instantModel.now`
 // 스파이와 같은 idiom).
-describe("DateWheelPicker '지금'/hintNow 판정은 model.family를 거친다 (전체 브랜치 리뷰 F-4)", () => {
-  it("시간 열이 있는 fields로 렌더하면 model.family(fields)가 실제로 불린다", () => {
-    const familySpy = vi.spyOn(instantModel, "family");
+describe("DateWheelPicker '지금'/hintNow 판정은 model.seedAction을 거친다 (전체 브랜치 리뷰 F-4)", () => {
+  it("시간 열이 있는 fields로 렌더하면 model.seedAction(fields)가 실제로 불린다", () => {
+    const familySpy = vi.spyOn(instantModel, "seedAction");
     const fields: WheelUnit[] = ["year", "month", "day", "hour", "minute", "second"];
 
     render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T03:00:05" fields={fields} onChange={() => undefined} />);
@@ -4838,8 +4838,8 @@ describe("DateWheelPicker '지금'/hintNow 판정은 model.family를 거친다 (
   // familySpy가 "datetime"이 아닌 값을 돌려주면(예: 모델이 시각 열도 "date"로
   // 오판) 버튼이 지금이 아니라 오늘로 나와야 한다 — 판정이 실제로 반환값을
   // 쓰고 있는지(호출만 하고 무시하지 않는지)까지 본다.
-  it("model.family가 \"date\"를 돌려주면 시간 열이 있어도 버튼은 여전히 '오늘'이다", () => {
-    const familySpy = vi.spyOn(instantModel, "family").mockReturnValue("date");
+  it("model.seedAction이 \"today\"를 돌려주면 시간 열이 있어도 버튼은 여전히 '오늘'이다", () => {
+    const familySpy = vi.spyOn(instantModel, "seedAction").mockReturnValue("today");
     render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T03:00:05" fields={["year", "month", "day", "hour", "minute", "second"] as WheelUnit[]} onChange={() => undefined} />);
     fireEvent.click(fieldOf("거래 시각"));
 

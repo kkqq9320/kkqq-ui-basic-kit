@@ -1019,10 +1019,31 @@ export type WheelModel = {
   /* `hourFormat`은 3단계에서 붙었습니다(스펙 §7) — 12시간제면 시 열의 타이핑 상한이
    * 12이고, 그때 확정되는 수는 **값이 아니라 12시간 읽기**입니다. 그것을 값으로
    * 되돌리는 것이 `hourFromTwelve`입니다. 안 넘기면 24시간제로, 지금까지와 같습니다. */
-  typeDigit(unit: WheelUnit, buffer: string, digit: string, hourFormat?: HourFormat): TypingStep;
+  /** ⚠️ **`fields`가 필요한 이유는 기간 모델이 알려 줬습니다.** 그 모델은 상한이 열 조합에
+   *  달려 있어(그리는 열 중 맨 위가 무제한) `fields` 없이는 "이 첫 자리로 두 자리가 될 수
+   *  있나"를 답할 수 없습니다. 시점 모델은 상한이 문맥과 무관해서 이 인자 없이도 됐고,
+   *  그래서 계약이 오랫동안 시점 모양이었습니다 — 두 번째 구현이 드러낸 네 번째 자리입니다. */
+  typeDigit(unit: WheelUnit, buffer: string, digit: string, hourFormat?: HourFormat, fields?: WheelUnit[]): TypingStep;
   flushBuffer(unit: WheelUnit, buffer: string, hourFormat?: HourFormat): number | null;
-  hourFromTwelve(reading: number, half: "am" | "pm"): number;
-  now(timeZone: string, fields?: WheelUnit[]): string;
+  /** 12시간 읽기를 값으로. **선택입니다** — 기간처럼 오전/오후가 없는 모델은 안 냅니다.
+   *  기계는 `meridiem`이 `null`이 아닐 때만 부릅니다. */
+  hourFromTwelve?(reading: number, half: "am" | "pm"): number;
+  /** **값이 없을 때 쓸 씨앗값.** 모든 모델이 답할 수 있습니다 — 시점은 "지금",
+   *  기간은 "0". 빈 값으로 연 픽커의 기준값이자 씨앗 버튼이 확정하는 값입니다.
+   *
+   *  🔴 이 멤버는 한동안 `now`였습니다. 그 이름이 **세 가지 일을 겸하고** 있었고
+   *  (씨앗값 · 씨앗 버튼이 확정하는 값 · `resetTarget`의 기준값), 기간 모델을 실제로
+   *  만들어 보니 **기간은 1번만 답할 수 있는데 2번을 거절할 방법이 없었습니다** —
+   *  `지금` 버튼이 그대로 떴습니다. 버튼의 유무는 아래 `seedAction`이 답합니다. */
+  seed(timeZone: string, fields?: WheelUnit[]): string;
+  /** 팝오버 하단의 **씨앗 버튼**을 뭐라 부르나. `null`이면 **버튼 자체를 안 그립니다.**
+   *
+   *  🔴 이 자리에 한동안 `family(fields): ValueFamily`가 있었는데, 기계가 그 값으로
+   *  실제로 하는 일은 **이 버튼과 안내 문구의 이름을 고르는 것뿐**이었습니다. 이름이
+   *  답하는 질문("계열이 무엇인가")과 실제 쓰임이 달랐고, 그래서 기간이 `"time"`이라고
+   *  거짓말해야 했습니다. 질문을 실제 쓰임대로 고쳐 적으면 기간의 답은 `null`입니다.
+   *  `familyOf`는 모델 안에 그대로 있습니다 — 계약에서만 내려왔습니다. */
+  seedAction(fields: WheelUnit[]): "today" | "now" | null;
   // 값 지식 둘이 기계(DateWheelPicker.tsx)에 남아 있었습니다(설계 스펙 §1단계 측정·
   // §12) — min/max 접두 비교(rangeKey/outOfRange/clampToRange)와 commitToday의 값
   // 분해. 여기 셋이 그 둘을 마저 모델로 옮깁니다 — outOfRange/clampToRange는 위
@@ -1030,16 +1051,6 @@ export type WheelModel = {
   outOfRange(value: string, bounds: { min?: string; max?: string }, fields: WheelUnit[]): boolean;
   clampToRange(value: string, bounds: { min?: string; max?: string }, fields: WheelUnit[]): string;
   parts(value: string, fields: WheelUnit[]): UnitParts | null;
-  /** `fields`가 날짜/시각/날짜+시각 중 어느 계열인지(설계 스펙 §3.2) — 전체
-   *  브랜치 리뷰 F-4(2b-4). 기계(DateWheelPicker.tsx)가 "오늘/지금" 버튼과
-   *  팝오버 안내 문구를 고를 때 이걸로 묻습니다. 예전에는 기계가
-   *  `fields.some((unit) => unit === "hour" || …)`로 직접 셋을 이름으로
-   *  나열했는데, 이건 `familyOf(fields) !== "date"`와 값이 완전히 같은
-   *  술어라 §3.2가 금지한 "기계가 단위 이름을 안다"를 그대로 어기고
-   *  있었습니다(순수 함수 `familyOf`가 이미 아래서 이 판정을 하고 있었고,
-   *  기계는 그걸 다시 손으로 베껴 쓴 것입니다) — 여기로 노출해 기계가
-   *  모델에 묻게 합니다. */
-  family(fields: WheelUnit[]): ValueFamily;
   /** 오전/오후 조작이 존재하는가 + 지금 어느 절반인가(3단계, 스펙 §7). 시 열이 없으면
    *  `null` — `family`와 같은 이유로 여기 있습니다(기계가 단위 이름을 알지 않게). */
   meridiem(value: string, fields: WheelUnit[]): "am" | "pm" | null;
@@ -1053,6 +1064,13 @@ export type WheelModel = {
   parsePasted(text: string, fields: WheelUnit[], hour?: HourDisplay): string | null;
   /** 그 열의 격자 간격(설계 스펙 §8). 기계가 "이 값이 격자 위인가"를 물을 때 씁니다. */
   stepOf(unit: WheelUnit, step?: WheelStep): number;
+  /** 팝오버에서 **그 열 뒤에 붙일 기호**(기간의 `d`·`h`·`m`). `null`이면 안 그립니다.
+   *
+   *  🔴 시각 열 사이의 `:`와는 **다른 것**입니다. 저건 두 열을 잇는 **구분자**라 열
+   *  앞에 오고 CSS가 `data-unit`으로 직접 그립니다. 이건 각 열이 무엇인지 말하는
+   *  **단위 표시**라 열 뒤에 옵니다. 기간은 열 조합이 자유로워서(연·월만, 일·시만 …)
+   *  **자리만으로는 어느 열인지 못 읽습니다** — 트리거와 같은 이유입니다. */
+  columnMark?(unit: WheelUnit, fields: WheelUnit[]): string | null;
   /** 값 전체를 각 열의 격자로 내립니다. `지금` 버튼과 빈 값의 기준값처럼 **여러 열이
    *  한꺼번에 정해지는 자리**가 씁니다 — 없으면 타이핑과 버튼이 같은 수에 다르게 도착합니다. */
   snapValue(value: string, fields: WheelUnit[], step?: WheelStep): string;
@@ -1076,11 +1094,13 @@ export const instantModel: WheelModel = {
   typeDigit,
   flushBuffer,
   hourFromTwelve,
-  now: todayIn,
+  seed: todayIn,
+  /* 날짜만이면 `오늘`, 시각이 섞이면 `지금`. 이 판정이 `familyOf`를 쓰는 **유일한**
+   * 자리로 남았습니다 — 기계는 이제 계열을 아예 안 묻습니다. */
+  seedAction: (fields) => (familyOf(fields) === "date" ? "today" : "now"),
   outOfRange,
   clampToRange,
   parts: parseValue,
-  family: familyOf,
   meridiem: meridiemOf,
   resetTarget,
   parsePasted,

@@ -9,6 +9,7 @@ export { Select, type SelectOption, type SelectProps } from "./Select";
  * 됩니다. 래퍼 둘과 그 둘이 공유하는 타입·기본 라벨만 내놓습니다. */
 export { DateWheelPicker, type DateWheelPickerProps } from "./DateWheelPicker";
 export { TimeWheelPicker, type TimeWheelPickerProps } from "./TimeWheelPicker";
+export { DurationWheelPicker, DEFAULT_DURATION_LABELS, type DurationWheelPickerProps } from "./DurationWheelPicker";
 export { DEFAULT_WHEEL_LABELS, todayIn, type WheelLabels, type WheelPickerProps, type WheelUnit } from "./WheelPicker";
 export { SectionTabs, SectionHeading, MobilePageTabs, MobilePageTabsContext, useMobilePageTabs, PageTabsIcon, type MobilePageTabRegistration, type SectionTabsProps } from "./SectionTabs";
 export { Sidebar, MobileQuickBar, DEFAULT_SIDEBAR_LABELS, type SidebarProps, type SidebarNavItem, type SidebarNavSection, type SidebarFooter, type SidebarLabels, type MobileQuickBarItem } from "./Sidebar";

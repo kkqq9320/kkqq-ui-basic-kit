@@ -292,6 +292,35 @@
  * 불편한데? 너무 답답한 느낌이야." 그래서 `:`가 읽힐 만큼만 벌리고 더는 안 씁니다 —
  * 기본 간격 6px에 6px을 더해 12px, `:`(폭 6px)가 그 한가운데입니다. */
 .wheel-column:is([data-unit="minute"], [data-unit="second"]) { margin-left: 6px; }
+
+/* 🔴 **열의 단위 표시**(기간의 `d`·`h`·`m`). 시각 열 사이의 `:`와는 다른 것입니다 —
+ * 저건 두 열을 잇는 **구분자**라 열 앞에 오고 CSS가 `data-unit`으로 직접 그립니다.
+ * 이건 그 열이 무엇인지 말하는 **단위 표시**라 숫자 오른쪽에 오고, **모델이 값을
+ * 정합니다**(`WheelModel.columnMark`). 기간은 열 조합이 자유로워서 자리만으로는 어느
+ * 열인지 못 읽습니다(오너 리포트 2026-08-16).
+ *
+ * 🔴 **가짜 요소로 얹습니다 — 숫자를 밀면 안 됩니다.** 한 번은 선택된 행 안에 진짜
+ * `<span>`으로 넣어 봤는데, 그러면 버튼의 가운데 정렬이 숫자+기호를 **함께** 맞추느라
+ * **숫자가 옆으로 밀리고** 기호가 휠과 **같이 스크롤**했습니다(오너: "숫자가 옆으로
+ * 밀리고 거기에 기호가 들어왔네 … 숫자는 움직이고 기호는 그 자리에 있어야지").
+ * 숫자는 열 한가운데에 그대로 있고, 기호는 `:`처럼 **제자리에 고정**입니다.
+ *
+ * 자리는 열 오른쪽 끝이 아니라 **가운데 숫자 바로 옆**입니다(오너: "너무 우측에
+ * 쏠려 있어"). 열 폭이 변해도 숫자를 따라갑니다.
+ *
+ * 🔴 **숫자는 열 정중앙 그대로이고, 기호는 오른쪽 남은 공백의 한가운데입니다**
+ * (오너 리포트 2026-08-16). `left`를 숫자 오른쪽 끝(`50% + 9px`, 두 자리 숫자 반폭
+ * 실측 8.86px)에 두고 `right: 0`으로 남은 공백을 통째로 덮은 뒤 `text-align: center`로
+ * 그 안에서 가운데 둡니다 — 기호 폭을 알 필요가 없어 `y`든 `mo`든 저절로 맞습니다.
+ *
+ * ⚠️ **숫자를 밀지 마세요.** 덩어리 전체를 가운데 두려고 행에 오른쪽 패딩을 준 적이
+ * 있는데, 그러면 숫자가 열 정중앙에서 벗어납니다(오너: "숫자는 중앙에 있어야 해").
+ * 기호가 스스로 자리를 찾게 두는 것이 답입니다. */
+.wheel-column::after {
+  content: var(--wheel-unit-mark, ""); position: absolute; z-index: 1; left: calc(50% + 9px); right: 0; text-align: center;
+  top: calc(30px + var(--wheel-rows-h) / 2); transform: translateY(-50%);
+  color: #fff; font-size: var(--action-font-size); font-weight: 700; line-height: 1; opacity: .72; pointer-events: none;
+}
 .wheel-column:is([data-unit="minute"], [data-unit="second"])::before {
   content: ":"; position: absolute; z-index: 1; left: -9px; top: calc(30px + var(--wheel-rows-h) / 2);
   transform: translateY(-50%); width: 6px; text-align: center; color: var(--muted); font-size: var(--font-size-control); font-weight: 700; line-height: 1; pointer-events: none;
