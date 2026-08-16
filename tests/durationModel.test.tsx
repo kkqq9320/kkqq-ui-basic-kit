@@ -117,8 +117,8 @@ describe("계약 — 기계가 기간 모델로도 돈다", () => {
   it("휠이 돈다", () => {
     renderDuration();
     fireEvent.click(fieldOf("기간"));
-    // 선택된 행에는 단위 기호가 붙습니다 — 덩어리 전체가 가운데 오도록 행 안에 넣었습니다.
-    expect(rowsOf("hour")).toEqual(["—", "00", "01h", "02", "03"]);
+    // 기호는 행 안이 아니라 열에 얹힙니다 — 숫자를 밀지 않고 휠과 같이 스크롤하지도 않습니다.
+    expect(rowsOf("hour")).toEqual(["—", "00", "01", "02", "03"]);
   });
 
   /* 🔴 위 "0 아래는 없는 값"이 화면에서 실제로 무엇이 되는지 — 이걸 안 보면 모델이
@@ -156,7 +156,7 @@ describe("계약 — 기간이 거짓말하지 않아도 되는가", () => {
     render(<WheelPicker model={durationModel} ariaLabel="기간" value="" onChange={() => undefined} fields={HM} />);
     fireEvent.click(fieldOf("기간"));
     // 0에서는 아래 두 칸이 전부 `—`라 인덱스로 짚으면 안 됩니다 — 선택된 행으로 봅니다.
-    expect(document.querySelector('.wheel-column[data-unit="hour"] .wheel-values button.selected')?.textContent).toBe("00h");
+    expect(document.querySelector('.wheel-column[data-unit="hour"] .wheel-values button.selected')?.textContent).toBe("00");
   });
 
   it("hourFromTwelve를 안 내도 된다 — 계약에서 선택이다", () => {
