@@ -44,6 +44,19 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.8.0
 
 ### 더해진 것 (기간)
 
+- **`DurationWheelPicker`** — 기간 쪽 래퍼이자 이 릴리스의 새 공개 컴포넌트. 기본
+  `fields`는 시·분(`"01:30"` = 1시간 30분)이고, 사다리(연·월·일·시·분·초)에서 잘라낸
+  연속 구간이면 무엇이든 받습니다 — `["day","hour"]`처럼 가운데를 잘라도 되고,
+  `["year","month"]`로 "2년 3개월"짜리 계약 기간도 됩니다.
+  🔴 **시점 래퍼 둘처럼 구간을 나눠 갖지 않습니다** — 값 도메인 자체가 달라 겹칠 일이
+  없습니다. 같은 `["hour","minute"]`이라도 `TimeWheelPicker`는 "오전 3시 30분"이고
+  이쪽은 "3시간 30분"입니다.
+  기본 라벨 **`DEFAULT_DURATION_LABELS`**도 함께 내놓습니다 — `units`가 **자리 이름**이
+  아니라 **세는 이름**입니다(`month`가 "월"이 아니라 "개월").
+  ⚠️ **알려진 잔여** — `WheelLabels`가 아직 `weekdays`와 `meridiem`을 **필수로** 요구해서,
+  기간이 안 쓰는 값이 `DEFAULT_DURATION_LABELS`에 그대로 실려 나갑니다. 그리는 것에는
+  영향이 없고(모델의 `meridiem`이 `null`이라 오전/오후 토글 자체가 안 그려집니다)
+  계약이 아직 시점 쪽으로 기울어 있다는 표시입니다 — 정리의 다음 후보입니다.
 - **`instantModel.durationModel`이 아니라 `src/model/duration.ts`의 `durationModel`** —
   `WheelModel`의 두 번째 구현. 단위는 연·월·일·시·분·초로 시점과 **이름이 같고 뜻이
   다릅니다**(`month`가 "몇 월"이 아니라 "몇 개월"). 그래서 바닥값이 전부 0입니다.
