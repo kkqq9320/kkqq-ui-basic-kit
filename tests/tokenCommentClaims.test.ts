@@ -3,7 +3,7 @@
 /* **`tokens.css`의 주석이 "이 토큰은 편집기에 안 내놓는다"고 말하면, 실제로 안 내놓아야 한다.**
  *
  * 실제로 어긋나 있었습니다: `--segmented-track`·`--segmented-chip` 위 주석이 "편집기에는
- * 안 내놓습니다"인데 `src/themeTokens.ts`는 둘 다 내놓고 있었고, 그 위 주석은 정반대로
+ * 안 내놓습니다"인데 `src/theme/themeTokens.ts`는 둘 다 내놓고 있었고, 그 위 주석은 정반대로
  * "🔴 **쌍입니다 — 둘을 같이 내놓습니다**(오너 결정 2026-08-13)"였습니다. **한 저장소의 두
  * 파일이 같은 사실을 정면으로 반대로 말한 것**입니다. 결정이 뒤집힐 때 한쪽 주석만 따라간
  * 자리이고, 그 종류는 사람이 다시 안 읽습니다.
@@ -16,7 +16,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { THEME_TOKEN_GROUPS } from "../src/themeTokens";
+import { THEME_TOKEN_GROUPS } from "../src/theme/themeTokens";
 import tokensCssSource from "../css/tokens.css?raw";
 
 /** 편집기에 안 내놓는다고 **주장한** 주석. 문구가 바뀌면 여기도 같이 고치세요. */

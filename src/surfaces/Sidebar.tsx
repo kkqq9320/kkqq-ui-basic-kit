@@ -11,7 +11,9 @@
  */
 import type { ReactNode, Ref } from "react";
 
-import { useBackToClose } from "./popupDismiss";
+import { Pressable } from "../controls/Pressable";
+
+import { useBackToClose } from "../browser/popupDismiss";
 
 export type SidebarNavItem = {
   id: string;
@@ -78,7 +80,7 @@ function NavEntry({ item, onNavigate }: { item: SidebarNavItem; onNavigate?: () 
   if (item.href) {
     return <a {...shared} href={item.href} aria-current={item.active ? "page" : undefined} onClick={() => { item.onSelect?.(); onNavigate?.(); }}>{inner}</a>;
   }
-  return <button {...shared} type="button" aria-current={item.active ? "page" : undefined} onClick={() => { item.onSelect?.(); onNavigate?.(); }}>{inner}</button>;
+  return <Pressable {...shared} aria-current={item.active ? "page" : undefined} onClick={() => { item.onSelect?.(); onNavigate?.(); }}>{inner}</Pressable>;
 }
 
 export function Sidebar({ brand, sections, slot, footer, collapsed = false, onToggleCollapse, mobileOpen = false, onMobileClose, labels: labelOverrides, className = "" }: SidebarProps) {
@@ -101,10 +103,10 @@ export function Sidebar({ brand, sections, slot, footer, collapsed = false, onTo
     <div className="sidebar-brand">
       {brand.icon && <span>{brand.icon}</span>}
       <strong>{brand.title}</strong>
-      {onToggleCollapse && <button type="button" className="sidebar-collapse-button" onClick={onToggleCollapse} aria-label={collapsed ? labels.expand : labels.collapse} title={collapsed ? labels.expand : labels.collapse}>
+      {onToggleCollapse && <Pressable className="sidebar-collapse-button" onClick={onToggleCollapse} aria-label={collapsed ? labels.expand : labels.collapse} title={collapsed ? labels.expand : labels.collapse}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d={collapsed ? "m9 5 7 7-7 7" : "m15 5-7 7 7 7"} /></svg>
-      </button>}
-      {onMobileClose && <button type="button" className="mobile-sidebar-close" onClick={onMobileClose} aria-label={labels.close}>×</button>}
+      </Pressable>}
+      {onMobileClose && <Pressable className="mobile-sidebar-close" onClick={onMobileClose} aria-label={labels.close}>×</Pressable>}
     </div>
 
     {slot && <div className="sidebar-slot">{slot}</div>}
@@ -118,7 +120,7 @@ export function Sidebar({ brand, sections, slot, footer, collapsed = false, onTo
       {footer.avatar}
       <span className="sidebar-user-copy"><strong>{footer.name}</strong>{footer.subtitle && <small>{footer.subtitle}</small>}</span>
       {footer.actions?.length ? <span className="sidebar-user-actions">
-        {footer.actions.map((action) => <button type="button" className="sidebar-icon-button" onClick={action.onClick} aria-label={action.label} title={action.label} key={action.id}>{action.icon}</button>)}
+        {footer.actions.map((action) => <Pressable className="sidebar-icon-button" onClick={action.onClick} aria-label={action.label} title={action.label} key={action.id}>{action.icon}</Pressable>)}
       </span> : null}
     </div>}
   </aside>;
@@ -133,6 +135,6 @@ export type MobileQuickBarItem = { id: string; label: string; icon: ReactNode; a
  */
 export function MobileQuickBar({ items, ariaLabel = "빠른 메뉴", barRef, className = "" }: { items: MobileQuickBarItem[]; ariaLabel?: string; barRef?: Ref<HTMLElement>; className?: string }) {
   return <nav ref={barRef} className={`mobile-quick-bar ${className}`.trim()} aria-label={ariaLabel}>
-    {items.map((item) => <button type="button" className={item.active ? "active" : undefined} onClick={item.onClick} aria-label={item.ariaLabel ?? item.label} key={item.id}>{item.icon}<span>{item.label}</span></button>)}
+    {items.map((item) => <Pressable className={item.active ? "active" : undefined} onClick={item.onClick} aria-label={item.ariaLabel ?? item.label} key={item.id}>{item.icon}<span>{item.label}</span></Pressable>)}
   </nav>;
 }

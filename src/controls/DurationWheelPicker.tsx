@@ -11,8 +11,8 @@
  * `seedAction`이 `null`) `today`·`now`·`hintNow`는 안 쓰입니다.
  */
 import { WheelPicker, DEFAULT_WHEEL_LABELS, type WheelPickerProps, type WheelLabels } from "./WheelPicker";
-import { durationModel } from "./model/duration";
-import type { WheelUnit } from "./model/instant";
+import { durationModel } from "../model/duration";
+import type { WheelUnit } from "../model/instant";
 
 const DURATION_FIELDS: WheelUnit[] = ["hour", "minute"];
 

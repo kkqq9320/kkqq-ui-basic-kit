@@ -9,7 +9,7 @@
  * 사라지므로 `WheelPicker`는 배럴에서 내보내지 않습니다.
  */
 import { WheelPicker, type WheelPickerProps } from "./WheelPicker";
-import { instantModel, type WheelUnit } from "./model/instant";
+import { instantModel, type WheelUnit } from "../model/instant";
 
 
 const DATE_FIELDS: WheelUnit[] = ["year", "month", "day"];

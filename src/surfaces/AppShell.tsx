@@ -21,7 +21,9 @@
  */
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
-import { useVirtualKeyboard, type VirtualKeyboard } from "./visualViewport";
+import { Pressable } from "../controls/Pressable";
+
+import { useVirtualKeyboard, type VirtualKeyboard } from "../browser/visualViewport";
 
 /** 포커스된 요소의 아래쪽과 키보드 사이에 남길 여유(px).
  *
@@ -1051,7 +1053,7 @@ export function AppShell({ sidebar, children, collapsed = false, mobileOpen = fa
   // (지금 스크롤 위치가 허락하는 만큼) 0으로 돌아가 레이아웃도 원래 폭으로 돌아갑니다.
   const style = { "--keyboard-inset": `${keyboardInset}px` } as CSSProperties;
   return <div className={shellClassName} style={style}>
-    {mobileOpen && onMobileClose && <button type="button" className="mobile-sidebar-overlay" aria-label={overlayLabel} onClick={onMobileClose} />}
+    {mobileOpen && onMobileClose && <Pressable className="mobile-sidebar-overlay" aria-label={overlayLabel} onClick={onMobileClose} />}
     {sidebar}
     <main className="workspace" ref={workspaceRef}>{children}</main>
     {quickBar}

@@ -17,12 +17,12 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { KIT_RESERVED, findConflict } from "../src/shortcuts";
+import { KIT_RESERVED, findConflict } from "../src/shortcuts/shortcuts";
 
 // `.tsx`만 보면 `src/`의 `.ts` 파일(`shortcuts.ts`·`popupDismiss.ts`·`positioning.ts` 등)이
 // 이 검사의 시야 밖으로 빠집니다 — §5.2가 막으려는 "조용히 틀린 예약 목록"이 확장자
 // 하나 차이로 새는 자리였습니다. `keyConsumers.test.ts`처럼 둘 다 봅니다.
-const sources = import.meta.glob("../src/*.{ts,tsx}", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+const sources = import.meta.glob("../src/**/*.{ts,tsx}", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 
 describe("액션끼리의 충돌", () => {
   it("같은 조합을 쓰는 다른 액션을 잡는다", () => {

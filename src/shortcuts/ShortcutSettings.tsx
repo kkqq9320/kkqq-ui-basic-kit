@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { Button } from "./Button";
+import { Button } from "../controls/Button";
 
 import { useShortcutRegistry } from "./ShortcutProvider";
 import { beginRecording, bindingWarning, comboFromEvent, endRecording, findConflict, formatCombo, UNBINDABLE_CODES, unbindableReason, type UnbindableReason } from "./shortcuts";
@@ -33,7 +33,7 @@ export type ShortcutSettingsProps = {
 
 /** `code`는 사람이 읽기 나쁩니다. 빠진 항목은 원시 `code`가 그대로 보일 뿐
  * **동작은 안 틀립니다**(스펙 §4) — 설정 화면에서 눈에 띄면 그때 더하면 됩니다. */
-const CODE_LABELS: Record<string, string> = { Semicolon: ";", Comma: ",", Period: ".", Slash: "/", Backslash: "\\", Quote: "'", BracketLeft: "[", BracketRight: "]", Minus: "-", Equal: "=", Backquote: "`", Space: "Space" };
+const CODE_LABELS: Record<string, string> = { Semicolon: ";", Comma: ",", Period: "./shortcuts", Slash: "/", Backslash: "\\", Quote: "'", BracketLeft: "[", BracketRight: "]", Minus: "-", Equal: "=", Backquote: "`", Space: "Space" };
 
 function labelForCode(code: string): string {
   if (CODE_LABELS[code]) return CODE_LABELS[code];
@@ -68,7 +68,7 @@ export function ShortcutSettings({ onChange, className }: ShortcutSettingsProps)
   // `DateWheelPicker`의 `fields` 오배선 경고와 같은 선례를 그대로 따릅니다(전체 리뷰
   // Important 2) — `import.meta.env`는 Vite 전용 확장이라 그 자리가 아예 없는
   // 번들러도 있습니다. `?.` 없이 `.DEV`를 읽으면 그 자리에서 `TypeError`를 던지므로
-  // (이 킷은 `exports["."]`가 소스를 그대로 내보내 소비자의 번들러를 그대로 탑니다),
+  // (이 킷은 `exports["./shortcuts"]`가 소스를 그대로 내보내 소비자의 번들러를 그대로 탑니다),
   // 옵셔널 체이닝이 "던지지 않는다"는 목적이 실제로 성립하는 데 필수입니다.
   const importMetaEnv = (import.meta as { env?: { DEV?: boolean } }).env;
   // 배선 누락 경고를 인스턴스당 한 번만 냅니다 — 녹음·지우기마다 매번 찍히면 신호가

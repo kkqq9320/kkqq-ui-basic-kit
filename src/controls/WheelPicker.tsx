@@ -12,6 +12,8 @@
  */
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
 
+import { Pressable } from "./Pressable";
+
 import { Button } from "./Button";
 import { createPortal } from "react-dom";
 
@@ -24,16 +26,16 @@ import {
   type WheelUnit,
   type HourDisplay,
   type WheelStep,
-} from "./model/instant";
-import { getHourFormat, getHourFormatServerSnapshot, getWheelRowsPerSide, getWheelRowsPerSideServerSnapshot, subscribeHourFormat, subscribeWheelRowsPerSide } from "./settings";
-import { useBackToClose, useEscapeToClose } from "./popupDismiss";
-import { isPrimaryButton } from "./pointerButton";
-import { dropdownViewportSpace, focusTriggerOnClick, onViewportChange } from "./positioning";
+} from "../model/instant";
+import { getHourFormat, getHourFormatServerSnapshot, getWheelRowsPerSide, getWheelRowsPerSideServerSnapshot, subscribeHourFormat, subscribeWheelRowsPerSide } from "../settings";
+import { useBackToClose, useEscapeToClose } from "../browser/popupDismiss";
+import { isPrimaryButton } from "../browser/pointerButton";
+import { dropdownViewportSpace, focusTriggerOnClick, onViewportChange } from "../browser/positioning";
 
 /* `todayIn`은 `index.ts`가 내보내고, `WheelUnit`은 tests/DateWheelPicker.test.tsx가
  * 이 경로로 가져옵니다. 모델로 옮긴 뒤에도 그 경로를 그대로 유지합니다 — 이 단계는
  * 공개 표면을 하나도 바꾸지 않습니다. */
-export { todayIn, type WheelUnit } from "./model/instant";
+export { todayIn, type WheelUnit } from "../model/instant";
 
 /** 기본은 연·월·일 3열. 상수로 둬서 기본값일 때 매 렌더 새 배열이 생기지 않게 합니다.
  *  타입은 `WheelUnit`(여섯 단위)까지 넓고, Task 3부터 컴포넌트가 시·분·초를 실제로
@@ -372,7 +374,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
   // `/// <reference types="vite/client" />`가 `ImportMeta.env`(필수 `ImportMetaEnv`)를
   // 프로그램 전역에 채워 줍니다 — 그래서 저장소 `tsc`는 이 줄에서 항상 초록이었습니다.
   // 하지만 `package.json`의 `files`에는 **`tests`가 없어**, 소비자에게 배포되는
-  // `src/DateWheelPicker.tsx`만 단독으로 컴파일하면(vite 타입 없이)
+  // `src/controls/DateWheelPicker.tsx`만 단독으로 컴파일하면(vite 타입 없이)
   // `Property 'env' does not exist on type 'ImportMeta'`로 거절됩니다 — 배포되는
   // 소스의 타입 통과가 소비자가 절대 못 받는 파일에 기대고 있었던 것입니다.
   // 그래서 아래는 지역 캐스트로 `env`가 아예 없는 경우까지 타입에서 인정합니다.
@@ -1521,7 +1523,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    *  한동안 조건 없이 걸었고, 그래서 **복사할 것이 없는데도 브라우저의 복사를 막았습니다.**
    *
    *  왜 그게 결함인가: 이 저장소는 `Ctrl+C`를 앱이 **다시 정의하지 못하게** 막아 뒀습니다
-   *  (`src/shortcuts.ts`의 `UNBINDABLE_EDIT_CODES`, 오너 결정 2026-08-13 —
+   *  (`src/shortcuts/shortcuts.ts`의 `UNBINDABLE_EDIT_CODES`, 오너 결정 2026-08-13 —
    *  "복사·붙여넣기·되돌리기는 너무 중요해서 앱이 다시 정의하면 안 된다"). 그 키를 그렇게
    *  보호해 놓고 **픽커 자신이 빈 값에서 먹는 것**은 같은 원칙을 어기는 자리입니다.
    *  페이지에서 드래그해 둔 글자를 복사하려던 사람은 아무것도 못 얻습니다. */
@@ -2091,7 +2093,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     }
 
     if (key !== "Enter" && key !== " " && key !== "ArrowUp" && key !== "ArrowDown") return;
-    // Enter·Space: <button>은 Enter를 keydown에서, Space를 keyup에서 click으로 바꾸고,
+    // Enter·Space: <Pressable>은 Enter를 keydown에서, Space를 keyup에서 click으로 바꾸고,
     // 그 click은 트리거의 onClick(열기/닫기 토글)을 부른다 — 막지 않으면 닫힘에서는 연
     // 직후 다시 닫고, 열림에서는 확정하며 닫은 것을 **다시 연다.** 그래서 §3의 계약은
     // "두 상태 모두에서 항상 preventDefault"다. ⚠️ 열림 쪽 결함은 **jsdom에서 재현되지
@@ -2307,7 +2309,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
         포커스된 버튼을 언마운트하면 focus만 기록되고 blur는 없으며 activeElement는 body로
         갑니다). 그래서 이 핸들러와 그 규칙이 충돌하지 않습니다. tests의 "버퍼를 든 채
         언마운트되면 확정하지 않고 버린다"가 그 전제까지 함께 지킵니다. */}
-    <div className="wheel-trigger-shell"><button id={id} ref={triggerRef} type="button" className={editing ? "wheel-trigger editing" : "wheel-trigger"} aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onPaste={handlePaste} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onBlur={() => { setEditing(false); flushTyping(); }} onClick={(event) => {
+    <div className="wheel-trigger-shell"><Pressable id={id} buttonRef={triggerRef} className={editing ? "wheel-trigger editing" : "wheel-trigger"} aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onPaste={handlePaste} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onBlur={() => { setEditing(false); flushTyping(); }} onClick={(event) => {
       // 맨 앞이어야 합니다 — 아래 어느 갈래로 빠지든 포커스는 트리거에 와야 합니다.
       // 근거는 positioning.ts의 헬퍼 주석(맥은 mousedown에서 포커스를 걷어갑니다).
       focusTriggerOnClick(event.currentTarget);
@@ -2405,7 +2407,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
              (`.wheel-trigger:focus-within` — §4.5: 포커스 없는 필드에 활성 표시가 남으면
              그 필드가 입력을 받는 중으로 읽힙니다). */
           : <span className={`wheel-segment${resolvedActiveUnit === part.unit ? " active" : ""}`} data-unit={part.unit} key={part.unit}>{part.text}</span>)
-        : labels.placeholder}</span><i className="wheel-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm2-2v4m10-4v4M3 9h18" /></svg></i></button></div>
+        : labels.placeholder}</span><i className="wheel-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm2-2v4m10-4v4M3 9h18" /></svg></i></Pressable></div>
     {/* onMouseDown의 기본 동작을 막는 것이 §6.2의 불변식("키보드를 받는 동안
         activeElement는 언제나 트리거")을 **팝오버 쪽에서** 지키는 장치입니다 — 설계 스펙 §6.3.
         포커스 이동과 텍스트 선택이 mousedown의 기본 동작입니다. `click`은 그대로
@@ -2456,7 +2458,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
             const pressed = meridiem === half;
             // 반대 절반으로 못 가면(경계가 통째로 막았으면) 그 버튼은 열의 ± 버튼과
             // **같은 규칙으로** disabled입니다 — `shifted(...) === null`이 그 판정입니다.
-            return <button type="button" tabIndex={-1} className={pressed ? "selected" : ""} aria-pressed={pressed} aria-keyshortcuts={half === "am" ? "a" : "p"} disabled={!pressed && meridiemShift === null} {...tapActivation(() => { setTyping(null); if (!pressed) flipMeridiem(); })} key={half}>{half === "am" ? meridiemLabels.am : meridiemLabels.pm}</button>;
+            return <Pressable tabIndex={-1} className={pressed ? "selected" : ""} aria-pressed={pressed} aria-keyshortcuts={half === "am" ? "a" : "p"} disabled={!pressed && meridiemShift === null} {...tapActivation(() => { setTyping(null); if (!pressed) flipMeridiem(); })} key={half}>{half === "am" ? meridiemLabels.am : meridiemLabels.pm}</Pressable>;
           })}
         </div>
       )}
@@ -2470,12 +2472,12 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
             `onPointerDown`의 `setActiveUnit(unit)`이 **포인터 경로가 활성 세그먼트를 따라가는
             유일한 길**입니다(열의 `onFocus`가 하던 일). 지우지 마세요. */}
         {columns.map((unit) => { const motion = columnMotion[unit]; const unitMark = model.columnMark?.(unit, fields) ?? ""; return <section className={`wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}${holdingUnit === unit ? " holding" : ""}`} aria-label={columnName(unit)} data-unit={unit} role="group" style={{ "--wheel-unit-mark": JSON.stringify(unitMark) } as CSSProperties} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); beginUndoGesture(); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; armHold(unit, event.pointerId, event.clientY); }} onPointerMove={(event) => { const hold = holdRef.current; if (hold && hold.pointerId === event.pointerId && Math.abs(event.clientY - hold.y) > 4) cancelHold(); moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget); }} onPointerUp={(event) => { cancelHold(); finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget); endUndoGesture(); }} onPointerCancel={(event) => { cancelHold(); endUndoGesture(); swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
-          <button type="button" className="wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></button>
+          <Pressable className="wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></Pressable>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
               컨테이너의 key가 바뀌어 행이 통째로 리마운트되므로 포커스를 둘 수도 없습니다. */}
-          <div className="wheel-viewport"><div className="wheel-values" key={`${unit}-${motion.sequence}`}>{offsets.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === rowsPerSide + 1; const buffered = offset === 0 && resolvedTyping?.unit === unit ? resolvedTyping.digits : null; return <button type="button" className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={(event) => { if (offset === 0 && centreTapped(unit, event.timeStamp)) return; if (rowValue) applyShift(unit, offset); }} key={offset}>{buffered ?? (rowValue ? model.label(rowValue, unit, weekdayLabels, fields, hourDisplay) : "—")}</button>; })}</div></div>
-          <button type="button" className="wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.next}`} disabled={!shifted(unit, 1)} onClick={() => applyShift(unit, 1)}><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></button>
+          <div className="wheel-viewport"><div className="wheel-values" key={`${unit}-${motion.sequence}`}>{offsets.map((offset) => { const rowValue = shifted(unit, offset); const preloadOnly = Math.abs(offset) === rowsPerSide + 1; const buffered = offset === 0 && resolvedTyping?.unit === unit ? resolvedTyping.digits : null; return <Pressable className={offset === 0 ? "selected" : ""} disabled={!rowValue} tabIndex={-1} aria-hidden={preloadOnly || undefined} aria-current={offset === 0 ? "date" : undefined} onClick={(event) => { if (offset === 0 && centreTapped(unit, event.timeStamp)) return; if (rowValue) applyShift(unit, offset); }} key={offset}>{buffered ?? (rowValue ? model.label(rowValue, unit, weekdayLabels, fields, hourDisplay) : "—")}</Pressable>; })}</div></div>
+          <Pressable className="wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.next}`} disabled={!shifted(unit, 1)} onClick={() => applyShift(unit, 1)}><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></Pressable>
         </section>; })}
       </div>
       {/* setTyping(null)을 먼저 부르는 이유는 handleShortcut의 Ctrl+;/Delete 분기와 같다 —

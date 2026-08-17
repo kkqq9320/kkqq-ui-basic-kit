@@ -8,8 +8,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DateWheelPicker } from "../src/DateWheelPicker";
-import { TimeWheelPicker } from "../src/TimeWheelPicker";
+import { DateWheelPicker } from "../src/controls/DateWheelPicker";
+import { TimeWheelPicker } from "../src/controls/TimeWheelPicker";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 

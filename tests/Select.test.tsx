@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Select, scrollActiveOptionIntoView } from "../src/Select";
+import { Select, scrollActiveOptionIntoView } from "../src/controls/Select";
 import selectCssSource from "../css/select.css?raw";
 import surfacesCssSource from "../css/surfaces.css?raw";
 
@@ -767,7 +767,7 @@ describe("Select", () => {
      * **다이얼로그의 포커스 스코프 밖으로** 나갑니다.
      *
      * `state: null`로 popstate를 쏘는 것이 "표식이 사라진 자리에 착지했다"입니다 —
-     * `src/popupDismiss.ts`의 `handlePopState`가 보는 것이 정확히 그 값입니다. */
+     * `src/browser/popupDismiss.ts`의 `handlePopState`가 보는 것이 정확히 그 값입니다. */
     it("뒤로가기로 닫으면 메뉴가 닫힌다", () => {
       render(<ControlledSelect initialValue="a" />);
       fireEvent.keyDown(screen.getByRole("button", { name: "항목" }), { key: "ArrowDown" });

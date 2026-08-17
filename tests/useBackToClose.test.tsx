@@ -8,7 +8,7 @@ import { StrictMode, useLayoutEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppShell, Dialog, Select, Sidebar } from "../src";
-import { takeUnlandedBackCountForTest } from "../src/popupDismiss";
+import { takeUnlandedBackCountForTest } from "../src/browser/popupDismiss";
 
 const STACK_KEY = "__dsPopupStack";
 
@@ -619,7 +619,7 @@ describe("B3: 같은 커밋에서 겹친 팝업 두 개가 함께 닫히는 동�
   });
 
   it("Select의 choose()가 onChange로 감싸는 Dialog까지 같이 닫으면, 두 표식 모두 back()으로 소비되고 scrollRestoration도 결국 auto로 복원된다", () => {
-    // 원인: choose()(src/Select.tsx)는 onChange를 부른 뒤 곧바로 setOpen(false)를
+    // 원인: choose()(src/controls/Select.tsx)는 onChange를 부른 뒤 곧바로 setOpen(false)를
     // 부른다. 이 테스트의 onChange는 감싸는 Dialog도 같은 틱에서 닫으므로, Dialog와
     // Select 두 useBackToClose 인스턴스의 정리 effect가 "같은 커밋"에서 함께 도는
     // 동시 정리 상황을 만든다. 각자 window.setTimeout(0)으로 자기 정리를 예약하는데

@@ -934,8 +934,8 @@ model/*.ts        값 모델(시점·기간). 화면도 DOM도 모릅니다
 | 자리 | 무엇이 어긋나는가 |
 |---|---|
 | `model/instant.ts` (약 1110줄) | 규칙 4. 시점 모델 하나이긴 한데 킷에서 두 번째로 큰 파일입니다 — 이음매를 아직 안 쟀습니다 |
-| `PageChrome.tsx` · `SectionTabs.tsx` | 규칙 4. 파일 이름이 대표 컴포넌트 이름이 아닌 묶음 파일입니다 |
-| `WheelPicker.tsx` (약 2500줄) · `AppShell.tsx` (약 1060줄) | 줄 수만으로는 쪼갤 근거가 아닙니다. 이음매를 재고 나서 정합니다 |
+| `surfaces/PageChrome.tsx` · `surfaces/SectionTabs.tsx` | 규칙 4. 파일 이름이 대표 컴포넌트 이름이 아닌 묶음 파일입니다 |
+| `controls/WheelPicker.tsx` (약 2500줄) · `surfaces/AppShell.tsx` (약 1060줄) | 줄 수만으로는 쪼갤 근거가 아닙니다. 이음매를 재고 나서 정합니다 |
 
 ### 배럴의 순서 — 역할별 묶음
 
@@ -1037,3 +1037,39 @@ nav(`aria-current="page"` + `class="active"`). 둘이 갈리면 **화면과 스�
 
 백로그 8·9번(세그먼트 슬라이드·눌림 피드백)이 휠과 탭을 어차피 다시 엽니다. 그때
 같이 옮기는 것이 자연스럽습니다.
+
+### 폴더 — 배럴의 묶음이 곧 폴더입니다
+
+```
+src/  controls/   surfaces/   theme/   shortcuts/   browser/   model/
+      index.ts    settings.ts
+```
+
+**축을 새로 만들지 않았습니다.** 위 "배럴의 순서"가 정한 여섯 묶음 그대로이고, 폴더가
+그것과 **하나씩 짝**입니다. 목차와 파일 트리가 같은 축이면 새 파일 자리가 저절로
+정해집니다 — `tests/moduleLayers.test.ts`가 둘이 어긋나면 빨개집니다.
+
+- **묶음에 파일이 하나면 폴더를 안 만듭니다** — `settings.ts`가 루트에 있는 이유입니다.
+- `model/`은 묶음이 아니라 **값 모델**이라 배럴 짝이 없습니다(배럴은 모델을 안 내보냅니다).
+- 배럴이 안 내보내는 비공개 헬퍼도 자기 묶음 폴더에 둡니다(`controls/selectKeyboard.ts`).
+
+⚠️ **폴더는 이름 바꾸기보다 훨씬 쌉니다 — 이 둘을 한 덩어리로 보지 마세요.** 실측:
+
+```
+폴더 이동에 낡는 주석 인용      34건   (src/ 경로가 붙은 것만)
+안 낡는 것(파일명만 쓴 인용)   253건   ← 폴더가 바뀌어도 파일명은 그대로
+import 경로                    114곳   ← 전부 컴파일러가 잡습니다
+```
+
+이름을 바꾸는 것은 **253건이 전부 사정권**에 들어옵니다. 그래서 폴더가 먼저입니다.
+
+### 아직 이름이 어긋나는 자리 — 폴더가 드러낸 것
+
+폴더로 묶고 나니 **같은 말을 두 번 하는 이름**이 보입니다. 이름 바꾸기는 위 253건이
+걸린 별도 라운드라 이번에 안 했고, 여기 적어 둡니다:
+
+| 지금 | 문제 | 후보 |
+|---|---|---|
+| `shortcuts/shortcuts.ts` | 폴더 안에서 파일 이름이 아무것도 안 말합니다 | `shortcuts/combo.ts` |
+| `theme/themeTokens.ts` · `theme/themePalette.ts` | 같은 되풀이 | `theme/tokens.ts` · `theme/palette.ts` |
+| `shortcuts/shortcutStorage.ts` | 같음 | `shortcuts/storage.ts` |

@@ -14,6 +14,8 @@
  */
 import { useEffect, useRef, useState, type CSSProperties} from "react";
 
+import { Pressable } from "../controls/Pressable";
+
 import {
   THEME_TOKEN_GROUPS,
   applyTokenOverrides,
@@ -262,14 +264,12 @@ export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKE
   return <section className={`panel theme-color-panel ${className}`.trim()} style={cardMin || cardMax ? ({ ...(cardMin ? { "--color-card-min": cardMin } : {}), ...(cardMax ? { "--color-card-max": cardMax } : {}) } as CSSProperties) : undefined}>
     <div className="panel-heading">
       <div><small>COLORS</small><h2>색상</h2></div>
-      <button
-        type="button"
-        className="theme-color-icon-button"
+      <Pressable className="theme-color-icon-button"
         aria-label={changedCount ? `색상 ${changedCount}개 모두 기본값으로` : "모두 기본값으로"}
         title={changedCount ? `모두 기본값으로 (${changedCount})` : "모두 기본값으로"}
         disabled={changedCount === 0}
         onClick={resetAll}
-      ><ResetIcon />{changedCount > 0 && <b>{changedCount}</b>}</button>
+      ><ResetIcon />{changedCount > 0 && <b>{changedCount}</b>}</Pressable>
     </div>
     <p className="muted-copy">
       지금은 <strong>{theme === "dark" ? "다크" : "라이트"} 모드</strong> 색을 바꾸고 있습니다.
@@ -306,22 +306,18 @@ export function ThemeColorEditor({ theme, onChange, palette, groups = THEME_TOKE
               <small>{token.name}</small>
             </span>
             <span className="theme-color-actions">
-              <button
-                type="button"
-                className="theme-color-icon-button"
+              <Pressable className="theme-color-icon-button"
                 aria-label={`${token.label} 직전 값으로`}
                 title="직전 값으로"
                 disabled={!history[token.name]?.length}
                 onClick={() => undoToken(token)}
-              ><UndoIcon /></button>
-              <button
-                type="button"
-                className="theme-color-icon-button"
+              ><UndoIcon /></Pressable>
+              <Pressable className="theme-color-icon-button"
                 aria-label={`${token.label} 기본값으로`}
                 title={`기본값 ${fallback}`}
                 disabled={!changed}
                 onClick={() => resetToken(token)}
-              ><ResetIcon /></button>
+              ><ResetIcon /></Pressable>
             </span>
             {/* 치는 중에는 초안을, 아니면 커밋된 값을 보입니다 — 초안 없이 커밋된 값만
                 걸면 파싱에 실패하는 순간 되돌려 그려져 지울 수가 없습니다(초안 선언부 참고). */}

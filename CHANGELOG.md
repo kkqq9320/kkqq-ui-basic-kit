@@ -18,6 +18,26 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.12.0
 **`src/` 이름·자리 정리 2라운드 — 소비자에게 보이는 변화가 0입니다.** 공개 이름이
 하나도 안 바뀌었고(`publicApi.test.ts`가 지킵니다) 파일만 갈라졌습니다.
 
+### 더해진 것
+
+- **`Pressable`** — 킷의 모든 `<button>`이 지나가는 자리(내부용, 배럴에 없습니다).
+  **옷은 없고 보장만** 있습니다: `type="button"` 기본값.
+
+  🔴 **재 보니 넷이 `type`을 안 적고 있었습니다** — 드롭다운 트리거 셋과 휠 트리거
+  하나. 폼 안에서 `<button>`의 기본값은 `submit`이라 **값을 고르는 순간 폼이
+  날아갑니다.** 데모 한 화면에서만 그 넷이 **22개**로 렌더됩니다(트리거는 반복됩니다).
+  지금은 화면의 버튼 77개 전부 `type="button"`입니다(브라우저 실측).
+
+  `tests/pressable.test.tsx`가 **`src/`에 날 `<button>`이 다시 생기면** 빨개집니다.
+
+- **`src/`가 폴더로 묶였습니다** — `controls/` · `surfaces/` · `theme/` · `shortcuts/` ·
+  `browser/` · `model/`. **축을 새로 만들지 않았습니다**: 배럴이 이미 가진 여섯 역할
+  묶음 그대로라 **목차와 파일 트리가 같은 축**입니다.
+
+  🟢 **소비자는 0입니다** — 배럴(`kkqq-ui-basic-kit`)로 import 하면 아무것도 안 바뀝니다.
+  ⚠️ deep import(`kkqq-ui-basic-kit/src/Select`)를 쓰던 앱만 경로에 폴더가 붙습니다
+  (`…/src/controls/Select`). 실측상 그런 소비자는 없습니다.
+
 ### 고친 것
 
 - **`hooks.ts`(542줄)를 셋으로 갈랐습니다.** 이름이 `hooks`라 **무엇이든 들어갈 수

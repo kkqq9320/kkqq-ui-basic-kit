@@ -39,8 +39,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { DateWheelPicker } from "../src/DateWheelPicker";
-import { Select } from "../src/Select";
+import { DateWheelPicker } from "../src/controls/DateWheelPicker";
+import { Select } from "../src/controls/Select";
 
 afterEach(cleanup);
 

@@ -17,7 +17,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AutoGrowTextarea } from "../src/AutoGrowTextarea";
+import { AutoGrowTextarea } from "../src/controls/AutoGrowTextarea";
 import controlsCssSource from "../css/controls.css?raw";
 import selectCssSource from "../css/select.css?raw";
 

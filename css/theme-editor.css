@@ -1,4 +1,4 @@
-/* 색상 토큰 편집기 — src/ThemeColorEditor.tsx
+/* 색상 토큰 편집기 — src/theme/ThemeColorEditor.tsx
  *
  * 카드는 2열로 깔리고, 카드 안은 [색 견본][이름·RGB][Undo·Reset] + 아랫줄 헥스 입력입니다.
  * controls.css와 page.css 뒤에 와야 액션 버튼·패널 스타일 위에 얹힙니다.

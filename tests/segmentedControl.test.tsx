@@ -14,7 +14,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { SegmentedControl } from "../src/SegmentedControl";
+import { SegmentedControl } from "../src/controls/SegmentedControl";
 import segmentedCssSource from "../css/segmented.css?raw";
 import tokensCssSource from "../css/tokens.css?raw";
 

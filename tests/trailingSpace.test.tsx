@@ -22,7 +22,7 @@
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { AppShell } from "../src/AppShell";
+import { AppShell } from "../src/surfaces/AppShell";
 
 /* jsdom은 ResizeObserver를 구현하지 않습니다. `tests/AppShell.test.tsx`의 가짜와 같은
  * 자리이고, **초기 배달을 반드시 흉내 냅니다** — 새로 observe()한 대상은 실제로는

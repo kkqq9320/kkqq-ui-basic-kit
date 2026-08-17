@@ -21,7 +21,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-const sources = import.meta.glob("../src/*.{ts,tsx}", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+const sources = import.meta.glob("../src/**/*.{ts,tsx}", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 
 /** 파일별 "부착 자리" 수 — `addEventListener("keydown", …)`과 `onKeyDown={…}`을
  * 합쳐 실제로 센 개수입니다(§2.1 표의 '부착 자리' 열과 같은 단위). 두 종류를 같은
@@ -29,19 +29,19 @@ const sources = import.meta.glob("../src/*.{ts,tsx}", { query: "?raw", import: "
  * 트리거 버튼과 메뉴에 각각) 그대로 2입니다. **이 숫자가 늘면 §2.1의 표를 다시
  * 재야 합니다.** */
 const KNOWN_CONSUMERS: Record<string, number> = {
-  "../src/WheelPicker.tsx": 1,
-  "../src/Select.tsx": 2,
-  "../src/Dialog.tsx": 1,
-  "../src/popupDismiss.ts": 1,
-  "../src/SectionTabs.tsx": 2,
-  "../src/PageChrome.tsx": 1,
-  "../src/ShortcutProvider.tsx": 1,
-  "../src/ShortcutSettings.tsx": 1,
+  "../src/controls/WheelPicker.tsx": 1,
+  "../src/controls/Select.tsx": 2,
+  "../src/surfaces/Dialog.tsx": 1,
+  "../src/browser/popupDismiss.ts": 1,
+  "../src/surfaces/SectionTabs.tsx": 2,
+  "../src/surfaces/PageChrome.tsx": 1,
+  "../src/shortcuts/ShortcutProvider.tsx": 1,
+  "../src/shortcuts/ShortcutSettings.tsx": 1,
   /* 2026-08-13 추가. **숫자만 맞춘 것이 아니라 §2.1 표를 다시 쟀습니다**(이 파일 위
    * 주석이 요구하는 절차입니다): `SegmentedControl`은 Ctrl·Meta·Alt가 눌리면 즉시
    * 반환하고, 처리한 분기(←·→·↑·↓·Home·End)마다 `preventDefault`를 부릅니다 —
    * 규칙 1이 성립하는 쪽이라 단축키와 겨루지 않습니다. */
-  "../src/SegmentedControl.tsx": 1,
+  "../src/controls/SegmentedControl.tsx": 1,
 };
 
 function keydownSites(source: string): number {

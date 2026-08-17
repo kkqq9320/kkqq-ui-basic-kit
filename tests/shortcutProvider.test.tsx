@@ -9,10 +9,10 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ShortcutProvider, useShortcutRegistry, type ShortcutAction, type ShortcutRegistry } from "../src/ShortcutProvider";
-import { Select } from "../src/Select";
-import { sidebarToggleAction } from "../src/shortcuts";
-import { createShortcutStorage, type ShortcutStorage } from "../src/shortcutStorage";
+import { ShortcutProvider, useShortcutRegistry, type ShortcutAction, type ShortcutRegistry } from "../src/shortcuts/ShortcutProvider";
+import { Select } from "../src/controls/Select";
+import { sidebarToggleAction } from "../src/shortcuts/shortcuts";
+import { createShortcutStorage, type ShortcutStorage } from "../src/shortcuts/shortcutStorage";
 
 afterEach(() => {
   cleanup();

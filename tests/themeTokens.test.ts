@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { THEME_TOKEN_GROUPS, THEME_TOKENS } from "../src/themeTokens";
+import { THEME_TOKEN_GROUPS, THEME_TOKENS } from "../src/theme/themeTokens";
 
 const cssModules = import.meta.glob("../css/*.css", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 const allCss = Object.values(cssModules).join("\n");

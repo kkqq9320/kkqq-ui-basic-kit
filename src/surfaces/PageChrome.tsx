@@ -3,7 +3,7 @@
  */
 import { useEffect, useRef, type ReactNode, type CSSProperties} from "react";
 
-import { isPrimaryButton } from "./pointerButton";
+import { isPrimaryButton } from "../browser/pointerButton";
 
 /**
  * 앱 셸 콘텐츠 페이지의 첫 요소(PRINCIPLES §7). 세 줄이 각각 최소 높이를 예약하므로

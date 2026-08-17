@@ -41,7 +41,7 @@
  *
  *   · 이 줄(`tabular-nums`)은 **숫자끼리** 폭을 맞춥니다. 이 폰트의 비례폭은 `1`이 898,
  *     `4`가 1278로 크게 다르므로, 없으면 `2026` → `2031`만으로도 필드가 들썩입니다.
- *   · **빈 자리**는 `src/DateWheelPicker.tsx`의 `DATE_WHEEL_FILL`(U+2012 FIGURE DASH)이
+ *   · **빈 자리**는 `src/controls/DateWheelPicker.tsx`의 `DATE_WHEEL_FILL`(U+2012 FIGURE DASH)이
  *     맡습니다. `tabular-nums`는 OpenType `tnum`으로 매핑되고 `tnum`은 **숫자 글리프에만**
  *     적용되므로, 채움 문자는 이 줄의 혜택을 **못 받습니다.**
  *

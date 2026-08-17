@@ -9,7 +9,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createShortcutStorage } from "../src/shortcutStorage";
+import { createShortcutStorage } from "../src/shortcuts/shortcutStorage";
 
 afterEach(() => {
   vi.restoreAllMocks();
