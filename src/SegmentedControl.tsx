@@ -3,7 +3,7 @@
  * 🔴 **왜 이제야 생겼는가.** 오너 질문(2026-08-13): "이 세그먼트나 버튼은 어디다 만드는
  * 거야? wheelpicker랑 다른 데 아니야? 이건 왜 모듈화 안 돼 있는 것 같지?" — 맞는
  * 지적이었습니다. 킷에 이 컴포넌트가 **없어서** 데모가
- * `<button className="secondary-button" aria-pressed>`로 손으로 그리고 있었고,
+ * `<button className="action-button" data-variant="secondary" aria-pressed>`로 손으로 그리고 있었고,
  * 그게 눌림/포커스 겹침의 뿌리이기도 했습니다. **규칙이 없으면 소비자마다 다시 그리고,
  * 그때 기존 상태와 부딪힙니다.**
  *

@@ -105,7 +105,7 @@ describe("글자색은 토큰을 거친다", () => {
   /* 이름이 생긴 두 자리를 이름으로 못박습니다 — 위 개수 비교도 잡지만, 그 실패 메시지는
    * "어느 것이 돌아갔는지" 말하지 않습니다. */
   it("강조색 채움 위 글자는 --on-accent다", () => {
-    expect(cssModules["../css/controls.css"]).toMatch(/\.primary \{[^}]*color:\s*var\(--on-accent\)/);
+    expect(cssModules["../css/controls.css"]).toMatch(/\[data-variant="primary"\] \{[^}]*color:\s*var\(--on-accent\)/);
     expect(cssModules["../css/tokens.css"]).toMatch(/--on-accent:\s*#[0-9a-fA-F]{6}/);
   });
 

@@ -165,13 +165,13 @@ export function ShortcutSettings({ onChange, className }: ShortcutSettingsProps)
             <li className="kkqq-shortcuts__row" key={item.id}>
               <span className="kkqq-shortcuts__label">{item.label}</span>
               <button
-                className="kkqq-shortcuts__record secondary-button"
+                className="kkqq-shortcuts__record action-button" data-variant="secondary"
                 type="button"
                 onClick={() => { setMessage(null); setRecording(item.id); }}
               >
                 {recording === item.id ? `${item.label} — 조합을 누르세요` : `${item.label} ${bound ? displayCombo(bound) : "없음"}`}
               </button>
-              <button className="kkqq-shortcuts__clear secondary-button" type="button" onClick={() => { setMessage(null); commit(item.id, null); }}>지우기</button>
+              <button className="kkqq-shortcuts__clear action-button" data-variant="secondary" type="button" onClick={() => { setMessage(null); commit(item.id, null); }}>지우기</button>
             </li>
           );
         })}

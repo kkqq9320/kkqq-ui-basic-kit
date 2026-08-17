@@ -75,8 +75,13 @@ describe("키보드 포커스 표시", () => {
 // 갈라져 있었다(입력 16%, 드롭다운·날짜 12%). 목록에서 컨트롤을 빠뜨리는 것이 지금까지의
 // 실패 방식이므로 개별 이름으로 고정한다 — 하나가 빠지면 그 이름으로 실패한다.
 describe("포커스 링은 토큰 하나가 정한다", () => {
+  /* 액션 버튼은 이제 클래스 나열이 아니라 `data-variant` 한 축입니다(§16). 그래서 목록이
+   * 둘로 갈립니다 — variant마다 하나, 그리고 자기 클래스를 가진 나머지 컨트롤.
+   * `file-button`·`link-button`은 목록에서 **빠졌습니다**: 킷 안에서 아무도 안 쓰는
+   * 죽은 클래스였고(src 0 · 데모 0 · 문서 0) 이번에 지웠습니다. 지우기 전까지
+   * 이 검사가 **아무것도 아닌 것의 포커스 규칙을 지키고** 있었습니다. */
+  const NEEDS_RING_VARIANT = ["primary", "secondary", "danger", "text"];
   const NEEDS_RING = [
-    "primary", "secondary-button", "danger-button", "file-button", "link-button", "text-button",
     "sidebar-collapse-button", "mobile-sidebar-close", "wheel-step",
     "mobile-page-tabs-button", "mobile-tab-card",
   ];
@@ -95,6 +100,14 @@ describe("포커스 링은 토큰 하나가 정한다", () => {
     const all = controlsCssSource + sidebarCssSource + wheelPickerCssSource + tabsCssSource;
     expect(all.length).toBeGreaterThan(4000);
     expect(all).toContain(`.${name}:focus-visible`);
+  });
+
+  /* variant는 `:is(...)`로 묶여 있을 수 있으므로(secondary와 danger가 같은 처리라 한 줄입니다)
+   * 선택자 전체를 글자로 맞추지 않고 **그 variant를 언급하는 `:focus-visible` 규칙이
+   * 있는가**를 봅니다. 하나가 빠지면 그 variant 이름으로 실패합니다. */
+  it.each(NEEDS_RING_VARIANT)('data-variant="%s"에 포커스 처리가 있다', (variant) => {
+    expect(controlsCssSource.length).toBeGreaterThan(2000);
+    expect(controlsCssSource).toMatch(new RegExp(`\[data-variant="${variant}"\][^{]*:focus-visible`));
   });
 
   // 탭 세 종류는 클래스 하나로 안 잡혀서 위 목록에 못 넣는다(자손 선택자다).
