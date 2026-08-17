@@ -1512,12 +1512,22 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
 
   /** Ctrl+C — **화면에 보이는 그대로** 씁니다(오너: "포맷된 날짜를 클립보드에"). 치던
    *  버퍼를 먼저 확정하는 이유는, 안 그러면 화면에는 `20‒‒`가 보이는데 클립보드에는
-   *  옛 값이 가서 **본 것과 붙여넣은 것이 다르기** 때문입니다. */
-  function copyValue() {
+   *  옛 값이 가서 **본 것과 붙여넣은 것이 다르기** 때문입니다.
+   *
+   *  🔴 **실제로 썼으면 `true`.** 호출부가 그것으로 `preventDefault`를 걸지 말지 정합니다 —
+   *  한동안 조건 없이 걸었고, 그래서 **복사할 것이 없는데도 브라우저의 복사를 막았습니다.**
+   *
+   *  왜 그게 결함인가: 이 저장소는 `Ctrl+C`를 앱이 **다시 정의하지 못하게** 막아 뒀습니다
+   *  (`src/shortcuts.ts`의 `UNBINDABLE_EDIT_CODES`, 오너 결정 2026-08-13 —
+   *  "복사·붙여넣기·되돌리기는 너무 중요해서 앱이 다시 정의하면 안 된다"). 그 키를 그렇게
+   *  보호해 놓고 **픽커 자신이 빈 값에서 먹는 것**은 같은 원칙을 어기는 자리입니다.
+   *  페이지에서 드래그해 둔 글자를 복사하려던 사람은 아무것도 못 얻습니다. */
+  function copyValue(): boolean {
     const flushed = flushTyping();
     const source = flushed ?? value;
-    if (!model.isValid(source, fields)) return;   // 빈 필드는 복사할 것이 없습니다
+    if (!model.isValid(source, fields)) return false;   // 빈 필드는 복사할 것이 없습니다
     writeClipboard(model.triggerParts(source, fields, null, hourDisplay).map((part) => part.text).join(""));
+    return true;
   }
 
   /** Ctrl+V — 읽을 수 없으면 **아무것도 하지 않습니다.** 값을 지우지 않는 것이
@@ -1819,8 +1829,10 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
      * 그러면 `KIT_RESERVED`가 실제보다 좁아지고, 소비자 앱이 등록에 성공한 뒤 이 필드가
      * 그 키를 먹습니다. */
     if ((event.ctrlKey || event.metaKey) && event.code === "KeyC") {
+      /* ⚠️ `Ctrl+V`·`a`/`p`와 **같은 순서**입니다 — 일을 하고 나서 막습니다.
+       * 복사할 것이 없으면 키를 안 먹고 브라우저에 넘깁니다(위 `copyValue` 주석). */
+      if (!copyValue()) return false;
       event.preventDefault();
-      copyValue();
       return true;
     }
     /* ⚠️ 여기만 `preventDefault`가 **분기 안에 있습니다**(`pasteFromKeydown`). 비보안

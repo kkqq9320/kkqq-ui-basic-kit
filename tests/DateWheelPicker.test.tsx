@@ -6108,6 +6108,57 @@ describe("필드의 복사·붙여넣기·되돌리기·저장", () => {
     expect(written).toEqual(["2026. 07. 12."]);
   });
 
+  /* ── 🔴 복사할 것이 없으면 키를 안 먹는다 (2026-08-16) ──
+   *
+   * `Ctrl+C` 분기가 `preventDefault()`를 **조건 없이** 불렀습니다. `copyValue()`는 빈
+   * 값에서 그냥 빠지므로, **복사도 안 하면서 브라우저의 복사를 막았습니다.** 페이지에서
+   * 드래그해 둔 글자를 복사하려던 사람은 아무것도 못 얻고, 아무 신호도 없어 **복사된 줄
+   * 알고 붙여넣습니다.**
+   *
+   * 왜 그게 결함인가: 이 저장소는 `Ctrl+C`를 앱이 **다시 정의하지 못하게** 막아 뒀습니다
+   * (`src/shortcuts.ts`의 `UNBINDABLE_EDIT_CODES`, 오너 결정 2026-08-13 — "복사·붙여넣기·
+   * 되돌리기는 너무 중요해서 앱이 다시 정의하면 안 된다"). **그렇게 보호한 키를 픽커가
+   * 빈 값에서 먹는 것**은 같은 원칙을 어기는 자리입니다.
+   *
+   * ⚠️ 브라우저가 그때 실제로 무엇을 복사하는지는 여기서 못 잽니다(jsdom에도, 브라우저
+   * pane에도 문서 포커스가 없어 `execCommand`가 확실히 되는 경우에도 `false`를 냅니다 —
+   * 실측). 이 검사가 고정하는 것은 **"우리가 그 키를 놓아준다"**까지입니다. */
+  it("복사할 것이 없으면 Ctrl+C가 preventDefault를 부르지 않는다", () => {
+    stubClipboard();
+    render(<ControlledDateWheel initialValue="" />);
+    const event = createEvent.keyDown(fieldOf("거래 날짜"), { key: "c", code: "KeyC", ctrlKey: true });
+    fireEvent(fieldOf("거래 날짜"), event);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("복사할 것이 없으면 클립보드도 안 건드린다", () => {
+    const written = stubClipboard();
+    render(<ControlledDateWheel initialValue="" />);
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "c", code: "KeyC", ctrlKey: true });
+    expect(written).toEqual([]);
+  });
+
+  // 대조군 — 값이 있으면 예전처럼 우리 키입니다. 이게 없으면 위 둘은
+  // "언제나 안 먹는다"는 구현으로도 통과합니다.
+  it("값이 있으면 Ctrl+C가 preventDefault를 부른다 — 대조군", () => {
+    stubClipboard();
+    render(<ControlledDateWheel initialValue="2026-07-12" />);
+    const event = createEvent.keyDown(fieldOf("거래 날짜"), { key: "c", code: "KeyC", ctrlKey: true });
+    fireEvent(fieldOf("거래 날짜"), event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  /* 빈 값이어도 **치던 것이 있으면** 확정해서 복사합니다 — 그때는 복사할 것이 생기므로
+   * 키를 먹는 것이 맞습니다. 위 "빈 값" 검사와 갈리는 자리라 함께 둡니다. */
+  it("빈 값이어도 치던 숫자가 있으면 확정해서 복사한다", () => {
+    const written = stubClipboard();
+    render(<ControlledDateWheel initialValue="" />);
+    for (const key of ["2", "0", "3", "1"]) fireEvent.keyDown(fieldOf("거래 날짜"), { key });
+    fireEvent.keyDown(fieldOf("거래 날짜"), { key: "c", code: "KeyC", ctrlKey: true });
+    expect(written.length).toBe(1);
+    expect(written[0]).toContain("2031");
+  });
+
   // 대조군 — 수식어가 없으면 이 컨트롤의 것이 아닙니다.
   it("수식어 없는 C는 복사하지 않는다", () => {
     const written = stubClipboard();
