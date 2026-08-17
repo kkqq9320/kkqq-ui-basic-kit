@@ -11,7 +11,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { useBackToClose, useEscapeToClose } from "./hooks";
+import { useBackToClose, useEscapeToClose } from "./popupDismiss";
 import { isPrimaryButton } from "./pointerButton";
 import { captureScrollSnapshot, dropdownViewportSpace, focusTriggerOnClick, onViewportChange, restoreFocusWithoutScroll, shouldOpenDropdownAbove, type ScrollSnapshot } from "./positioning";
 import { firstEnabledValue, initialActiveValue, lastEnabledValue, stepEnabledValue } from "./selectKeyboard";

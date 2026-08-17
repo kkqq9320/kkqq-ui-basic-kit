@@ -1,5 +1,17 @@
-/* 공용 훅 — 원본: frontend/src/lib/hooks.ts:29-50, frontend/src/App.tsx:319-379 */
-import { useContext, createContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+/* 킷 팝업이 **닫히는 경로** — Escape와 브라우저 뒤로가기, 그리고 겹친 깊이.
+ * 원본: frontend/src/lib/hooks.ts:29-50, frontend/src/App.tsx:319-379
+ *
+ * `hooks.ts`(542줄)에서 갈라져 나왔습니다(PRINCIPLES §15 규칙 4). 그 파일은 이름이
+ * `hooks`라 **무엇이든 들어갈 수 있는 자리**였고 실제로 세 주제가 들어 있었습니다 —
+ * 팝업 닫기 / 스크롤 방향 / 뷰포트·가상 키보드. 재 보니 셋 사이에 **참조가 0건**이라
+ * 이음매가 이미 나 있었습니다.
+ *
+ * 이 파일 안의 것들은 서로 얽혀 있습니다: `useBackToClose`가 history 표식을 쓰고,
+ * scrollRestoration 잠금·해제와 popstate 착지 대기가 그것을 받쳐 줍니다. 한 문장으로는
+ * **"팝업 하나가 열려 있는 동안 브라우저의 뒤로가기·스크롤 복원을 어떻게 빌려 쓰는가"**
+ * 입니다. 팝업 닫기와 무관한 것을 여기 넣지 마세요 — 그러면 다시 `hooks.ts`가 됩니다.
+ */
+import { createContext, useContext, useEffect, useLayoutEffect, useRef } from "react";
 
 /**
  * 겹친 깊이. 팝업이 자기 안에 열릴 것들에게 자기 깊이를 알려 줍니다.
@@ -376,167 +388,4 @@ export function useBackToClose(open: boolean, onClose: () => void, stackKey = "_
       }, 0);
     };
   }, [open, stackKey]);
-}
-
-/**
- * 아래로 18px 이상 연속 스크롤하면 true. 위로 스크롤하거나 맨 위에 닿으면 false.
- * AppShell의 navHidden에 그대로 넣으면 하단 고정 바가 스크롤에 따라 숨습니다.
- * 방향이 바뀔 때마다 누적 거리를 초기화하므로 미세한 흔들림에는 반응하지 않습니다.
- */
-export function useScrollDirectionHidden(scrollRootId = "root") {
-  const [hidden, setHidden] = useState(false);
-  useEffect(() => {
-    const scrollRoot = document.getElementById(scrollRootId);
-    if (!scrollRoot) return;
-    let previousTop = scrollRoot.scrollTop;
-    let direction = 0;
-    let distance = 0;
-    function handleScroll() {
-      const currentTop = scrollRoot!.scrollTop;
-      const delta = currentTop - previousTop;
-      previousTop = currentTop;
-      if (currentTop <= 18) {
-        direction = 0;
-        distance = 0;
-        setHidden(false);
-        return;
-      }
-      if (Math.abs(delta) < 1) return;
-      const nextDirection = delta > 0 ? 1 : -1;
-      if (nextDirection !== direction) {
-        direction = nextDirection;
-        distance = 0;
-      }
-      distance += Math.abs(delta);
-      if (distance < 18) return;
-      setHidden(direction > 0);
-      distance = 0;
-    }
-    scrollRoot.addEventListener("scroll", handleScroll, { passive: true });
-    return () => scrollRoot.removeEventListener("scroll", handleScroll);
-  }, [scrollRootId]);
-  return [hidden, setHidden] as const;
-}
-
-export type VisualViewportBox = { top: number; left: number; width: number; height: number };
-
-function readVisualViewportBox(): VisualViewportBox | null {
-  const viewport = window.visualViewport;
-  if (!viewport) return null;
-  return {
-    top: Math.round(viewport.offsetTop),
-    left: Math.round(viewport.offsetLeft),
-    width: Math.round(viewport.width),
-    height: Math.round(viewport.height),
-  };
-}
-
-/**
- * 지금 실제로 보이는 영역의 좌표와 크기. `position: fixed` 요소를 여기에 맞추면
- * 가상 키보드·주소창·핀치줌과 무관하게 항상 보이는 영역 안에 놓입니다.
- *
- * 이게 "키보드가 열렸나?"를 추측하는 것보다 튼튼합니다. 안정 높이 대비 축소량으로
- * 판정하면 주소창이 접히고 펴지는 높이(휴대폰에서 100~140px)가 키보드 임계값과
- * 비슷해 오판합니다. 보이는 영역에 그냥 맞추면 판정이 아예 필요 없습니다.
- *
- * visualViewport가 없는 환경에서는 null을 돌려주고, 그때는 CSS 기본값
- * (레이아웃 뷰포트 전체)이 그대로 쓰입니다.
- *
- * **초기값은 `useState`의 지연 초기화 함수로 렌더 중에 동기적으로 계산합니다.**
- * 예전에는 `useState(null)`로 시작해 `useEffect`(페인트 "이후"에야 도는 패시브
- * 이펙트)에서만 값을 채웠습니다. 키보드가 이미 열려 있는 상태에서 다이얼로그가
- * 새로 마운트되면(예: 필드에 포커스가 있는 채로 다른 버튼을 눌러 다이얼로그를 여는
- * 경우), 그 사이 한 프레임은 `box === null`이라 인라인 스타일이 아예 없는 채로
- * 페인트되어 백드롭이 전체 화면 크기(CSS 기본값)로 한 번 그려졌다가, 그다음 프레임에
- * 실제(줄어든) 크기로 바뀌었습니다 — 다이얼로그의 첫 열림이 "두 번에 걸쳐" 그려지는
- * 결함(§3 Interruptibility 위반: 논리적 목표가 아니라 항상 지금 값에서 시작해야 하는데,
- * 여기서는 "지금 값"조차 첫 프레임에 없었습니다) 중 하나였습니다. 지연 초기화는
- * 커밋(그리고 첫 페인트) 전, 렌더 단계에서 동기적으로 실행되므로 첫 프레임부터 이미
- * 올바른 값을 반환합니다 — 두 번째 렌더도, 그 사이 프레임도 필요 없습니다.
- * (`useEffect`는 여전히 필요합니다 — 마운트 이후의 리사이즈·스크롤을 계속 반영해야
- * 하니까요. 최초 1회 계산만 렌더 단계로 당겨온 것입니다.)
- */
-export function useVisualViewportBox(): VisualViewportBox | null {
-  const [box, setBox] = useState<VisualViewportBox | null>(readVisualViewportBox);
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-    function update() {
-      const next = readVisualViewportBox();
-      setBox((current) => (current && next && current.top === next.top && current.left === next.left && current.width === next.width && current.height === next.height ? current : next));
-    }
-    update();
-    viewport.addEventListener("resize", update);
-    viewport.addEventListener("scroll", update);
-    window.addEventListener("resize", update);
-    return () => {
-      viewport.removeEventListener("resize", update);
-      viewport.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
-    };
-  }, []);
-  return box;
-}
-
-export type VirtualKeyboard = {
-  open: boolean;
-  /** 키보드가 가린 아래쪽 높이(px). fixed 요소가 그만큼 위로 피하면 됩니다. */
-  inset: number;
-};
-
-/**
- * 가상 키보드가 열렸는지와, 화면 아래쪽을 얼마나 가렸는지를 알려줍니다.
- *
- * 편집 가능한 요소에 포커스가 있고 visualViewport 높이가 안정 상태보다 120px 넘게
- * 줄었을 때만 열린 것으로 봅니다. 높이 변화만 보면 주소창 축소를 키보드로 오인하고,
- * 포커스만 보면 프로그램 포커스(키보드 안 뜸)까지 열린 것으로 칩니다.
- *
- * inset은 레이아웃 뷰포트 기준입니다. 안드로이드 기본값(`resizes-visual`)에서는
- * 키보드가 레이아웃 뷰포트를 줄이지 않으므로 `position: fixed` 요소는 키보드 뒤까지
- * 뻗습니다. 그 차이가 곧 inset이라, 이만큼 아래 패딩을 주면 키보드 바로 위에 붙습니다.
- */
-export function useVirtualKeyboard(): VirtualKeyboard {
-  const [keyboard, setKeyboard] = useState<VirtualKeyboard>({ open: false, inset: 0 });
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-    let restingHeight = Math.max(viewport.height, window.innerHeight);
-    const editableSelector = "input, textarea, select, [contenteditable='true']";
-    function apply(next: VirtualKeyboard) {
-      setKeyboard((current) => (current.open === next.open && current.inset === next.inset ? current : next));
-    }
-    function updateKeyboardState() {
-      const focused = document.activeElement instanceof Element && document.activeElement.matches(editableSelector);
-      if (!focused) {
-        restingHeight = Math.max(restingHeight, viewport!.height, window.innerHeight);
-        apply({ open: false, inset: 0 });
-        return;
-      }
-      const open = restingHeight - viewport!.height > 120;
-      const covered = window.innerHeight - (viewport!.offsetTop + viewport!.height);
-      apply({ open, inset: open ? Math.max(0, Math.round(covered)) : 0 });
-    }
-    function updateAfterFocus() {
-      window.setTimeout(updateKeyboardState, 0);
-    }
-    viewport.addEventListener("resize", updateKeyboardState);
-    // 뷰포트가 스크롤되면 offsetTop이 바뀌므로 inset도 다시 재야 합니다.
-    viewport.addEventListener("scroll", updateKeyboardState);
-    window.addEventListener("resize", updateKeyboardState);
-    document.addEventListener("focusin", updateAfterFocus);
-    document.addEventListener("focusout", updateAfterFocus);
-    return () => {
-      viewport.removeEventListener("resize", updateKeyboardState);
-      viewport.removeEventListener("scroll", updateKeyboardState);
-      window.removeEventListener("resize", updateKeyboardState);
-      document.removeEventListener("focusin", updateAfterFocus);
-      document.removeEventListener("focusout", updateAfterFocus);
-    };
-  }, []);
-  return keyboard;
-}
-
-/** 열림 여부만 필요할 때. */
-export function useVirtualKeyboardOpen() {
-  return useVirtualKeyboard().open;
 }

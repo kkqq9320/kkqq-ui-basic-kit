@@ -284,7 +284,7 @@ describe("onViewportChange", () => {
   // `document.addEventListener("scroll", …, true)`는 DOM 트리의 스크롤만 잡고
   // `VisualViewport` 객체의 이벤트는 못 잡는다 — 핀치줌 상태로 패닝하면 `offsetTop`만
   // 바뀌고 resize도 document scroll도 안 나서 좌표가 통째로 낡는다.
-  // 저장소 안에 이미 정답이 있었다: `src/hooks.ts`의 `useVisualViewportBox`가 resize와
+  // 저장소 안에 이미 정답이 있었다: `src/visualViewport.ts`의 `useVisualViewportBox`가 resize와
   // scroll을 둘 다 등록하고 `:523`에 이유까지 적어 뒀다.
   it("visualViewport scroll에서 부른다 — 핀치줌 팬의 유일한 신호다", () => {
     const viewport = installFakeVisualViewport();

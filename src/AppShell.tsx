@@ -2,7 +2,7 @@
  * 필요한 CSS: tokens.css, sidebar.css, page.css
  *
  * 데스크톱은 [사이드바 | 작업 영역] 2열 그리드, 모바일은 단일 열 + 오프캔버스 서랍.
- * navHidden/keyboardOpen은 hooks.ts의 useScrollDirectionHidden /
+ * navHidden/keyboardOpen은 scrollDirection.ts의 useScrollDirectionHidden /
  * useVirtualKeyboardOpen을 그대로 넣으면 됩니다.
  *
  * **프롭은 controlled지만 이 컴포넌트가 상태 없이 도는 건 아닙니다.** 한때 여기와
@@ -21,7 +21,7 @@
  */
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
-import { useVirtualKeyboard, type VirtualKeyboard } from "./hooks";
+import { useVirtualKeyboard, type VirtualKeyboard } from "./visualViewport";
 
 /** 포커스된 요소의 아래쪽과 키보드 사이에 남길 여유(px).
  *
@@ -181,7 +181,7 @@ function prefersReducedMotion() {
  * 함께 들어올립니다(예: 필드 + 그 아래 액션 버튼 줄) — 자세한 이유·한도는 그 상수
  * 문서와 `reposition()` 안 주석을 참고하세요.
  *
- * `useVirtualKeyboard()`가 이미 계산해 둔 `inset`(hooks.ts 참고)은 한때 아무도
+ * `useVirtualKeyboard()`가 이미 계산해 둔 `inset`(visualViewport.ts 참고)은 한때 아무도
  * 쓰지 않았습니다. 이걸 쓰는 것만으로는 부족합니다 — 패딩(아래 `style`의
  * `--keyboard-inset`, `page.css`의 `.workspace`가 소비)은 스크롤할 "공간"을
  * 만들 뿐 아무것도 움직이지 않고, 여기서 하는 스크롤 이동은 이미 있던 범위

@@ -8,7 +8,7 @@ import { StrictMode, useLayoutEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppShell, Dialog, Select, Sidebar } from "../src";
-import { takeUnlandedBackCountForTest } from "../src/hooks";
+import { takeUnlandedBackCountForTest } from "../src/popupDismiss";
 
 const STACK_KEY = "__dsPopupStack";
 
@@ -48,7 +48,7 @@ afterEach(() => {
   backSpy.mockRestore();
   // 이 파일의 테스트는 자기가 부른 back()을 반드시 popstate로 착지시켜야 한다.
   // unlandedBackCount는 모듈 스코프라 착지 안 한 값이 **다음 테스트로 넘어가고**, 그
-  // 테스트의 "내가 맨 위인가" 판정(hooks.ts의 effective 스택)을 조용히 틀리게 만든다.
+  // 테스트의 "내가 맨 위인가" 판정(popupDismiss.ts의 effective 스택)을 조용히 틀리게 만든다.
   // 실측: back()을 no-op으로 스텁한 테스트가 1을 남겼고 다음 테스트가 1로 시작했다.
   // 조용히 리셋만 하면 그 결함이 영원히 안 보이므로 여기서 터뜨린다 — 이 단언이 깨지면
   // 범인은 방금 끝난 그 테스트다. take*는 읽으면서 0으로 되돌리므로, 실패하더라도

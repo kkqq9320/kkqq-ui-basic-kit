@@ -38,7 +38,7 @@ export function shouldOpenDropdownAbove(trigger: HTMLElement, desiredHeight: num
  * 좌표가 통째로 낡습니다 — 그런데 `dropdownViewportSpace`와 두 컴포넌트의 `left` 계산이
  * 바로 그 offset을 읽습니다.
  *
- * 정답은 이미 이 저장소 안에 있었습니다: `src/hooks.ts`의 `useVisualViewportBox`가
+ * 정답은 이미 이 저장소 안에 있었습니다: `src/visualViewport.ts`의 `useVisualViewportBox`가
  * `resize`와 `scroll`을 둘 다 등록하고 그 이유까지 적어 뒀습니다("뷰포트가 스크롤되면
  * offsetTop이 바뀌므로 inset도 다시 재야 합니다").
  *
