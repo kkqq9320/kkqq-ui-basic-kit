@@ -140,6 +140,8 @@ Next.js App Router처럼 마운트 지점을 직접 정할 수 없는 환경이�
 - `select.css`와 `wheel-picker.css`는 `surfaces.css`를 필요로 합니다.
 - `tabs.css`의 모바일 배치는 `page.css`의 `.workspace`(`position: relative`)를
   부모로 가정합니다.
+- `SectionHeading`의 스타일은 **`page.css`** 에 있습니다(`tabs.css`가 아닙니다) —
+  탭이 아니라 페이지 뼈대의 일부라서입니다(`PRINCIPLES.md` §7·§15).
 
 ### 폰트를 바꾸려면
 
@@ -644,6 +646,11 @@ useEffect(() => localStorage.setItem("sidebarCollapsed", String(collapsed)), [co
 <SectionHeading title="기본 설정" description="설명은 3줄 자리를 예약합니다." />
 ```
 
+⚠️ **`SectionHeading`은 탭의 일부가 아닙니다.** 여기 같이 적은 것은 화면에서 바로
+아래에 서기 때문이고, 컴포넌트는 `PageChrome`에서 나오며 스타일은 `page.css`에
+있습니다. 탭이 없는 페이지에서도 그대로 씁니다 — §7 배치 스택
+(`PageHeader` → (탭) → `SectionHeading` → `Panel`)의 한 칸입니다.
+
 오른쪽 아래 플로팅 페이지 카드까지 쓰려면 트리를 `MobilePageTabsContext.Provider`로
 감싸고 `AppShell`의 `pageTabs` 슬롯에 `MobilePageTabs`를 넣으세요.
 
@@ -955,6 +962,7 @@ CSS 클래스는 이전 이름을 대체로 유지했습니다. 헷갈릴 만한
 |---|---|---|
 | `Select` | `.app-select` | |
 | `SectionTabs` | `.settings-tabs` | 이름은 `settings`지만 범용 섹션 탭입니다 |
+| `SectionHeading` | `.settings-section-heading` | 같은 이유로 `settings`. 컴포넌트는 `PageChrome`, 스타일은 `page.css` |
 | `Sidebar` 브랜드 | `.sidebar-brand` | 원본 `.brand`에서 개명 |
 | `Sidebar` 상단 슬롯 | `.sidebar-slot` | 원본 `.budget-picker`에서 개명 |
 | nav 배지 | `.sidebar-nav-count` | 원본 `.nav-count`에서 개명 |
