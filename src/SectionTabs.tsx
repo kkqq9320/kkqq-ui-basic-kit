@@ -5,7 +5,7 @@
  * 접힙니다. MobilePageTabsProvider 안에 있으면 오른쪽 아래 플로팅 카드에도
  * 자동으로 등록되어 한 손으로 탭을 옮길 수 있습니다.
  */
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type Ref } from "react";
 
 import { isPrimaryButton } from "./pointerButton";
 
@@ -93,11 +93,6 @@ export function SectionTabs<T extends string>({ value, tabs, onChange, ariaLabel
       {tabs.map((tab) => <button type="button" role="tab" aria-selected={tab.value === value} className={tab.value === value ? "active" : ""} onClick={() => selectTab(tab.value)} key={tab.value}>{tab.label}</button>)}
     </div>
   </div>;
-}
-
-/** 탭 아래 섹션 제목. 설명이 3줄 자리를 예약해 탭을 옮겨도 카드 위치가 고정됩니다. */
-export function SectionHeading({ title, description, className = "" }: { title: ReactNode; description?: ReactNode; className?: string }) {
-  return <div className={`settings-section-heading ${className}`.trim()}><h2>{title}</h2><p>{description}</p></div>;
 }
 
 /**

@@ -11,7 +11,7 @@ export { DateWheelPicker, type DateWheelPickerProps } from "./DateWheelPicker";
 export { TimeWheelPicker, type TimeWheelPickerProps } from "./TimeWheelPicker";
 export { DurationWheelPicker, DEFAULT_DURATION_LABELS, type DurationWheelPickerProps } from "./DurationWheelPicker";
 export { DEFAULT_WHEEL_LABELS, todayIn, type WheelLabels, type WheelPickerProps, type WheelUnit } from "./WheelPicker";
-export { SectionTabs, SectionHeading, MobilePageTabs, MobilePageTabsContext, useMobilePageTabs, PageTabsIcon, type MobilePageTabRegistration, type SectionTabsProps } from "./SectionTabs";
+export { SectionTabs, MobilePageTabs, MobilePageTabsContext, useMobilePageTabs, PageTabsIcon, type MobilePageTabRegistration, type SectionTabsProps } from "./SectionTabs";
 export { Sidebar, MobileQuickBar, DEFAULT_SIDEBAR_LABELS, type SidebarProps, type SidebarNavItem, type SidebarNavSection, type SidebarFooter, type SidebarLabels, type MobileQuickBarItem } from "./Sidebar";
 export { AppShell, type AppShellProps } from "./AppShell";
 export { Dialog, DialogHeading, DialogActions, type DialogProps } from "./Dialog";
@@ -20,7 +20,7 @@ export { THEME_TOKEN_GROUPS, THEME_TOKENS, applyTokenOverrides, defaultTokenValu
 export { createThemePalette, type ThemePalette, type ThemeColorBackup, type ParsedThemeColors } from "./themePalette";
 export { AutoGrowTextarea, type AutoGrowTextareaProps } from "./AutoGrowTextarea";
 export { SegmentedControl, type SegmentedControlProps, type SegmentedOption } from "./SegmentedControl";
-export { PageHeader, SummaryGrid, SummaryCard, PanelGrid, Panel, FieldGrid, DismissibleDetails, type GridJustify } from "./PageChrome";
+export { PageHeader, SectionHeading, SummaryGrid, SummaryCard, PanelGrid, Panel, FieldGrid, DismissibleDetails, type GridJustify } from "./PageChrome";
 export { PopupDepthContext, useBackToClose, useEscapeToClose, useScrollDirectionHidden, useVisualViewportBox, useVirtualKeyboard, useVirtualKeyboardOpen, type VisualViewportBox, type VirtualKeyboard } from "./hooks";
 export { isPrimaryButton } from "./pointerButton";
 export { dropdownViewportSpace, shouldOpenDropdownAbove, onViewportChange, captureScrollSnapshot, restoreFocusWithoutScroll, type ScrollSnapshot } from "./positioning";

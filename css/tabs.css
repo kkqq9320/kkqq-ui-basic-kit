@@ -18,12 +18,6 @@
 .settings-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
 .settings-tabs .mobile-tab-card { display: none; }
 
-/* 탭 아래 섹션 제목. 설명이 3줄(57px) 자리를 예약하므로 탭마다 설명 길이가
- * 달라도 첫 콘텐츠 카드가 항상 같은 세로 위치에서 시작합니다. */
-.settings-section-heading { margin-bottom: 14px; }
-.settings-section-heading h2 { margin: 0 0 5px; font-size: 20px; }
-.settings-section-heading p { min-height: 57px; margin: 0; color: var(--muted); font-size: 13px; line-height: 19px; }
-
 .mobile-page-tabs-float { display: none; }
 
 @media (max-width: 760px), (hover: none) and (pointer: coarse) {
