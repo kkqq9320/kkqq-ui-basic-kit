@@ -81,14 +81,21 @@ describe("같은 위험은 같은 빨강이다", () => {
   // `.danger-button`은 처음부터 `var(--red)`였는데 다이얼로그의 위험 버튼만 리터럴
   // `#bd554d`였고 **다크 규칙이 아예 없었습니다.** 그래서 다크에서 대비 3.72로
   // 읽기 어려웠습니다(토큰으로 7.53).
-  it.each([
-    ["css/controls.css", ".danger-button"],
-    ["css/dialog.css", ".dialog-actions .danger"],
-  ])("%s의 %s가 --red를 쓴다", (file, selector) => {
-    const source = cssModules[`../${file}`];
-    const rule = new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{[^}]*\\}`).exec(source)?.[0] ?? "";
-
+  //
+  // 🔴 **이제 위험 색을 정하는 자리가 하나입니다.** 위 사고가 가능했던 이유가 바로
+  // 두 자리였기 때문입니다 — 게다가 이름도 `.danger-button`과 `.danger`로 갈려 있어
+  // **같은 것을 두 이름으로** 부르고 있었습니다. 다이얼로그에 남은 것은 자리(왼쪽 끝)뿐이고,
+  // 색이 거기 다시 생기면 아래 둘째 검사가 빨개집니다.
+  it("위험 색은 controls.css 한 자리에서만 --red로 정해진다", () => {
+    const rule = /\.action-button\[data-variant="danger"\]\s*\{[^}]*\}/.exec(cssModules["../css/controls.css"])?.[0] ?? "";
+    expect(rule).not.toBe("");
     expect([rule.includes("var(--red)"), /#[0-9a-fA-F]{3,8}\b/.test(rule)]).toEqual([true, false]);
+  });
+
+  it("다이얼로그는 위험 색을 다시 선언하지 않는다 — 자리만 정한다", () => {
+    const rule = /\.dialog-actions \.action-button\[data-variant="danger"\]\s*\{[^}]*\}/.exec(cssModules["../css/dialog.css"])?.[0] ?? "";
+    expect(rule).not.toBe("");
+    expect(/color:|background|border-color/.test(rule)).toBe(false);
   });
 });
 
@@ -142,6 +149,12 @@ describe("토큰 묶음", () => {
 describe("대비 쌍은 함께 노출된다", () => {
   const PAIRS: Array<[string, string]> = [
     ["--accent-text", "--segmented-chip"],   // 글자와 그 글자가 얹히는 면
+    /* 🔴 이 쌍이 없던 동안 사용자는 **채움만 바꾸고 그 위 글자는 못 바꿨습니다** — 강조색을
+     * 밝게 고르면 일곱 곳의 흰 글자가 한꺼번에 안 읽히는데 고칠 자리가 없었습니다. */
+    ["--on-accent", "--accent"],
+    /* 같은 모양. 사이드바 바탕을 밝게 바꾸면 "지금 여기" 상태 열두 곳이 사라집니다. */
+    ["--sidebar-bright", "--sidebar"],
+    ["--on-badge", "--badge"],
   ];
 
   it("한쪽만 편집기에 있는 쌍이 없다", () => {

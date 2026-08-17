@@ -28,13 +28,13 @@ describe("터치에서 들러붙는 호버", () => {
   });
 
   // 가드를 넣으면서 규칙을 한 블록으로 모으고 싶어지는데, 그러면 소스 순서가 바뀐다.
-  // :hover::before(opacity .5)가 .active::before(opacity 1)보다 **앞에** 있어야 활성
+  // :hover::before(opacity .5)가 [aria-current]::before(opacity 1)보다 **앞에** 있어야 활성
   // 항목이 이긴다 — 미디어 쿼리는 특이도를 더하지 않으므로 순서가 유일한 판정 기준이다.
   // 블록을 아래로 옮기면 호버가 활성을 덮어써 활성 표시가 흐려진다. 16f528a가 낸
   // 사고와 같은 계열이라 명시적으로 고정한다.
-  it("호버 규칙이 .active 규칙보다 소스에서 앞선다 — 활성 표시가 이겨야 한다", () => {
+  it("호버 규칙이 활성 규칙보다 소스에서 앞선다 — 활성 표시가 이겨야 한다", () => {
     const hoverBefore = sidebarCssSource.indexOf(".sidebar nav :is(a, button):hover::before");
-    const activeBefore = sidebarCssSource.indexOf(".sidebar nav :is(a, button).active::before");
+    const activeBefore = sidebarCssSource.indexOf('.sidebar nav :is(a, button)[aria-current="page"]::before');
     expect(hoverBefore).toBeGreaterThan(-1);
     expect(activeBefore).toBeGreaterThan(-1);
     expect(hoverBefore).toBeLessThan(activeBefore);
@@ -49,7 +49,10 @@ describe("키보드 포커스 표시", () => {
   it("사이드바 nav 항목에 :focus-visible 짝이 있고 기본 링을 끈다", () => {
     const rule = sidebarCssSource.match(/^\.sidebar nav :is\(a, button\):focus-visible \{[^}]*\}/m);
     expect(rule).not.toBeNull();
-    expect(rule![0]).toMatch(/color:\s*#fff/);
+    // 값이 아니라 **뜻**을 단언합니다. `#fff`를 글자 그대로 적어 두던 자리인데, 그때는
+    // 그 흰색에 이름이 없었습니다(사다리의 맨 윗칸이 비어 있었습니다). 이제 이름이
+    // 있으므로 리터럴로 되돌리면 여기가 빨개집니다.
+    expect(rule![0]).toMatch(/color:\s*var\(--sidebar-bright\)/);
     expect(rule![0]).toMatch(/outline:\s*none/);
     expect(sidebarCssSource).toMatch(/^\.sidebar nav :is\(a, button\):focus-visible::before \{/m);
   });
@@ -72,8 +75,13 @@ describe("키보드 포커스 표시", () => {
 // 갈라져 있었다(입력 16%, 드롭다운·날짜 12%). 목록에서 컨트롤을 빠뜨리는 것이 지금까지의
 // 실패 방식이므로 개별 이름으로 고정한다 — 하나가 빠지면 그 이름으로 실패한다.
 describe("포커스 링은 토큰 하나가 정한다", () => {
+  /* 액션 버튼은 이제 클래스 나열이 아니라 `data-variant` 한 축입니다(§16). 그래서 목록이
+   * 둘로 갈립니다 — variant마다 하나, 그리고 자기 클래스를 가진 나머지 컨트롤.
+   * `file-button`·`link-button`은 목록에서 **빠졌습니다**: 킷 안에서 아무도 안 쓰는
+   * 죽은 클래스였고(src 0 · 데모 0 · 문서 0) 이번에 지웠습니다. 지우기 전까지
+   * 이 검사가 **아무것도 아닌 것의 포커스 규칙을 지키고** 있었습니다. */
+  const NEEDS_RING_VARIANT = ["primary", "secondary", "danger", "text"];
   const NEEDS_RING = [
-    "primary", "secondary-button", "danger-button", "file-button", "link-button", "text-button",
     "sidebar-collapse-button", "mobile-sidebar-close", "wheel-step",
     "mobile-page-tabs-button", "mobile-tab-card",
   ];
@@ -92,6 +100,14 @@ describe("포커스 링은 토큰 하나가 정한다", () => {
     const all = controlsCssSource + sidebarCssSource + wheelPickerCssSource + tabsCssSource;
     expect(all.length).toBeGreaterThan(4000);
     expect(all).toContain(`.${name}:focus-visible`);
+  });
+
+  /* variant는 `:is(...)`로 묶여 있을 수 있으므로(secondary와 danger가 같은 처리라 한 줄입니다)
+   * 선택자 전체를 글자로 맞추지 않고 **그 variant를 언급하는 `:focus-visible` 규칙이
+   * 있는가**를 봅니다. 하나가 빠지면 그 variant 이름으로 실패합니다. */
+  it.each(NEEDS_RING_VARIANT)('data-variant="%s"에 포커스 처리가 있다', (variant) => {
+    expect(controlsCssSource.length).toBeGreaterThan(2000);
+    expect(controlsCssSource).toMatch(new RegExp(`\[data-variant="${variant}"\][^{]*:focus-visible`));
   });
 
   // 탭 세 종류는 클래스 하나로 안 잡혀서 위 목록에 못 넣는다(자손 선택자다).
@@ -114,9 +130,9 @@ describe("포커스 링은 토큰 하나가 정한다", () => {
   it.each([
     ".settings-tabs > .settings-tab-options > button",
     ".mobile-quick-tab-menu > button",
-  ])("%s의 포커스 규칙이 .active보다 앞선다", (base) => {
+  ])("%s의 포커스 규칙이 활성 규칙보다 앞선다", (base) => {
     const focusAt = tabsCssSource.indexOf(`${base}:focus-visible`);
-    const activeAt = tabsCssSource.indexOf(`${base}.active`);
+    const activeAt = tabsCssSource.indexOf(`${base}[aria-selected="true"]`);
     expect(focusAt).toBeGreaterThan(-1);
     expect(activeAt).toBeGreaterThan(-1);
     expect(focusAt).toBeLessThan(activeAt);

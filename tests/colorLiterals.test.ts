@@ -63,3 +63,54 @@ describe("CSS의 색은 토큰을 거친다", () => {
     expect(cssModules["../css/tokens.css"]).toMatch(/--badge:\s*#[0-9a-fA-F]{6}/);
   });
 });
+
+/* **글자색으로 쓰인 `#fff`·`#000`은 위 검사가 일부러 빼고 있었습니다.**
+ *
+ * 위 머리말이 그 이유를 적어 뒀습니다 — *"`#fff`·`#000`과 세 자리 축약 … 은 팔레트 색이
+ * 아니라 효과라서 뺍니다."* 그림자·유리 표면에서는 맞는 판단이지만, **`color:`로 쓰이면
+ * 효과가 아니라 진짜 글자색**입니다. 그 구멍으로 열아홉 곳이 들어와 있었습니다:
+ *
+ *     강조색 채움 위 글자   일곱 곳  →  `--on-accent`
+ *     사이드바의 "지금 여기"  열두 곳  →  `--sidebar-bright`
+ *
+ * 둘 다 **이름이 없어서** 리터럴이었습니다. 앱이 강조색이나 사이드바 바탕을 밝게 바꾸면
+ * 열아홉 곳이 한꺼번에 안 읽히는데 고칠 자리가 없었습니다(`tests/themeTokens.test.ts`의
+ * 대비 쌍 검사가 이제 그 짝을 강제합니다).
+ */
+describe("글자색은 토큰을 거친다", () => {
+  /** 아직 이름이 없는 글자색. 위 `KNOWN`과 같은 방식 — 줄지 않으면 이 검사는 일을 안 하는 것입니다. */
+  const KNOWN_TEXT: Record<string, number> = {
+    /* 모바일 유리 위의 활성 탭 두 곳(`.settings-tabs … button.active`,
+     * `.mobile-quick-tab-menu > button.active`). 바탕이 **강조색 채움이 아니라**
+     * `color-mix(in srgb, var(--accent) 28%, transparent)` — 흐린 유리 위에 얹힌 28% 틴트라
+     * `--on-accent`도 `--sidebar-bright`도 그 뜻이 아닙니다. 이 표면에 역할 이름을 줄지는
+     * 아직 안 정했습니다(§16의 "아직 안 지키는 자리"). **몰라서가 아니라 미룬 것**이고,
+     * 그 사실이 여기 적혀 있는 것이 요점입니다. */
+    "../css/tabs.css": 2,
+  };
+
+  const textLiteralsIn = (source: string) =>
+    [...source.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/color:\s*(#[0-9a-fA-F]{3,8})\b/g)].map((match) => match[1]);
+
+  // 전제 — 정규식이 아무것도 못 잡으면 아래가 전부 공허합니다. 알려진 둘이 실제로 잡혀야 합니다.
+  it("글자색 선언을 실제로 읽어냈다", () => {
+    expect(Object.values(cssModules).some((source) => /color:\s*var\(--on-accent\)/.test(source))).toBe(true);
+    expect(textLiteralsIn(cssModules["../css/tabs.css"]).length).toBe(2);
+  });
+
+  it.each(audited.map(([path]) => path))("%s 에 이름 없는 글자색이 없다", (path) => {
+    expect(textLiteralsIn(cssModules[path]).length).toBe(KNOWN_TEXT[path] ?? 0);
+  });
+
+  /* 이름이 생긴 두 자리를 이름으로 못박습니다 — 위 개수 비교도 잡지만, 그 실패 메시지는
+   * "어느 것이 돌아갔는지" 말하지 않습니다. */
+  it("강조색 채움 위 글자는 --on-accent다", () => {
+    expect(cssModules["../css/controls.css"]).toMatch(/\[data-variant="primary"\] \{[^}]*color:\s*var\(--on-accent\)/);
+    expect(cssModules["../css/tokens.css"]).toMatch(/--on-accent:\s*#[0-9a-fA-F]{6}/);
+  });
+
+  it("사이드바의 밝은 상태는 --sidebar-bright다", () => {
+    expect(cssModules["../css/sidebar.css"]).toMatch(/\.sidebar nav :is\(a, button\)\[aria-current="page"\] \{[^}]*color:\s*var\(--sidebar-bright\)/);
+    expect(cssModules["../css/tokens.css"]).toMatch(/--sidebar-bright:\s*#[0-9a-fA-F]{6}/);
+  });
+});

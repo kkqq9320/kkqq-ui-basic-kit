@@ -35,16 +35,66 @@ label { display: grid; gap: 6px; align-content: space-between; color: var(--mute
 /* 3줄에서 시작해 내부 스크롤바 없이 늘어나는 메모 입력 */
 .auto-grow-textarea { min-height: calc(1.45em * 3 + 22px); overflow-y: hidden; resize: none; white-space: pre-wrap; }
 
-.primary, .secondary-button, .danger-button, .button-row button, .file-button { min-width: var(--action-min-width); height: var(--action-height); display: inline-flex; align-items: center; justify-content: center; padding: 0 14px; border-radius: 7px; font-size: var(--action-font-size); font-weight: 700; line-height: 1; white-space: nowrap; }
-.primary { border: 1px solid var(--accent); background: var(--accent); color: #fff; }
-.primary:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
-.primary:disabled, .secondary-button:disabled, .danger-button:disabled { opacity: .55; cursor: not-allowed; }
-.secondary-button { border: 1px solid var(--line); color: var(--text); background: var(--surface); }
-.danger-button { border: 1px solid color-mix(in srgb, var(--red) 45%, var(--line)); color: var(--red); background: var(--surface); }
-.button-row { display: flex; justify-content: flex-end; gap: 8px; }
-.button-row button:not(.primary) { border: 1px solid var(--line); color: var(--text); background: var(--surface); }
-.text-button { padding: 8px 0 0; color: var(--link); border: 0; background: transparent; font-size: 13px; }
-.link-button { text-decoration: none; }
+/* ── 액션 버튼 ────────────────────────────────────────────────────────────────
+ * **이름의 근거는 저장소 안에 있습니다** — 높이 토큰이 이미 `--action-height`·
+ * `--compact-action-height`이고 §2가 38px을 *"표준 액션 버튼"* 이라고 부릅니다.
+ * 이 물건의 이름은 처음부터 "action"이었고, 클래스만 `.primary`였습니다.
+ *
+ * 🔴 **종류는 클래스 나열이 아니라 `data-variant` 한 축입니다**(§16). 클래스 나열은
+ * `.primary.danger`처럼 **뜻이 없는 조합을 표현할 수 있고**, 실제로 그 유연함이
+ * 결함을 냈습니다 — 아래 `.action-row` 주석을 보세요.
+ *
+ * 테두리를 base에서 `transparent`로 깔아 두는 이유: variant를 바꿔도 상자 크기가
+ * 안 변합니다. 예전에는 variant마다 `border`를 통째로 선언해서, 테두리 없는 것과
+ * 있는 것이 1px씩 어긋났습니다.
+ *
+ * `text-decoration: none`이 base에 있는 이유: `<a>`를 버튼 모양으로 쓸 때 밑줄을
+ * 지우던 `.link-button`이 따로 있었는데, 그 클래스는 킷 안에서 **아무도 안 썼습니다**
+ * (src 0 · 데모 0 · 문서 0). 한 줄이면 되는 것을 클래스로 들고 있던 자리입니다. */
+.action-button { text-decoration: none; }
+/* 🔴 **기하는 base가 아니라 "칩" 셋만 공유합니다.** 처음엔 base에 넣었다가 데모에서
+ * 재 보니 글자 버튼이 굵기 400→700, 높이 23→21px로 **딸려 갔습니다.** 구조적인 이유가
+ * 있습니다 — §2의 높이 계층은 *"액션 버튼"* 에 대한 규칙이고, 글자 버튼은 글줄 안에
+ * 서는 링크 모양이라 애초에 그 계층 밖입니다. CSS가 그 사실을 말하게 둡니다.
+ *
+ * 테두리를 `transparent`로 깔아 두는 이유: variant를 바꿔도 상자 크기가 안 변합니다.
+ *
+ * ⚠️ **`:is()`가 아니라 `:where()`인 것이 중요합니다.** `:is()`는 인자 중 가장 높은
+ * 명시도를 가져오므로 이 줄이 `(0,2,0)`이 되는데, 옛 `.primary`는 `(0,1,0)`이었습니다.
+ * 그 한 칸 차이로 **앱이 `.어떤통 button {…}`으로 걸어 둔 조정이 전부 무력화됩니다** —
+ * 데모의 `.layout-switch-buttons button`(0,1,1)이 실제로 그렇게 깨져 28px 버튼이
+ * 38px이 됐습니다(브라우저에서 재서 발견). `:where()`는 0을 기여해 옛 명시도를
+ * 그대로 지킵니다. 아래 포커스 규칙도 같은 이유로 `:where()`입니다. */
+.action-button:where([data-variant="primary"], [data-variant="secondary"], [data-variant="danger"]) { min-width: var(--action-min-width); height: var(--action-height); display: inline-flex; align-items: center; justify-content: center; padding: 0 14px; border: 1px solid transparent; border-radius: 7px; font-size: var(--action-font-size); font-weight: 700; line-height: 1; white-space: nowrap; }
+/* 두 번째 높이 계층(§2). 없으면 38px — §14대로 새 축의 기본값은 "지금과 같음"입니다. */
+.action-button[data-size="compact"] { min-width: var(--compact-action-min-width); height: var(--compact-action-height); padding: 0 11px; }
+.action-button[data-variant="primary"] { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+/* ⚠️ `:not(:disabled)`는 **이번에 더했습니다.** 예전에는 비활성 primary도 호버하면
+ * 어두워졌습니다 — 다이얼로그 쪽(`dialog.css`)에는 그 제외가 있었고 여기만 없었습니다.
+ * 같은 옷이 두 파일에서 다르게 행동하던 자리입니다. */
+.action-button[data-variant="primary"]:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, #000); }
+.action-button:disabled { opacity: .55; cursor: not-allowed; }
+.action-button[data-variant="secondary"] { border-color: var(--line); color: var(--text); background: var(--surface); }
+.action-button[data-variant="danger"] { border-color: color-mix(in srgb, var(--red) 45%, var(--line)); color: var(--red); background: var(--surface); }
+/* 🔴 **여기 있던 `.button-row button:not(.primary)`를 지웠습니다 — 살아 있는 결함이었습니다.**
+ *
+ * "행 안의 버튼 중 primary가 아닌 것은 secondary처럼 보인다"는 암묵 규칙이었는데,
+ * 그 선택자의 명시도가 `(0,2,1)`이라 `.danger-button`의 `(0,1,0)`을 **이깁니다.**
+ * 즉 **행 안의 삭제 버튼은 위험 색을 잃고 secondary로 그려졌습니다.** 데모에서 재
+ * 확인했습니다(`color: rgb(237,237,245)` = `--text`, 테두리 = `--line`), 그리고
+ * `README.md`가 **정확히 그 마크업을 가르치고 있었습니다.**
+ *
+ * 클래스 나열 모델이 이 결함을 가능하게 한 것입니다 — 이제 각 버튼이 `data-variant`로
+ * 자기 종류를 **말하므로** 암묵 규칙이 필요 없고, 이 명시도 싸움 자체가 없어집니다.
+ * (같은 집안의 사고가 `wheel-picker.css`에도 기록돼 있습니다: `(0,2,1)`이 `(0,2,0)`을
+ * 이겨 글자가 통째로 사라진 자리.)
+ *
+ * `.button-row` → `.action-row`: 이름도 `.action-button`과 짝을 맞춥니다. */
+.action-row { display: flex; justify-content: flex-end; gap: 8px; }
+/* 글자 버튼은 높이 계층에 속하지 않습니다 — 링크처럼 글줄 안에 섭니다. 그래서 base의
+ * 기하를 **되돌립니다.** 되돌릴 것이 셋뿐이라 별도 클래스로 가르는 것보다 낫습니다
+ * (별도 클래스면 `.text-button`이라는 또 하나의 일반적인 이름이 남습니다). */
+.action-button[data-variant="text"] { padding: 8px 0 0; border: 0; background: transparent; color: var(--link); font-size: 13px; }
 
 /* 아래 세 블록은 킷이 렌더하는 나머지 포커스 가능 컨트롤을 덮습니다. PRINCIPLES §11은
  * "3px 강조색 아웃라인"을 계약으로 갖고 있었지만 이들에겐 **규칙이 아예 없어서**
@@ -62,10 +112,7 @@ label { display: grid; gap: 6px; align-content: space-between; color: var(--mute
  * .page-action-button(page.css:13)이 이미 쓰는 방식이고, 컨트롤이 이미 가진 시각
  * 언어로 상태를 말하는 편이 바깥에 3px을 더하는 것보다 조용합니다.
  * 값은 그 규칙과 동일하게 맞춥니다. */
-.secondary-button:focus-visible,
-.danger-button:focus-visible,
-.file-button:focus-visible,
-.button-row button:not(.primary):focus-visible {
+.action-button:where([data-variant="secondary"], [data-variant="danger"]):focus-visible {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
   background: var(--accent-soft);
@@ -75,9 +122,11 @@ label { display: grid; gap: 6px; align-content: space-between; color: var(--mute
 /* .primary는 이미 배경도 테두리도 강조색이라 테두리 색을 바꿔서는 구분이 안 됩니다.
  * 안쪽에 밝은 링을 그려 넣습니다 — 바깥 크기를 늘리지 않아 옆 버튼과의 간격이
  * 흔들리지 않고, 흰 링 대 강조색 채움이라 대비도 충분합니다. */
-.primary:focus-visible {
+.action-button[data-variant="primary"]:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, #fff 82%, transparent);
+  /* 링도 `--on-accent`를 따릅니다 — 그 채움 위에 얹히는 것은 글자든 링이든 같은
+   * 레버여야 합니다. 앱이 밝은 강조색을 고르면 둘이 같이 어두워져야 읽힙니다. */
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--on-accent) 82%, transparent);
 }
 
 /* 🔴 **눌린 상태(`aria-pressed="true"`)는 포커스와 확실히 달라야 합니다**(오너 리포트
@@ -107,16 +156,14 @@ label { display: grid; gap: 6px; align-content: space-between; color: var(--mute
  *
  * 📌 **최종 모양은 오너가 실기기에서 고르는 중입니다**(데모의 "ON 버튼 모양" 줄에 시안
  * 셋). 이 규칙은 그 사이의 기본값이고, 정해지면 이 자리만 바꾸면 됩니다. */
-.secondary-button[aria-pressed="true"],
-.button-row button:not(.primary)[aria-pressed="true"] {
+.action-button[data-variant="secondary"][aria-pressed="true"] {
   color: var(--surface);
   border-color: var(--text);
   background: var(--text);
 }
 /* 선택된 채 포커스면 안쪽 링으로 말합니다 — 색 계열을 또 바꾸면 셋째 그림이 생겨
  * 오히려 못 읽습니다(`.primary:focus-visible`과 같은 처리). */
-.secondary-button[aria-pressed="true"]:focus-visible,
-.button-row button:not(.primary)[aria-pressed="true"]:focus-visible {
+.action-button[data-variant="secondary"][aria-pressed="true"]:focus-visible {
   color: var(--surface);
   border-color: var(--text);
   background: var(--text);
@@ -126,8 +173,7 @@ label { display: grid; gap: 6px; align-content: space-between; color: var(--mute
 
 /* 테두리도 배경도 없는 글자 버튼. 바꿀 테두리가 없으므로 글자 자체로 말합니다 —
  * 강조색 + 밑줄. 링만 두면 투명 배경 위에 사각형만 뜬 것처럼 보입니다. */
-.text-button:focus-visible,
-.link-button:focus-visible {
+.action-button[data-variant="text"]:focus-visible {
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 3px;

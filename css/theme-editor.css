@@ -44,7 +44,7 @@
  * 이때 면을 지우면 다시 맨 아이콘만 떠 있는 꼴이 됩니다. */
 .theme-color-icon-button:disabled { opacity: .45; cursor: default; }
 /* 모두 초기화 버튼의 개수 배지 */
-.theme-color-icon-button > b { position: absolute; top: -3px; right: -3px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 999px; color: #fff; background: var(--accent); font-size: 9px; font-weight: 800; line-height: 15px; }
+.theme-color-icon-button > b { position: absolute; top: -3px; right: -3px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 999px; color: var(--on-accent); background: var(--accent); font-size: 9px; font-weight: 800; line-height: 15px; }
 
 /* 값 칸과 그 옆의 붙박이 형식 표시. 표시가 **늘 보여야** 하는 이유는 이 칸이 늘 값이
  * 차 있어 placeholder가 사실상 안 뜨고, 카드 위쪽의 읽기 전용 `R, G, B` 때문에 이 칸이

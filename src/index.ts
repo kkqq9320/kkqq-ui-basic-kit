@@ -13,6 +13,7 @@
  */
 
 /* ── 컨트롤 ── */
+export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from "./Button";
 export { Select, type SelectOption, type SelectProps } from "./Select";
 export { SegmentedControl, type SegmentedControlProps, type SegmentedOption } from "./SegmentedControl";
 export { AutoGrowTextarea, type AutoGrowTextareaProps } from "./AutoGrowTextarea";

@@ -87,7 +87,7 @@ describe("Select", () => {
     fireEvent.click(screen.getByRole("button", { name: "항목" }));
 
     expect(screen.getByRole("option", { name: "첫째" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("option", { name: "첫째" }).className).toContain("selected");
+    expect(screen.getByRole("option", { name: "첫째" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("option", { name: "셋째" })).toHaveProperty("disabled", true);
   });
 
@@ -512,13 +512,14 @@ describe("Select", () => {
       expect(selectCssSource).toMatch(/\.app-select-menu button:disabled\s*\{[^}]*cursor:\s*not-allowed/);
     });
 
-    // 특이도 함정: .selected 규칙이 (0,5,1)로 :disabled 규칙 (0,2,1)을 이긴다.
+    // 특이도 함정: 선택 규칙이 (0,5,1)로 :disabled 규칙 (0,2,1)을 이긴다.
+    // (클래스 `.selected`였다가 §16에 따라 `[aria-selected="true"]`가 됐습니다 — 명시도는 같습니다.)
     // 값이 disabled 옵션을 가리키면 강조색이 disabled 표시를 덮어써서, 고를 수 없는
     // 항목이 "선택된 항목"처럼 보인다. 특이도를 올려 이기는 대신 .selected가
     // disabled를 아예 매칭하지 않게 한다 — 의미가 맞는 쪽이다.
-    it(".selected 규칙이 disabled를 제외한다", () => {
+    it("선택 규칙이 disabled를 제외한다", () => {
       expect(selectCssSource.length).toBeGreaterThan(1000);
-      const selectedRule = selectCssSource.match(/\.app-select-menu button\.selected[^{]*\{/);
+      const selectedRule = selectCssSource.match(/\.app-select-menu button\[aria-selected="true"\][^{]*\{/);
       expect(selectedRule).not.toBeNull();
       expect(selectedRule![0]).toMatch(/:not\(:disabled\)/);
     });
@@ -560,9 +561,9 @@ describe("Select", () => {
     // initialActiveValue가 메뉴를 열 때마다 활성을 현재 값으로 시딩하므로
     // active===selected는 드문 경우가 아니라 "열자마자 보는" 기본값이다 — 이걸 빼면
     // 매번 강조색·굵기는 select.css에서, transform은 surfaces.css에서 오는 잡종이 된다.
-    it(".selected 규칙이 :focus-visible도 제외한다 — 방향키로 짚은 옵션의 강조를 공용 규칙에 넘기려면", () => {
+    it("선택 규칙이 :focus-visible도 제외한다 — 방향키로 짚은 옵션의 강조를 공용 규칙에 넘기려면", () => {
       expect(selectCssSource.length).toBeGreaterThan(1000);
-      const selectedRule = selectCssSource.match(/\.app-select-menu button\.selected[^{]*\{/);
+      const selectedRule = selectCssSource.match(/\.app-select-menu button\[aria-selected="true"\][^{]*\{/);
       expect(selectedRule).not.toBeNull();
       expect(selectedRule![0]).toMatch(/:not\(:focus-visible\)/);
     });
@@ -606,7 +607,7 @@ describe("Select", () => {
       // 활성만 첫째로 옮긴다 — 선택은 여전히 둘째다.
       fireEvent.keyDown(screen.getByRole("listbox"), { key: "ArrowUp" });
       expect(document.activeElement).toBe(screen.getByRole("option", { name: "첫째" }));
-      expect(screen.getByRole("option", { name: "둘째" }).className).toContain("selected");
+      expect(screen.getByRole("option", { name: "둘째" }).getAttribute("aria-selected")).toBe("true");
     });
 
     it("선택값이 없으면 첫 선택 가능한 옵션이 활성이 된다", () => {

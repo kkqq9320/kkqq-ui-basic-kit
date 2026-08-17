@@ -18,8 +18,68 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.11.0
 **`src/` 이름·자리 정리 1라운드 — 소비자에게 보이는 변화가 0입니다.** 공개 이름 120개
 (값 75 · 타입 45)가 **하나도 안 바뀌었고**, 이제 그 목록을 테스트가 못 박습니다.
 
+### 🔴 BREAKING — 버튼의 CSS 클래스가 전부 바뀝니다
+
+`Button` 컴포넌트가 생기면서 버튼 옷을 **하나로** 모았습니다. 앱이 이 클래스들을 직접
+쓰고 있었다면 고칠 곳입니다(`import`는 한 글자도 안 바뀝니다).
+
+| 옛것 | 새것 |
+|---|---|
+| `className="primary"` | `<Button variant="primary">` |
+| `className="secondary-button"` | `<Button>` (기본값) |
+| `className="danger-button"` · 다이얼로그의 `className="danger"` | `<Button variant="danger">` |
+| `className="text-button"` | `<Button variant="text">` |
+| `className="button-row"` | `className="action-row"` |
+| `.link-button` · `.file-button` | **삭제** — 킷 안에서 아무도 안 썼습니다 |
+
+컴포넌트를 안 쓰고 클래스만 쓰려면 `class="action-button" data-variant="…"` 입니다.
+
+🔴 **그리고 이것이 제일 조용한 breaking입니다: 액션 줄 안의 날 `<button>`은 이제 옷이
+없습니다.** 예전에는 통이 자식을 대신 칠했습니다(`.button-row button:not(.primary)` ·
+`.dialog-actions button` · `.wheel-actions button`). 그 암묵 규칙이 바로 위 결함의
+원인이라 없앴고, **각 버튼이 자기 종류를 말해야** 합니다.
+
+```diff
+- <div className="button-row"><button>취소</button></div>
++ <div className="action-row"><Button>취소</Button></div>
+
+- <DialogActions><button>취소</button></DialogActions>
++ <DialogActions><Button>취소</Button></DialogActions>
+```
+
+안 고치면 **브라우저 기본 버튼**이 나옵니다(실측: `border: 2px outset` · 회색 바탕).
+`DialogActions`는 킷 컴포넌트인데 자식은 앱이 주므로 특히 조심하세요 — 옛 README
+예제가 정확히 그 마크업이었습니다.
+
+**상태 클래스 넷도 사라졌습니다** — 탭·드롭다운 옵션·사이드바 nav가 같은 상태를
+`aria-*`와 클래스로 **두 번** 말하고 있었습니다. 이제 속성 하나만 씁니다:
+`.settings-tabs button.active` → `[aria-selected="true"]`,
+`.app-select-menu button.selected` → `[aria-selected="true"]`,
+`.sidebar nav …​.active` → `[aria-current="page"]`.
+
+### 🔴 고친 것 — 행 안의 삭제 버튼이 위험 색을 잃고 있었습니다
+
+```
+.danger-button                    (0,1,0)
+.button-row button:not(.primary)  (0,2,1)   ← 이깁니다
+```
+
+행이 자식 버튼을 대신 칠했고 그 선택자가 더 구체적이라, **`.button-row` 안의
+`danger-button`은 secondary로 그려졌습니다**(데모 실측: `color` = `--text`).
+그리고 이 README가 **정확히 그 마크업을 가르치고 있었습니다.** 각 버튼이
+`data-variant`로 자기 종류를 말하면서 그 규칙 자체가 없어졌습니다.
+
 ### 더해진 것
 
+- **`Button`** — 킷의 유일한 버튼 컴포넌트. `variant` 한 축(`primary`·`secondary`·
+  `danger`·`text`), `type`은 기본이 `"button"`(폼 안에서 취소가 폼을 보내던 종류를
+  막습니다), `size`는 안 주면 문맥이 정합니다(§2).
+- **`PRINCIPLES.md` §16 — 상태를 어떻게 적는가.** ARIA가 이미 말하는 상태는 그 속성을
+  칠하고(클래스 사본 금지), 종류는 `data-*` 한 축, 순수 시각 상태만 `data-*`,
+  부품 이름만 클래스. **아직 안 지키는 자리 표**를 같이 적었습니다.
+- **토큰 셋** — `--on-accent`(강조색 채움 위 글자, 여덟 곳) · `--on-badge`(한 곳) ·
+  `--sidebar-bright`(사이드바 밝기 사다리의 맨 윗칸, 열 곳). 전부 `#fff`로 흩어져
+  있던 것이고 편집기에 노출됩니다 — 채움만 바꾸고 그 위 글자는 못 바꾸던 상태였습니다.
 - **`PRINCIPLES.md` §15 — `src/` 파일 이름과 자리.** 이 저장소는 대소문자로 종류를
   구별하는 관습(대문자 `.tsx` = 컴포넌트, 소문자 `.ts` = 모듈)을 처음부터 지켜 왔는데
   **어디에도 적혀 있지 않았습니다.** 네 규칙과, **아직 그 규칙을 안 지키는 자리 표**를
