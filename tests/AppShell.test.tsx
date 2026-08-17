@@ -958,7 +958,7 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
 
   it("안드로이드 다단계 리사이즈처럼 keyboard.inset이 열린 채로 여러 번 바뀌어도 매번 처음부터 다시 끊기지 않고 지금 값에서 새 목표로 이어간다", async () => {
     // 안드로이드는 키보드가 한 번에 최종 높이로 열리지 않고 여러 단계로 리사이즈될 수
-    // 있다 — 그때마다 keyboard.inset이 바뀐다(hooks.ts의 useVirtualKeyboard). 두 단계
+    // 있다 — 그때마다 keyboard.inset이 바뀐다(visualViewport.ts의 useVirtualKeyboard). 두 단계
     // 모두 스크롤이 필요하게(overshoot > 0) 잡아, 1단계 애니메이션이 진행되는 도중에
     // 2단계가 다시 겨냥하는 상황을 실제로 재현한다. 이펙트가 keyboard.inset을
     // 의존성으로 갖고 있으므로 매 단계마다 다시 실행되는데, 그렇다고 "리스너를 통째로

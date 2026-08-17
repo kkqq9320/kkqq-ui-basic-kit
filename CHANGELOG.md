@@ -13,6 +13,33 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.12.0
 
 ---
 
+## 미출시
+
+**`src/` 이름·자리 정리 2라운드 — 소비자에게 보이는 변화가 0입니다.** 공개 이름이
+하나도 안 바뀌었고(`publicApi.test.ts`가 지킵니다) 파일만 갈라졌습니다.
+
+### 고친 것
+
+- **`hooks.ts`(542줄)를 셋으로 갈랐습니다.** 이름이 `hooks`라 **무엇이든 들어갈 수
+  있는 자리**였고(§15 규칙 4가 금지하는 넓은 이름) 실제로 세 주제가 들어 있었습니다.
+  재 보니 셋 사이의 **참조가 0건**이라 이음매가 이미 나 있었습니다.
+
+  | 새 파일 | 무엇 | 내보내는 것 |
+  |---|---|---|
+  | `src/popupDismiss.ts` | 팝업이 닫히는 경로 — Escape·뒤로가기·깊이 | `PopupDepthContext` · `useEscapeToClose` · `useBackToClose` |
+  | `src/scrollDirection.ts` | 스크롤 방향으로 바를 숨기는 판정 | `useScrollDirectionHidden` |
+  | `src/visualViewport.ts` | `window.visualViewport`를 감싸는 훅들 | `useVisualViewportBox` · `useVirtualKeyboard` · `useVirtualKeyboardOpen` |
+
+  🟢 **배럴이 같은 이름을 계속 내보내므로 소비자는 0입니다.** deep import(`design-system/src/hooks`)를
+  쓰던 앱만 경로를 바꾸면 되는데, 실측상 그런 소비자는 없습니다.
+
+### 눈으로 볼 것
+
+**없습니다** — 순수 이동입니다. 데모에서 다이얼로그를 열고 Escape로 닫아 확인했습니다:
+history 표식이 push → 정리(null)까지 그대로 돕니다.
+
+---
+
 ## v0.12.0 — 2026-08-18
 
 [전체 diff: v0.11.0...v0.12.0](https://github.com/kkqq9320/kkqq-ui-basic-kit/compare/v0.11.0...v0.12.0)

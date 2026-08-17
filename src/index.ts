@@ -49,6 +49,8 @@ export { ShortcutSettings, displayCombo, type ShortcutSettingsProps } from "./Sh
 export { getHourFormat, getHourFormatServerSnapshot, setHourFormat, subscribeHourFormat, getWheelRowsPerSide, getWheelRowsPerSideServerSnapshot, setWheelRowsPerSide, subscribeWheelRowsPerSide, type HourFormat, type WheelRowsPerSide } from "./settings";
 
 /* ── 훅·순수 헬퍼 ── 컴포넌트가 아니라 앱이 직접 쓰는 계산과 훅입니다. */
-export { PopupDepthContext, useBackToClose, useEscapeToClose, useScrollDirectionHidden, useVisualViewportBox, useVirtualKeyboard, useVirtualKeyboardOpen, type VisualViewportBox, type VirtualKeyboard } from "./hooks";
+export { PopupDepthContext, useBackToClose, useEscapeToClose } from "./popupDismiss";
+export { useScrollDirectionHidden } from "./scrollDirection";
+export { useVisualViewportBox, useVirtualKeyboard, useVirtualKeyboardOpen, type VisualViewportBox, type VirtualKeyboard } from "./visualViewport";
 export { dropdownViewportSpace, shouldOpenDropdownAbove, onViewportChange, captureScrollSnapshot, restoreFocusWithoutScroll, type ScrollSnapshot } from "./positioning";
 export { isPrimaryButton } from "./pointerButton";

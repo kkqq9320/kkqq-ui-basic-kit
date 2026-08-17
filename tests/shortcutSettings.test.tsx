@@ -4,7 +4,7 @@
 /* **녹음기는 설정 UI이면서 계측기입니다**(스펙 §5.3·§6).
  *
  * ⚠️ `Escape`·`Tab`은 조합으로 등록할 수 없습니다. 실측된 이유가 있습니다 —
- * 설정 화면이 `Dialog` 안이면 `hooks.ts:25`의 `useEscapeToClose`가 `Escape`를 받아
+ * 설정 화면이 `Dialog` 안이면 `popupDismiss.ts`의 `useEscapeToClose`가 `Escape`를 받아
  * 다이얼로그를 닫는데, **그 리스너는 `preventDefault`를 안 부릅니다.** 그래서
  * 녹음기는 "아무도 안 먹었다"로 읽고, 다이얼로그가 닫히면서 동시에 등록됩니다.
  */

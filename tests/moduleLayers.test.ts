@@ -104,7 +104,7 @@ describe("src/ 파일 이름 규칙과 의존 방향 (PRINCIPLES §15)", () => {
     expect(code.filter((line) => !/^export\s*\{[^}]*\}\s*from\s*"\.\/[^"]+";$/.test(line))).toEqual([]);
   });
 
-  /* §15의 "아직 이 규칙을 안 지키는 자리" 표는 `hooks.ts (약 540줄)` 처럼 **크기를**
+  /* §15의 "아직 이 규칙을 안 지키는 자리" 표는 `AppShell.tsx (약 1060줄)` 처럼 **크기를**
    * 적습니다. 이 저장소의 기록된 규칙은 *"주석에 적은 숫자는 아무도 다시 재지 않는다 —
    * 단언으로 옮겨라"* 입니다(링크 개수가 한 브랜치 안에서 두 번 낡은 뒤에 생겼습니다).
    *
@@ -116,7 +116,7 @@ describe("src/ 파일 이름 규칙과 의존 방향 (PRINCIPLES §15)", () => {
    * 그래서 표가 실제로 주장하는 것 — **크기의 자릿수** — 을 잽니다(±5%). 평범한 편집엔
    * 조용하고, 누가 파일을 실제로 쪼개면 빨개집니다. **그때가 표를 고칠 때**입니다. */
   it("§15가 적은 크기가 실제 파일과 같은 자릿수다", () => {
-    const claims = [...principles.matchAll(/`(\w+\.tsx?)` \(약 (\d+)줄\)/g)].map((match) => ({ file: match[1], claimed: Number(match[2]) }));
+    const claims = [...principles.matchAll(/`([\w/]+\.tsx?)` \(약 (\d+)줄\)/g)].map((match) => ({ file: match[1], claimed: Number(match[2]) }));
     expect(claims.length).toBeGreaterThan(2);
     // 끝 개행 뒤의 빈 조각은 줄이 아닙니다 — `wc -l`과 같은 셈을 씁니다.
     const lineCount = (source: string | undefined) => (source === undefined ? undefined : source.split("\n").length - (source.endsWith("\n") ? 1 : 0));

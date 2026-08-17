@@ -140,7 +140,7 @@ function cssPixels(value: string): number {
 }
 
 /* ---- 키보드 보정 계산 재현 ----------------------------------------------------
- * 아래는 src/AppShell.tsx의 reposition()(:269-284)과 src/hooks.ts의
+ * 아래는 src/AppShell.tsx의 reposition()과 src/visualViewport.ts의
  * useVirtualKeyboard(:476-515)가 "지금 이 순간" 무엇을 봤을지를 DOM에서 다시
  * 읽어 재현한 것입니다 — 훅 내부 상태를 후킹해 읽은 게 절대 아닙니다(데모는
  * src/를 건드리지 않으므로 그럴 수도 없습니다). 그래서:
@@ -206,10 +206,10 @@ function snapshotKeyboardMath(label: string, target: string | undefined): string
   // "N"이 뜨면 그게 바로 "킷이 이 필드는 애초에 손대지 않는다"는 뜻입니다.
   const inRoot = scrollRoot && focused ? (scrollRoot.contains(focused) ? "Y" : "N") : "n/a";
 
-  // useVirtualKeyboard(hooks.ts:482,487)가 "열림"을 가르는 첫 조건 — 포커스가 편집
-  // 가능한 요소에 있는가. hooks.ts:482의 셀렉터를 그대로 씁니다. edit=N인데 foc=body면
+  // useVirtualKeyboard(visualViewport.ts)가 "열림"을 가르는 첫 조건 — 포커스가 편집
+  // 가능한 요소에 있는가. 그 훅의 EDITABLE 셀렉터를 그대로 씁니다. edit=N인데 foc=body면
   // "닫힘"의 이유가 높이가 아니라 포커스 자체였다는 뜻이고, edit=Y인데도 op=N이면
-  // 높이 축소가 120px 문턱(hooks.ts:493)을 못 넘었다는 뜻 — 둘은 완전히 다른 원인입니다.
+  // 높이 축소가 120px 문턱(visualViewport.ts)을 못 넘었다는 뜻 — 둘은 완전히 다른 원인입니다.
   const editable = focused instanceof Element && focused.matches("input, textarea, select, [contenteditable='true']") ? "Y" : "N";
 
   let rectText = "n/a";
@@ -247,7 +247,7 @@ function snapshotKeyboardMath(label: string, target: string | undefined): string
 }
 
 /** 킷이 지금 "열림"으로 보고 있는가 — `.app-shell`의 `keyboard-inset-open`을 그대로
- * 읽는다(snapshotKeyboardMath의 `op=`와 같은 판정). 여기서 hooks.ts의 120px 문턱을
+ * 읽는다(snapshotKeyboardMath의 `op=`와 같은 판정). 여기서 visualViewport.ts의 120px 문턱을
  * 다시 구현하지 않는 이유는 startReleaseTrace 트리거의 주석과 같다 — 재구현하면
  * 드리프트 지점이 하나 더 는다. */
 function kitKeyboardOpen(): boolean {
@@ -972,7 +972,7 @@ export function installEventTrace() {
     append(`popstate    stackLen=${popupStackLength()}  menu=${menuPresent()}`);
   });
 
-  // 포커스 이동 자체 — 기존 패널은 이걸 전혀 찍지 않았다. useVirtualKeyboard(hooks.ts:487)가
+  // 포커스 이동 자체 — 기존 패널은 이걸 전혀 찍지 않았다. useVirtualKeyboard(visualViewport.ts)가
   // "편집 가능한 요소에 포커스가 있는가"로 열림 여부를 가르므로, 포커스가 언제·무엇으로
   // 옮겨갔는지를 놓치면 그 판정의 절반을 볼 수 없다. document.activeElement는 focusout
   // 시점에 이미 새 대상으로 넘어가 있을 수 있어(스펙상 그렇다) event.target을 tgt=로
@@ -1004,7 +1004,7 @@ export function installEventTrace() {
 
   // 두 방향 트레이스의 방아쇠 — 킷이 스스로 "열렸다/닫혔다"고 판단한 그 순간에 맞춘다.
   // .app-shell의 keyboard-inset-open은 useVirtualKeyboard의 keyboard.open을 그대로
-  // 반영하므로(AppShell이 붙인다), 이걸 보면 hooks.ts의 120px 문턱이나 restingHeight
+  // 반영하므로(AppShell이 붙인다), 이걸 보면 visualViewport.ts의 120px 문턱이나 restingHeight
   // 누적 규칙을 여기서 다시 구현하지 않아도 된다 — 재구현했다면 그게 바로 이 파일이
   // 이미 경고하고 있는 종류의 드리프트 지점이 하나 더 느는 것이다.
   //

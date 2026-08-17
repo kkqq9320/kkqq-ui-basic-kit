@@ -32,7 +32,7 @@ const KNOWN_CONSUMERS: Record<string, number> = {
   "../src/WheelPicker.tsx": 1,
   "../src/Select.tsx": 2,
   "../src/Dialog.tsx": 1,
-  "../src/hooks.ts": 1,
+  "../src/popupDismiss.ts": 1,
   "../src/SectionTabs.tsx": 2,
   "../src/PageChrome.tsx": 1,
   "../src/ShortcutProvider.tsx": 1,

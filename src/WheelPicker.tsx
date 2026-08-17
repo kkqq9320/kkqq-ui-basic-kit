@@ -26,7 +26,7 @@ import {
   type WheelStep,
 } from "./model/instant";
 import { getHourFormat, getHourFormatServerSnapshot, getWheelRowsPerSide, getWheelRowsPerSideServerSnapshot, subscribeHourFormat, subscribeWheelRowsPerSide } from "./settings";
-import { useBackToClose, useEscapeToClose } from "./hooks";
+import { useBackToClose, useEscapeToClose } from "./popupDismiss";
 import { isPrimaryButton } from "./pointerButton";
 import { dropdownViewportSpace, focusTriggerOnClick, onViewportChange } from "./positioning";
 
@@ -2063,7 +2063,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     //    할 수 없는 일"이라는 한 가지 이유로 갈린다.
 
     if (key === "Escape") {
-      // **열림은 여기서 처리하지 않는다.** `useEscapeToClose`(hooks.ts)가 document
+      // **열림은 여기서 처리하지 않는다.** `useEscapeToClose`(popupDismiss.ts)가 document
       // 리스너로 받아 겹친 것 중 가장 깊은 하나만 닫는다 — 다이얼로그 안의 픽커를
       // Escape로 닫아도 다이얼로그가 살아 있는 것이 그 훅 덕이다. 여기서 가로채면
       // (특히 아래 stopPropagation이 걸리면) 그 리스너에 영영 안 닿아 **팝오버가
