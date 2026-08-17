@@ -7,6 +7,8 @@
  */
 import { createContext, useContext, useEffect, useRef, useState, type Ref } from "react";
 
+import { Pressable } from "../controls/Pressable";
+
 import { isPrimaryButton } from "../browser/pointerButton";
 
 export type MobilePageTabRegistration = {
@@ -88,9 +90,9 @@ export function SectionTabs<T extends string>({ value, tabs, onChange, ariaLabel
     onChange(nextValue);
   }
   return <div ref={rootRef} className={`settings-tabs${mobileOpen ? " mobile-open" : ""} ${className}`.trim()}>
-    <button type="button" className="mobile-tab-card" aria-label={`${ariaLabel}: ${currentTab.label}`} aria-haspopup="true" aria-expanded={mobileOpen} onClick={() => setMobileOpen((open) => !open)}><span>{currentTab.label}</span><i aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" /></svg></i></button>
+    <Pressable className="mobile-tab-card" aria-label={`${ariaLabel}: ${currentTab.label}`} aria-haspopup="true" aria-expanded={mobileOpen} onClick={() => setMobileOpen((open) => !open)}><span>{currentTab.label}</span><i aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" /></svg></i></Pressable>
     <div className="settings-tab-options" role="tablist" aria-label={ariaLabel}>
-      {tabs.map((tab) => <button type="button" role="tab" aria-selected={tab.value === value} onClick={() => selectTab(tab.value)} key={tab.value}>{tab.label}</button>)}
+      {tabs.map((tab) => <Pressable role="tab" aria-selected={tab.value === value} onClick={() => selectTab(tab.value)} key={tab.value}>{tab.label}</Pressable>)}
     </div>
   </div>;
 }
@@ -105,9 +107,9 @@ export function MobilePageTabs({ registration, open, onToggle, label = "페이�
   if (!registration) return null;
   return <div ref={floatRef} className={`mobile-page-tabs-float${open ? " open" : ""} ${className}`.trim()}>
     <div className="mobile-quick-tab-menu" role="tablist" aria-label={registration.ariaLabel}>
-      {registration.tabs.map((tab) => <button type="button" role="tab" aria-selected={tab.value === registration.currentValue} key={tab.value} onClick={() => { registration.onSelect(tab.value); onToggle(false); }}>{tab.label}</button>)}
+      {registration.tabs.map((tab) => <Pressable role="tab" aria-selected={tab.value === registration.currentValue} key={tab.value} onClick={() => { registration.onSelect(tab.value); onToggle(false); }}>{tab.label}</Pressable>)}
     </div>
-    <button type="button" className="mobile-page-tabs-button" aria-label={`${label} · ${registration.ariaLabel}: ${registration.currentLabel}`} aria-haspopup="true" aria-expanded={open} onClick={() => onToggle(!open)}><PageTabsIcon /><span>{label}</span></button>
+    <Pressable className="mobile-page-tabs-button" aria-label={`${label} · ${registration.ariaLabel}: ${registration.currentLabel}`} aria-haspopup="true" aria-expanded={open} onClick={() => onToggle(!open)}><PageTabsIcon /><span>{label}</span></Pressable>
   </div>;
 }
 

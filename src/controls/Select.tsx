@@ -9,6 +9,8 @@
  * 그럴 때 portal을 켜세요. body에 fixed로 붙고 스크롤·리사이즈를 따라갑니다.
  */
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+
+import { Pressable } from "./Pressable";
 import { createPortal } from "react-dom";
 
 import { useBackToClose, useEscapeToClose } from "../browser/popupDismiss";
@@ -374,7 +376,7 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
 
     if (!open) {
       if (key !== "ArrowDown" && key !== "ArrowUp" && key !== "Enter" && key !== " ") return;
-      // <button>은 Enter를 keydown에서, Space를 keyup에서 click으로 바꿉니다.
+      // <Pressable>은 Enter를 keydown에서, Space를 keyup에서 click으로 바꿉니다.
       // 여기서 막지 않으면 그 click이 트리거의 onClick과 겹쳐 (연 직후) 곧바로 다시
       // 닫아버립니다(토글이 두 번 겹치는 셈). 이 네 키로 열려는 시도임이 확정된 지금
       // 곧바로 막아야 합니다 — 아래 initial===null 가드보다 뒤에 두면, 선택 가능한
@@ -450,8 +452,7 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
     onPointerDownCapture={() => { selectionScrollRef.current = captureScrollSnapshot(); }}
     onKeyDown={handleKeyDown}
   >
-    {options.map((option) => <button
-      type="button"
+    {options.map((option) => <Pressable
       role="option"
       aria-selected={option.value === value}
       // roving tabindex: 활성 옵션 하나만 tab 순서에 있습니다. 옵션이 개별적으로 tab
@@ -460,13 +461,11 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
       disabled={option.disabled}
       key={option.value}
       onClick={() => choose(option.value)}
-    >{option.label}</button>)}
+    >{option.label}</Pressable>)}
   </div>;
 
   return <div className={`app-select dropdown-align-${align} ${open ? "open" : ""} ${openAbove ? "drop-up" : ""} ${className}`.trim()} ref={rootRef}>
-    <button
-      ref={triggerRef}
-      type="button"
+    <Pressable buttonRef={triggerRef}
       className="app-select-trigger"
       aria-label={ariaLabel}
       aria-haspopup="listbox"
@@ -486,7 +485,7 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
         if (!open) setActiveValue(initialActiveValue(options, value));
         setOpen((current) => !current);
       }}
-    ><span className={commitPulse ? "dropdown-value-commit" : undefined} key={commitPulse}>{selected?.label || placeholder}</span><i className="dropdown-chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></i></button>
+    ><span className={commitPulse ? "dropdown-value-commit" : undefined} key={commitPulse}>{selected?.label || placeholder}</span><i className="dropdown-chevron" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m3.5 6 4.5 4 4.5-4" /></svg></i></Pressable>
     {open && (portal ? (position ? createPortal(menu, document.body) : null) : menu)}
   </div>;
 }

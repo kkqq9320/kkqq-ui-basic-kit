@@ -17,6 +17,8 @@
  */
 import type { ReactNode } from "react";
 
+import { Pressable } from "./Pressable";
+
 export type SegmentedOption<T extends string> = {
   value: T;
   /** 칸에 그리는 것. 글자면 그것이 곧 접근성 이름입니다. */
@@ -70,9 +72,7 @@ export function SegmentedControl<T extends string>({ ariaLabel, value, options, 
       {options.map((option) => {
         const checked = option.value === value;
         return (
-          <button
-            type="button"
-            key={option.value}
+          <Pressable key={option.value}
             role="radio"
             aria-checked={checked}
             /* roving tabindex — 고른 칸 하나만 탭 정거장입니다. 아무것도 안 골려 있으면
@@ -83,7 +83,7 @@ export function SegmentedControl<T extends string>({ ariaLabel, value, options, 
             onClick={() => !option.disabled && pick(option.value)}
           >
             {option.label}
-          </button>
+          </Pressable>
         );
       })}
     </div>

@@ -93,6 +93,17 @@ const OWN_DOM_TAG = /<[a-z][\w-]*[\s/>]/;
  *   구현을 어기는 변경이라 하지 않습니다. */
 const NO_OWN_DOM = new Set(["ShortcutProvider"]);
 
+/* **자기 DOM은 그리는데 자기 클래스가 없는 것.** 위 규칙의 이유는 *"그냥 펼치면 앱이 준
+ * 값이 킷의 클래스를 덮는다"* 인데, 덮을 킷 클래스가 **없으면** 그 위험이 없습니다.
+ *
+ * - `Pressable`(src/controls/Pressable.tsx): 킷의 모든 `<button>`이 지나가는 보장
+ *   자리이고 **옷이 없습니다**(옷은 `Button`·탭·사이드바가 각자 입힙니다). className은
+ *   `...rest`로 그대로 갑니다. 여기에 클래스를 하나라도 붙이면 킷의 모든 버튼에
+ *   딸려 가므로, "클래스가 없다"가 이 컴포넌트의 계약입니다.
+ *
+ * 주석으로만 적으면 아무도 다시 안 재므로 아래에서 소스로 확인합니다. */
+const NO_OWN_CLASS = new Set(["Pressable"]);
+
 describe("내보내는 컴포넌트는 전부 className을 받는다", () => {
   // 전제 — 파싱이 0건이면 아래 단언이 **공허하게** 통과합니다.
   it("컴포넌트를 실제로 찾아냈다", () => {
@@ -124,13 +135,16 @@ describe("내보내는 컴포넌트는 전부 className을 받는다", () => {
    * 하고 있다는 뜻이고, 그러면 아래 검사는 완화 없이 통과한 것이라 이 완화가 공허합니다. */
   it("rest로 물려받는 래퍼가 실제로 있다", () => {
     const forwarding = components.filter(inheritsByForwarding).map((component) => component.name).sort();
-    expect(forwarding).toEqual(["DateWheelPicker", "DurationWheelPicker", "TimeWheelPicker"]);
+    /* `Button`이 이 목록에 들어온 것은 **의도입니다** — 이제 자기 DOM을 안 그리고
+     * `Pressable`에 넘깁니다(그래서 `type="button"` 보장이 한 자리로 모였습니다). */
+    expect(forwarding).toEqual(["Button", "DateWheelPicker", "DurationWheelPicker", "TimeWheelPicker"]);
   });
 
   it("빠진 컴포넌트가 없다", () => {
     const missing = components.filter((component) =>
       !component.signature.includes("className")
       && !NO_OWN_DOM.has(component.name)
+      && !NO_OWN_CLASS.has(component.name)
       && !inheritsByForwarding(component));
     expect(missing.map((component) => `${component.name} (${component.path})`)).toEqual([]);
   });
@@ -141,6 +155,18 @@ describe("내보내는 컴포넌트는 전부 className을 받는다", () => {
    * 자기 DOM 태그를 실제로 안 그리는지 여기서 다시 잽니다. 나중에 DOM을 그리는
    * 컴포넌트가 예외에 오르면(예: Task 5의 ShortcutSettings — 실제로 DOM을 그리므로
    * 예외 대상이 아닙니다) 여기서 빨개집니다. */
+  /* `NO_OWN_CLASS`의 근거("자기 클래스가 없다")도 소스로 다시 잽니다. 누가 `Pressable`에
+   * 클래스를 붙이면 여기서 빨개지고, 그게 이 예외가 무효가 되는 순간입니다. */
+  it("NO_OWN_CLASS 예외는 실제로 자기 클래스를 붙이지 않는다", () => {
+    for (const name of NO_OWN_CLASS) {
+      const component = components.find((candidate) => candidate.name === name);
+      expect(component, `${name}이 컴포넌트 목록에서 안 잡힘`).toBeTruthy();
+      const body = componentBody(sources[`../src/${component!.path}`], name);
+      expect(body, `${name}의 함수 본문을 못 찾음`).not.toBe("");
+      expect(/className\s*=/.test(body), `${name}이 className을 붙이는데 NO_OWN_CLASS에 올라 있음`).toBe(false);
+    }
+  });
+
   it("NO_OWN_DOM 예외는 실제로 자기 DOM 태그를 그리지 않는다", () => {
     for (const name of NO_OWN_DOM) {
       const component = components.find((candidate) => candidate.name === name);

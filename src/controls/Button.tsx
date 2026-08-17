@@ -12,6 +12,8 @@
  */
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
+import { Pressable } from "./Pressable";
+
 /** §2의 두 높이 계층. 생략하면 문맥이 정합니다 — 다이얼로그·팝오버 안이면 32px입니다. */
 export type ButtonSize = "action" | "compact";
 
@@ -55,5 +57,5 @@ export type ButtonProps = {
  * 그때 실제 쓰임을 보고 엽니다.
  */
 export function Button({ variant = "secondary", size, className = "", type = "button", ...rest }: ButtonProps) {
-  return <button type={type} className={`action-button ${className}`.trim()} data-variant={variant} data-size={size} {...rest} />;
+  return <Pressable type={type} className={`action-button ${className}`.trim()} data-variant={variant} data-size={size} {...rest} />;
 }
