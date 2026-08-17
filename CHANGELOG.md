@@ -48,6 +48,11 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.11.0
 셀렉터 `*`와 **옮긴 블록 자신뿐**입니다. computed 값도 선언대로입니다
 (`min-height: 57px` · `font-size: 13px` · `line-height: 19px`).
 
+⚠️ **딱 하나 예외가 있습니다 — `css/index.css` 대신 파일을 골라 import 하는 앱.**
+전에는 `tabs.css`만 넣어도 섹션 제목이 스타일을 받았고, 이제 **`page.css`가 필요**
+합니다. `index.css`를 쓰면 해당 없습니다(둘 다 들어갑니다). README "골라 쓰기"에
+적었습니다.
+
 ### 검사
 
 1519 통과 / 46 파일(직전 1500 / 43) · TZ=UTC 1519 · `tsc` · `tsc:src`.
