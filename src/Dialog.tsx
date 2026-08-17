@@ -9,7 +9,7 @@ import { useContext, useEffect, useRef, type FormEvent, type ReactNode } from "r
 import { createPortal } from "react-dom";
 
 import { PopupDepthContext, useBackToClose, useEscapeToClose, useVisualViewportBox } from "./hooks";
-import { isPrimaryButton } from "./positioning";
+import { isPrimaryButton } from "./pointerButton";
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 

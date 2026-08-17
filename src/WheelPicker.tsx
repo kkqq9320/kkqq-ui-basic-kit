@@ -25,7 +25,8 @@ import {
 } from "./model/instant";
 import { getHourFormat, getHourFormatServerSnapshot, getWheelRowsPerSide, getWheelRowsPerSideServerSnapshot, subscribeHourFormat, subscribeWheelRowsPerSide } from "./settings";
 import { useBackToClose, useEscapeToClose } from "./hooks";
-import { dropdownViewportSpace, focusTriggerOnClick, isPrimaryButton, onViewportChange } from "./positioning";
+import { isPrimaryButton } from "./pointerButton";
+import { dropdownViewportSpace, focusTriggerOnClick, onViewportChange } from "./positioning";
 
 /* `todayIn`은 `index.ts`가 내보내고, `WheelUnit`은 tests/DateWheelPicker.test.tsx가
  * 이 경로로 가져옵니다. 모델로 옮긴 뒤에도 그 경로를 그대로 유지합니다 — 이 단계는

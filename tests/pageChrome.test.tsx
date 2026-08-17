@@ -9,10 +9,38 @@
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { Panel, PanelGrid, FieldGrid, SummaryGrid, SummaryCard } from "../src/PageChrome";
+import pageCss from "../css/page.css?raw";
+import tabsCss from "../css/tabs.css?raw";
+import { Panel, PanelGrid, FieldGrid, SectionHeading, SummaryGrid, SummaryCard } from "../src/PageChrome";
 import { ThemeColorEditor } from "../src/ThemeColorEditor";
 
 afterEach(cleanup);
+
+/* `SectionHeading`은 `SectionTabs.tsx`에서 여기로 옮겨 왔습니다(PRINCIPLES §15 규칙 4 —
+ * 탭이 아니라 §7 배치 스택의 일부입니다). 옮기기 전 이 컴포넌트는 **렌더 테스트가 0개**
+ * 였습니다(훑어 확인 — 배럴·소스·데모에만 나옵니다). 컴포넌트와 CSS가 **서로 다른 두
+ * 파일**을 건너간 변경이라, 이 파일의 머리말이 적은 그대로 양쪽을 다 봅니다: 표시가
+ * 붙는가(렌더), 그 표시에 닿는 규칙이 있는가(CSS). */
+describe("SectionHeading: §7의 예약된 설명 줄", () => {
+  it("설명을 안 넘겨도 <p>가 남는다 — 자리를 예약하는 것이 계약이다", () => {
+    const { container } = render(<SectionHeading title="컨트롤" />);
+    const heading = container.querySelector(".settings-section-heading");
+    expect(heading?.querySelector("h2")?.textContent).toBe("컨트롤");
+    expect(heading?.querySelector("p")).not.toBeNull();
+  });
+
+  it("className은 킷 클래스를 덮지 않고 더해진다", () => {
+    const { container } = render(<SectionHeading title="컨트롤" className="dense" />);
+    expect([...container.firstElementChild!.classList].sort()).toEqual(["dense", "settings-section-heading"]);
+  });
+
+  /* 🔴 **이 줄이 CSS 이사를 지킵니다.** 컴포넌트만 옮기고 규칙을 두고 왔거나, 규칙만
+   * 옮기고 클래스 이름을 바꿨으면 여기가 빨개집니다. 57px은 §7이 적은 "19px 3줄"입니다. */
+  it("예약 높이 규칙이 page.css에 있고 tabs.css에는 없다", () => {
+    expect(pageCss).toContain(".settings-section-heading p { min-height: 57px;");
+    expect(tabsCss).not.toContain("settings-section-heading");
+  });
+});
 
 describe("PanelGrid: 앱이 정하는 것들", () => {
   it("기본은 자연 높이다 — stretch 표시가 없다", () => {
