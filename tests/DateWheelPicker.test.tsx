@@ -8,11 +8,11 @@ import { act, cleanup, createEvent, fireEvent, render, screen, waitFor } from "@
 import { useEffect, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DateWheelPicker } from "../src/DateWheelPicker";
-import { DEFAULT_WHEEL_LABELS, type WheelLabels } from "../src/WheelPicker";
+import { DateWheelPicker } from "../src/controls/DateWheelPicker";
+import { DEFAULT_WHEEL_LABELS, type WheelLabels } from "../src/controls/WheelPicker";
 import { instantModel, type WheelUnit } from "../src/model/instant";
 import { setHourFormat, getWheelRowsPerSide, setWheelRowsPerSide } from "../src/settings";
-import { Dialog } from "../src/Dialog";
+import { Dialog } from "../src/surfaces/Dialog";
 import wheelPickerCssSource from "../css/wheel-picker.css?raw";
 import tokensCssSource from "../css/tokens.css?raw";
 

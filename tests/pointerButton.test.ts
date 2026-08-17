@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { isPrimaryButton } from "../src/pointerButton";
+import { isPrimaryButton } from "../src/browser/pointerButton";
 
 describe("isPrimaryButton", () => {
   it("주 버튼과 button 미지정은 참이다", () => {

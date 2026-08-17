@@ -9,8 +9,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { WheelPicker, DEFAULT_WHEEL_LABELS } from "../src/WheelPicker";
-import { DEFAULT_DURATION_LABELS } from "../src/DurationWheelPicker";
+import { WheelPicker, DEFAULT_WHEEL_LABELS } from "../src/controls/WheelPicker";
+import { DEFAULT_DURATION_LABELS } from "../src/controls/DurationWheelPicker";
 import { instantModel } from "../src/model/instant";
 import { durationModel, parseDuration, serializeDuration, durationCeiling } from "../src/model/duration";
 import type { WheelUnit } from "../src/model/instant";

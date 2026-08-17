@@ -6,9 +6,9 @@
  * 예외가 나므로, 색 하나를 바꾸는 순간 편집기가 죽는다. */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createThemePalette } from "../src/themePalette";
-import { THEME_TOKEN_GROUPS, type ThemeTokenGroup } from "../src/themeTokens";
-import { writeTokenOverrides } from "../src/themeTokens";
+import { createThemePalette } from "../src/theme/themePalette";
+import { THEME_TOKEN_GROUPS, type ThemeTokenGroup } from "../src/theme/themeTokens";
+import { writeTokenOverrides } from "../src/theme/themeTokens";
 
 afterEach(() => {
   vi.restoreAllMocks();

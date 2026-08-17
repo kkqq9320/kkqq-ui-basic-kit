@@ -24,16 +24,16 @@ import {
   type WheelUnit,
   type HourDisplay,
   type WheelStep,
-} from "./model/instant";
-import { getHourFormat, getHourFormatServerSnapshot, getWheelRowsPerSide, getWheelRowsPerSideServerSnapshot, subscribeHourFormat, subscribeWheelRowsPerSide } from "./settings";
-import { useBackToClose, useEscapeToClose } from "./popupDismiss";
-import { isPrimaryButton } from "./pointerButton";
-import { dropdownViewportSpace, focusTriggerOnClick, onViewportChange } from "./positioning";
+} from "../model/instant";
+import { getHourFormat, getHourFormatServerSnapshot, getWheelRowsPerSide, getWheelRowsPerSideServerSnapshot, subscribeHourFormat, subscribeWheelRowsPerSide } from "../settings";
+import { useBackToClose, useEscapeToClose } from "../browser/popupDismiss";
+import { isPrimaryButton } from "../browser/pointerButton";
+import { dropdownViewportSpace, focusTriggerOnClick, onViewportChange } from "../browser/positioning";
 
 /* `todayIn`은 `index.ts`가 내보내고, `WheelUnit`은 tests/DateWheelPicker.test.tsx가
  * 이 경로로 가져옵니다. 모델로 옮긴 뒤에도 그 경로를 그대로 유지합니다 — 이 단계는
  * 공개 표면을 하나도 바꾸지 않습니다. */
-export { todayIn, type WheelUnit } from "./model/instant";
+export { todayIn, type WheelUnit } from "../model/instant";
 
 /** 기본은 연·월·일 3열. 상수로 둬서 기본값일 때 매 렌더 새 배열이 생기지 않게 합니다.
  *  타입은 `WheelUnit`(여섯 단위)까지 넓고, Task 3부터 컴포넌트가 시·분·초를 실제로

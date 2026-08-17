@@ -16,7 +16,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import appShellSource from "../src/AppShell.tsx?raw";
+import appShellSource from "../src/surfaces/AppShell.tsx?raw";
 import tokensCssSource from "../css/tokens.css?raw";
 
 /** `--motion-reposition: 400ms;` 의 밀리초. 주석 안의 숫자에 안 걸리게 **선언 형태만** 잡습니다. */

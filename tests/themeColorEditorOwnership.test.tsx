@@ -6,8 +6,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ThemeColorEditor } from "../src/ThemeColorEditor";
-import { createThemePalette } from "../src/themePalette";
+import { ThemeColorEditor } from "../src/theme/ThemeColorEditor";
+import { createThemePalette } from "../src/theme/themePalette";
 
 const BRAND = { name: "--brand-2", label: "브랜드2", description: "앱 색" };
 const palette = () => createThemePalette([{ title: "브랜드", tokens: [BRAND] }]);

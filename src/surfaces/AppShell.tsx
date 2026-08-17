@@ -21,7 +21,7 @@
  */
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
-import { useVirtualKeyboard, type VirtualKeyboard } from "./visualViewport";
+import { useVirtualKeyboard, type VirtualKeyboard } from "../browser/visualViewport";
 
 /** 포커스된 요소의 아래쪽과 키보드 사이에 남길 여유(px).
  *

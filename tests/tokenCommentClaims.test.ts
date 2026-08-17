@@ -16,7 +16,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { THEME_TOKEN_GROUPS } from "../src/themeTokens";
+import { THEME_TOKEN_GROUPS } from "../src/theme/themeTokens";
 import tokensCssSource from "../css/tokens.css?raw";
 
 /** 편집기에 안 내놓는다고 **주장한** 주석. 문구가 바뀌면 여기도 같이 고치세요. */

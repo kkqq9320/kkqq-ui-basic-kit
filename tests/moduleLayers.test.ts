@@ -104,7 +104,7 @@ describe("src/ 파일 이름 규칙과 의존 방향 (PRINCIPLES §15)", () => {
     expect(code.filter((line) => !/^export\s*\{[^}]*\}\s*from\s*"\.\/[^"]+";$/.test(line))).toEqual([]);
   });
 
-  /* §15의 "아직 이 규칙을 안 지키는 자리" 표는 `AppShell.tsx (약 1060줄)` 처럼 **크기를**
+  /* §15의 "아직 이 규칙을 안 지키는 자리" 표는 `surfaces/AppShell.tsx (약 1060줄)` 처럼 **크기를**
    * 적습니다. 이 저장소의 기록된 규칙은 *"주석에 적은 숫자는 아무도 다시 재지 않는다 —
    * 단언으로 옮겨라"* 입니다(링크 개수가 한 브랜치 안에서 두 번 낡은 뒤에 생겼습니다).
    *
@@ -133,7 +133,20 @@ describe("src/ 파일 이름 규칙과 의존 방향 (PRINCIPLES §15)", () => {
    *
    * 묶음 이름과 순서를 여기 고정하므로, 새 항목을 넣는 사람은 **어느 묶음인지 정해야**
    * 합니다. 그것이 이 검사가 사는 이유입니다 — 순서 자체보다, 자리를 정하게 만드는 것. */
-  const BARREL_GROUPS = ["컨트롤", "표면·레이아웃", "테마", "단축키", "킷 전역 설정", "훅·순수 헬퍼"];
+  const BARREL_GROUPS = ["컨트롤", "표면·레이아웃", "테마", "단축키", "킷 전역 설정", "브라우저"];
+
+  /* 🔴 **묶음이 곧 폴더입니다.** 목차(배럴)와 파일 트리가 **같은 축**이라는 것이 이
+   * 정리의 요점입니다 — 하나만 고치면 둘이 갈라지고, 갈라지는 순간 "어디에 넣지"가
+   * 다시 취향 문제가 됩니다. `settings.ts`는 묶음에 파일이 하나뿐이라 폴더를 안
+   * 만들었습니다(§15). */
+  const GROUP_FOLDER: Record<string, string> = {
+    "컨트롤": "controls",
+    "표면·레이아웃": "surfaces",
+    "테마": "theme",
+    "단축키": "shortcuts",
+    "킷 전역 설정": "",          // 파일 하나 — 루트에 둡니다
+    "브라우저": "browser",
+  };
 
   const barrelPlacement = (() => {
     const headings: string[] = [];
@@ -156,6 +169,28 @@ describe("src/ 파일 이름 규칙과 의존 방향 (PRINCIPLES §15)", () => {
   it("배럴의 묶음 머리말과 export 줄을 실제로 읽어냈다", () => {
     expect(barrelPlacement.headings.length).toBe(BARREL_GROUPS.length);
     expect(barrelPlacement.placed.length).toBeGreaterThan(15);
+  });
+
+  it("각 묶음의 export가 그 묶음의 폴더에서만 나온다", () => {
+    // 전제 — 짝이 비면 아래가 공허합니다.
+    expect(Object.keys(GROUP_FOLDER).sort()).toEqual([...BARREL_GROUPS].sort());
+    const wrong = barrelPlacement.placed
+      .filter((entry) => entry.group !== null)
+      .map((entry) => ({ ...entry, folder: entry.module.includes("/") ? entry.module.slice(0, entry.module.lastIndexOf("/")) : "" }))
+      .filter((entry) => entry.folder !== GROUP_FOLDER[entry.group!])
+      .map((entry) => `${entry.module} 은 "${entry.group}" 묶음인데 폴더가 ${entry.folder || "(루트)"} 입니다`);
+    expect(wrong).toEqual([]);
+  });
+
+  /* 폴더 쪽에서도 봅니다 — 배럴이 안 내보내는 파일이 엉뚱한 폴더에 있어도 위 검사는
+   * 조용합니다(`selectKeyboard`처럼 비공개 헬퍼가 그렇습니다). */
+  it("src의 모든 파일이 정해진 폴더 중 하나에 있다", () => {
+    const allowed = new Set([...Object.values(GROUP_FOLDER).filter(Boolean), "model"]);
+    const rootAllowed = new Set(["index", "settings"]);
+    const wrong = modules
+      .filter((module) => (module.id.includes("/") ? !allowed.has(module.id.slice(0, module.id.lastIndexOf("/"))) : !rootAllowed.has(module.id)))
+      .map((module) => module.file);
+    expect(wrong).toEqual([]);
   });
 
   it("묶음이 §15가 정한 순서로 나온다", () => {

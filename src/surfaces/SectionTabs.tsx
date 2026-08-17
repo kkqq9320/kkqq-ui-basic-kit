@@ -7,7 +7,7 @@
  */
 import { createContext, useContext, useEffect, useRef, useState, type Ref } from "react";
 
-import { isPrimaryButton } from "./pointerButton";
+import { isPrimaryButton } from "../browser/pointerButton";
 
 export type MobilePageTabRegistration = {
   id: string;

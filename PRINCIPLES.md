@@ -934,8 +934,8 @@ model/*.ts        값 모델(시점·기간). 화면도 DOM도 모릅니다
 | 자리 | 무엇이 어긋나는가 |
 |---|---|
 | `model/instant.ts` (약 1110줄) | 규칙 4. 시점 모델 하나이긴 한데 킷에서 두 번째로 큰 파일입니다 — 이음매를 아직 안 쟀습니다 |
-| `PageChrome.tsx` · `SectionTabs.tsx` | 규칙 4. 파일 이름이 대표 컴포넌트 이름이 아닌 묶음 파일입니다 |
-| `WheelPicker.tsx` (약 2500줄) · `AppShell.tsx` (약 1060줄) | 줄 수만으로는 쪼갤 근거가 아닙니다. 이음매를 재고 나서 정합니다 |
+| `surfaces/PageChrome.tsx` · `surfaces/SectionTabs.tsx` | 규칙 4. 파일 이름이 대표 컴포넌트 이름이 아닌 묶음 파일입니다 |
+| `controls/WheelPicker.tsx` (약 2500줄) · `surfaces/AppShell.tsx` (약 1060줄) | 줄 수만으로는 쪼갤 근거가 아닙니다. 이음매를 재고 나서 정합니다 |
 
 ### 배럴의 순서 — 역할별 묶음
 

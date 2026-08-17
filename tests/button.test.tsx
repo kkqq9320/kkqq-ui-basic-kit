@@ -9,7 +9,7 @@
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Button } from "../src/Button";
+import { Button } from "../src/controls/Button";
 
 afterEach(cleanup);
 

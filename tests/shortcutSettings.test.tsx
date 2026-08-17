@@ -11,10 +11,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ShortcutProvider, type ShortcutAction } from "../src/ShortcutProvider";
-import { ShortcutSettings, displayCombo } from "../src/ShortcutSettings";
-import { isRecording } from "../src/shortcuts";
-import { createShortcutStorage } from "../src/shortcutStorage";
+import { ShortcutProvider, type ShortcutAction } from "../src/shortcuts/ShortcutProvider";
+import { ShortcutSettings, displayCombo } from "../src/shortcuts/ShortcutSettings";
+import { isRecording } from "../src/shortcuts/shortcuts";
+import { createShortcutStorage } from "../src/shortcuts/shortcutStorage";
 
 const cssModules = import.meta.glob("../css/*.css", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 const SHORTCUT_CSS = cssModules["../css/shortcuts.css"];

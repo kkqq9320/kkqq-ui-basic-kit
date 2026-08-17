@@ -13,7 +13,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Select } from "../src";
-import { captureScrollSnapshot, dropdownViewportSpace, onViewportChange, restoreFocusWithoutScroll, shouldOpenDropdownAbove } from "../src/positioning";
+import { captureScrollSnapshot, dropdownViewportSpace, onViewportChange, restoreFocusWithoutScroll, shouldOpenDropdownAbove } from "../src/browser/positioning";
 
 const realScrollingElement = Object.getOwnPropertyDescriptor(Document.prototype, "scrollingElement");
 

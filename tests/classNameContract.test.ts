@@ -20,7 +20,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-const sources = import.meta.glob("../src/*.tsx", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+const sources = import.meta.glob("../src/**/*.tsx", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 
 /** `export function Name(...)`의 괄호를 세어 시그니처를 통째로 떼어냅니다. */
 function exportedComponents(source: string): Array<{ name: string; signature: string }> {

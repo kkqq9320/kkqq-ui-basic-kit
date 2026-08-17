@@ -11,7 +11,7 @@
  */
 import type { ReactNode, Ref } from "react";
 
-import { useBackToClose } from "./popupDismiss";
+import { useBackToClose } from "../browser/popupDismiss";
 
 export type SidebarNavItem = {
   id: string;

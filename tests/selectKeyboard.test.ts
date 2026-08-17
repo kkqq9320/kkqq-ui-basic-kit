@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { firstEnabledValue, initialActiveValue, lastEnabledValue, stepEnabledValue } from "../src/selectKeyboard";
+import { firstEnabledValue, initialActiveValue, lastEnabledValue, stepEnabledValue } from "../src/controls/selectKeyboard";
 
 /** 가운데가 disabled — 건너뛰기를 한 배열로 양방향 다 검증할 수 있다. */
 const OPTIONS = [

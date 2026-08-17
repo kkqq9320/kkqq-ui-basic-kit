@@ -8,7 +8,7 @@ import { StrictMode, useLayoutEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppShell, Dialog, Select, Sidebar } from "../src";
-import { takeUnlandedBackCountForTest } from "../src/popupDismiss";
+import { takeUnlandedBackCountForTest } from "../src/browser/popupDismiss";
 
 const STACK_KEY = "__dsPopupStack";
 

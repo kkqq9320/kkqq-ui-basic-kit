@@ -42,7 +42,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { AppShell } from "../src/AppShell";
+import { AppShell } from "../src/surfaces/AppShell";
 import tokensCssSource from "../css/tokens.css?raw";
 import controlsCssSource from "../css/controls.css?raw";
 

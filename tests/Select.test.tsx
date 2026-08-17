@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Select, scrollActiveOptionIntoView } from "../src/Select";
+import { Select, scrollActiveOptionIntoView } from "../src/controls/Select";
 import selectCssSource from "../css/select.css?raw";
 import surfacesCssSource from "../css/surfaces.css?raw";
 
