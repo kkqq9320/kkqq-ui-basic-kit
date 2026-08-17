@@ -34,6 +34,23 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.11.0
 
 컴포넌트를 안 쓰고 클래스만 쓰려면 `class="action-button" data-variant="…"` 입니다.
 
+🔴 **그리고 이것이 제일 조용한 breaking입니다: 액션 줄 안의 날 `<button>`은 이제 옷이
+없습니다.** 예전에는 통이 자식을 대신 칠했습니다(`.button-row button:not(.primary)` ·
+`.dialog-actions button` · `.wheel-actions button`). 그 암묵 규칙이 바로 위 결함의
+원인이라 없앴고, **각 버튼이 자기 종류를 말해야** 합니다.
+
+```diff
+- <div className="button-row"><button>취소</button></div>
++ <div className="action-row"><Button>취소</Button></div>
+
+- <DialogActions><button>취소</button></DialogActions>
++ <DialogActions><Button>취소</Button></DialogActions>
+```
+
+안 고치면 **브라우저 기본 버튼**이 나옵니다(실측: `border: 2px outset` · 회색 바탕).
+`DialogActions`는 킷 컴포넌트인데 자식은 앱이 주므로 특히 조심하세요 — 옛 README
+예제가 정확히 그 마크업이었습니다.
+
 **상태 클래스 넷도 사라졌습니다** — 탭·드롭다운 옵션·사이드바 nav가 같은 상태를
 `aria-*`와 클래스로 **두 번** 말하고 있었습니다. 이제 속성 하나만 씁니다:
 `.settings-tabs button.active` → `[aria-selected="true"]`,
