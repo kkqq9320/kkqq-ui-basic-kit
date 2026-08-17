@@ -84,9 +84,8 @@ describe("Button: 나머지는 그대로 통과시킨다", () => {
     expect(at(container).disabled).toBe(true);
   });
 
-  it("ref로 실제 button 노드가 잡힌다", () => {
-    let node: HTMLButtonElement | null = null;
-    render(<Button ref={(element: HTMLButtonElement | null) => { node = element; }}>보통</Button>);
-    expect(node).toBeInstanceOf(HTMLButtonElement);
-  });
+  /* 🔴 여기 `ref` 테스트가 있었고 **로컬에서 초록, CI의 React 18 잡에서 빨강**이었습니다.
+   * 함수 컴포넌트의 `ref`-as-prop은 React 19 전용인데 킷의 peer는 `>=18`입니다.
+   * 계약에서 `ref`를 뺐으므로(그 이유는 `Button.tsx`에) 이 테스트도 없습니다 —
+   * 대신 그 사실을 여기 적어 둡니다. 다음 사람이 "왜 ref가 없지"에서 멈추지 않도록. */
 });
