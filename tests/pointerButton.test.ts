@@ -1,4 +1,4 @@
-/* `src/pointerButton.ts` — 포인터 버튼 번호 판정.
+/* `src/browser/pointerButton.ts` — 포인터 버튼 번호 판정.
  *
  * `tests/positioning.test.tsx`에서 그대로 옮겨 왔습니다(PRINCIPLES §15 규칙 4로 함수가
  * 옮겨 갔으므로). jsdom이 필요 없습니다 — 순수 함수라 그 자체가 이 분리의 값입니다.

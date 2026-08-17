@@ -96,7 +96,7 @@ function renderIntoScrollRoot(ui: ReactElement) {
 /** renderIntoScrollRoot과 같지만 #root 자신을 data-keyboard-keep-visible이 붙은
  * "바깥" 요소 안에 넣는다 — 그 마커가 스크롤 호스트(#root) 경계를 벗어난 조상에
  * 있으면 무시돼야 한다는 걸 검증하는 테스트 전용 헬퍼다(그 조상은 이 훅이 옮기는
- * scrollTop으로 전혀 움직이지 않으므로 기준으로 쓸 수 없다 — src/AppShell.tsx의
+ * scrollTop으로 전혀 움직이지 않으므로 기준으로 쓸 수 없다 — src/surfaces/AppShell.tsx의
  * findKeyboardKeepVisibleAncestor 문서 참고). wrapper에 data-test-outside를 붙여
  * afterEach가 #root까지 통째로 치우게 한다. */
 function renderIntoScrollRootInsideMarkedWrapper(ui: ReactElement) {
@@ -1355,7 +1355,7 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     // (트레이스 vpTop 0→329). 팬 자체가 필드를 드러내므로, 팬 전 지오메트리로 재고 곧장
     // 스크롤하면 브라우저와 이중으로 밀어 올린다. 닫을 때 되돌리지 않는 계약(§9) 때문에
     // 그 초과분이 영구히 남아, 열고 닫을 때마다 페이지가 조금씩 위로 밀렸다(실기기
-    // st 877→912→936→998에서 수렴). 근거 전체는 src/AppShell.tsx의
+    // st 877→912→936→998에서 수렴). 근거 전체는 src/surfaces/AppShell.tsx의
     // KEYBOARD_VIEWPORT_SETTLE_MS를 쓰는 이펙트 주석에.
     //
     // **이 테스트가 실제로 가르는 것.** 팬만으로 이미 충분해서 킷이 스크롤할 이유가

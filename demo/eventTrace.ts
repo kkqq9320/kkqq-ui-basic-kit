@@ -19,7 +19,7 @@ const MAX_ENTRIES = 400;
 /** 이보다 긴 공백 뒤에 오는 이벤트는 새 "묶음"으로 치고 +0ms부터 다시 셉니다. */
 const BURST_GAP_MS = 700;
 
-/** src/AppShell.tsx의 KEYBOARD_SCROLL_GAP과 같은 값 — overshoot 공식을 그대로
+/** src/surfaces/AppShell.tsx의 KEYBOARD_SCROLL_GAP과 같은 값 — overshoot 공식을 그대로
  * 재현하려면 같은 여유값을 더해야 합니다.
  *
  * 킷 쪽이 바뀌면 여기도 같이 바꿔야 합니다. 안 맞으면 이 패널이 찍는 over가 킷의
@@ -27,7 +27,7 @@ const BURST_GAP_MS = 700;
  * 8에서 24로 오른 뒤 실제로 그럴 뻔했습니다. */
 const KEYBOARD_SCROLL_GAP = 24;
 
-/** src/AppShell.tsx의 KEYBOARD_KEEP_VISIBLE_ATTR과 같은 값 — 마킹된 컨테이너를 찾는
+/** src/surfaces/AppShell.tsx의 KEYBOARD_KEEP_VISIBLE_ATTR과 같은 값 — 마킹된 컨테이너를 찾는
  * 조건(hasAttribute)을 그대로 재현하려면 같은 속성 이름을 봐야 합니다.
  *
  * 킷 쪽이 바뀌면 여기도 같이 바꿔야 합니다 — 안 맞으면 keep=/cap=/over=가 킷의
@@ -140,7 +140,7 @@ function cssPixels(value: string): number {
 }
 
 /* ---- 키보드 보정 계산 재현 ----------------------------------------------------
- * 아래는 src/AppShell.tsx의 reposition()과 src/visualViewport.ts의
+ * 아래는 src/surfaces/AppShell.tsx의 reposition()과 src/browser/visualViewport.ts의
  * useVirtualKeyboard(:476-515)가 "지금 이 순간" 무엇을 봤을지를 DOM에서 다시
  * 읽어 재현한 것입니다 — 훅 내부 상태를 후킹해 읽은 게 절대 아닙니다(데모는
  * src/를 건드리지 않으므로 그럴 수도 없습니다). 그래서:
@@ -165,7 +165,7 @@ function cssPixels(value: string): number {
  * 올릴 때도 각 단계가 각자의 트리거+settle 쌍으로 남습니다.
  */
 
-/** src/AppShell.tsx의 findKeyboardKeepVisibleAncestor를 그대로 재현합니다 —
+/** src/surfaces/AppShell.tsx의 findKeyboardKeepVisibleAncestor를 그대로 재현합니다 —
  * focused에서 시작해(자기 자신은 검사하지 않음) scrollRoot(포함) 안쪽만 거슬러
  * 올라가며 KEYBOARD_KEEP_VISIBLE_ATTR이 붙은 가장 가까운 조상을 찾습니다.
  * scrollRoot 경계를 벗어나면 멈춥니다 — 그 밖의 조상은 이 훅이 옮기는 scrollTop으로
@@ -224,7 +224,7 @@ function snapshotKeyboardMath(label: string, target: string | undefined): string
     const focusedOvershoot = rect.bottom - visibleBottom + KEYBOARD_SCROLL_GAP;
     overshoot = focusedOvershoot;
 
-    // src/AppShell.tsx의 reposition() 재현(위 findKeepVisibleAncestor 문서 참고):
+    // src/surfaces/AppShell.tsx의 reposition() 재현(위 findKeepVisibleAncestor 문서 참고):
     // 마킹된 컨테이너가 있으면 그 아래쪽까지 같이 반영하되(overshoot는 커질 수만
     // 있음, focusedOvershoot가 항상 바닥이다), 포커스된 필드 자신의 위쪽이 보이는
     // 영역 밖으로 밀려나지 않는 한도(ceiling) 안에서만 얹는다. 킷 쪽 공식
@@ -286,7 +286,7 @@ function logKeyboardSnapshot(label: string, target?: string) {
   append(snapshotKeyboardMath(label, target));
 }
 
-/** src/AppShell.tsx:154의 prefersReducedMotion()과 같은 판정입니다.
+/** src/surfaces/AppShell.tsx:154의 prefersReducedMotion()과 같은 판정입니다.
  *
  * **이 한 값이 닫힘 해제의 모양을 통째로 가릅니다** — animateFloorTo(AppShell.tsx:709)와
  * animateScrollTopBy(:400) 둘 다 이게 참이면 트윈을 건너뛰고 목표를 그 자리에서
@@ -302,7 +302,7 @@ function reduceMotionState(): "Y" | "N" | "?" {
 /** `#root`에 인라인 height가 박혀 있으면 그 값, 없으면 0.
  *
  * **이게 없으면 `ch=`를 오독합니다.** 킷은 닫히는 창구(120ms) 동안 `#root`에 인라인
- * height를 씁니다(`src/AppShell.tsx`의 C2). 인라인 height는 `100dvh`를 이기므로 그
+ * height를 씁니다(`src/surfaces/AppShell.tsx`의 C2). 인라인 height는 `100dvh`를 이기므로 그
  * 구간의 `clientHeight`는 브라우저의 실제 지오메트리가 아니라 **킷이 못 박은 값**입니다.
  * 즉 이 패널의 `ch=`는 그 구간에서 구조적으로 평평해집니다 — C1/C2 진단의 근거였던
  * 1192 스파이크를 더는 볼 수 없습니다. 표식 없이 그대로 두면 다음 캡처를 읽는 사람이

@@ -281,7 +281,7 @@ describe("녹음 중에는 디스패처가 조용하다 (스펙 §6.1)", () => {
  * 캡처 패스가 버블 패스보다 **항상 먼저** 돕니다 — 등록 순서와 무관합니다. 같은 노드의
  * 캡처 패스와 버블 패스는 브라우저의 디스패치 알고리즘 안에서 **서로 다른 두 번의
  * `invoke` 호출**이고, 캡처 쪽 `invoke`가 통째로 먼저 끝난 뒤에야 버블 쪽 `invoke`가
- * 시작합니다(`src/shortcuts.ts`의 `recordingDepth` 위 주석이 같은 근거를 적어
+ * 시작합니다(`src/shortcuts/shortcuts.ts`의 `recordingDepth` 위 주석이 같은 근거를 적어
  * 두었습니다 — 거기서도 jsdom으로 확인했습니다). 그래서 녹음기의 `preventDefault()`가
  * 디스패처의 규칙 1(`defaultPrevented`) 검사보다 먼저 event에 반영되어, `isRecording()`이
  * 거짓이어도 규칙 1이 우연히 같은 결과를 냅니다 — 플래그를 안 재고 규칙 1만 잰

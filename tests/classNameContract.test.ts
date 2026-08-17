@@ -87,7 +87,7 @@ const OWN_DOM_TAG = /<[a-z][\w-]*[\s/>]/;
  * DOM을 렌더하는 컴포넌트만 손으로 골라 import합니다 — 여기 이름을 추가하려면 그 전제
  * (DOM이 없다)가 참인지 먼저 확인하세요.
  *
- * - `ShortcutProvider`(src/ShortcutProvider.tsx): `<Context.Provider>{children}</Context.Provider>`
+ * - `ShortcutProvider`(src/shortcuts/ShortcutProvider.tsx): `<Context.Provider>{children}</Context.Provider>`
  *   만 렌더합니다. 감싸는 `<div>`를 추가해 className을 붙일 수는 있지만, 그러면 이 킷을
  *   쓰는 모든 앱에 새 DOM 노드가 하나씩 생깁니다 — 스펙 §8("안 쓰면 영향 0")과 Task 3의
  *   구현을 어기는 변경이라 하지 않습니다. */

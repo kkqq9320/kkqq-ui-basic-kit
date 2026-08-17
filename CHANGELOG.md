@@ -18,6 +18,16 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.12.0
 **`src/` 이름·자리 정리 2라운드 — 소비자에게 보이는 변화가 0입니다.** 공개 이름이
 하나도 안 바뀌었고(`publicApi.test.ts`가 지킵니다) 파일만 갈라졌습니다.
 
+### 더해진 것
+
+- **`src/`가 폴더로 묶였습니다** — `controls/` · `surfaces/` · `theme/` · `shortcuts/` ·
+  `browser/` · `model/`. **축을 새로 만들지 않았습니다**: 배럴이 이미 가진 여섯 역할
+  묶음 그대로라 **목차와 파일 트리가 같은 축**입니다.
+
+  🟢 **소비자는 0입니다** — 배럴(`kkqq-ui-basic-kit`)로 import 하면 아무것도 안 바뀝니다.
+  ⚠️ deep import(`kkqq-ui-basic-kit/src/Select`)를 쓰던 앱만 경로에 폴더가 붙습니다
+  (`…/src/controls/Select`). 실측상 그런 소비자는 없습니다.
+
 ### 고친 것
 
 - **`hooks.ts`(542줄)를 셋으로 갈랐습니다.** 이름이 `hooks`라 **무엇이든 들어갈 수

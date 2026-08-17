@@ -345,7 +345,7 @@ describe("DateWheelPicker", () => {
   // `requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }))`였다.
   //
   // **SEG Task 4에서 그 호출이 사라졌다** — 포커스가 팝오버 안에 간 적이 없으므로 되돌릴
-  // 것이 없다(설계 스펙 §6.2). 그리고 그 삭제로 `src/DateWheelPicker.tsx`에는
+  // 것이 없다(설계 스펙 §6.2). 그리고 그 삭제로 `src/controls/DateWheelPicker.tsx`에는
   // `focus({ preventScroll: true })` 호출이 **하나도 남지 않았다**(직접 확인했다). 즉 이
   // 자리의 preventScroll 계약은 지킬 대상이 없어졌다 — 규칙 자체는 이 킷의 다른 focus
   // 복귀(positioning.ts, Select)에서 계속 지켜지고, 그쪽 테스트가 따로 있다.
@@ -3464,7 +3464,7 @@ describe("DateWheelPicker 완료 피드백(커밋 애니메이션)", () => {
 // "2026. 08. 06." → "날짜 선택" → "2026. 08. 06."로, 지운 값이 완료에서 되살아났다.
 // 원인은 commitAndClose의 "비어 있으면 baseValue로 채운다" 폴백(:391 부근)이 "처음부터
 // 빈 값으로 열었다"와 "방금 지웠다"를 구분하지 못해서다 — main 브랜치에도 있던 결함
-// (git show main:src/DateWheelPicker.tsx의 같은 줄), 이 브랜치가 만든 회귀가 아니다.
+// (git show main:src/controls/DateWheelPicker.tsx의 같은 줄), 이 브랜치가 만든 회귀가 아니다.
 // 고친 방식은 보수적이다: 비우기는 그대로 팝오버를 닫지 않고, 대신 컴포넌트가 "이번에
 // 지웠다"를 기억해(clearedRef) 완료가 그 기억이 있으면 되살림 분기를 건너뛴다.
 describe("DateWheelPicker 비우기 뒤 완료가 지운 값을 되살리지 않는다", () => {
@@ -6116,7 +6116,7 @@ describe("필드의 복사·붙여넣기·되돌리기·저장", () => {
    * 알고 붙여넣습니다.**
    *
    * 왜 그게 결함인가: 이 저장소는 `Ctrl+C`를 앱이 **다시 정의하지 못하게** 막아 뒀습니다
-   * (`src/shortcuts.ts`의 `UNBINDABLE_EDIT_CODES`, 오너 결정 2026-08-13 — "복사·붙여넣기·
+   * (`src/shortcuts/shortcuts.ts`의 `UNBINDABLE_EDIT_CODES`, 오너 결정 2026-08-13 — "복사·붙여넣기·
    * 되돌리기는 너무 중요해서 앱이 다시 정의하면 안 된다"). **그렇게 보호한 키를 픽커가
    * 빈 값에서 먹는 것**은 같은 원칙을 어기는 자리입니다.
    *

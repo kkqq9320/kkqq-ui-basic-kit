@@ -372,7 +372,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
   // `/// <reference types="vite/client" />`가 `ImportMeta.env`(필수 `ImportMetaEnv`)를
   // 프로그램 전역에 채워 줍니다 — 그래서 저장소 `tsc`는 이 줄에서 항상 초록이었습니다.
   // 하지만 `package.json`의 `files`에는 **`tests`가 없어**, 소비자에게 배포되는
-  // `src/DateWheelPicker.tsx`만 단독으로 컴파일하면(vite 타입 없이)
+  // `src/controls/DateWheelPicker.tsx`만 단독으로 컴파일하면(vite 타입 없이)
   // `Property 'env' does not exist on type 'ImportMeta'`로 거절됩니다 — 배포되는
   // 소스의 타입 통과가 소비자가 절대 못 받는 파일에 기대고 있었던 것입니다.
   // 그래서 아래는 지역 캐스트로 `env`가 아예 없는 경우까지 타입에서 인정합니다.
@@ -1521,7 +1521,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    *  한동안 조건 없이 걸었고, 그래서 **복사할 것이 없는데도 브라우저의 복사를 막았습니다.**
    *
    *  왜 그게 결함인가: 이 저장소는 `Ctrl+C`를 앱이 **다시 정의하지 못하게** 막아 뒀습니다
-   *  (`src/shortcuts.ts`의 `UNBINDABLE_EDIT_CODES`, 오너 결정 2026-08-13 —
+   *  (`src/shortcuts/shortcuts.ts`의 `UNBINDABLE_EDIT_CODES`, 오너 결정 2026-08-13 —
    *  "복사·붙여넣기·되돌리기는 너무 중요해서 앱이 다시 정의하면 안 된다"). 그 키를 그렇게
    *  보호해 놓고 **픽커 자신이 빈 값에서 먹는 것**은 같은 원칙을 어기는 자리입니다.
    *  페이지에서 드래그해 둔 글자를 복사하려던 사람은 아무것도 못 얻습니다. */
