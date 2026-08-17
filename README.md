@@ -140,6 +140,7 @@ Next.js App Router처럼 마운트 지점을 직접 정할 수 없는 환경이�
 - `select.css`와 `wheel-picker.css`는 `surfaces.css`를 필요로 합니다.
 - `tabs.css`의 모바일 배치는 `page.css`의 `.workspace`(`position: relative`)를
   부모로 가정합니다.
+- `Button`의 옷은 **`controls.css`** 에 있습니다.
 - `SectionHeading`의 스타일은 **`page.css`** 에 있습니다(`tabs.css`가 아닙니다) —
   탭이 아니라 페이지 뼈대의 일부라서입니다(`PRINCIPLES.md` §7·§15).
 
@@ -228,6 +229,36 @@ wght 930 : 숫자 1404 · U+2012 1404  (±0)
 ---
 
 ## 컴포넌트
+
+### Button
+
+```tsx
+<Button variant="primary" onClick={save}>저장</Button>
+<Button onClick={cancel}>취소</Button>            {/* 생략하면 secondary */}
+<Button variant="danger" onClick={remove}>삭제</Button>
+<Button variant="text" onClick={add}>+ 새로 만들기</Button>
+
+<div className="action-row">
+  <Button onClick={cancel}>취소</Button>
+  <Button variant="danger" onClick={remove}>삭제</Button>
+  <Button variant="primary" onClick={save}>저장</Button>
+</div>
+```
+
+**종류는 `variant` 한 축입니다** — `primary` · `secondary`(기본) · `danger` · `text`.
+한 축에 값 하나라 뜻 없는 조합이 표현되지 않습니다(PRINCIPLES §16).
+
+- **`type`은 기본이 `"button"`입니다.** 폼 안에서 `<button>`의 기본값은 `submit`이라,
+  취소 버튼이 폼을 보내는 사고가 납니다. 정말 제출 버튼이면 `type="submit"`을 주세요.
+- **`size`는 안 줘도 됩니다.** §2의 계층은 문맥이 정합니다 — 다이얼로그·휠 팝오버 안이면
+  32px입니다. 그 밖에서 조밀하게 쓰려면 `size="compact"`.
+- `className`은 킷 클래스를 **덮지 않고 합쳐집니다**(§14). 나머지 props는 그대로
+  `<button>`에 갑니다(`disabled`·`aria-*`·`ref`·핸들러).
+- 액션 줄은 `className="action-row"`입니다(오른쪽 정렬, 8px 간격).
+
+⚠️ **아이콘 전용 버튼은 아직 여기 없습니다.** 킷의 아이콘 버튼은 기하가 다섯으로 갈리고
+전부 문맥에 매여 있어(38×38 · 32×32 · 28×32 · 28×28 · 100%×30) 한 prop으로 덮으면 계약이
+다섯 배가 됩니다. `<a>`를 버튼 모양으로 쓰는 갈래도 아직 없습니다.
 
 ### Select
 
@@ -500,7 +531,7 @@ Ctrl·Meta·Alt가 눌린 키는 전부 양보하므로 앱의 단축키와 겨�
 **같은 값을 다시 고르면 `onChange`를 부르지 않습니다** — 안 바뀐 값을 보내면 소비자의
 dirty 판정이 더러워집니다.
 
-⚠️ **고른 칸은 강조색으로 채우지 않습니다.** 이 킷에서 강조색 채움은 `.primary`·다이얼로그
+⚠️ **고른 칸은 강조색으로 채우지 않습니다.** 이 킷에서 강조색 채움은 `Button`의 `primary`·다이얼로그
 확정 등 **"이걸 하세요"**라는 뜻으로 이미 일곱 자리가 씁니다. 고름은 행동이 아니라
 값이므로, 움푹한 트랙 위에 뜬 칩 + 강조색 **색조**로 말합니다. 색을 바꾸려면
 `.segmented` 아래 선택자를 앱에서 덮으세요.
@@ -604,10 +635,10 @@ useEffect(() => localStorage.setItem("sidebarCollapsed", String(collapsed)), [co
 <div data-keyboard-keep-visible>
   {/* 감싸는 label이 이미 이름을 주므로 ariaLabel은 선택입니다(PRINCIPLES §11) */}
   <label>메모<AutoGrowTextarea value={memo} onChange={setMemo} /></label>
-  <div className="button-row">
-    <button type="button" className="secondary-button">취소</button>
-    <button type="button" className="danger-button">삭제</button>
-    <button type="button" className="primary">저장</button>
+  <div className="action-row">
+    <Button>취소</Button>
+    <Button variant="danger">삭제</Button>
+    <Button variant="primary">저장</Button>
   </div>
 </div>
 ```
@@ -684,17 +715,17 @@ const pageTabs = useMobilePageTabs();
   <DialogHeading eyebrow="CATEGORY" title="분류 등록" />
   <label>이름<input required /></label>
   <DialogActions>
-    <button type="button" className="danger">삭제</button>
-    <button type="button" onClick={() => setOpen(false)}>취소</button>
-    <button className="primary">등록</button>
+    <Button variant="danger">삭제</Button>
+    <Button onClick={() => setOpen(false)}>취소</Button>
+    <Button variant="primary" type="submit">등록</Button>
   </DialogActions>
 </Dialog>
 ```
 
 body 포털에 z-index 200으로 뜹니다. 백드롭 `mousedown`·Escape·**뒤로가기**로
 닫히고, 포커스를 안에 가두며(Tab 순환), 닫히면 열기 직전 요소로 포커스를
-되돌립니다. 액션은 32px 조밀 계열이고 `.danger`는 왼쪽 끝으로 밀려 확인 버튼과
-멀어집니다.
+되돌립니다. 액션은 32px 조밀 계열이고(문맥이 정합니다, §2) `variant="danger"`는 왼쪽 끝으로 밀려
+확인 버튼과 멀어집니다.
 
 뒤로가기는 뒤 페이지로 가지 않고 다이얼로그만 닫습니다(`useBackToClose`).
 겹쳐 열면 위에서부터 하나씩 닫히고, 버튼으로 닫았을 때는 남긴 history 표식을
@@ -963,6 +994,8 @@ CSS 클래스는 이전 이름을 대체로 유지했습니다. 헷갈릴 만한
 | `Select` | `.app-select` | |
 | `SectionTabs` | `.settings-tabs` | 이름은 `settings`지만 범용 섹션 탭입니다 |
 | `SectionHeading` | `.settings-section-heading` | 같은 이유로 `settings`. 컴포넌트는 `PageChrome`, 스타일은 `page.css` |
+| `Button` | `.action-button` + `data-variant` | 옛 `.primary`·`.secondary-button`·`.danger-button`·`.text-button`을 대체합니다 |
+| 액션 줄 | `.action-row` | 옛 `.button-row` |
 | `Sidebar` 브랜드 | `.sidebar-brand` | 원본 `.brand`에서 개명 |
 | `Sidebar` 상단 슬롯 | `.sidebar-slot` | 원본 `.budget-picker`에서 개명 |
 | nav 배지 | `.sidebar-nav-count` | 원본 `.nav-count`에서 개명 |

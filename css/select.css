@@ -71,7 +71,7 @@
  * 강조색·굵기는 여기서, transform은 surfaces.css에서 오는 흐릿한 잡종이 된다.
  * initialActiveValue가 메뉴를 열 때마다 활성을 현재 값으로 시딩하므로
  * active===selected는 드문 경우가 아니라 "열자마자 보는" 기본값이다. */
-.app-select-menu button.selected:not(:hover):not(:focus-visible):not(:disabled) { color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 78%, transparent); font-weight: 700; }
+.app-select-menu button[aria-selected="true"]:not(:hover):not(:focus-visible):not(:disabled) { color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 78%, transparent); font-weight: 700; }
 
 @media (prefers-reduced-motion: reduce) {
   .dropdown-chevron { transition: none; }

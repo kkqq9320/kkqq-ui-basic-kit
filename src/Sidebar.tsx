@@ -70,7 +70,11 @@ export type SidebarProps = {
 function NavEntry({ item, onNavigate }: { item: SidebarNavItem; onNavigate?: () => void }) {
   const title = item.title ?? (typeof item.label === "string" ? item.label : undefined);
   const inner = <>{item.icon}<span>{item.label}{item.badge != null && item.badge !== false && <b className="sidebar-nav-count">{item.badge}</b>}</span></>;
-  const shared = { className: item.active ? "active" : undefined, title };
+  /* 🔴 상태를 **한 번만** 말합니다(PRINCIPLES §16). 예전에는 `aria-current`와
+   * `className="active"`가 같은 사실을 두 번 말했고, 둘이 갈리면 화면과 스크린리더가
+   * 다른 말을 합니다. CSS가 `[aria-current="page"]`를 직접 칠합니다 — 속성 선택자는
+   * 클래스와 명시도가 같아 캐스케이드가 안 흔들립니다. */
+  const shared = { title };
   if (item.href) {
     return <a {...shared} href={item.href} aria-current={item.active ? "page" : undefined} onClick={() => { item.onSelect?.(); onNavigate?.(); }}>{inner}</a>;
   }

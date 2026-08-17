@@ -10,7 +10,7 @@
  *   2. `className`은 **덮지 않고 합칩니다** — 앱이 자기 클래스를 얹어도 킷 옷이 남습니다
  *      (§14, `tests/classNameContract.test.ts`가 전 컴포넌트에 요구하는 계약).
  */
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ComponentPropsWithRef, ReactNode } from "react";
 
 /** §2의 두 높이 계층. 생략하면 문맥이 정합니다 — 다이얼로그·팝오버 안이면 32px입니다. */
 export type ButtonSize = "action" | "compact";
@@ -32,7 +32,11 @@ export type ButtonProps = {
   size?: ButtonSize;
   className?: string;
   children?: ReactNode;
-} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className" | "children">;
+  /* `ComponentPropsWithRef`인 이유: `ButtonHTMLAttributes`에는 `ref`가 없습니다.
+   * 런타임에는 React 19가 함수 컴포넌트의 `ref`를 그대로 넘겨 주므로 **테스트는
+   * 초록인데 `tsc`만 빨간** 상태가 됐었습니다 — 실제로 그렇게 한 번 커밋했습니다.
+   * `npm test`는 타입을 안 봅니다. */
+} & Omit<ComponentPropsWithRef<"button">, "className" | "children">;
 
 /**
  * ⚠️ **아이콘 전용 버튼은 여기 없습니다.** 재 보니 킷의 아이콘 버튼은 한 물건이 아니라

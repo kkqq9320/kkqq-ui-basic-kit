@@ -457,7 +457,6 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
       // roving tabindex: 활성 옵션 하나만 tab 순서에 있습니다. 옵션이 개별적으로 tab
       // 순서에 들어가면 옵션 50개짜리 Select에서 다음 필드까지 Tab을 50번 눌러야 합니다.
       tabIndex={option.value === activeValue ? 0 : -1}
-      className={option.value === value ? "selected" : ""}
       disabled={option.disabled}
       key={option.value}
       onClick={() => choose(option.value)}

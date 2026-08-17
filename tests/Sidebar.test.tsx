@@ -28,13 +28,13 @@ describe("터치에서 들러붙는 호버", () => {
   });
 
   // 가드를 넣으면서 규칙을 한 블록으로 모으고 싶어지는데, 그러면 소스 순서가 바뀐다.
-  // :hover::before(opacity .5)가 .active::before(opacity 1)보다 **앞에** 있어야 활성
+  // :hover::before(opacity .5)가 [aria-current]::before(opacity 1)보다 **앞에** 있어야 활성
   // 항목이 이긴다 — 미디어 쿼리는 특이도를 더하지 않으므로 순서가 유일한 판정 기준이다.
   // 블록을 아래로 옮기면 호버가 활성을 덮어써 활성 표시가 흐려진다. 16f528a가 낸
   // 사고와 같은 계열이라 명시적으로 고정한다.
-  it("호버 규칙이 .active 규칙보다 소스에서 앞선다 — 활성 표시가 이겨야 한다", () => {
+  it("호버 규칙이 활성 규칙보다 소스에서 앞선다 — 활성 표시가 이겨야 한다", () => {
     const hoverBefore = sidebarCssSource.indexOf(".sidebar nav :is(a, button):hover::before");
-    const activeBefore = sidebarCssSource.indexOf(".sidebar nav :is(a, button).active::before");
+    const activeBefore = sidebarCssSource.indexOf('.sidebar nav :is(a, button)[aria-current="page"]::before');
     expect(hoverBefore).toBeGreaterThan(-1);
     expect(activeBefore).toBeGreaterThan(-1);
     expect(hoverBefore).toBeLessThan(activeBefore);
@@ -130,9 +130,9 @@ describe("포커스 링은 토큰 하나가 정한다", () => {
   it.each([
     ".settings-tabs > .settings-tab-options > button",
     ".mobile-quick-tab-menu > button",
-  ])("%s의 포커스 규칙이 .active보다 앞선다", (base) => {
+  ])("%s의 포커스 규칙이 활성 규칙보다 앞선다", (base) => {
     const focusAt = tabsCssSource.indexOf(`${base}:focus-visible`);
-    const activeAt = tabsCssSource.indexOf(`${base}.active`);
+    const activeAt = tabsCssSource.indexOf(`${base}[aria-selected="true"]`);
     expect(focusAt).toBeGreaterThan(-1);
     expect(activeAt).toBeGreaterThan(-1);
     expect(focusAt).toBeLessThan(activeAt);

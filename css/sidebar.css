@@ -117,8 +117,8 @@
  * 보인다(실기기 관측: 빠른 바의 메뉴 버튼이 서랍을 닫은 뒤에도 accent로 남아 있었다).
  * 좁은 데스크톱 창은 (hover: hover)를 만족하므로 마우스 호버는 그대로 동작한다.
  *
- * **@media를 자리에서 감싸는 것이 중요하다.** 이 세 줄은 아래 .active 규칙과 소스
- * 순서로 우열이 갈린다 — :hover::before(.5)가 .active::before(1)보다 **앞에** 있어야
+ * **@media를 자리에서 감싸는 것이 중요하다.** 이 세 줄은 아래 [aria-current] 규칙과 소스
+ * 순서로 우열이 갈린다 — :hover::before(.5)가 [aria-current]::before(1)보다 **앞에** 있어야
  * 활성 항목이 이긴다. 미디어 쿼리는 특이도를 더하지 않으므로, 블록을 아래로 옮기면
  * 호버가 활성을 덮어써 활성 표시가 흐려진다(16f528a가 낸 사고와 같은 계열).
  * 그래서 한 블록으로 합치지 않고 원래 위치를 각각 지킨다. */
@@ -129,15 +129,15 @@
  * .sidebar-icon-button(:156)이 이미 쓰는 짝이다. 이게 없어서 Tab으로 nav 항목에 가면
  * 킷 스타일 없이 흰 링만 떴다. 포커스는 터치에서 들러붙지 않으므로 가드가 필요 없다. */
 .sidebar nav :is(a, button):focus-visible::before { opacity: .5; transform: scaleX(1); transition-duration: 120ms, 200ms; }
-.sidebar nav :is(a, button).active { color: var(--sidebar-bright); }
-.sidebar nav :is(a, button).active::before { opacity: 1; transform: scaleX(1); }
-.sidebar nav :is(a, button).active::after { height: 18px; }
+.sidebar nav :is(a, button)[aria-current="page"] { color: var(--sidebar-bright); }
+.sidebar nav :is(a, button)[aria-current="page"]::before { opacity: 1; transform: scaleX(1); }
+.sidebar nav :is(a, button)[aria-current="page"]::after { height: 18px; }
 @media (hover: hover) {
   .sidebar nav :is(a, button):hover { color: var(--sidebar-bright); }
 }
 .sidebar nav :is(a, button):focus-visible { color: var(--sidebar-bright); outline: none; }
 /* 선택되는 순간 아이콘이 한 번 튕깁니다 */
-.sidebar nav :is(a, button).active svg { animation: sidebar-nav-pop 320ms cubic-bezier(.2, 1.12, .35, 1); }
+.sidebar nav :is(a, button)[aria-current="page"] svg { animation: sidebar-nav-pop 320ms cubic-bezier(.2, 1.12, .35, 1); }
 .sidebar nav :is(a, button) svg, .mobile-quick-bar svg { width: 20px; height: 20px; flex: 0 0 20px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
 .sidebar nav :is(a, button) > span { flex: 1 1 auto; min-width: 0; max-width: var(--sidebar-label-max); display: flex; align-items: center; overflow: hidden; white-space: nowrap; transition: max-width var(--sidebar-motion) var(--sidebar-ease), opacity calc(var(--sidebar-motion) * .5) var(--sidebar-ease); }
 
@@ -301,6 +301,6 @@
   .mobile-quick-bar { transition: none; }
   .app-shell.mobile-keyboard-open .mobile-quick-bar,
   .app-shell.mobile-keyboard-open .mobile-page-tabs-float { transition: none; }
-  .sidebar nav :is(a, button).active svg, .mobile-quick-bar > button.active svg { animation: none; }
+  .sidebar nav :is(a, button)[aria-current="page"] svg, .mobile-quick-bar > button.active svg { animation: none; }
   .sidebar nav :is(a, button)::before { transform: none; }
 }

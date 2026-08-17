@@ -86,7 +86,7 @@ describe("Button: 나머지는 그대로 통과시킨다", () => {
 
   it("ref로 실제 button 노드가 잡힌다", () => {
     let node: HTMLButtonElement | null = null;
-    render(<Button ref={(element) => { node = element; }}>보통</Button>);
+    render(<Button ref={(element: HTMLButtonElement | null) => { node = element; }}>보통</Button>);
     expect(node).toBeInstanceOf(HTMLButtonElement);
   });
 });

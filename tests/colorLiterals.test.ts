@@ -110,7 +110,7 @@ describe("글자색은 토큰을 거친다", () => {
   });
 
   it("사이드바의 밝은 상태는 --sidebar-bright다", () => {
-    expect(cssModules["../css/sidebar.css"]).toMatch(/\.sidebar nav :is\(a, button\)\.active \{[^}]*color:\s*var\(--sidebar-bright\)/);
+    expect(cssModules["../css/sidebar.css"]).toMatch(/\.sidebar nav :is\(a, button\)\[aria-current="page"\] \{[^}]*color:\s*var\(--sidebar-bright\)/);
     expect(cssModules["../css/tokens.css"]).toMatch(/--sidebar-bright:\s*#[0-9a-fA-F]{6}/);
   });
 });
