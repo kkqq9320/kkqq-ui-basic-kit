@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-/* `src/positioning.ts` — 이 파일은 `src/index.ts:17`로 **공개 API**가 다섯 개 나가는데
+/* `src/positioning.ts` — 이 파일은 배럴로 **공개 API**가 다섯 개 나가는데
  * 테스트가 하나도 없었습니다. 순수 숫자 함수라 가장 검증하기 쉬운 자리인데도 그랬고,
  * 계획서가 실측한 바 `above > below`를 `>=`로, `preventScroll: true`를 평범한 `.focus()`로,
  * `- bottomInset`을 통째로 지워도 전 스위트가 초록이었습니다.
@@ -13,7 +13,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Select } from "../src";
-import { captureScrollSnapshot, dropdownViewportSpace, isPrimaryButton, onViewportChange, restoreFocusWithoutScroll, shouldOpenDropdownAbove } from "../src/positioning";
+import { captureScrollSnapshot, dropdownViewportSpace, onViewportChange, restoreFocusWithoutScroll, shouldOpenDropdownAbove } from "../src/positioning";
 
 const realScrollingElement = Object.getOwnPropertyDescriptor(Document.prototype, "scrollingElement");
 
@@ -143,25 +143,6 @@ describe("shouldOpenDropdownAbove", () => {
     expect(space.above).toBe(space.below);   // 동점을 만들었는지부터 확인 — 아니면 아래가 무의미하다
 
     expect(shouldOpenDropdownAbove(triggerAt(300), 400)).toBe(false);
-  });
-});
-
-describe("isPrimaryButton", () => {
-  it("주 버튼과 button 미지정은 참이다", () => {
-    expect([isPrimaryButton({ button: 0 }), isPrimaryButton({})]).toEqual([true, true]);
-  });
-
-  // 가운데·오른쪽·뒤로·앞으로는 닫기 제스처가 아니다. 뒤로 버튼이 걸리면 팝업이 먼저
-  // 닫히며 history 표식을 써버려 브라우저의 뒤로가기가 페이지를 나간다(소스 주석).
-  it("가운데·오른쪽·뒤로·앞으로 버튼은 거짓이다", () => {
-    expect([1, 2, 3, 4].map((button) => isPrimaryButton({ button }))).toEqual([false, false, false, false]);
-  });
-
-  // ⚠️ **characterization.** `-1`(눌림 없음)도 참을 돌려준다 — `<= 0`이라서다.
-  // 지금 호출부가 pointerdown/mousedown뿐이라 실제로 도달하지 않지만, 계약이 아니라
-  // 구현의 부수 결과이므로 여기 적어 둔다. 바꾸려면 이 테스트를 먼저 뒤집을 것.
-  it("button -1(눌림 없음)도 참이다 — 의도가 아니라 <= 0의 부수 결과다", () => {
-    expect(isPrimaryButton({ button: -1 })).toBe(true);
   });
 });
 

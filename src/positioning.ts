@@ -25,21 +25,6 @@ export function shouldOpenDropdownAbove(trigger: HTMLElement, desiredHeight: num
 }
 
 /**
- * 이 눌림을 "닫기 제스처"로 볼지 판단합니다. 주 버튼(마우스 왼쪽·터치·펜)만 참입니다.
- *
- * 마우스의 뒤로/앞으로 버튼과 가운데 버튼도 mousedown·pointerdown을 일으킵니다.
- * 그걸 닫기로 처리하면 뒤로가기 버튼 한 번에 두 가지가 겹칩니다: 팝업이 먼저 닫히며
- * 정리 코드가 history 표식을 써버리고, 뒤이어 브라우저의 뒤로가기가 그 표식을 못 찾아
- * 페이지를 나가버립니다. 커서가 팝업 안이었는지 밖이었는지에 따라 결과가 갈려서
- * 진단하기 매우 어렵습니다.
- *
- * button: 0 = 주 버튼, 1 = 가운데, 2 = 오른쪽, 3/4 = 뒤로/앞으로, -1 = 눌림 없음.
- */
-export function isPrimaryButton(event: { button?: number }) {
-  return (event.button ?? 0) <= 0;
-}
-
-/**
  * 앵커드 팝업의 좌표를 다시 재야 하는 **모든** 신호를 한 자리에 모읍니다. 해제 함수를
  * 돌려주므로 `useEffect`의 cleanup에 그대로 씁니다.
  *

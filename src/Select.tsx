@@ -12,7 +12,8 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { useBackToClose, useEscapeToClose } from "./hooks";
-import { captureScrollSnapshot, dropdownViewportSpace, focusTriggerOnClick, isPrimaryButton, onViewportChange, restoreFocusWithoutScroll, shouldOpenDropdownAbove, type ScrollSnapshot } from "./positioning";
+import { isPrimaryButton } from "./pointerButton";
+import { captureScrollSnapshot, dropdownViewportSpace, focusTriggerOnClick, onViewportChange, restoreFocusWithoutScroll, shouldOpenDropdownAbove, type ScrollSnapshot } from "./positioning";
 import { firstEnabledValue, initialActiveValue, lastEnabledValue, stepEnabledValue } from "./selectKeyboard";
 
 export type SelectOption = { value: string; label: string; disabled?: boolean };
