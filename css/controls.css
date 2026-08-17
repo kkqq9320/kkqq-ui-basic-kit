@@ -36,7 +36,7 @@ label { display: grid; gap: 6px; align-content: space-between; color: var(--mute
 .auto-grow-textarea { min-height: calc(1.45em * 3 + 22px); overflow-y: hidden; resize: none; white-space: pre-wrap; }
 
 .primary, .secondary-button, .danger-button, .button-row button, .file-button { min-width: var(--action-min-width); height: var(--action-height); display: inline-flex; align-items: center; justify-content: center; padding: 0 14px; border-radius: 7px; font-size: var(--action-font-size); font-weight: 700; line-height: 1; white-space: nowrap; }
-.primary { border: 1px solid var(--accent); background: var(--accent); color: #fff; }
+.primary { border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); }
 .primary:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
 .primary:disabled, .secondary-button:disabled, .danger-button:disabled { opacity: .55; cursor: not-allowed; }
 .secondary-button { border: 1px solid var(--line); color: var(--text); background: var(--surface); }

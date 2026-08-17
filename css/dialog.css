@@ -86,8 +86,8 @@
 .dialog-actions button { width: auto; min-width: var(--compact-action-min-width); height: var(--compact-action-height); display: inline-flex; align-items: center; justify-content: center; padding: 0 12px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: var(--surface); font-size: var(--action-font-size); font-weight: 700; line-height: 1; white-space: nowrap; }
 .dialog-actions button:hover:not(:disabled) { color: var(--text); }
 .dialog-actions button:disabled { opacity: .55; cursor: not-allowed; }
-.dialog-actions .primary { color: #fff; border-color: var(--accent); background: var(--accent); }
-.dialog-actions .primary:hover:not(:disabled) { color: #fff; background: color-mix(in srgb, var(--accent) 88%, #000); }
+.dialog-actions .primary { color: var(--on-accent); border-color: var(--accent); background: var(--accent); }
+.dialog-actions .primary:hover:not(:disabled) { color: var(--on-accent); background: color-mix(in srgb, var(--accent) 88%, #000); }
 /* 파괴적 액션은 왼쪽 끝으로 밀어 확인 버튼과 멀리 떨어뜨립니다 */
 /* 색은 .danger-button(controls.css:24)과 같은 토큰·같은 관용구를 씁니다. 한동안
  * #bd554d 리터럴이었고 다크 규칙이 아예 없어, 같은 "삭제"가 자리에 따라 다른 빨강이었고

@@ -49,7 +49,10 @@ describe("키보드 포커스 표시", () => {
   it("사이드바 nav 항목에 :focus-visible 짝이 있고 기본 링을 끈다", () => {
     const rule = sidebarCssSource.match(/^\.sidebar nav :is\(a, button\):focus-visible \{[^}]*\}/m);
     expect(rule).not.toBeNull();
-    expect(rule![0]).toMatch(/color:\s*#fff/);
+    // 값이 아니라 **뜻**을 단언합니다. `#fff`를 글자 그대로 적어 두던 자리인데, 그때는
+    // 그 흰색에 이름이 없었습니다(사다리의 맨 윗칸이 비어 있었습니다). 이제 이름이
+    // 있으므로 리터럴로 되돌리면 여기가 빨개집니다.
+    expect(rule![0]).toMatch(/color:\s*var\(--sidebar-bright\)/);
     expect(rule![0]).toMatch(/outline:\s*none/);
     expect(sidebarCssSource).toMatch(/^\.sidebar nav :is\(a, button\):focus-visible::before \{/m);
   });

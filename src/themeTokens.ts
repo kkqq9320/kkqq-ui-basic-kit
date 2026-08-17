@@ -52,6 +52,7 @@ export const THEME_TOKEN_GROUPS: ThemeTokenGroup[] = [
     tokens: [
       { name: "--accent", label: "강조색", description: "선택 상태·주요 버튼·링크" },
       { name: "--accent-text", label: "강조 글자", description: "세그먼트 칩 위의 강조색 글자 — 대비 때문에 다크에서만 밝습니다" },
+      { name: "--on-accent", label: "강조색 위 글자", description: "강조색으로 채운 버튼·선택 행 위에 얹히는 글자 — 위의 \"강조 글자\"와 방향이 반대입니다" },
       { name: "--accent-soft", label: "강조 배경", description: "선택된 항목의 옅은 배경" },
       { name: "--link", label: "링크 글자", description: "텍스트 버튼·링크" },
     ],
@@ -63,6 +64,7 @@ export const THEME_TOKEN_GROUPS: ThemeTokenGroup[] = [
     title: "사이드바",
     tokens: [
       { name: "--sidebar", label: "사이드바 배경", description: "왼쪽 메뉴 바탕" },
+      { name: "--sidebar-bright", label: "사이드바 강조 글자", description: "호버·활성 등 \"지금 여기\" 상태 — 제목보다 한 칸 밝습니다" },
       { name: "--sidebar-strong", label: "사이드바 제목", description: "브랜드 이름" },
       { name: "--sidebar-text", label: "사이드바 글자", description: "메뉴 항목" },
       { name: "--sidebar-muted", label: "사이드바 보조 글자", description: "설명·아이콘 버튼" },
@@ -80,6 +82,7 @@ export const THEME_TOKEN_GROUPS: ThemeTokenGroup[] = [
       { name: "--orange", label: "주황", description: "주의" },
       { name: "--orange-soft", label: "주황 배경", description: "주의 상태의 옅은 배경" },
       { name: "--badge", label: "뱃지", description: "사이드바 메뉴의 개수 뱃지" },
+      { name: "--on-badge", label: "뱃지 위 글자", description: "개수 뱃지 안의 숫자" },
       /* 메시지 색은 `--red`/`--green`을 그대로 쓰지 않습니다 — 옅은 배경 위 13px 글자라
          기준 대비가 4.5인데 `var(--red)`는 라이트에서 정확히 4.50, 다크에서 5.67까지
          떨어집니다. 그 미결이 이 역할 토큰들로 풀렸습니다(값은 화면 그대로). */
