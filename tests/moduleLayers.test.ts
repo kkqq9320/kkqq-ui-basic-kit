@@ -127,6 +127,64 @@ describe("src/ 파일 이름 규칙과 의존 방향 (PRINCIPLES §15)", () => {
     expect(wrong).toEqual([]);
   });
 
+  /* §15 — 배럴은 **목차**입니다. 정리 전 순서는 사실상 임의였고(`themeTokens`가
+   * `ThemeColorEditor` 뒤에, `AutoGrowTextarea`가 테마 한가운데에 있었습니다), 그런
+   * 파일은 새 항목이 늘 **맨 아래**에 붙어 다시 임의로 돌아갑니다.
+   *
+   * 묶음 이름과 순서를 여기 고정하므로, 새 항목을 넣는 사람은 **어느 묶음인지 정해야**
+   * 합니다. 그것이 이 검사가 사는 이유입니다 — 순서 자체보다, 자리를 정하게 만드는 것. */
+  const BARREL_GROUPS = ["컨트롤", "표면·레이아웃", "테마", "단축키", "킷 전역 설정", "훅·순수 헬퍼"];
+
+  const barrelPlacement = (() => {
+    const headings: string[] = [];
+    const placed: Array<{ module: string; group: string | null }> = [];
+    let current: string | null = null;
+    for (const line of byId.get("index")!.source.split("\n")) {
+      const heading = /^\/\* ── (.+?) ── /.exec(line);
+      if (heading) {
+        current = heading[1];
+        headings.push(current);
+        continue;
+      }
+      const exported = /^export .* from "\.\/([^"]+)";$/.exec(line.trim());
+      if (exported) placed.push({ module: exported[1], group: current });
+    }
+    return { headings, placed };
+  })();
+
+  // 전제 — 정규식이 헤딩이나 export 줄을 못 잡으면 아래가 전부 공허합니다.
+  it("배럴의 묶음 머리말과 export 줄을 실제로 읽어냈다", () => {
+    expect(barrelPlacement.headings.length).toBe(BARREL_GROUPS.length);
+    expect(barrelPlacement.placed.length).toBeGreaterThan(15);
+  });
+
+  it("묶음이 §15가 정한 순서로 나온다", () => {
+    expect(barrelPlacement.headings).toEqual(BARREL_GROUPS);
+  });
+
+  it("모든 export가 어느 묶음엔가 들어 있고, 빈 묶음이 없다", () => {
+    expect(barrelPlacement.placed.filter((entry) => entry.group === null).map((entry) => entry.module)).toEqual([]);
+    const empty = BARREL_GROUPS.filter((group) => !barrelPlacement.placed.some((entry) => entry.group === group));
+    expect(empty).toEqual([]);
+  });
+
+  /* "묶음 안에서는 기계가 래퍼보다 먼저" — 같은 묶음 안에서 A가 B를 import 하면 B가
+   * 먼저 나와야 합니다(`WheelPicker` → 래퍼 셋, `themeTokens` → `themePalette` →
+   * `ThemeColorEditor`, `shortcuts` → … → `ShortcutSettings`).
+   *
+   * ⚠️ **묶음을 건너서는 이 규칙을 걸지 않습니다.** 걸면 `Select`가 `hooks`·`positioning`
+   * 뒤로 밀려 헬퍼가 목차 맨 앞에 오게 되고, 그것이 바로 이 순서가 거부한 배치입니다
+   * (의존 층 순서). 역할 묶음과 의존 순서는 이 지점에서 부딪히고, 부딪히면 역할이 이깁니다. */
+  it("같은 묶음 안에서는 의존되는 쪽이 먼저 나온다", () => {
+    const index = new Map(barrelPlacement.placed.map((entry, position) => [entry.module, position]));
+    const groupOf = new Map(barrelPlacement.placed.map((entry) => [entry.module, entry.group]));
+    const wrong = barrelPlacement.placed.flatMap((entry) =>
+      (byId.get(entry.module)?.deps ?? [])
+        .filter((dep) => groupOf.get(dep) === entry.group && index.get(dep)! > index.get(entry.module)!)
+        .map((dep) => `${entry.module}이 ${dep}보다 먼저 나옴 (묶음: ${entry.group})`));
+    expect(wrong).toEqual([]);
+  });
+
   /* 순환이 없다는 것은 브리핑이 사람 눈으로 잰 사실입니다. 사람이 잰 것은 낡습니다. */
   it("순환 의존이 없다", () => {
     const cycles: string[] = [];
