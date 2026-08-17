@@ -1,0 +1,122 @@
+/// <reference types="vite/client" />
+
+/* **`src/`의 파일 이름 규칙과 의존 방향을 기계가 지킵니다.**
+ *
+ * 이 저장소는 **대소문자로 종류를 구별하는 관습**을 처음부터 지키고 있었습니다 —
+ * 대문자 `.tsx`는 컴포넌트, 소문자 `.ts`는 컴포넌트가 아닌 것(순수 계산·훅·DOM 헬퍼).
+ * 🔴 그런데 그 규칙이 **어디에도 적혀 있지 않았고**, 지키는 것은 다음 사람의 눈썰미
+ * 뿐이었습니다. 이제 `PRINCIPLES.md` §15에 적혀 있고, 여기가 그것을 잽니다.
+ *
+ * 규칙을 글로만 적으면 안 되는 이유는 이 저장소가 이미 겪었습니다 — 관습으로만 있던
+ * 동안 **거꾸로 가는 화살표가 하나 생겼습니다**: `selectKeyboard.ts`(순수 계산)가
+ * `Select.tsx`(컴포넌트)에서 타입을 가져오고 있었습니다. `import type`이라 런타임
+ * 비용은 0이었지만, 그 파일의 머리말이 "표현을 고르기 전에 이 파일이 먼저 있었다"고
+ * 적어 둔 것과 정면으로 어긋납니다. 눈으로는 몇 달 동안 안 보였습니다.
+ */
+import { describe, expect, it } from "vitest";
+
+const sources = import.meta.glob("../src/**/*.{ts,tsx}", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+
+type Module = { id: string; file: string; isComponentFile: boolean; source: string; deps: string[] };
+
+/** `../src/a/b.tsx` → `a/b` */
+function toId(path: string) {
+  return path.replace("../src/", "").replace(/\.tsx?$/, "");
+}
+
+/** `a/b`에서 본 `../c` → `c`. 확장자는 붙지 않으므로 id끼리 바로 비교됩니다. */
+function resolveFrom(id: string, specifier: string) {
+  const base = id.includes("/") ? id.slice(0, id.lastIndexOf("/")) : "";
+  const parts = (base ? `${base}/${specifier}` : specifier).split("/");
+  const stack: string[] = [];
+  for (const part of parts) {
+    if (part === "." || part === "") continue;
+    if (part === "..") stack.pop();
+    else stack.push(part);
+  }
+  return stack.join("/");
+}
+
+const modules: Module[] = Object.entries(sources).map(([path, source]) => {
+  const id = toId(path);
+  const name = id.slice(id.lastIndexOf("/") + 1);
+  const deps = [...source.matchAll(/from\s+"(\.[^"]+)"/g)].map((match) => resolveFrom(id, match[1]));
+  return { id, file: path.replace("../src/", ""), isComponentFile: /^[A-Z]/.test(name), source, deps };
+});
+
+const byId = new Map(modules.map((module) => [module.id, module]));
+const internalEdges = modules.flatMap((module) => module.deps.filter((dep) => byId.has(dep)).map((dep) => [module.id, dep] as const));
+
+describe("src/ 파일 이름 규칙과 의존 방향 (PRINCIPLES §15)", () => {
+  /* 전제 — glob이 0건이거나 import 정규식이 아무것도 못 잡으면 아래 검사가 전부
+   * **공허하게** 통과합니다. `src/`를 통째로 지워도 초록이 됩니다. */
+  it("파일과 의존 관계를 실제로 읽어냈다", () => {
+    expect(modules.length).toBeGreaterThan(20);
+    expect(internalEdges.length).toBeGreaterThan(20);
+    expect(modules.map((module) => module.file)).toContain("index.ts");
+  });
+
+  /* §15 규칙 1 — 확장자와 첫 글자가 같은 것을 말합니다. `.tsx`는 대문자로 시작하는
+   * 컴포넌트 파일, `.ts`는 소문자로 시작하는 모듈. 예외를 두면 그 순간 규칙이 관습으로
+   * 돌아갑니다(그 상태가 이 파일이 생긴 이유입니다). */
+  it("`.tsx`는 대문자로, `.ts`는 소문자로 시작한다", () => {
+    const wrong = modules
+      .filter((module) => module.isComponentFile !== module.file.endsWith(".tsx"))
+      .map((module) => module.file);
+    expect(wrong).toEqual([]);
+  });
+
+  /* §15 규칙 2 — 소문자 모듈은 컴포넌트를 렌더하지 않습니다. JSX가 들어가면 파일이
+   * `.tsx`여야 하고, 그러면 규칙 1이 먼저 빨개집니다. 여기서는 "컴포넌트를 내보내는가"를
+   * 봅니다 — JSX 없이 `createElement`로 써도 잡히도록 이름 규칙으로 판정합니다. */
+  it("소문자 모듈은 대문자 함수(컴포넌트)를 내보내지 않는다", () => {
+    const offenders = modules
+      .filter((module) => !module.isComponentFile)
+      .flatMap((module) => [...module.source.matchAll(/export function ([A-Z]\w*)/g)].map((match) => `${module.file}: ${match[1]}`));
+    expect(offenders).toEqual([]);
+  });
+
+  /* 🔴 §15 규칙 3 — **방향.** 소문자 모듈이 컴포넌트 파일을 import 하면(타입이라도)
+   * 층이 거꾸로 갑니다. 이것이 실제로 일어났던 위반이고, 이 줄이 그 재발을 잡습니다.
+   *
+   * 예외는 **배럴 하나뿐**입니다 — `index.ts`는 공개 API 목록이라 모든 컴포넌트를 다시
+   * 내보내는 것이 그 파일의 일 전부입니다. 아래에서 "정말 다시 내보내기만 하는가"를
+   * 따로 재므로, 이 예외를 방패 삼아 로직이 흘러들어오면 그쪽이 빨개집니다. */
+  it("소문자 모듈은 컴포넌트 파일을 import 하지 않는다 (배럴 제외)", () => {
+    const backwards = internalEdges
+      .filter(([from, to]) => from !== "index" && !byId.get(from)!.isComponentFile && byId.get(to)!.isComponentFile)
+      .map(([from, to]) => `${from} → ${to}`);
+    expect(backwards).toEqual([]);
+  });
+
+  /* 위 예외의 근거("배럴은 다시 내보내기만 한다")를 여기서 다시 잽니다 — 주석에만 적힌
+   * 근거는 아무도 다시 재지 않는다는 것이 이 저장소의 기록된 규칙입니다. 주석과 빈 줄을
+   * 걷어낸 뒤 남는 줄은 전부 `export … from "./…"` 여야 합니다. */
+  it("배럴은 다시 내보내기만 한다 — 그래서 위 예외가 성립한다", () => {
+    const code = byId.get("index")!.source
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("//"));
+    expect(code.length).toBeGreaterThan(15);
+    expect(code.filter((line) => !/^export\s*\{[^}]*\}\s*from\s*"\.\/[^"]+";$/.test(line))).toEqual([]);
+  });
+
+  /* 순환이 없다는 것은 브리핑이 사람 눈으로 잰 사실입니다. 사람이 잰 것은 낡습니다. */
+  it("순환 의존이 없다", () => {
+    const cycles: string[] = [];
+    const state = new Map<string, "visiting" | "done">();
+    function visit(id: string, path: string[]) {
+      if (state.get(id) === "done") return;
+      if (state.get(id) === "visiting") {
+        cycles.push([...path.slice(path.indexOf(id)), id].join(" → "));
+        return;
+      }
+      state.set(id, "visiting");
+      for (const dep of byId.get(id)!.deps.filter((dep) => byId.has(dep))) visit(dep, [...path, id]);
+      state.set(id, "done");
+    }
+    for (const module of modules) visit(module.id, []);
+    expect(cycles).toEqual([]);
+  });
+});
