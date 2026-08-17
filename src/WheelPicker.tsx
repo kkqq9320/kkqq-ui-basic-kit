@@ -11,6 +11,8 @@
  *   · 데스크톱 휠·화살표는 커서가 있는 컬럼만, 모바일 스와이프·키보드는 활성 컬럼만
  */
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
+
+import { Button } from "./Button";
 import { createPortal } from "react-dom";
 
 import {
@@ -2480,7 +2482,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
           이 버튼들은 그 단축키의 동등물이므로(title에 단축키를 적어 뒀다), 버퍼를 안 지우면
           같은 뜻의 단축키와 버튼이 다르게 굴며, 남은 버퍼가 이 버튼이 방금 설정한 값을
           나중에(예: 다음 Tab) 도로 덮어쓸 수 있다. */}
-      <div className="wheel-actions">{seedAction && <button type="button" className="action-button" data-variant="secondary" tabIndex={-1} title={`${todayLabel} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" {...tapActivation(() => { setTyping(null); commitToday(); })}>{todayLabel}</button>}{allowClear && <button type="button" className="action-button" data-variant="secondary" tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" {...tapActivation(() => { setTyping(null); clearedRef.current = true; if (value) pushUndo(value); onChange(""); })}>{labels.clear}</button>}<button type="button" tabIndex={-1} className="action-button" data-variant="primary" aria-keyshortcuts="Enter Control+S Meta+S" {...tapActivation(commitAndClose)}>{labels.done}</button></div>
+      <div className="wheel-actions">{seedAction && <Button tabIndex={-1} title={`${todayLabel} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" {...tapActivation(() => { setTyping(null); commitToday(); })}>{todayLabel}</Button>}{allowClear && <Button tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" {...tapActivation(() => { setTyping(null); clearedRef.current = true; if (value) pushUndo(value); onChange(""); })}>{labels.clear}</Button>}<Button tabIndex={-1} variant="primary" aria-keyshortcuts="Enter Control+S Meta+S" {...tapActivation(commitAndClose)}>{labels.done}</Button></div>
     </div>, document.body)}
   </div>;
 }

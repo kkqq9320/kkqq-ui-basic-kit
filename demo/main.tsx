@@ -16,6 +16,7 @@ installHistoryProbe();
 import {
   AppShell,
   AutoGrowTextarea,
+  Button,
   DateWheelPicker,
   TimeWheelPicker,
   DurationWheelPicker,
@@ -160,10 +161,10 @@ function ImeCapturePanel() {
         <code>keyCode=</code>를 그대로 가져옵니다.</li>
     </ol>
     <div className="action-row" style={{ marginTop: 16 }}>
-      <button type="button" className="action-button" data-variant="secondary" onClick={() => logTraceNote("IME 확인 — 여기부터")}>
+      <Button onClick={() => logTraceNote("IME 확인 — 여기부터")}>
         여기부터
-      </button>
-      <button type="button" className="action-button" data-variant="secondary" onClick={() => setText("")}>칸 비우기</button>
+      </Button>
+      <Button onClick={() => setText("")}>칸 비우기</Button>
     </div>
   </Panel>;
 }
@@ -177,8 +178,8 @@ function HistoryLogPanel() {
     return () => window.removeEventListener("ds-history-log", update);
   }, []);
   return <Panel title="history 기록" hint="DEBUG" actions={<>
-    <button type="button" className="action-button" data-variant="secondary" onClick={() => { navigator.clipboard?.writeText(lines.join("\n")); }}>복사</button>
-    <button type="button" className="action-button" data-variant="secondary" onClick={() => { clearProbeLog(); setLines([]); }}>지우기</button>
+    <Button onClick={() => { navigator.clipboard?.writeText(lines.join("\n")); }}>복사</Button>
+    <Button onClick={() => { clearProbeLog(); setLines([]); }}>지우기</Button>
   </>}>
     <p className="muted-copy">뒤로가기로 페이지를 나갔다 돌아와도 남아 있습니다. 아래 내용을 그대로 붙여 주세요.</p>
     <pre className="demo-log">{lines.length ? lines.join("\n") : "(아직 기록 없음)"}</pre>
@@ -490,14 +491,11 @@ function LayoutSwitch() {
     <div className="layout-switch-row">
       <strong>남는 폭 <code>--*-justify</code></strong>
       <div className="layout-switch-buttons">
-        {JUSTIFY_CHOICES.map((choice) => <button
-          key={choice}
-          type="button"
-          className="action-button" data-variant={choice === justify ? "primary" : "secondary"}
+        {JUSTIFY_CHOICES.map((choice) => <Button key={choice} variant={choice === justify ? "primary" : "secondary"}
           aria-pressed={choice === justify}
           onClick={() => setJustify(choice)}
           title={choice}
-        >{choice === "normal" ? "왼쪽" : choice === "center" ? "가운데" : choice === "end" ? "오른쪽" : "양끝"}</button>)}
+        >{choice === "normal" ? "왼쪽" : choice === "center" ? "가운데" : choice === "end" ? "오른쪽" : "양끝"}</Button>)}
       </div>
     </div>
     {/* ⚠️ **이 줄이 없어서 오너가 같은 자리에서 세 번 막혔습니다.** 버튼이 어떤 CSS 값을
@@ -512,14 +510,11 @@ function LayoutSwitch() {
     <div className="layout-switch-row">
       <strong>폭 흉내 <small>(창은 그대로)</small></strong>
       <div className="layout-switch-buttons">
-        {WIDTH_PRESETS.map((preset) => <button
-          key={preset.label}
-          type="button"
-          className="action-button" data-variant={preset.width === fakeWidth ? "primary" : "secondary"}
+        {WIDTH_PRESETS.map((preset) => <Button key={preset.label} variant={preset.width === fakeWidth ? "primary" : "secondary"}
           aria-pressed={preset.width === fakeWidth}
           title={preset.볼것}
           onClick={() => setFakeWidth(preset.width)}
-        >{preset.label}</button>)}
+        >{preset.label}</Button>)}
       </div>
     </div>
     <table className="layout-switch-table">
@@ -547,7 +542,7 @@ function LayoutSwitch() {
 /** 레이아웃 탭의 패널들. **높이를 일부러 다르게** 뒀습니다 — 나란히 놓으면 짧은 쪽
  *  아래가 비는 것이 이 방식의 실제 비용이고, 데모가 그걸 감추면 안 됩니다. */
 const LAYOUT_PANELS: Record<string, () => ReactElement> = {
-  messages: () => <Panel key="messages" title="패널" hint="PANEL" actions={<button type="button" className="action-button" data-variant="secondary">액션</button>}>
+  messages: () => <Panel key="messages" title="패널" hint="PANEL" actions={<Button>액션</Button>}>
     <p className="muted-copy">패널은 기본이 작업 영역 전체 폭입니다. 가로로 나란히 놓고 싶으면 <code>PanelGrid</code>로 묶으세요 — 어느 패널이 같이 설지는 앱이 정합니다.</p>
     <div className="error" style={{ marginTop: 12 }}>오류 메시지 예시입니다.</div>
     <div className="success">성공 메시지 예시입니다.</div>
@@ -750,7 +745,7 @@ function Demo() {
             <small>작업 공간</small>
             {/* 슬롯이 접기 애니메이션 때문에 overflow를 자르므로 portal 필수 */}
             <Select ariaLabel="작업 공간" value={currency} options={SHORT_OPTIONS} onChange={setCurrency} portal />
-            <button type="button" className="action-button" data-variant="text">+ 새로 만들기</button>
+            <Button variant="text">+ 새로 만들기</Button>
           </>}
           sections={[
             { items: [navItem("dashboard", "대시보드", "dashboard"), navItem("entry", "입력", "entry", 7), navItem("list", "목록", "list")] },
@@ -776,8 +771,8 @@ function Demo() {
         pageTabs={<MobilePageTabs registration={pageTabs.registration} open={pageTabs.open} onToggle={pageTabs.setOpen} floatRef={pageTabs.floatRef} />}
       >
         <div className="page-actions">
-          <button type="button" className="page-action-button" onClick={() => setTheme((value) => (value === "light" ? "dark" : "light"))} aria-label={theme === "dark" ? "라이트 모드로 전환" : "다크 모드로 전환"} title={theme === "dark" ? "라이트 모드" : "다크 모드"}><Glyph d={theme === "dark" ? ICONS.sun : ICONS.moon} /></button>
-          <button type="button" className="page-action-button" onClick={() => setPage("users")} aria-label="설정" title="설정"><Glyph d={ICONS.gear} /></button>
+          <Button className="page-" onClick={() => setTheme((value) => (value === "light" ? "dark" : "light"))} aria-label={theme === "dark" ? "라이트 모드로 전환" : "다크 모드로 전환"} title={theme === "dark" ? "라이트 모드" : "다크 모드"}><Glyph d={theme === "dark" ? ICONS.sun : ICONS.moon} /></Button>
+          <Button className="page-" onClick={() => setPage("users")} aria-label="설정" title="설정"><Glyph d={ICONS.gear} /></Button>
         </div>
         <PageHeader eyebrow="DESIGN SYSTEM" title="컴포넌트 데모" description="드롭다운·날짜 피커·사이드바·탭이 한 화면에 모두 있습니다. 브라우저 폭을 760px 아래로 줄이면 모바일 레이아웃으로 바뀝니다." />
         {/* 단축키 예시 하나를 여기서도 문자로 적어 둡니다 — 자세한 설명과 설정 UI는
@@ -828,10 +823,10 @@ function Demo() {
                 <label>늦게 비활성 (§7.1)<DateWheelPicker ariaLabel="늦게 비활성 날짜" value={raceDate} onChange={setRaceDate} disabled={raceDisabled} /></label>
               </FieldGrid>
               <div className="action-row" style={{ marginTop: 16 }}>
-                <button type="button" className="action-button" data-variant="secondary" onClick={() => { setRaceDisabled(false); setCountdown(3); logTraceNote("3초 카운트다운 시작"); }} disabled={countdown > 0}>
+                <Button onClick={() => { setRaceDisabled(false); setCountdown(3); logTraceNote("3초 카운트다운 시작"); }} disabled={countdown > 0}>
                   {countdown > 0 ? `${countdown}초 뒤 비활성…` : "3초 뒤 비활성"}
-                </button>
-                <button type="button" className="action-button" data-variant="secondary" onClick={() => { setCountdown(0); setRaceDisabled(false); logTraceNote("disabled=false 되돌림"); }}>다시 활성</button>
+                </Button>
+                <Button onClick={() => { setCountdown(0); setRaceDisabled(false); logTraceNote("disabled=false 되돌림"); }}>다시 활성</Button>
               </div>
               {/* ⚠️ 안내는 **실제로 검증한 재현 절차 그대로** 적습니다. "아무 숫자나 반쯤"이라고
                   적으면 공허한 캡처가 나오고, **트레이스만 봐서는 그걸 가려낼 수 없습니다**:
@@ -936,22 +931,22 @@ function Demo() {
               <div data-keyboard-keep-visible>
                 <label>메모 (3줄에서 시작해 자동 확장)<AutoGrowTextarea value={memo} onChange={setMemo} placeholder="여러 줄을 입력해 보세요" maxLength={500} ariaLabel="메모" /></label>
                 <div className="action-row" style={{ marginTop: 16 }}>
-                  <button type="button" className="action-button" data-variant="secondary">취소</button>
-                  <button type="button" className="action-button" data-variant="danger">삭제</button>
-                  <button type="button" className="action-button" data-variant="primary">저장</button>
+                  <Button>취소</Button>
+                  <Button variant="danger">삭제</Button>
+                  <Button variant="primary">저장</Button>
                 </div>
               </div>
             </Panel>
             <Panel title="다이얼로그" hint="DIALOG">
               <p className="muted-copy">백드롭 클릭·Escape로 닫히고, 포커스가 안에 갇히며, 닫히면 열었던 버튼으로 포커스가 돌아옵니다.</p>
               <div className="action-row" style={{ marginTop: 16 }}>
-                <button type="button" className="action-button" data-variant="secondary" onClick={() => setDialog("scroll")}>긴 다이얼로그</button>
-                <button type="button" className="action-button" data-variant="primary" onClick={() => setDialog("basic")}>다이얼로그 열기</button>
+                <Button onClick={() => setDialog("scroll")}>긴 다이얼로그</Button>
+                <Button variant="primary" onClick={() => setDialog("basic")}>다이얼로그 열기</Button>
                 {/* 🔬 결함 재현용(2026-08-16, PR #106). 첫 포커스 후보가 `type="hidden"`이라
                     FOCUSABLE 선택자에는 걸리지만 포커스는 못 받습니다. 고치기 전에는
                     (1) 열자마자 포커스가 다이얼로그 밖에 남고 (2) 마지막 버튼에서 Tab이
                     죽었습니다. 지금은 이름 칸이 잡히고 Tab이 감싸야 합니다. */}
-                <button type="button" className="action-button" data-variant="secondary" onClick={() => setDialog("hidden-first")}>숨은 입력이 첫 요소인 다이얼로그</button>
+                <Button onClick={() => setDialog("hidden-first")}>숨은 입력이 첫 요소인 다이얼로그</Button>
               </div>
             </Panel>
           </PanelGrid>
@@ -1001,13 +996,13 @@ function Demo() {
               ⚠️ CSS의 `order`로 옮기지 마세요 — 화면만 바뀌고 **Tab 순서와 읽기 순서는
               그대로**라 둘이 어긋납니다. 배열을 바꾸는 쪽이 맞습니다. */}
           <div className="action-row" style={{ marginBottom: 12 }}>
-            <button type="button" className="action-button" data-variant="secondary" onClick={() => setPanelOrder((current) => [...current.slice(1), current[0]])}>패널 순서 돌리기</button>
+            <Button onClick={() => setPanelOrder((current) => [...current.slice(1), current[0]])}>패널 순서 돌리기</Button>
             {/* 세 패널의 높이를 일부러 다르게 뒀으므로 이 버튼 하나로 차이가 그대로 보입니다.
                 끄면 각자 제 높이(짧은 쪽 아래가 빔), 켜면 한 줄이 같은 높이(빈 자리가 짧은
                 패널 **안쪽**으로 들어감). 없어지는 게 아니라 옮겨갈 뿐입니다. */}
-            <button type="button" className="action-button" data-variant={panelStretch ? "primary" : "secondary"} aria-pressed={panelStretch} onClick={() => setPanelStretch((value) => !value)}>
+            <Button variant={panelStretch ? "primary" : "secondary"} aria-pressed={panelStretch} onClick={() => setPanelStretch((value) => !value)}>
               {panelStretch ? "높이 맞춤 켜짐" : "높이 맞춤 꺼짐"}
-            </button>
+            </Button>
           </div>
           <PanelGrid stretch={panelStretch}>
             {panelOrder.map((id) => LAYOUT_PANELS[id]())}
@@ -1024,22 +1019,20 @@ function Demo() {
               고쳐 보세요, 이 칩이 따라 바뀝니다: <span className="demo-brand-chip">데모 브랜드</span>
             </p>
             <div className="action-row" style={{ marginBottom: 10 }}>
-              <button
-                type="button"
-                className="action-button" data-variant={appOwnsColors ? "primary" : "secondary"}
+              <Button variant={appOwnsColors ? "primary" : "secondary"}
                 aria-pressed={appOwnsColors}
                 onClick={() => setAppOwnsColors((owned) => !owned)}
               >
                 {appOwnsColors ? "앱이 저장(켜짐)" : "킷이 저장(꺼짐)"}
-              </button>
-              <button type="button" className="action-button" data-variant="secondary" onClick={() => {
+              </Button>
+              <Button onClick={() => {
                 /* 앱이 소유하면 저장소가 아니라 **앱이 가진 값**으로 봉투를 만듭니다 —
                    인자를 빼면 `read`로 저장소를 보므로 controlled 앱에서는 빈 백업이 나옵니다. */
                 const backup = appOwnsColors ? demoPalette.serialize(serverColors) : demoPalette.serialize();
                 setBackupText(JSON.stringify(backup, null, 2));
                 setRestoreNote(`백업을 만들었습니다 — 라이트 ${Object.keys(backup.colors.light).length}개, 다크 ${Object.keys(backup.colors.dark).length}개`);
-              }}>백업 만들기</button>
-              <button type="button" className="action-button" data-variant="secondary" onClick={() => {
+              }}>백업 만들기</Button>
+              <Button onClick={() => {
                 let raw: unknown;
                 try { raw = JSON.parse(backupText); } catch { setRestoreNote("JSON이 아닙니다"); return; }
                 const parsed = demoPalette.parse(raw);
@@ -1053,7 +1046,7 @@ function Demo() {
                   demoPalette.applyBackup(parsed.backup, theme);   // theme은 필수 — :root는 하나뿐입니다
                 }
                 setRestoreNote(parsed.dropped.length ? `복원했습니다. 모르는 색 ${parsed.dropped.length}개는 뺐습니다: ${parsed.dropped.join(", ")}` : "복원했습니다");
-              }}>복원</button>
+              }}>복원</Button>
             </div>
             <p className="demo-owner-note">
               마지막 <code>onCommit</code>: {lastCommit} · {restoreNote || "피커를 끄는 동안은 안 불리고, 손을 떼거나 500ms 쉬면 한 번 불립니다"}
@@ -1083,9 +1076,9 @@ function Demo() {
       <label>분류 이름<input placeholder="예: 출장비" required /></label>
       <label>메모<AutoGrowTextarea value={memo} onChange={setMemo} maxLength={500} ariaLabel="분류 메모" placeholder="설명을 입력하세요" /></label>
       <DialogActions>
-        <button type="button" className="action-button" data-variant="danger" onClick={() => setDialog("none")}>삭제</button>
-        <button type="button" className="action-button" data-variant="secondary" onClick={() => setDialog("none")}>취소</button>
-        <button className="action-button" data-variant="primary">등록</button>
+        <Button variant="danger" onClick={() => setDialog("none")}>삭제</Button>
+        <Button onClick={() => setDialog("none")}>취소</Button>
+        <Button variant="primary">등록</Button>
       </DialogActions>
     </Dialog>
 
@@ -1100,8 +1093,8 @@ function Demo() {
       <input type="hidden" name="csrf" defaultValue="token" />
       <label>이름<input placeholder="여기에 포커스가 잡혀야 합니다" /></label>
       <DialogActions>
-        <button type="button" className="action-button" data-variant="secondary" onClick={() => setDialog("none")}>취소</button>
-        <button type="button" className="action-button" data-variant="primary" onClick={() => setDialog("none")}>확인</button>
+        <Button onClick={() => setDialog("none")}>취소</Button>
+        <Button variant="primary" onClick={() => setDialog("none")}>확인</Button>
       </DialogActions>
     </Dialog>
 
@@ -1116,8 +1109,8 @@ function Demo() {
         return <label key={key}>{field.label}<input inputMode={field.numeric ? "numeric" : undefined} placeholder={field.placeholder} /></label>;
       })}
       <DialogActions>
-        <button type="button" className="action-button" data-variant="secondary" onClick={() => setDialog("none")}>취소</button>
-        <button type="button" className="action-button" data-variant="primary" onClick={() => setDialog("none")}>저장</button>
+        <Button onClick={() => setDialog("none")}>취소</Button>
+        <Button variant="primary" onClick={() => setDialog("none")}>저장</Button>
       </DialogActions>
     </Dialog>
   </MobilePageTabsContext.Provider>;

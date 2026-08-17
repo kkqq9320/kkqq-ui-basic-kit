@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { Button } from "./Button";
+
 import { useShortcutRegistry } from "./ShortcutProvider";
 import { beginRecording, bindingWarning, comboFromEvent, endRecording, findConflict, formatCombo, UNBINDABLE_CODES, unbindableReason, type UnbindableReason } from "./shortcuts";
 
@@ -164,14 +166,12 @@ export function ShortcutSettings({ onChange, className }: ShortcutSettingsProps)
           return (
             <li className="kkqq-shortcuts__row" key={item.id}>
               <span className="kkqq-shortcuts__label">{item.label}</span>
-              <button
-                className="kkqq-shortcuts__record action-button" data-variant="secondary"
-                type="button"
+              <Button className="kkqq-shortcuts__record"
                 onClick={() => { setMessage(null); setRecording(item.id); }}
               >
                 {recording === item.id ? `${item.label} — 조합을 누르세요` : `${item.label} ${bound ? displayCombo(bound) : "없음"}`}
-              </button>
-              <button className="kkqq-shortcuts__clear action-button" data-variant="secondary" type="button" onClick={() => { setMessage(null); commit(item.id, null); }}>지우기</button>
+              </Button>
+              <Button className="kkqq-shortcuts__clear" onClick={() => { setMessage(null); commit(item.id, null); }}>지우기</Button>
             </li>
           );
         })}
