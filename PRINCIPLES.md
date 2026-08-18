@@ -1089,13 +1089,17 @@ nav(`aria-current="page"` + `class="active"`). 둘이 갈리면 **화면과 스�
 | `.open` ×8 | select · sidebar · tabs · wheel | ③ — **오너 결정 2026-08-18**: 부모의 `.open`은 자식 트리거의 `aria-expanded`와 **다른 사실**입니다(아래). `data-open` 축으로 |
 | `.mobile-open` ×3 | tabs | ③ — 위와 같은 결정에 걸립니다 |
 | `.active` ×6 | sidebar(`.mobile-quick-bar`) · wheel | ① — **오너 결정 2026-08-18**: **항목이 자기 역할을 말하게** 합니다(`MobileQuickBarItem`에 필드 하나 추가). 내비 항목만 `aria-current`를 답니다 |
-| `.selected` ×3 | wheel(**값 행만**) | ① — **결정 아님**(2026-08-18 재측정). 그 행은 `aria-current="date"`를 **이미** 갖고 있고 조건이 글자 그대로 같습니다 → 순수 사본 |
-| `.moving-*` ×8 · `.entering` ×2 · `.holding` ×2 · `.editing` ×1 | wheel | ③ — 전부 순수 시각 상태 |
+| `.moving-*` ×8 · `.entering` ×2 · `.holding` ×2 · `.editing` ×1 · `.dragging` ×1 | wheel | ③ — 전부 순수 시각 상태 |
 
-✅ **셋이 나갔습니다**(2026-08-18): `.stretch` → `data-align` · sidebar의 `.mobile-open` →
-`data-mobile-drawer` · 오전/오후의 `.selected` → 이미 있던 `aria-pressed`. 셋 다 **결정이 필요 없는**
-자리였습니다 — 앞의 둘은 대응하는 ARIA가 아예 없고(순수 시각·축), 셋째는 같은 요소에 같은
-조건의 속성이 **이미 있어** 순수한 클래스 사본이었습니다.
+✅ **넷이 나갔습니다**(2026-08-18): `.stretch` → `data-align` · sidebar의 `.mobile-open` →
+`data-mobile-drawer` · 오전/오후의 `.selected` → 이미 있던 `aria-pressed` · 값 행의 `.selected` →
+이미 있던 `aria-current="date"`. 넷 다 **결정이 필요 없는** 자리였습니다 — 앞의 둘은 대응하는
+ARIA가 아예 없고(순수 시각·축), 뒤의 둘은 같은 요소에 **같은 조건의 속성이 이미 있어** 순수한
+클래스 사본이었습니다.
+
+📐 **남은 것은 서른하나입니다**(2026-08-18 실측). 위 표를 더한 수가 아니라 `css/`를 센 수입니다 —
+이번에 세면서 표에 `.dragging` ×1이 빠져 있는 것을 찾았습니다. 표의 수는 **소스에서 다시 재기**
+전에는 믿지 마세요.
 
 ### 🔴 `.open`은 왜 ①이 아닌가 (오너 결정 2026-08-18)
 

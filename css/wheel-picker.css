@@ -360,8 +360,8 @@
 .wheel-column.moving-previous .wheel-values { animation: wheel-slide-previous 210ms cubic-bezier(.2, .9, .25, 1); }
 .wheel-values button { width: 100%; min-width: 0; height: 30px; min-height: 30px; max-height: 30px; padding: 0 3px; border: 0; border-radius: 5px; color: color-mix(in srgb, var(--text) 58%, var(--muted)); background: transparent; font-size: var(--font-size-control); line-height: 30px; white-space: nowrap; transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease, transform var(--motion-fast) ease; }
 .wheel-values button:hover:not(:disabled) { color: var(--text); background: color-mix(in srgb, var(--accent-soft) 68%, transparent); }
-.wheel-values button.selected { color: var(--on-accent); background: var(--accent); box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 24%, transparent); font-weight: 800; transform: scale(1.025); }
-.wheel-column:is(.moving-next, .moving-previous) .wheel-values button.selected { animation: wheel-selected-pop 230ms cubic-bezier(.18, 1.15, .35, 1); }
+.wheel-values button[aria-current="date"] { color: var(--on-accent); background: var(--accent); box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 24%, transparent); font-weight: 800; transform: scale(1.025); }
+.wheel-column:is(.moving-next, .moving-previous) .wheel-values button[aria-current="date"] { animation: wheel-selected-pop 230ms cubic-bezier(.18, 1.15, .35, 1); }
 .wheel-values button:disabled { color: transparent; cursor: default; }
 
 /* 🔴 **길게 누르는 동안 보이는 표시**(오너 리포트 4번). 없으면 아무도 이 기능을 못 찾고,
@@ -463,7 +463,7 @@
   .wheel-column.entering .wheel-values,
   .wheel-values,
   .wheel-column:is(.moving-next, .moving-previous) .wheel-values,
-  .wheel-column:is(.moving-next, .moving-previous) .wheel-values button.selected { animation: none; transition: none; }
+  .wheel-column:is(.moving-next, .moving-previous) .wheel-values button[aria-current="date"] { animation: none; transition: none; }
   /* ⚠️ **누름 표시는 장식이 아니라 진행 상태입니다** — 여기서 지우면 0.5초를 아무 신호
    * 없이 기다리게 됩니다. 움직임만 없애고 **표시는 남깁니다.**
    *
