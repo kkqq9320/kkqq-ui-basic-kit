@@ -61,10 +61,10 @@ const FILL = "\u2012";
  * 🔴 예전에는 절대 인덱스를 썼다(`[4]` = 오프셋 +1). 행이 늘 일곱이라 성립하던 것인데,
  * 오너 리포트 6번으로 **위아래 행 수가 전역 설정**이 되면서(기본 1 → 다섯 행) 그 숫자가
  * 통째로 틀렸다. 인덱스를 하나씩 고쳐 두면 설정을 바꿀 때마다 또 틀린다 —
- * `.selected`에서 세면 행 수와 무관하게 같은 행을 가리킨다. */
+ * `aria-current="date"`에서 세면 행 수와 무관하게 같은 행을 가리킨다. */
 function rowAt(column: Element, offset: number) {
   const rows = [...column.querySelectorAll(".wheel-values button")];
-  const centre = rows.findIndex((row) => row.classList.contains("selected"));
+  const centre = rows.findIndex((row) => row.matches('[aria-current="date"]'));
   expect(centre).toBeGreaterThan(-1);
   return rows[centre + offset] as HTMLElement;
 }
@@ -676,10 +676,10 @@ describe("DateWheelPicker 스와이프", () => {
   // 리마운트가 없어지면 다시 시작할 계기 자체가 사라진다(클래스 토글로는 시작되지 않는다).
   it("드래그 중 커밋은 액센트 행을 리마운트하지 않는다", () => {
     const { year } = openWheel();
-    const selectedBefore = year.querySelector(".wheel-values button.selected");
+    const selectedBefore = year.querySelector('.wheel-values button[aria-current="date"]');
     pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerMove", year, { pointerId: 7, clientY: 60, buttons: 1 });
-    expect(year.querySelector(".wheel-values button.selected")).toBe(selectedBefore);
+    expect(year.querySelector('.wheel-values button[aria-current="date"]')).toBe(selectedBefore);
   });
 
   // ── 새 스와이프는 앞선 모션을 비우고 시작한다 ────────────────────────────────
@@ -3148,14 +3148,14 @@ describe("DateWheelPicker 타이핑", () => {
     const field = await openAt("2026-07-12");
     fireEvent.keyDown(field, { key: "2" });
     fireEvent.keyDown(field, { key: "Backspace" });
-    expect(screen.getByRole("group", { name: "연도 2026" }).querySelector(".wheel-values .selected")?.textContent).toBe("2026");
+    expect(screen.getByRole("group", { name: "연도 2026" }).querySelector('.wheel-values [aria-current="date"]')?.textContent).toBe("2026");
   });
 
   it("치는 동안 선택 행에 친 숫자가 그대로 보인다", async () => {
     const field = await openAt("2026-07-12");
     fireEvent.keyDown(field, { key: "2" });
     fireEvent.keyDown(field, { key: "0" });
-    expect(screen.getByRole("group", { name: "연도 2026" }).querySelector(".wheel-values .selected")?.textContent).toBe("20");
+    expect(screen.getByRole("group", { name: "연도 2026" }).querySelector('.wheel-values [aria-current="date"]')?.textContent).toBe("20");
   });
 });
 
@@ -3413,11 +3413,11 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
     // 정확한 이름("연도 2031")으로 찾으면, 확정이 아예 안 됐을 때(연도가 여전히 2026일 때)
-    // getByRole이 "못 찾음"으로 던져 버려 아래 .selected 단언까지 못 가고 죽는다 — 그러면
+    // getByRole이 "못 찾음"으로 던져 버려 아래 가운데 행 단언까지 못 가고 죽는다 — 그러면
     // 뮤테이션이 이 줄이 아니라 쿼리에서 죽어, 이 단언 자체는 실패해 본 적이 없는 게 된다.
-    // 느슨한 정규식으로 찾아, 실패가 항상 .selected 텍스트 비교에서 나게 한다.
+    // 느슨한 정규식으로 찾아, 실패가 항상 가운데 행의 텍스트 비교에서 나게 한다.
     const reopenedYear = screen.getByRole("group", { name: /^연도/ });
-    expect(reopenedYear.querySelector(".wheel-values .selected")?.textContent).toBe("2031");
+    expect(reopenedYear.querySelector('.wheel-values [aria-current="date"]')?.textContent).toBe("2031");
   });
 
   // 완료 버튼이 flushTyping을 거치므로, 완료 테스트만으로는 **"닫히면 버퍼를 버린다" 이펙트**가
@@ -3435,13 +3435,13 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
     const reopenedYear = screen.getByRole("group", { name: /^연도/ });
-    expect(reopenedYear.querySelector(".wheel-values .selected")?.textContent).toBe("2026");
+    expect(reopenedYear.querySelector('.wheel-values [aria-current="date"]')?.textContent).toBe("2026");
   });
 
   it("포인터로 컬럼을 누르면 버퍼를 버린다", async () => {
     const { year } = await openAndType("2026-07-12", ["3"]);
     fireEvent.pointerDown(year, { pointerId: 1, clientY: 80, buttons: 1 });
-    expect(year.querySelector(".wheel-values .selected")?.textContent).toBe("2026");
+    expect(year.querySelector('.wheel-values [aria-current="date"]')?.textContent).toBe("2026");
   });
 
   // 리뷰 finding — Tab 분기 맨 앞의 flushTyping(unit)이 실제 버퍼를 상대로 실행되는
@@ -3469,7 +3469,7 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
   it("→로 세그먼트를 떠난 뒤 연도 열은 버퍼가 아니라 확정된 값을 보여준다", async () => {
     const { trigger, year } = await openAndType("2026-07-12", ["3", "1"]);
     fireEvent.keyDown(trigger, { key: "ArrowRight" });
-    expect(year.querySelector(".wheel-values .selected")?.textContent).toBe("2031");
+    expect(year.querySelector('.wheel-values [aria-current="date"]')?.textContent).toBe("2031");
   });
 
   // Shift+Tab도 확정하고 떠난다(스펙 §3 — Tab과 완전히 대칭이다). 월에서 시작하는
@@ -3580,7 +3580,7 @@ describe("DateWheelPicker 단축키", () => {
 
     // 버퍼가 안 지워지면 이 행은 여전히 버퍼 "3"을 보여준다(buffered ?? ... 가 "3"에서
     // 멈춘다). 지워지면 방금 설정된 값의 연도 "2026"이 보인다.
-    expect(year.querySelector(".wheel-values .selected")?.textContent).toBe("2026");
+    expect(year.querySelector('.wheel-values [aria-current="date"]')?.textContent).toBe("2026");
   });
 
   it("비우기 버튼을 누르면 치던 숫자를 버린다", () => {
@@ -3596,7 +3596,7 @@ describe("DateWheelPicker 단축키", () => {
 
     // 비우기는 값을 ""로 만들고, baseValue는 값이 비어 있으면 오늘로 대체된다(:203) —
     // 버퍼가 안 지워지면 이 행은 여전히 버퍼 "3"을 보여준다.
-    expect(year.querySelector(".wheel-values .selected")?.textContent).toBe("2026");
+    expect(year.querySelector('.wheel-values [aria-current="date"]')?.textContent).toBe("2026");
   });
 
   // labels.hint의 기본값이 타이핑을 포함해 바뀐다(PRINCIPLES §11 문서화 대상) —
@@ -5148,9 +5148,9 @@ describe("DateWheelPicker 열 라벨 — 시·분·초는 두 자리 숫자만 (
     const hour = screen.getByRole("group", { name: "시 03" });
     const minute = screen.getByRole("group", { name: "분 00" });
     const second = screen.getByRole("group", { name: "초 05" });
-    expect(hour.querySelector(".wheel-values button.selected")?.textContent).toBe("03");
-    expect(minute.querySelector(".wheel-values button.selected")?.textContent).toBe("00");
-    expect(second.querySelector(".wheel-values button.selected")?.textContent).toBe("05");
+    expect(hour.querySelector('.wheel-values button[aria-current="date"]')?.textContent).toBe("03");
+    expect(minute.querySelector('.wheel-values button[aria-current="date"]')?.textContent).toBe("00");
+    expect(second.querySelector('.wheel-values button[aria-current="date"]')?.textContent).toBe("05");
   });
 
   // 대조군 — 일 열은 여전히 요일이 붙는다. 시·분·초만 "두 자리만"이지 날짜
@@ -6321,7 +6321,7 @@ describe("DateWheelPicker 휠 행 수 설정 (오너 리포트 6번)", () => {
       cleanup();
       setWheelRowsPerSide(rows);
       const all = [...openYear().querySelectorAll(".wheel-values button")];
-      expect(all.findIndex((row) => row.classList.contains("selected"))).toBe(rows + 1);
+      expect(all.findIndex((row) => row.matches('[aria-current="date"]'))).toBe(rows + 1);
     }
   });
 
@@ -6555,6 +6555,52 @@ describe("길게 누르기 임계와 진행 막대 (오너 리포트 5·6차)", 
 
   it("움직임을 줄이는 환경에서도 지연은 남는다 — 더블탭에서 번쩍이면 안 된다", () => {
     expect(wheelPickerCssSource).toContain(".wheel-column.holding::after { animation: wheel-hold 1ms linear 200ms forwards; }");
+  });
+});
+
+/* ── §16 ①: 값 행의 선택 표시 ────────────────────────────────────────────────
+ *
+ * 🔴 **값 행도 오전/오후와 같은 모양이었습니다.** `aria-current="date"`를 **이미** 갖고
+ * 있는 바로 그 요소에 `className={offset === 0 ? "selected" : ""}`가 **글자 그대로
+ * 같은 조건으로** 하나 더 붙어 있었습니다. 그래서 이것은 결정이 아니라 사본 제거입니다
+ * (PRINCIPLES §16 표, 2026-08-18 재측정).
+ *
+ * 🟢 명시도는 (0,2,1)로 전과 같습니다 — 속성 선택자는 클래스와 같은 무게입니다. 그래서
+ * 바로 아래 줄의 `.wheel-values button:disabled`가 **소스 순서로 이기는 것**도 그대로입니다
+ * (가운데 행이 "—"일 때 투명해지는 그 규칙입니다). 순서를 바꾸거나 `:not(:disabled)`를
+ * 더하면 그건 이관이 아니라 동작 변경입니다.
+ *
+ * ⚠️ **자리가 셋이라 검사도 셋입니다.** 사이드바에서 **CSS만** 되돌리는 변이가 1664개
+ * 초록이었던 것을 기억하세요:
+ *   ① 붙이는 쪽(JSX) — 이 파일의 값 행 조회 열여섯이 전부 이 속성으로 찾습니다
+ *   ② 칠하는 쪽(CSS) — 아래 두 검사
+ *   ③ **둘 다 있는 경우** — 아래 렌더 검사. ①·②만으로는 클래스를 되살려도 안 빨개집니다 */
+describe("값 행의 선택 표시는 aria-current 하나다 (§16 ①)", () => {
+  const openYear = () => {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    return screen.getByRole("group", { name: /^연도/ });
+  };
+
+  it("그 행을 칠하는 것은 속성 선택자다", () => {
+    expect(wheelPickerCssSource).toContain('.wheel-values button[aria-current="date"] {');
+  });
+
+  /* 칠하는 자리가 셋입니다 — 본 규칙 · 슬라이드 중의 `wheel-selected-pop` · 축소 모션의
+   * 예외. 하나씩 박으면 되돌림 하나를 놓치므로 **클래스가 아예 안 남는 것**을 봅니다.
+   * ⚠️ `selected`가 아니라 `button.selected`를 봅니다 — 앞엣것은 애니메이션 이름
+   * `wheel-selected-pop`에도 걸려 이 검사가 영영 안 빨개집니다. */
+  it("클래스 사본은 CSS 어디에도 없다 — 슬라이드 팝도, 축소 모션 예외도", () => {
+    expect(wheelPickerCssSource).not.toContain("button.selected");
+  });
+
+  it("전제: 렌더된 가운데 행이 그 속성으로 찾힌다", () => {
+    expect(openYear().querySelector('.wheel-values button[aria-current="date"]')?.textContent).toBe("2026");
+  });
+
+  it("그 행에 selected 클래스 사본이 없다", () => {
+    const centre = openYear().querySelector('.wheel-values button[aria-current="date"]');
+    expect(centre?.classList.contains("selected")).toBe(false);
   });
 });
 
@@ -7176,7 +7222,7 @@ describe("빈 값으로 열었을 때의 기준값과 격자", () => {
 // 갖고 있습니다).
 describe("라벨 넷이 선택 필드다 — 폴백이 죽은 코드가 아니다", () => {
   const dayRowText = () =>
-    document.querySelector('.wheel-column[data-unit="day"] .wheel-values button.selected')?.textContent ?? null;
+    document.querySelector('.wheel-column[data-unit="day"] .wheel-values button[aria-current="date"]')?.textContent ?? null;
 
   /* 🔴 **이 검사가 가장 중요합니다 — 없으면 크래시가 한참 뒤에, 한 조합에서만 납니다.**
    * `weekdays`는 `model.label`로 넘어가 시점 모델의 **일 열에서만** 인덱싱됩니다

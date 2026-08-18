@@ -157,7 +157,7 @@ describe("계약 — 기간이 거짓말하지 않아도 되는가", () => {
     render(<WheelPicker model={durationModel} ariaLabel="기간" value="" onChange={() => undefined} fields={HM} />);
     fireEvent.click(fieldOf("기간"));
     // 0에서는 아래 두 칸이 전부 `—`라 인덱스로 짚으면 안 됩니다 — 선택된 행으로 봅니다.
-    expect(document.querySelector('.wheel-column[data-unit="hour"] .wheel-values button.selected')?.textContent).toBe("00");
+    expect(document.querySelector('.wheel-column[data-unit="hour"] .wheel-values button[aria-current="date"]')?.textContent).toBe("00");
   });
 
   it("hourFromTwelve를 안 내도 된다 — 계약에서 선택이다", () => {
