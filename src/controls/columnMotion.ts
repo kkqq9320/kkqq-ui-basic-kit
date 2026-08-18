@@ -44,8 +44,13 @@ export type ColumnMotions = {
 };
 
 /* 시·분·초 세 키는 날짜 전용 픽커에서 아무 열도 만들지 않지만, `Record<WheelUnit, …>`가
- * 여섯 키를 다 요구하므로 초기값에 채워 둡니다 — 안 채우면 tsc가 거절합니다. */
-const IDLE: ColumnMotion = { sequence: 0, direction: "next", playing: false };
+ * 여섯 키를 다 요구하므로 초기값에 채워 둡니다 — 안 채우면 tsc가 거절합니다.
+ *
+ * ⚠️ **여섯 키가 이 객체 하나를 공유하므로 얼려 둡니다.** 아래 세 갈래는 전부 새 객체를
+ * 만들어 넣으니 지금은 안전하지만, 언젠가 누가 `motions[unit].playing = false`처럼 제자리
+ * 수정을 하면 **여섯이 한꺼번에 바뀝니다.** 얼려 두면 그 순간 조용히 어긋나는 대신
+ * `TypeError`로 터집니다(모듈은 strict mode입니다). */
+const IDLE: ColumnMotion = Object.freeze({ sequence: 0, direction: "next", playing: false });
 
 export function useColumnMotions(): ColumnMotions {
   const [motions, setMotions] = useState<Record<WheelUnit, ColumnMotion>>({
