@@ -99,7 +99,11 @@ export function Sidebar({ brand, sections, slot, footer, collapsed = false, onTo
   // 밀어 넣습니다 — 뒤로가기 한 번이 보이지 않는 서랍을 닫는 데 쓰이지만, 상태는
   // 실제로 닫힌 것이 맞고, 킷이 CSS 미디어 쿼리를 JS에 복제하지 않아도 됩니다.
   useBackToClose(mobileOpen && onMobileClose !== undefined, () => onMobileClose?.());
-  return <aside className={`sidebar${mobileOpen ? " mobile-open" : ""} ${className}`.trim()}>
+  /* 서랍이 열렸다는 것은 **순수 시각 상태**입니다(§16 ③) — 접근성 트리에 대응이 없습니다.
+   * 여는 트리거는 킷 밖(앱의 햄버거 버튼)이라 `aria-expanded`를 걸 자리가 여기 없습니다.
+   * ⚠️ 닫힐 때 `undefined`로 **아예 안 붙입니다** — 빈 값이 붙으면 나중에 맨
+   * `[data-mobile-drawer]` 선택자를 쓸 수 없게 됩니다. */
+  return <aside className={`sidebar ${className}`.trim()} data-mobile-drawer={mobileOpen ? "open" : undefined}>
     <div className="sidebar-brand">
       {brand.icon && <span>{brand.icon}</span>}
       <strong>{brand.title}</strong>

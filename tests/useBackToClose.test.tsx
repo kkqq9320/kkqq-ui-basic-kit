@@ -102,7 +102,7 @@ describe("모바일 사이드바 드로어 뒤로가기", () => {
   it("드로어가 열려 있으면 history에 표식을 남긴다", () => {
     expect(stack()).toHaveLength(0);
     render(<Drawer />);
-    expect(document.querySelector(".sidebar.mobile-open")).toBeTruthy();
+    expect(document.querySelector(".sidebar")?.getAttribute("data-mobile-drawer")).toBe("open");
     expect(stack()).toHaveLength(1);
   });
 
@@ -115,7 +115,7 @@ describe("모바일 사이드바 드로어 뒤로가기", () => {
     expect(stack()).toHaveLength(1);
 
     pressBack();
-    expect(document.querySelector(".sidebar.mobile-open")).toBeNull();
+    expect(document.querySelector(".sidebar")?.hasAttribute("data-mobile-drawer")).toBe(false);
     expect(stack()).toHaveLength(0);
   });
 
@@ -125,7 +125,7 @@ describe("모바일 사이드바 드로어 뒤로가기", () => {
 
     pressBack();
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(document.querySelector(".sidebar.mobile-open")).toBeNull();
+    expect(document.querySelector(".sidebar")?.hasAttribute("data-mobile-drawer")).toBe(false);
   });
 
   it("오버레이로 직접 닫으면 남긴 표식을 걷어낸다 — 뒤로가기 횟수가 밀리지 않는다", () => {
@@ -138,7 +138,7 @@ describe("모바일 사이드바 드로어 뒤로가기", () => {
     const overlay = document.querySelector<HTMLElement>(".mobile-sidebar-overlay");
     expect(overlay).not.toBeNull();
     fireEvent.click(overlay!);
-    expect(document.querySelector(".sidebar.mobile-open")).toBeNull();
+    expect(document.querySelector(".sidebar")?.hasAttribute("data-mobile-drawer")).toBe(false);
     expect(backSpy).not.toHaveBeenCalled();   // 즉시가 아니라 예약된다
     vi.advanceTimersByTime(1);
     expect(backSpy).toHaveBeenCalledOnce();

@@ -224,7 +224,10 @@
     transform: translateX(-105%);
     box-shadow: 18px 0 48px rgba(14, 15, 31, .28);
   }
-  .sidebar.mobile-open { transform: translateX(0); }
+  /* 🔴 **이 줄의 자리를 옮기지 마세요.** 바로 위 `.sidebar-collapsed .sidebar`도 (0,2,0)이고
+   * 같은 `transform`을 씁니다 — **순서로만 갈립니다.** 속성 선택자는 클래스와 명시도가
+   * 같아서(§16) 이관은 공짜지만, 자리가 바뀌면 모바일 서랍이 안 열립니다. */
+  .sidebar[data-mobile-drawer="open"] { transform: translateX(0); }
   .sidebar-collapsed .sidebar-brand { gap: 10px; padding: 0 8px 24px; }
   .sidebar-collapsed .sidebar-brand > span { width: 30px; opacity: 1; }
   .sidebar-collapsed .sidebar-brand > strong { max-width: var(--sidebar-label-max); opacity: 1; }
