@@ -77,11 +77,18 @@ describe("writeClipboard", () => {
 
   /* 권한 거절은 `writeText`가 **거부된 프로미스**로 옵니다. 안 삼키면 unhandled
    * rejection이 되어 다른 검사에서 터집니다. */
-  it("거절당한 쓰기를 삼킨다", async () => {
+  it("거절당한 쓰기를 삼킨다 — unhandled rejection이 안 남는다", async () => {
+    /* 🔴 처음엔 `not.toThrow()`만 봤는데, `.catch`를 지우는 변이가 **통과했습니다** —
+     * 동기적으로 던지는 것이 아니라 프로미스가 거부되는 것이라 그 단언이 못 봅니다.
+     * 실제로 재야 하는 것은 **거부가 처리되지 않은 채 남는가**입니다. */
+    const unhandled: unknown[] = [];
+    const watch = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", watch);
     giveClipboard({ writeText: async () => { throw new Error("NotAllowedError"); } });
-    expect(() => writeClipboard("x")).not.toThrow();
-    await Promise.resolve();
-    await Promise.resolve();
+    writeClipboard("x");
+    await new Promise((resolve) => { setImmediate(resolve); });
+    process.off("unhandledRejection", watch);
+    expect(unhandled).toEqual([]);
   });
 
   it("API가 없으면 execCommand 폴백으로 그 글자를 쓴다", () => {
