@@ -175,12 +175,12 @@
 /* 눌린 절반은 **열의 선택된 행과 같은 언어**로 말합니다 — 이 줄이 값의 일부라는 것을
  * 화면이 그렇게 말합니다(확정 버튼의 `.primary`와 같은 강조를 쓰면 "누르면 확정된다"로
  * 읽힙니다). */
-.wheel-meridiem button.selected { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.wheel-meridiem button[aria-pressed="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
 .wheel-meridiem button:disabled { opacity: .38; }
 /* (hover: hover) 가드가 필요한 이유는 이 파일 :54와 같습니다 — 터치 기기는 탭한 요소에
  * :hover를 다음 탭까지 붙여둡니다. */
 @media (hover: hover) and (pointer: fine) {
-  .wheel-meridiem button:not(.selected):not(:disabled):hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+  .wheel-meridiem button:not([aria-pressed="true"]):not(:disabled):hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 }
 
 .wheel-columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }

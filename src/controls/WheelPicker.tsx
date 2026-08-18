@@ -2070,7 +2070,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
             const pressed = meridiem === half;
             // 반대 절반으로 못 가면(경계가 통째로 막았으면) 그 버튼은 열의 ± 버튼과
             // **같은 규칙으로** disabled입니다 — `shifted(...) === null`이 그 판정입니다.
-            return <Pressable tabIndex={-1} className={pressed ? "selected" : ""} aria-pressed={pressed} aria-keyshortcuts={half === "am" ? "a" : "p"} disabled={!pressed && meridiemShift === null} {...tapActivation(() => { setTyping(null); if (!pressed) flipMeridiem(); })} key={half}>{half === "am" ? meridiemLabels.am : meridiemLabels.pm}</Pressable>;
+            return <Pressable tabIndex={-1} aria-pressed={pressed} aria-keyshortcuts={half === "am" ? "a" : "p"} disabled={!pressed && meridiemShift === null} {...tapActivation(() => { setTyping(null); if (!pressed) flipMeridiem(); })} key={half}>{half === "am" ? meridiemLabels.am : meridiemLabels.pm}</Pressable>;
           })}
         </div>
       )}
