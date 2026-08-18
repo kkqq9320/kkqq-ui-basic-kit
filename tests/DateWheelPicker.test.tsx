@@ -889,7 +889,9 @@ describe("DateWheelPicker 스와이프", () => {
   it("열 밖에서 손을 뗀 뒤 그 열의 ± 버튼을 누르면, 그 버튼이 하는 일만 일어난다", () => {
     const { onChange, year } = openWheel();
     pointer("pointerDown", year, { pointerId: 1, clientY: 100, buttons: 1, button: 0 });
-    fireEvent.pointerUp(document.body, { pointerId: 1 });   // 열 밖에서 뗀다
+    // ⚠️ 맨 fireEvent가 아니라 이 파일의 pointer 헬퍼입니다 — jsdom에는 PointerEvent가
+    // 없어서 fireEvent는 pointerId를 안 싣습니다(실측). 소스는 그 id로 자기 제스처를 가립니다.
+    pointer("pointerUp", document.body, { pointerId: 1 });   // 열 밖에서 뗀다
     onChange.mockClear();
     const next = screen.getByRole("button", { name: "연도 다음" });
     pointer("pointerDown", next, { pointerId: 1, clientY: 160, buttons: 1, button: 0 });
@@ -915,7 +917,7 @@ describe("DateWheelPicker 스와이프", () => {
     pointer("pointerMove", year, { pointerId: 1, clientY: 105, buttons: 1 });   // 홀드를 끊는 렌더
     pointer("pointerMove", year, { pointerId: 1, clientY: 110, buttons: 1 });   // 이제 dragging이 남는다
     expect(year.classList.contains("dragging")).toBe(true);   // 전제 — 걷을 것이 실제로 있다
-    fireEvent.pointerUp(document.body, { pointerId: 1 });
+    pointer("pointerUp", document.body, { pointerId: 1 });
     expect([year.classList.contains("dragging"), year.style.getPropertyValue("--wheel-drag-offset")]).toEqual([false, ""]);
   });
 

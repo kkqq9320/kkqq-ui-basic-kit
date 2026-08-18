@@ -841,6 +841,45 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     return () => { document.removeEventListener("pointerdown", closeOutside, true); };
   }, [open]);
 
+  /* 🔴 **스와이프의 네 번째 출구 — 시퀀스가 열 밖에서 끝났다.**
+   *
+   * 나머지 셋(열의 `onPointerUp` · 열의 `onPointerCancel` · 홀드의 선점)은 **전부 시퀀스가
+   * 그 열 위에서 끝날 것을 요구합니다.** 마우스에는 암묵 포인터 캡처가 없고 명시 캡처는
+   * 세로 `SWIPE_SLOP`을 넘겨야 걸리므로, **가로로 끌어 열 밖에서 떼면** 어느 것도 안 돕니다.
+   *
+   * 남은 `swipeRef`를 다음 제스처가 읽습니다. 밟는 법과 결과(실측):
+   *
+   *     열을 누른 채 옆으로 끌어 밖에서 뗀다 → 같은 열의 `다음` 버튼을 누른다
+   *       ↳ 연도가 **거꾸로 두 칸** 가고 그 클릭까지 삼켜집니다.
+   *
+   * ± 버튼의 pointerdown은 `startsOnStepControl`에서 조기 반환하므로 낡은 기록을 **덮어쓰지도
+   * 않고**, 뒤이은 pointermove가 그 기록으로 커밋합니다. 그래서 *"다음 `pointerdown`이 어차피
+   * 덮어쓴다"* 에 기댈 수 없습니다 — **생성 자리는 건너뛸 수 있습니다.**
+   *
+   * ⚠️ **열 위에서 끝난 것은 여기서 손대지 않습니다.** 먼저 비우면 `finishSwipe`가 `!start`로
+   * 빠져 **놓을 때의 커밋이 사라집니다.** 대상 검사가 그 순서 의존을 없앱니다.
+   *
+   * ⚠️ 다른 열 위에서 끝난 경우도 여기서 안 잡습니다 — 그 열의 `finishSwipe`가 신원 가드보다
+   * **먼저** `swipeRef`를 비우므로 파기는 이미 보장됩니다(그 순서가 계약의 일부입니다). */
+  useEffect(() => {
+    if (!open) return;
+    function abandonSwipe(event: PointerEvent) {
+      const start = swipeRef.current;
+      if (!start || start.pointerId !== event.pointerId) return;
+      if (event.target instanceof Element && event.target.closest(".wheel-column")) return;
+      swipeRef.current = null;
+      const column = popoverRef.current?.querySelector(`.wheel-column[data-unit="${start.unit}"]`);
+      if (column instanceof HTMLElement) clearSwipeVisual(column);
+      releaseColumnClickSuppression();
+    }
+    document.addEventListener("pointerup", abandonSwipe);
+    document.addEventListener("pointercancel", abandonSwipe);
+    return () => {
+      document.removeEventListener("pointerup", abandonSwipe);
+      document.removeEventListener("pointercancel", abandonSwipe);
+    };
+  }, [open]);
+
   /**
    * 모바일에서 아래로 열 자리를 만듭니다(스펙 §7.0). **팝오버가 마운트된 뒤에** 돕니다 —
    * 그래야 필요한 높이를 상수로 짐작하지 않고 **실제로 잰 값**으로 정할 수 있습니다.
