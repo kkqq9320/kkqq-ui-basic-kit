@@ -872,6 +872,37 @@ describe("DateWheelPicker 스와이프", () => {
     fireEvent.click(row);
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  /* ── 새 누름은 언제나 억제 없이 시작한다 ────────────────────────────────────
+   *
+   * 🔴 **이 자리에 감시자가 없었습니다.** 열의 `onPointerDown`이 `suppressColumnClickRef`를
+   * `false`로 내리는데, 그 줄을 통째로 지워도 **1628개가 전부 초록**이었습니다(실측
+   * 2026-08-18). 표식은 열 여섯이 **공유하는 하나**라, 한 열에서 스와이프한 뒤 표식이
+   * 남아 있으면 **다른 열의 멀쩡한 탭이 삼켜집니다.**
+   *
+   * ⚠️ **이것이 검사 인공물이 아닌 이유.** 보통은 `releaseColumnClickSuppression`의
+   * `requestAnimationFrame`이 한 프레임 뒤에 먼저 내립니다 — 그래서 실브라우저의 사람 손에는
+   * 이 줄이 대개 잉여입니다. 잉여가 아닌 경우는 **rAF가 안 도는 때**입니다: 탭이 백그라운드로
+   * 가면 브라우저가 rAF를 멈춥니다. 손을 뗀 프레임에 탭을 옮겼다 돌아오면 표식이 선 채로
+   * 남아 있고, 그때 이 줄이 **다음 누름을 구합니다.**
+   *
+   * 검사가 동기 구간이라 rAF가 안 도는 것은 그 상황의 **재현**입니다. */
+  it("한 열에서 스와이프한 뒤에도 다른 열의 행 클릭은 살아 있다", () => {
+    const { onChange, year } = openWheel();
+    const yearRow = rowAt(year, 1);
+    pointer("pointerDown", yearRow, { pointerId: 2, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", yearRow, { pointerId: 2, clientY: 120, buttons: 1 });   // 18px 넘김 — 무장
+    pointer("pointerUp", yearRow, { pointerId: 2, clientY: 120 });
+    // 스와이프 커밋("2025-07-12")은 바로 위 검사가 지킵니다 — 여기서 재는 것은 그다음입니다.
+    onChange.mockClear();
+    /* `value`가 **고정 prop**이라 baseValue는 내내 2026-07-12입니다(커밋해도 안 움직입니다).
+     * 그래서 월 오프셋 +1은 08월이고, 클릭이 살아 있으면 2026-08-12가 나옵니다. */
+    const monthRow = rowAt(screen.getByRole("group", { name: "월 07" }), 1);
+    pointer("pointerDown", monthRow, { pointerId: 3, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerUp", monthRow, { pointerId: 3, clientY: 100 });
+    fireEvent.click(monthRow);
+    expect(onChange.mock.calls.flat()).toEqual(["2026-08-12"]);
+  });
   // ── 무장 해제는 행을 갈아치우지 않는다 ──────────────────────────────────────
   //
   // 위 무장 해제는 처음에 `sequence`를 0으로 되돌리는 방식이었고, **그것이 회귀를
@@ -5698,6 +5729,29 @@ describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () =
     const onChange = openTime("2026-08-12T15:07:00");
     pointer("pointerDown", rowOf("초", 0), { pointerId: 8, clientY: 100, button: 0, isPrimary: true });
     act(() => { vi.advanceTimersByTime(HOLD_MS); });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  /* 🔴 **위 검사를 손 떼기까지 이어서 봅니다 — 거기에 감시자가 없었습니다.**
+   *
+   * 억제 표식이 왜 필요한지는 대개 **리타기팅**으로 설명됩니다(커밋 → `sequence` 증가 →
+   * 행 일곱 개 리마운트 → 브라우저가 click을 공통 조상으로 보냄). 그런데 `resetColumn`은
+   * `next === baseValue`에서 조기 반환합니다 — 이미 그 값인 열을 길게 누르면
+   * **커밋 0 · 리마운트 0 · 포인터 캡처 0**인데도 표식은 서야 합니다. 안 그러면 손을 떼며
+   * 나는 click이 그 행의 평범한 이동으로 값을 바꿉니다. 사용자는 초기화를 하려던 것이지
+   * 01초를 고르려던 것이 아닙니다.
+   *
+   * 그래서 이 검사가 막는 것은 *"표식을 지우고 커밋·캡처 발생 여부에서 유도하자"* 는
+   * 다음 라운드의 그럴듯한 제안입니다 — 그 제안은 위 리타기팅 검사들을 **전부 통과합니다.** */
+  it("초기화가 아무 일도 안 해도 손 떼기의 행 클릭은 삼켜진다", () => {
+    vi.useFakeTimers();
+    const onChange = openTime("2026-08-12T15:07:00");
+    const row = rowOf("초", 1);   // 오프셋 +1 = 01초. 클릭이 살아 있으면 값이 바뀝니다.
+    pointer("pointerDown", row, { pointerId: 8, clientY: 100, button: 0, isPrimary: true });
+    act(() => { vi.advanceTimersByTime(HOLD_MS); });
+    // 커밋도 리마운트도 없었으므로 행을 다시 찾지 않습니다 — 같은 노드가 살아 있습니다.
+    pointer("pointerUp", row, { pointerId: 8, clientY: 100 });
+    fireEvent.click(row);
     expect(onChange).not.toHaveBeenCalled();
   });
 
