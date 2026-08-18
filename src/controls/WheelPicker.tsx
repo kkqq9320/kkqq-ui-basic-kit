@@ -14,6 +14,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncEx
 
 import { Pressable } from "./Pressable";
 import { shiftedFrom, type WheelShiftContext } from "./wheelShift";
+import { useColumnMotions } from "./columnMotion";
 import { useUndoStack } from "./undoStack";
 
 import { Button } from "./Button";
@@ -228,24 +229,6 @@ function wheelOffsets(rowsPerSide: number): number[] {
   return Array.from({ length: span * 2 + 1 }, (_, index) => index - span);
 }
 /**
- * 열의 휠 이동 모션. **필드 셋이 서로 다른 것을 몰고 있고, 그게 요점입니다.**
- *
- * - `sequence` — 값 컨테이너의 `key`(`${unit}-${sequence}`)를 만듭니다. 바뀌면 행
- *   일곱 개가 **리마운트**되고, 그 리마운트가 슬라이드를 처음부터 재생시킵니다.
- *   뜻은 "값이 바뀌었으니 다시 재생하라"입니다. **커밋할 때만 올립니다.**
- * - `playing` — `moving-*` 클래스를 붙일지입니다. 뜻은 "재생할 슬라이드가 있다"이고,
- *   CSS는 이 클래스로 애니메이션을 **무장**합니다.
- * - `direction` — 어느 쪽 키프레임인지.
- *
- * ⚠️ **`playing`을 따로 두지 않고 `sequence`가 클래스까지 몰게 하면 안 됩니다.**
- * 한동안 className이 `sequence ? moving-${direction} : ""`였고, 그래서 무장을 해제하려면
- * `sequence`를 0으로 되돌려야 했는데 **그것도 key 변경이라 리마운트를 일으켰습니다.**
- * 결과: 스와이프 pointerdown이 행을 갈아치워, mousedown을 받은 노드가 mouseup 전에
- * 사라지고 브라우저가 `click`을 공통 조상으로 리타기팅해 **행 클릭이 죽었습니다**
- * (오너 리포트 "7일 때 9를 눌러도 안 바뀐다"; 무장된 열에서만이라 한 번 걸러 한 번씩).
- * 무장 해제는 클래스만 끄고 key는 그대로 두어야 합니다.
- */
-/**
  * **탭과 스와이프를 가르는 유일한 수(px).** 이 거리 미만으로 움직였다 놓으면 탭이고
  * (커밋 없음 + 클릭 그대로 통과), 이상이면 스와이프입니다(놓을 때 한 칸 커밋 + 클릭 억제).
  *
@@ -280,8 +263,6 @@ const SWIPE_SLOP = 18;
  * 애니메이션이 아예 안 돌아 **영영 안 옵니다.** 시간으로 걷으면 두 경우 다 성립합니다.
  */
 const WHEEL_ENTER_TOTAL_MS = 360;
-
-type DateWheelMotion = { sequence: number; direction: "next" | "previous"; playing: boolean };
 
 export type WheelPickerProps = {
   /** 앱이 이 컴포넌트를 겨눌 때의 출구. **내보내는 컴포넌트는 전부 이걸 받습니다** —
@@ -514,16 +495,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
   // 둘 다 넣으면 상자 높이가 그 둘로 고정되어 `maxHeight`가 무력해집니다. 왜 위쪽이
   // `bottom`이어야 하는지는 `placePicker`의 주석에 있습니다.
   const [position, setPosition] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
-  // 시·분·초 세 키는 아직 아무 열도 만들지 않지만(2b-3에서 붙습니다), Record<WheelUnit, …>가
-  // 여섯 키를 다 요구하므로 초기값에 채워 둡니다 — 안 채우면 tsc가 거절합니다(2b-1).
-  const [columnMotion, setColumnMotion] = useState<Record<WheelUnit, DateWheelMotion>>({
-    year: { sequence: 0, direction: "next", playing: false },
-    month: { sequence: 0, direction: "next", playing: false },
-    day: { sequence: 0, direction: "next", playing: false },
-    hour: { sequence: 0, direction: "next", playing: false },
-    minute: { sequence: 0, direction: "next", playing: false },
-    second: { sequence: 0, direction: "next", playing: false },
-  });
+  const columnMotions = useColumnMotions();
   /**
    * 팝오버가 막 열렸는가. 열 셋이 함께 굴러 들어오는 진입 애니메이션의 **게이트**입니다
    * (css/wheel-picker.css의 `.wheel-column.entering .wheel-values`).
@@ -749,25 +721,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     clearedRef.current = false;
     sessionStartValueRef.current = committedOnCloseRef.current ?? value;
     committedOnCloseRef.current = null;
-    // **이동 신호도 여기서 끕니다.** `markColumnMotion`은 `playing`을 켜기만 하고, 끄는
-    // 것은 스와이프 시작(`clearColumnMotion`)뿐이었습니다. 그래서 ±로 한 칸 옮긴 열은
-    // 그 클래스를 **세션 내내** 달고 있었고, 팝오버는 닫힐 때 언마운트되므로 **다시 열 때
-    // 새 노드에서 슬라이드가 처음부터 재생**됐습니다 — 아무것도 안 움직인 열림에서
-    // "값이 움직였다"가 재생된 것입니다. 오너가 그것을 기능으로 보고 "다른 픽커에도
-    // 적용해 달라"고 했는데(진짜 진입 애니메이션은 css/wheel-picker.css의
-    // `wheel-enter`가 따로 맡습니다), 신호로서는 거짓말이었습니다.
-    //
-    // `sequence`는 건드리지 않습니다 — 그것은 값 컨테이너의 key이고, 여기서 0으로
-    // 되돌리면 R1에서 고친 리마운트 결함이 그대로 돌아옵니다.
-    // 여섯 키 다 꺼야 Record<WheelUnit, …>를 채웁니다 — hour·minute·second는 아직 아무
-    // 열도 안 켜므로(playing이 될 일이 없음) 사실상 no-op이지만, 타입은 완전한 객체를
-    // 요구합니다(2b-1).
-    setColumnMotion((current) => (Object.values(current).some((motion) => motion.playing)
-      ? {
-          year: { ...current.year, playing: false }, month: { ...current.month, playing: false }, day: { ...current.day, playing: false },
-          hour: { ...current.hour, playing: false }, minute: { ...current.minute, playing: false }, second: { ...current.second, playing: false },
-        }
-      : current));
+    columnMotions.stopAll();
   }, [open]);
 
   // 팝오버가 닫히면 버퍼를 버립니다. 닫힘은 "세그먼트를 떠난다"의 상위 집합이라, 확정하지
@@ -1129,7 +1083,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    * 되돌릴 수 없는 문이고, 오너가 그걸 알고 행 쪽을 골랐습니다.
    *
    * **여러 칸을 건너뛰므로 휠 슬라이드를 재생합니다** — `오늘`/`지금`과 같은 이유이고
-   * (오너 리포트: "선택한 애니메이션이 없이 바뀌어서 어색해") 같은 `markColumnMotion`을
+   * (오너 리포트: "선택한 애니메이션이 없이 바뀌어서 어색해") 같은 `columnMotions.mark`을
    * 지납니다.
    *
    * ⚠️ **손 떼기가 만드는 행 클릭을 억제해야 합니다.** 안 그러면 초기화 뒤에 그 행의
@@ -1219,7 +1173,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     const from = model.parts(baseValue, fields);
     const next = clampToRange(model.setUnit(baseValue, unit, target, fields, step));
     if (!model.isValid(next, fields) || next === baseValue) return;
-    if (from) markColumnMotion(unit, Math.sign(target - from[unit]));
+    if (from) columnMotions.mark(unit, Math.sign(target - from[unit]));
     onChange(next);
   }
 
@@ -1268,67 +1222,6 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     /* `hourFromTwelve`는 계약에서 **선택**입니다 — 기간에는 오전/오후가 없습니다.
      * `meridiem`이 `null`이 아닌 모델만 그것을 내므로 둘을 함께 봅니다. */
     return unit === MERIDIEM_UNIT && meridiem && model.hourFromTwelve ? model.hourFromTwelve(typed, meridiem) : typed;
-  }
-
-  function markColumnMotion(unit: WheelUnit, amount: number) {
-    if (amount) {
-      setColumnMotion((current) => ({
-        ...current,
-        [unit]: { sequence: current[unit].sequence + 1, direction: amount > 0 ? "next" : "previous", playing: true },
-      }));
-    }
-  }
-
-  /**
-   * 한 칸 확정합니다. `motion`이 `"wheel"`이면 휠 이동 애니메이션까지 재생합니다 —
-   * `markColumnMotion`이 열의 sequence를 올리고, 값 컨테이너의 key가
-   * `${unit}-${sequence}`라서 행 일곱 개가 리마운트되는 것이 그 트리거입니다.
-   * `"none"`이면 값만 확정합니다.
-   *
-   * **`"none"`을 쓰는 자리는 드래그 중 커밋 하나뿐입니다**(`moveSwipe`). 근거는 그
-   * 호출부에 적혀 있습니다.
-   */
-  /**
-   * 스와이프가 시작될 때 그 열의 모션을 비웁니다. **새 드래그가 시작됐다는 것은
-   * 애니메이션할 휠 이동이 없다는 뜻입니다.**
-   *
-   * `markColumnMotion`은 sequence를 **올리기만** 하고 아무도 0으로 되돌리지 않았습니다.
-   * 열의 className이 `sequence ? moving-${direction}`이라, 한 번이라도 커밋한 열은 그
-   * 클래스를 계속 달고 있었고 — 그 클래스가 210ms 슬라이드를 **무장**시킵니다.
-   * `.dragging`이 `animation: none !important`로 무음 처리하지만 그것은
-   * `Math.abs(offset) > 2`로 켜지므로 커밋 직후 한 프레임 빠지고, 그 프레임에
-   * 애니메이션이 **리마운트 없이** 새로 생겨 `from`을 그립니다. 실브라우저
-   * `getAnimations()`로 쟀습니다: `.dragging`을 붙이면 `[]`, 떼면 `currentTime: 0`짜리가
-   * 새로 생기며 computed transform이 `matrix(0.975, 0, 0, 0.975, 0, -45)`가 됩니다.
-   * 그래서 **두 번째 스와이프부터** 번쩍임이 돌아왔습니다 — 무장시킨 것은 바로 앞
-   * 스와이프의 놓을 때 커밋입니다.
-   *
-   * 여기서 비우면 드래그 내내 `moving-*`이 **아예 안 붙으므로**, `.dragging`이 어떻게
-   * 토글되든 만들어질 애니메이션이 없습니다. `finishSwipe`의 놓을 때 커밋이 다시
-   * 무장시키므로 **착지 슬라이드는 그대로 남습니다**(대조군이 지킵니다).
-   *
-   * 이미 꺼져 있으면 같은 객체를 돌려주어 리렌더를 만들지 않습니다.
-   *
-   * ⚠️ **`playing`만 끕니다. `sequence`는 건드리지 않습니다 — 그게 이 함수의 요점입니다.**
-   * 처음 판에서는 `sequence`를 0으로 되돌렸고, className이 `sequence ? …`였으니 그것이
-   * 무장 해제 방법이었습니다. 그런데 `sequence`는 값 컨테이너의 key이기도 해서 **무장
-   * 해제가 곧 리마운트**였고, pointerdown이 행 일곱 개를 갈아치웠습니다. mousedown을 받은
-   * 노드가 mouseup 전에 사라지면 브라우저는 `click`을 공통 조상으로 리타기팅하므로 행의
-   * `onClick`이 안 돕니다 — 오너 리포트 "7일 때 9를 눌러도 안 바뀐다"가 그것이고,
-   * 무장된 열에서만 그러므로 **한 번 걸러 한 번씩** 실패했습니다(코디네이터 실브라우저
-   * 실측: 무장 `isConnected: false` 값 안 바뀜 / 비무장 살아 있고 값 바뀜 / 다시 무장
-   * 안 바뀜). `DateWheelMotion` 타입 주석에 그 셋의 분업이 적혀 있습니다.
-   *
-   * **`.dragging`을 제스처 전체에 거는 안을 기각한 이유**(같은 구멍을 겨냥한 다른
-   * 후보였습니다): 그쪽은 무장을 **무음 처리만** 하므로 `clearSwipeVisual`이
-   * `.dragging`을 떼는 순간 애니메이션이 **다시 만들어집니다** — 번쩍임이 드래그 중에서
-   * **놓는 순간으로 옮겨갈** 뿐입니다(같은 측정: `.dragging`을 붙이면 `[]`, 떼면
-   * `currentTime: 0`짜리가 새로 생깁니다). 여기서는 무장 자체를 지우므로 다시 만들어질
-   * 것이 없습니다. **진행 중이던 애니메이션을 pointerdown에서 끊는 것은 두 안이 같습니다**
-   * — 그건 새 제스처가 앞 모션을 대체하는 것이라 맞습니다.
-   */
-  function clearColumnMotion(unit: WheelUnit) {
-    setColumnMotion((current) => (current[unit].playing ? { ...current, [unit]: { ...current[unit], playing: false } } : current));
   }
 
   /* ---- 되돌리기(Ctrl+Z) --------------------------------------------------
@@ -1532,6 +1425,15 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     applyPastedText(text);
   }
 
+  /**
+   * 한 칸 확정합니다. `motion`이 `"wheel"`이면 휠 이동 애니메이션까지 재생합니다 —
+   * `columnMotions.mark`이 열의 sequence를 올리고, 값 컨테이너의 key가
+   * `${unit}-${sequence}`라서 행 일곱 개가 리마운트되는 것이 그 트리거입니다.
+   * `"none"`이면 값만 확정합니다.
+   *
+   * **`"none"`을 쓰는 자리는 드래그 중 커밋 하나뿐입니다**(`moveSwipe`). 근거는 그
+   * 호출부에 적혀 있습니다.
+   */
   function commitShift(sourceValue: string, unit: WheelUnit, amount: number, motion: "wheel" | "none" = "wheel") {
     const next = shiftedFrom(shiftContext, sourceValue, unit, amount);
     if (!next) return null;
@@ -1544,7 +1446,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     // 제스처 중이면 시작할 때 이미 쌓았습니다. 화살표처럼 제스처가 아닌 경로만
     // 여기서 한 번씩 쌓습니다.
     if (!undo.inGesture) undo.push(sourceValue);
-    if (motion === "wheel") markColumnMotion(unit, amount);
+    if (motion === "wheel") columnMotions.mark(unit, amount);
     onChange(next);
     return next;
   }
@@ -1552,7 +1454,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
   /**
    * `오늘`(팝오버 버튼과 `Ctrl+;`가 공유)입니다. **여러 칸을 건너뛰더라도 휠 슬라이드를**
    * **재생합니다** — 오너 리포트: "오늘 버튼 클릭했을 때 선택한 애니메이션이 없이 바뀌어서
-   * 어색해". 예전에는 `onChange`를 직접 불러 `markColumnMotion`을 안 탔습니다.
+   * 어색해". 예전에는 `onChange`를 직접 불러 `columnMotions.mark`을 안 탔습니다.
    *
    * ⚠️ **§12의 트리거 확정 펄스와 다른 신호입니다.** §12는 `오늘`·`비우기`가 **트리거의**
    * 확정 펄스를 켜지 않는다고 정했고 그건 그대로입니다. 이것은 **팝오버 안 휠의**
@@ -1576,7 +1478,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     // 고정 인덱스 표(`{year:0,month:1,day:2,hour:3,minute:4,second:5}`)로 **위치만**
     // 보고 셌는데, 그 표는 값이 늘 "YYYY-MM-DD" 세 자리일 때만 맞습니다. 값에 시각이
     // 섞이면(계열이 datetime이 되어 `T`가 붙으면) `-`로 쪼갠 조각이 더는 숫자가
-    // 아니게 되어 `Number(...)`가 `NaN`이 되고, `markColumnMotion`의 `if (amount)`
+    // 아니게 되어 `Number(...)`가 `NaN`이 되고, `columnMotions.mark`의 `if (amount)`
     // 가드가 그 `NaN`을 거짓으로 걸러 **조용히** 그 열의 모션이 사라졌습니다(테스트
     // "지금 버튼이 시각을 가진 값에서도 열 모션을 만든다"가 이 회귀를 고정합니다).
     // `model.parts`(=parseValue)는 **이름**으로 꺼내므로 사다리 여섯 단위 전부에
@@ -1587,7 +1489,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     // 이미 같은 결의 방어를 합니다.
     const from = model.parts(baseValue, fields);
     const to = model.parts(next, fields);
-    if (from && to) for (const unit of fields) markColumnMotion(unit, Math.sign(to[unit] - from[unit]));
+    if (from && to) for (const unit of fields) columnMotions.mark(unit, Math.sign(to[unit] - from[unit]));
     undo.push(baseValue);
     onChange(next);
   }
@@ -1598,7 +1500,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
 
   /**
    * 타이핑으로 값을 확정합니다. **`commitShift`를 타면 안 됩니다** —
-   * 그쪽은 `markColumnMotion`이 열의 sequence를 올리고, 값 컨테이너의 key가
+   * 그쪽은 `columnMotions.mark`이 열의 sequence를 올리고, 값 컨테이너의 key가
    * `${unit}-${sequence}`라서 행 일곱 개가 통째로 리마운트되며 휠 이동
    * 애니메이션이 재생됩니다. 숫자 하나마다 210ms 전환이 도는 셈입니다.
    * 타이핑은 휠 이동이 아닙니다.
@@ -2105,7 +2007,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
       // ⚠️ **여기서 안 붙이는 것만으로는 모자랍니다.** 열이 앞선 커밋에서 받은 `moving-*`을
       // 아직 달고 있으면 슬라이드는 여전히 무장돼 있고, `.dragging`이 빠지는 프레임에
       // **리마운트 없이도** 새로 시작합니다. 그래서 스와이프가 **시작될 때** 그 열의 모션을
-      // 비웁니다 — `clearColumnMotion`에 측정값이 있습니다.
+      // 비웁니다 — `columnMotions.clear`에 측정값이 있습니다.
       const next = commitShift(start.value, unit, direction, "none");
       if (next) {
         start.value = next;
@@ -2387,7 +2289,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
 
             `onPointerDown`의 `setActiveUnit(unit)`이 **포인터 경로가 활성 세그먼트를 따라가는
             유일한 길**입니다(열의 `onFocus`가 하던 일). 지우지 마세요. */}
-        {columns.map((unit) => { const motion = columnMotion[unit]; const unitMark = model.columnMark?.(unit, fields) ?? ""; return <section className={`wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}${holdingUnit === unit ? " holding" : ""}`} aria-label={columnName(unit)} data-unit={unit} role="group" style={{ "--wheel-unit-mark": JSON.stringify(unitMark) } as CSSProperties} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); undo.beginGesture(baseValue); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; armHold(unit, event.pointerId, event.clientY); }} onPointerMove={(event) => { const hold = holdRef.current; if (hold && hold.pointerId === event.pointerId && Math.abs(event.clientY - hold.y) > 4) cancelHold(); moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget); }} onPointerUp={(event) => { cancelHold(); finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget); undo.endGesture(); }} onPointerCancel={(event) => { cancelHold(); undo.endGesture(); swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {columns.map((unit) => { const motion = columnMotions.of(unit); const unitMark = model.columnMark?.(unit, fields) ?? ""; return <section className={`wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}${holdingUnit === unit ? " holding" : ""}`} aria-label={columnName(unit)} data-unit={unit} role="group" style={{ "--wheel-unit-mark": JSON.stringify(unitMark) } as CSSProperties} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; columnMotions.clear(unit); undo.beginGesture(baseValue); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; armHold(unit, event.pointerId, event.clientY); }} onPointerMove={(event) => { const hold = holdRef.current; if (hold && hold.pointerId === event.pointerId && Math.abs(event.clientY - hold.y) > 4) cancelHold(); moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget); }} onPointerUp={(event) => { cancelHold(); finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget); undo.endGesture(); }} onPointerCancel={(event) => { cancelHold(); undo.endGesture(); swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <Pressable className="wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></Pressable>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
