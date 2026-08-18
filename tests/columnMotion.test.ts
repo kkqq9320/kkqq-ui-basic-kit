@@ -36,6 +36,13 @@ describe("columnMotion", () => {
     expect(result.current.of("year")).toEqual({ sequence: 0, direction: "next", playing: false });
   });
 
+  /* 여섯 키가 초기 객체 하나를 **공유**합니다. 제자리 수정이 들어오면 여섯이 한꺼번에
+   * 바뀌므로, 그때 조용히 어긋나는 대신 터지게 얼려 뒀습니다. */
+  it("초기 객체는 얼어 있다 — 여섯 열이 그것을 공유한다", () => {
+    const { result } = mount();
+    expect(UNITS.map((unit) => Object.isFrozen(result.current.of(unit)))).toEqual(UNITS.map(() => true));
+  });
+
   it("mark는 sequence를 올리고 재생을 켠다", () => {
     const { result } = mount();
     act(() => { result.current.mark("year", 1); });
