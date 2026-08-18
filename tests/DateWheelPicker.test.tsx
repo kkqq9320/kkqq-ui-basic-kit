@@ -5843,6 +5843,39 @@ describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () =
     expect(onChange.mock.calls.map((call) => String(call[0]))).toEqual([]);
   });
 
+  /* 🔴 **팝오버가 닫히는 것도 홀드의 출구입니다** — 한동안 아니었습니다.
+   *
+   * `cancelHold`을 부르는 자리는 다섯이었는데(재무장 · 언마운트 · 4px 움직임 · 손 떼기 ·
+   * 포인터 취소) **닫힘이 그중에 없었습니다.** 그래서 누른 채 Escape나 안드로이드
+   * 뒤로가기로 **취소**하면, 팝오버는 닫히고 값도 되돌아간 뒤 500ms 있다가 초기화가
+   * 발동해 **값이 다시 바뀌었습니다.**
+   *
+   * 이 킷의 주 타깃이 모바일이고 거기서 취소 수단은 뒤로가기뿐입니다
+   * (`useBackToClose(open, cancelAndClose)`) — 그래서 데스크톱 전용 구멍이 아닙니다. */
+  it("누른 채 Escape로 취소하면 홀드도 같이 취소된다", () => {
+    vi.useFakeTimers();
+    const onChange = openTime("2026-08-12T15:07:41");
+    pointer("pointerDown", rowOf("초", 0), { pointerId: 31, clientY: 100, button: 0, isPrimary: true });
+    fireEvent.keyDown(fieldOf("거래 시각"), { key: "Escape" });
+    act(() => { vi.advanceTimersByTime(HOLD_MS); });
+    expect(onChange.mock.calls.map((call) => String(call[0]))).toEqual([]);
+  });
+
+  /* ⚠️ **닫힘 경로가 `cancelAndClose` 하나가 아닙니다.** 소비자가 홀드 중에 `disabled`를 켜면
+   * `useLayoutEffect(() => { if (disabled) setOpen(false); }, [disabled])`가 **그 함수를 안 거치고**
+   * 닫습니다. 그래서 정리는 취소 함수가 아니라 **닫힘 자체**에 걸어야 합니다 —
+   * `cancelAndClose`에 `cancelHold()`를 더하는 수정은 이 검사에서 빨간 채로 남습니다(실측). */
+  it("누른 채 disabled가 켜지면 홀드도 같이 취소된다", () => {
+    vi.useFakeTimers();
+    const onChange = vi.fn();
+    const { rerender } = render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:07:41" fields={TIME_FIELDS} onChange={onChange} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    pointer("pointerDown", rowOf("초", 0), { pointerId: 32, clientY: 100, button: 0, isPrimary: true });
+    rerender(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:07:41" fields={TIME_FIELDS} onChange={onChange} disabled />);
+    act(() => { vi.advanceTimersByTime(HOLD_MS); });
+    expect(onChange.mock.calls.map((call) => String(call[0]))).toEqual([]);
+  });
+
   /* ⚠️ **이 검사는 describe의 맨 마지막이어야 합니다.** 여기서 처음으로 이 파일이
    * `useBackToClose`의 언마운트 `setTimeout(0)`(→ `history.back()`)을 흘려보냅니다.
    * (`:1513`의 *"이 파일은 그 타이머를 흘려보내지 않으므로"* 는 이 검사 뒤로 거짓입니다.) */
