@@ -11,6 +11,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { canReadClipboard, catchDefaultPaste, readClipboard, writeClipboard } from "../src/browser/clipboard";
 
+/** 🔴 **`process`는 `lib.dom`에 없습니다.** 이 저장소는 `@types/node`를 안 깔아 두었고
+ *  (배포되는 것은 `src`뿐이라 넣을 이유가 없습니다), 전체 `tsc`가 그것을 잡습니다.
+ *  그래서 **여기서 쓰는 두 메서드만** 국소로 선언합니다 — `navigator.clipboard`의
+ *  거짓말을 소스에서 국소 선언으로 다룬 것과 같은 방식입니다. */
+const nodeProcess = (globalThis as unknown as {
+  process: { on(event: string, listener: (reason: unknown) => void): void; off(event: string, listener: (reason: unknown) => void): void };
+}).process;
+
 const scratches = () => [...document.querySelectorAll('textarea[aria-hidden="true"]')] as HTMLTextAreaElement[];
 
 /** `execCommand`를 스텁하고 **불리는 순간의 임시 textarea**를 잡습니다 — 끝난 뒤에는
@@ -38,7 +46,10 @@ function giveClipboard(api: Partial<Clipboard>) {
 }
 
 describe("canReadClipboard", () => {
-  // 전제 — jsdom에는 원래 `navigator.clipboard`가 없습니다. 없으면 아래가 전부 공허합니다.
+  /* 전제 — jsdom에는 원래 `navigator.clipboard`가 없습니다. 없으면 아래가 전부 공허합니다.
+   * ⚠️ **이 검사만 변이로 안 죽습니다 — 그게 맞습니다.** 지키는 대상이 소스가 아니라
+   * 환경이라, 소스를 어떻게 망가뜨려도 안 빨개집니다. 변이 커버리지를 셀 때 이 한 줄이
+   * 남는 것은 구멍이 아닙니다. */
   it("전제: 이 환경에는 navigator.clipboard가 없다", () => {
     expect(navigator.clipboard).toBeUndefined();
   });
@@ -83,11 +94,12 @@ describe("writeClipboard", () => {
      * 실제로 재야 하는 것은 **거부가 처리되지 않은 채 남는가**입니다. */
     const unhandled: unknown[] = [];
     const watch = (reason: unknown) => unhandled.push(reason);
-    process.on("unhandledRejection", watch);
+    nodeProcess.on("unhandledRejection", watch);
     giveClipboard({ writeText: async () => { throw new Error("NotAllowedError"); } });
     writeClipboard("x");
-    await new Promise((resolve) => { setImmediate(resolve); });
-    process.off("unhandledRejection", watch);
+    // 매크로태스크 경계까지 갑니다 — node는 마이크로태스크 큐를 비운 뒤에 이 이벤트를 냅니다.
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+    nodeProcess.off("unhandledRejection", watch);
     expect(unhandled).toEqual([]);
   });
 
