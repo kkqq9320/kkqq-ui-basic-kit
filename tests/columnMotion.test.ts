@@ -13,7 +13,13 @@
 import { describe, expect, it } from "vitest";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach } from "vitest";
-import { useColumnMotions } from "../src/controls/columnMotion";
+import { useColumnMotions, type ColumnMotion } from "../src/controls/columnMotion";
+import { type WheelUnit } from "../src/model/wheelModel";
+
+/** 상태가 여섯 키를 **손으로 나열한** 레코드라, 검사도 여섯을 다 봐야 합니다. */
+const UNITS: WheelUnit[] = ["year", "month", "day", "hour", "minute", "second"];
+const OTHERS = UNITS.filter((unit) => unit !== "day");
+const IDLE: ColumnMotion = { sequence: 0, direction: "next", playing: false };
 
 afterEach(cleanup);
 
@@ -57,10 +63,12 @@ describe("columnMotion", () => {
     expect(counter.renders).toBe(before);
   });
 
-  it("한 열을 밀어도 다른 열의 sequence는 그대로다", () => {
+  /* ⚠️ **다섯을 다 봅니다.** 하나만 보면 나머지 넷을 건드리는 변이가 통과합니다 —
+   * 이 파일의 상태는 여섯 키를 **손으로 나열한** 레코드라 그게 현실적인 결함입니다. */
+  it("한 열을 밀어도 나머지 다섯은 손 안 탄다", () => {
     const { result } = mount();
-    act(() => { result.current.mark("year", 1); });
-    expect(result.current.of("month").sequence).toBe(0);
+    act(() => { result.current.mark("day", 1); });
+    expect(OTHERS.map((unit) => result.current.of(unit))).toEqual(OTHERS.map(() => IDLE));
   });
 
   it("여러 번 밀면 sequence가 그만큼 올라간다", () => {
@@ -85,18 +93,21 @@ describe("columnMotion", () => {
     expect(counter.renders).toBe(before);
   });
 
-  it("stopAll은 재생 중인 열을 전부 끈다", () => {
+  /* ⚠️ **여섯을 다 밉니다.** 앞서 year·month만 밀었더니 "hour·minute·second는 안 끈다"는
+   * 변이가 통과했습니다 — 시각 열은 날짜 전용 픽커에서 안 그려지므로 화면 검사도 그
+   * 자리를 밟지 않습니다. */
+  it("stopAll은 재생 중인 열을 전부 끈다 — 여섯 다", () => {
     const { result } = mount();
-    act(() => { result.current.mark("year", 1); result.current.mark("month", -1); });
+    act(() => { for (const unit of UNITS) result.current.mark(unit, 1); });
     act(() => { result.current.stopAll(); });
-    expect([result.current.of("year").playing, result.current.of("month").playing]).toEqual([false, false]);
+    expect(UNITS.map((unit) => result.current.of(unit).playing)).toEqual(UNITS.map(() => false));
   });
 
-  it("stopAll도 sequence는 건드리지 않는다", () => {
+  it("stopAll도 sequence는 건드리지 않는다 — 여섯 다", () => {
     const { result } = mount();
-    act(() => { result.current.mark("year", 1); });
+    act(() => { UNITS.forEach((unit, index) => { for (let n = 0; n <= index; n += 1) result.current.mark(unit, 1); }); });
     act(() => { result.current.stopAll(); });
-    expect(result.current.of("year").sequence).toBe(1);
+    expect(UNITS.map((unit) => result.current.of(unit).sequence)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
   it("재생 중인 열이 없으면 stopAll은 리렌더를 만들지 않는다", () => {
