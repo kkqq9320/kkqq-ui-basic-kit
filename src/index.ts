@@ -31,7 +31,7 @@ export { DurationWheelPicker, DEFAULT_DURATION_LABELS, type DurationWheelPickerP
 /* ── 표면·레이아웃 ── 바깥에서 안쪽 순서입니다: 셸 → 사이드바 → 페이지 뼈대 → 탭 →
  * 셸 밖에 서는 표면(§7이 적어 둔 스택과 같은 방향). */
 export { AppShell, type AppShellProps } from "./surfaces/AppShell";
-export { Sidebar, MobileQuickBar, DEFAULT_SIDEBAR_LABELS, type SidebarProps, type SidebarNavItem, type SidebarNavSection, type SidebarFooter, type SidebarLabels, type MobileQuickBarItem } from "./surfaces/Sidebar";
+export { Sidebar, MobileQuickBar, DEFAULT_SIDEBAR_LABELS, type SidebarProps, type SidebarNavItem, type SidebarNavSection, type SidebarFooter, type SidebarLabels, type MobileQuickBarItem, type MobileQuickBarKind } from "./surfaces/Sidebar";
 export { PageHeader, SectionHeading, SummaryGrid, SummaryCard, PanelGrid, Panel, FieldGrid, DismissibleDetails, type GridJustify } from "./surfaces/PageChrome";
 export { SectionTabs, MobilePageTabs, MobilePageTabsContext, useMobilePageTabs, PageTabsIcon, type MobilePageTabRegistration, type SectionTabsProps } from "./surfaces/SectionTabs";
 export { Dialog, DialogHeading, DialogActions, type DialogProps } from "./surfaces/Dialog";
