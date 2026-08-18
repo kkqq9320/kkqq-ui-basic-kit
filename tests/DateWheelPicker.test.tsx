@@ -7540,13 +7540,22 @@ describe("휠의 시각 상태는 data-* 축이 칠한다 (§16 ③)", () => {
   });
 
   /* **둘 다** 칸 — 위 둘만으로는 클래스를 되살려도 안 빨개집니다. */
-  it("렌더된 열에 클래스 사본이 없다 — class는 부품 이름만 싣는다", () => {
+  /* 🔴 **"둘 다" 칸입니다.** 칠하는 쪽·붙이는 쪽만 보면 클래스 사본을 되살려도 안 빨개집니다 —
+   * 실제로 이 검사가 좁았을 때(이번에 옮긴 둘만 봤을 때) 열에 `active`를 되살리는 변이가
+   * **511개 전부 초록**이었습니다.
+   *
+   * 이제 휠의 상태 클래스가 다 나갔으므로 **완전 일치**로 못 박습니다: 이 셋의 `class`는
+   * **부품 이름 하나뿐**이어야 합니다. 상태는 전부 속성이 싣습니다. */
+  it("렌더된 열·세그먼트·트리거의 class는 부품 이름뿐이다", () => {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} />);
-    fireEvent.click(fieldOf("거래 날짜"));
+    const trigger = fieldOf("거래 날짜");
+    fireEvent.click(trigger);
     fireEvent.click(screen.getByRole("button", { name: "연도 다음" }));
 
     const year = screen.getByRole("group", { name: /^연도/ });
-    // ⚠️ `active`·`entering`은 아직 클래스입니다(다음 라운드) — 이 검사는 **이번에 옮긴 둘**만 봅니다.
-    expect([year.getAttribute("data-motion"), /moving-|holding/.test(year.className)]).toEqual(["next", false]);
+    const segment = trigger.querySelector(".wheel-segment")!;
+    // 전제 — 상태가 실제로 붙어 있는 순간을 보고 있다(안 그러면 아래가 공허합니다).
+    expect([year.getAttribute("data-motion"), segment.hasAttribute("data-unit")]).toEqual(["next", true]);
+    expect([year.className, segment.className, trigger.className]).toEqual(["wheel-column", "wheel-segment", "wheel-trigger"]);
   });
 });
