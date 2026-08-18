@@ -1018,21 +1018,21 @@ describe("DateWheelPicker 스와이프", () => {
   /* 같은 구멍의 **보이는 절반**입니다 — 청소부가 없으니 열이 끌린 모습 그대로 얼어붙습니다.
    * `clearSwipeVisual`의 호출자 둘이 다 "시퀀스가 열 위에서 끝날 것"을 요구합니다.
    *
-   * ⚠️ **move를 두 번 미는 것이 중요합니다.** 첫 move가 홀드를 끊어(`MOVE_TOLERANCE` 4)
-   * `setHoldingUnit(null)`이 렌더를 일으키고, 그 렌더가 `className`을 통째로 다시 써
-   * `classList`로 붙인 `.dragging`을 **지웁니다**(실측). 한 번만 밀면 이 검사는 클래스가
-   * 이미 없는 채로 빨개져 **엉뚱한 이유로** 빨간 검사가 됩니다.
+   * ✅ **그 한 프레임 공백은 닫혔습니다**(2026-08-19). 전에는 첫 move가 홀드를 끊어
+   * (`MOVE_TOLERANCE` 4) 렌더가 일어나고, 그 렌더가 `className`을 통째로 다시 써
+   * `classList`로 붙인 `.dragging`을 지웠습니다 — 그래서 여기 move가 둘이었습니다.
    *
-   * 📌 그 한 프레임 공백 자체는 이 라운드에서 안 고칩니다 — 커밋은 30px에서 나므로
-   * 그때는 클래스가 이미 붙어 있고, 억제할 애니메이션이 아직 없습니다. 원장에 적었습니다. */
+   * 지금은 표시가 `data-dragging`이고 **React가 관리하지 않는 속성**이라 렌더를 넘겨
+   * 살아남습니다. move 둘은 실제 제스처에 가까워 그대로 뒀고, 바로 아래 전제가
+   * "걷을 것이 실제로 있다"를 여전히 지킵니다. */
   it("열 밖에서 손을 떼면 끌린 표시가 걷힌다", () => {
     const { year } = openWheel();
     pointer("pointerDown", year, { pointerId: 1, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerMove", year, { pointerId: 1, clientY: 105, buttons: 1 });   // 홀드를 끊는 렌더
     pointer("pointerMove", year, { pointerId: 1, clientY: 110, buttons: 1 });   // 이제 dragging이 남는다
-    expect(year.classList.contains("dragging")).toBe(true);   // 전제 — 걷을 것이 실제로 있다
+    expect(year.hasAttribute("data-dragging")).toBe(true);   // 전제 — 걷을 것이 실제로 있다
     pointer("pointerUp", document.body, { pointerId: 1 });
-    expect([year.classList.contains("dragging"), year.style.getPropertyValue("--wheel-drag-offset")]).toEqual([false, ""]);
+    expect([year.hasAttribute("data-dragging"), year.style.getPropertyValue("--wheel-drag-offset")]).toEqual([false, ""]);
   });
 
   /* ── 새 누름은 언제나 억제 없이 시작한다 ────────────────────────────────────
@@ -1337,7 +1337,7 @@ describe("DateWheelPicker 스와이프", () => {
     const { year } = openWheel();
     pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
     for (const clientY of [95, 90, 85, 82]) pointer("pointerMove", year, { pointerId: 7, clientY, buttons: 1 });
-    expect(year.classList.contains("dragging")).toBe(true);
+    expect(year.hasAttribute("data-dragging")).toBe(true);
   });
 
   // [그림자 2/3] 손가락이 떠나면 열은 원래 자리로 돌아온다 — `clearSwipeVisual`의
@@ -4453,7 +4453,7 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // 스와이프 블록의 "끄는 동안 열은 dragging이다"가 지키고, 규칙 자체는 여기가 지킵니다 —
   // 바로 위 `translateY(calc(...))` 핀과 같은 두 겹 패턴입니다.
   it("드래그 중에는 열의 트랜지션과 애니메이션이 꺼진다", () => {
-    expect(wheelPickerCssSource).toContain(".wheel-column.dragging .wheel-values { animation: none !important; transition: none; }");
+    expect(wheelPickerCssSource).toContain(".wheel-column[data-dragging] .wheel-values { animation: none !important; transition: none; }");
   });
 
   // **모든 열이 함께 구릅니다** — 축 1. 규칙은 하나이고, 열마다 다른 것은 **시차뿐**입니다.

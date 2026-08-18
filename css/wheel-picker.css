@@ -360,7 +360,7 @@
  * `backwards`가 필요합니다 — 시차를 기다리는 동안 2·3번 열이 제자리로 보였다가 시작
  * 위치로 튀는 것을 막습니다. */
 .wheel-column[data-entering] .wheel-values { animation: wheel-enter 280ms cubic-bezier(.18, .85, .28, 1) var(--wheel-enter-delay, 0ms) backwards; }
-.wheel-column.dragging .wheel-values { animation: none !important; transition: none; }
+.wheel-column[data-dragging] .wheel-values { animation: none !important; transition: none; }
 .wheel-column[data-motion="next"] .wheel-values { animation: wheel-slide-next 210ms cubic-bezier(.2, .9, .25, 1); }
 .wheel-column[data-motion="previous"] .wheel-values { animation: wheel-slide-previous 210ms cubic-bezier(.2, .9, .25, 1); }
 .wheel-values button { width: 100%; min-width: 0; height: 30px; min-height: 30px; max-height: 30px; padding: 0 3px; border: 0; border-radius: 5px; color: color-mix(in srgb, var(--text) 58%, var(--muted)); background: transparent; font-size: var(--font-size-control); line-height: 30px; white-space: nowrap; transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease, transform var(--motion-fast) ease; }
