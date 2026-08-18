@@ -538,7 +538,7 @@ describe("Select", () => {
       expect(stateRule![0]).toMatch(/outline:\s*var\(--focus-ring\)/);
       // 세 상태가 한 규칙에 같이 있어야 한 곳만 고쳐도 셋이 함께 움직인다.
       expect(stateRule![0]).toMatch(/:focus-visible/);
-      expect(stateRule![0]).toMatch(/\.app-select\.open/);
+      expect(stateRule![0]).toMatch(/\.app-select\[data-open\]/);
       // disabled는 빠져야 한다 — :hover는 disabled에도 매칭된다.
       expect(stateRule![0]).toMatch(/:hover:not\(:disabled\)/);
     });

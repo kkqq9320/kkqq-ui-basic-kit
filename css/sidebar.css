@@ -60,7 +60,7 @@
  * 그대로 들고 있고, 이 파일이 만든 예외를 이 파일이 책임집니다. */
 .sidebar-slot .app-select-trigger:hover:not(:disabled),
 .sidebar-slot .app-select-trigger:focus-visible,
-.sidebar-slot .app-select.open > .app-select-trigger { border-color: var(--accent); }
+.sidebar-slot .app-select[data-open] > .app-select-trigger { border-color: var(--accent); }
 
 .sidebar nav { display: grid; gap: 4px; }
 

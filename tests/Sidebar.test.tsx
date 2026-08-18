@@ -52,8 +52,9 @@ describe("모바일 서랍의 표식 (§16 ③)", () => {
    * 1664개가 전부 초록**이었습니다 — 그 상태에서 서랍은 **영영 안 열립니다.** 동작 검사들은
    * 속성이 붙는 것까지만 보고 무엇이 칠해지는지는 안 봅니다.
    *
-   * ⚠️ **이관 자체가 만드는 구멍입니다.** 다음에 `.open`·`.moving-*`을 옮길 때도 **양쪽을
-   * 짝으로** 재세요(오전/오후 쪽 짝은 `tests/DateWheelPicker.test.tsx`에 있습니다). */
+   * ⚠️ **이관 자체가 만드는 구멍입니다.** 그 뒤 `.moving-*`·`.open`을 옮길 때도 같은 구멍이
+   * 나왔습니다 — 매번 **양쪽을 짝으로** 재세요. 짝의 예는 `tests/DateWheelPicker.test.tsx`의
+   * *"휠의 시각 상태는 data-* 축이 칠한다"* 블록입니다. */
   it("서랍 열림은 data-mobile-drawer가 칠한다 — JSX가 붙이는 그것이다", () => {
     expect(sidebarCssSource.length).toBeGreaterThan(1000);
     expect(sidebarCssSource).toContain('.sidebar[data-mobile-drawer="open"] { transform: translateX(0); }');

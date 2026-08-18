@@ -6,7 +6,7 @@
  * 가운데 정렬은 양쪽에 18px 슬롯을 둬 텍스트가 수학적으로 중앙에 옵니다.
  */
 .app-select { position: relative; width: 100%; min-width: 0; color: var(--text); font-size: var(--font-size-control); font-weight: 400; }
-.app-select.open { z-index: 80; }
+.app-select[data-open] { z-index: 80; }
 .app-select-trigger { width: 100%; min-height: 41px; display: grid; grid-template-columns: minmax(0, 1fr) var(--dropdown-icon-box); align-items: center; gap: 8px; padding: 8px var(--dropdown-inline-padding); border: 1px solid var(--line); border-radius: 7px; color: var(--text); background: var(--input); text-align: left; }
 .app-select-trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 트리거 상태 피드백. 값은 wheel-picker.css:21의 날짜 필드와 **글자 그대로 같다** —
@@ -20,7 +20,7 @@
  * 실제로 지키는 자리다. 열린 상태도 함께 강조한다 — 날짜 필드가 .open에서 하는 것과
  * 같고, 안 그러면 메뉴가 떠 있는데 앵커는 평상시 모습으로 남는다.
  * :hover는 disabled에도 매칭되므로 명시적으로 뺀다(wheel-picker.css:21과 같은 이유). */
-.app-select-trigger:hover:not(:disabled), .app-select-trigger:focus-visible, .app-select.open > .app-select-trigger { border-color: var(--accent); outline: var(--focus-ring); }
+.app-select-trigger:hover:not(:disabled), .app-select-trigger:focus-visible, .app-select[data-open] > .app-select-trigger { border-color: var(--accent); outline: var(--focus-ring); }
 /* 비활성 트리거. 값은 controls.css:22의 액션 버튼과 같다 — 킷 전체에서 "못 쓴다"는
  * 한 가지 모양으로만 말한다.
  *
@@ -39,7 +39,7 @@
 
 /* 셰브런은 제자리에서 회전만 합니다. 이동시키지 마세요. */
 .dropdown-chevron { width: var(--dropdown-icon-box); height: var(--dropdown-icon-box); display: grid; place-items: center; color: currentColor; transform: rotate(0deg); transform-origin: 50% 50%; transition: transform .16s ease; }
-.open > .app-select-trigger .dropdown-chevron, .app-select.open .dropdown-chevron { transform: rotate(180deg); }
+[data-open] > .app-select-trigger .dropdown-chevron, .app-select[data-open] .dropdown-chevron { transform: rotate(180deg); }
 .dropdown-chevron svg { width: var(--dropdown-icon-size); height: var(--dropdown-icon-size); display: block; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
 /* overscroll-behavior: contain — 메뉴 스크롤이 끝(위/아래)에 닿아도 조상(페이지)으로
