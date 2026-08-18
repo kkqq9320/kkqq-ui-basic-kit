@@ -14,6 +14,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncEx
 
 import { Pressable } from "./Pressable";
 import { shiftedFrom, type WheelShiftContext } from "./wheelShift";
+import { useUndoStack } from "./undoStack";
 
 import { Button } from "./Button";
 import { createPortal } from "react-dom";
@@ -180,14 +181,6 @@ const WHEEL_TAP_SLOP = 12;
  *  이 아래로 내려가면 오너가 말한 "답답한" 화면이 됩니다. */
 const WHEEL_COLUMN_MIN = 56;
 
-/** 되돌리기 스택의 최대 길이. 한 항목이 한 조작이므로 50이면 한 세션에서 사람이 하는
- *  조작을 넉넉히 덮습니다. 무한히 쌓지 않는 이유는 이 컨트롤이 소비자 페이지에 여러 개
- *  살아 있을 수 있어서입니다 — 각자 자기 스택을 듭니다. */
-const WHEEL_UNDO_LIMIT = 50;
-
-/** 휠 한 무리를 한 조작으로 묶는 꼬리 시간. 휠에는 `pointerup`에 해당하는 "뗌"이 없어
- *  경계를 시간으로 볼 수밖에 없습니다 — 드래그·홀드와 달리 여기만 타이머입니다. */
-const WHEEL_UNDO_WHEEL_MS = 200;
 /** `css/wheel-picker.css`의 `.wheel-popover { padding: 12px }`와 같은 값.
  *  ⚠️ 한쪽만 바꾸면 바닥 폭이 조용히 어긋납니다 — 검사가 둘을 대조합니다. */
 const POPOVER_PADDING = 12;
@@ -1340,52 +1333,15 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
 
   /* ---- 되돌리기(Ctrl+Z) --------------------------------------------------
    *
-   * 🔴 **한 항목은 한 조작입니다 — `onChange` 한 번이 아닙니다.** 이 컨트롤은 화살표
-   * 한 번, 휠 한 칸, 드래그 한 노치마다 `onChange`를 부릅니다. 그 단위로 쌓으면 서른
-   * 칸 끈 드래그가 항목 서른 개가 되고 Ctrl+Z는 한 칸씩 되돌아옵니다 — 사용자가
-   * "되돌리기"라고 부르는 것이 아닙니다.
-   *
-   * 그래서 **이어지는 제스처는 시작할 때 한 번만** 쌓습니다. 제스처의 경계를 새로
-   * 만들지 않는 것이 요점입니다 — 이 파일에 이미 있습니다(열의 `onPointerDown`/
-   * `onPointerUp`, ± 버튼의 누름/뗌). 그 자리에 `beginUndoGesture`/`endUndoGesture`만
-   * 겁니다. **휠만 "뗌"이 없어서** 꼬리 타이머로 끝을 봅니다.
-   *
-   * ⚠️ 스택은 **되돌리기 전용입니다. 다시 하기(Ctrl+Shift+Z)는 없습니다** — 오너가
-   * 요청한 것은 되돌리기 하나이고, 없는 기능을 예약해 두면 소비자 앱이 그 조합을 못
-   * 쓰면서 아무도 안 씁니다. 이 결정의 대가는 릴리스 노트에 적습니다.
+   * 스택 자체는 `controls/undoStack.ts`에 있습니다 — **왜 한 항목이 한 조작인지**도
+   * 거기 적혀 있습니다. 여기 남는 것은 이 컨트롤에만 있는 두 가지입니다: 제스처의
+   * 경계를 어디에 거는가(열의 `onPointerDown`/`onPointerUp`, 휠은 `markTick`), 그리고
+   * 꺼낸 값을 되돌릴 때 **세션 상태를 같이 되살리는 것**(`undoValue`).
    */
-  const undoStackRef = useRef<string[]>([]);
-  const undoGestureRef = useRef(false);
-  const undoWheelTimerRef = useRef<number | null>(null);
-
-  /* 붙여넣기는 `await`를 건너므로 **이 렌더의 `value` 클로저가 낡습니다.**
-   * `commitAndClose`가 바로 그 함정으로 방금 지운 값을 되살렸던 자리와 같은 결이라,
-   * 그쪽이 택한 방법(렌더 클로저 대신 기준값을 따로 들기)을 여기서도 씁니다. */
-  const valueRef = useRef(value);
-  valueRef.current = value;
-
-  function pushUndo(previous: string) {
-    const stack = undoStackRef.current;
-    if (stack[stack.length - 1] === previous) return;   // 같은 값을 두 번 쌓지 않습니다
-    stack.push(previous);
-    if (stack.length > WHEEL_UNDO_LIMIT) stack.shift();
-  }
-
-  function beginUndoGesture() {
-    if (!undoGestureRef.current) pushUndo(baseValue);
-    undoGestureRef.current = true;
-  }
-  function endUndoGesture() { undoGestureRef.current = false; }
-
-  /** 휠은 "뗌"이 없습니다 — 마지막 칸에서 꼬리 시간이 지나면 한 무리가 끝난 것으로 봅니다. */
-  function markUndoWheel() {
-    beginUndoGesture();
-    if (undoWheelTimerRef.current !== null) window.clearTimeout(undoWheelTimerRef.current);
-    undoWheelTimerRef.current = window.setTimeout(() => { undoWheelTimerRef.current = null; endUndoGesture(); }, WHEEL_UNDO_WHEEL_MS);
-  }
+  const undo = useUndoStack();
 
   function undoValue() {
-    const previous = undoStackRef.current.pop();
+    const previous = undo.pop();
     if (previous === undefined) return;
     setTyping(null);
     // 빈 값으로 되돌아가면 "이번 세션에 지운 적 있음"도 같이 되살립니다 — 안 그러면
@@ -1426,6 +1382,12 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    *  잰 값). 그 사실을 타입으로 적어 둡니다. 안 그러면 `if (navigator.clipboard?.readText)`가
    *  `TS2774: This condition will always return true`로 거절당하고, 더 나쁘게는 **읽는
    *  사람이 그 가드를 군더더기로 보고 지웁니다.** */
+  /* 붙여넣기는 `await`를 건너므로 **이 렌더의 `value` 클로저가 낡습니다.**
+   * `commitAndClose`가 바로 그 함정으로 방금 지운 값을 되살렸던 자리와 같은 결이라,
+   * 그쪽이 택한 방법(렌더 클로저 대신 기준값을 따로 들기)을 여기서도 씁니다. */
+  const valueRef = useRef(value);
+  valueRef.current = value;
+
   const clipboardApi = (): Clipboard | undefined => navigator.clipboard as Clipboard | undefined;
 
   /** 복사와 붙여넣기가 **같은 임시 요소**를 씁니다. 다른 것은 `readonly` 하나인데,
@@ -1500,7 +1462,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     if (next === valueRef.current) return;
     setTyping(null);
     clearedRef.current = false;
-    pushUndo(valueRef.current);
+    undo.push(valueRef.current);
     onChange(next);
   }
 
@@ -1581,7 +1543,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     if (next === sourceValue) return null;
     // 제스처 중이면 시작할 때 이미 쌓았습니다. 화살표처럼 제스처가 아닌 경로만
     // 여기서 한 번씩 쌓습니다.
-    if (!undoGestureRef.current) pushUndo(sourceValue);
+    if (!undo.inGesture) undo.push(sourceValue);
     if (motion === "wheel") markColumnMotion(unit, amount);
     onChange(next);
     return next;
@@ -1626,7 +1588,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     const from = model.parts(baseValue, fields);
     const to = model.parts(next, fields);
     if (from && to) for (const unit of fields) markColumnMotion(unit, Math.sign(to[unit] - from[unit]));
-    pushUndo(baseValue);
+    undo.push(baseValue);
     onChange(next);
   }
 
@@ -1643,7 +1605,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    */
   function commitTyped(unit: WheelUnit, amount: number) {
     const next = clampToRange(model.setUnit(baseValue, unit, amount, fields, step));
-    pushUndo(baseValue);
+    undo.push(baseValue);
     onChange(next);
     return next;
   }
@@ -1749,7 +1711,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     // 조용히 덮어씁니다.
     setTyping(null);
     setActiveUnit(unit);
-    markUndoWheel();
+    undo.markTick(baseValue);
     applyShift(unit, event.deltaY > 0 ? 1 : -1);
   }
 
@@ -1829,7 +1791,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
       clearedRef.current = true;   // commitAndClose가 이 값을 baseValue로 되살리지 않도록 기억
       // 이미 비어 있으면 쌓지 않습니다 — 빈 값 위에 빈 값을 쌓으면 Ctrl+Z 한 번이
       // 아무것도 안 한 것처럼 보입니다.
-      if (value) pushUndo(value);
+      if (value) undo.push(value);
       onChange("");
       return true;
     }
@@ -2425,7 +2387,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
 
             `onPointerDown`의 `setActiveUnit(unit)`이 **포인터 경로가 활성 세그먼트를 따라가는
             유일한 길**입니다(열의 `onFocus`가 하던 일). 지우지 마세요. */}
-        {columns.map((unit) => { const motion = columnMotion[unit]; const unitMark = model.columnMark?.(unit, fields) ?? ""; return <section className={`wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}${holdingUnit === unit ? " holding" : ""}`} aria-label={columnName(unit)} data-unit={unit} role="group" style={{ "--wheel-unit-mark": JSON.stringify(unitMark) } as CSSProperties} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); beginUndoGesture(); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; armHold(unit, event.pointerId, event.clientY); }} onPointerMove={(event) => { const hold = holdRef.current; if (hold && hold.pointerId === event.pointerId && Math.abs(event.clientY - hold.y) > 4) cancelHold(); moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget); }} onPointerUp={(event) => { cancelHold(); finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget); endUndoGesture(); }} onPointerCancel={(event) => { cancelHold(); endUndoGesture(); swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {columns.map((unit) => { const motion = columnMotion[unit]; const unitMark = model.columnMark?.(unit, fields) ?? ""; return <section className={`wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}${holdingUnit === unit ? " holding" : ""}`} aria-label={columnName(unit)} data-unit={unit} role="group" style={{ "--wheel-unit-mark": JSON.stringify(unitMark) } as CSSProperties} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; clearColumnMotion(unit); undo.beginGesture(baseValue); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; armHold(unit, event.pointerId, event.clientY); }} onPointerMove={(event) => { const hold = holdRef.current; if (hold && hold.pointerId === event.pointerId && Math.abs(event.clientY - hold.y) > 4) cancelHold(); moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget); }} onPointerUp={(event) => { cancelHold(); finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget); undo.endGesture(); }} onPointerCancel={(event) => { cancelHold(); undo.endGesture(); swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <Pressable className="wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></Pressable>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
@@ -2438,7 +2400,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
           이 버튼들은 그 단축키의 동등물이므로(title에 단축키를 적어 뒀다), 버퍼를 안 지우면
           같은 뜻의 단축키와 버튼이 다르게 굴며, 남은 버퍼가 이 버튼이 방금 설정한 값을
           나중에(예: 다음 Tab) 도로 덮어쓸 수 있다. */}
-      <div className="wheel-actions">{seedAction && <Button tabIndex={-1} title={`${todayLabel} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" {...tapActivation(() => { setTyping(null); commitToday(); })}>{todayLabel}</Button>}{allowClear && <Button tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" {...tapActivation(() => { setTyping(null); clearedRef.current = true; if (value) pushUndo(value); onChange(""); })}>{labels.clear}</Button>}<Button tabIndex={-1} variant="primary" aria-keyshortcuts="Enter Control+S Meta+S" {...tapActivation(commitAndClose)}>{labels.done}</Button></div>
+      <div className="wheel-actions">{seedAction && <Button tabIndex={-1} title={`${todayLabel} (Ctrl+;)`} aria-keyshortcuts="Control+; Meta+;" {...tapActivation(() => { setTyping(null); commitToday(); })}>{todayLabel}</Button>}{allowClear && <Button tabIndex={-1} title={`${labels.clear} (Delete)`} aria-keyshortcuts="Delete" {...tapActivation(() => { setTyping(null); clearedRef.current = true; if (value) undo.push(value); onChange(""); })}>{labels.clear}</Button>}<Button tabIndex={-1} variant="primary" aria-keyshortcuts="Enter Control+S Meta+S" {...tapActivation(commitAndClose)}>{labels.done}</Button></div>
     </div>, document.body)}
   </div>;
 }
