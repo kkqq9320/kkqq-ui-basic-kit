@@ -4,13 +4,18 @@
 // 없다) 소스 텍스트로 고정한다 — Select.test.tsx·Dialog.test.tsx의 같은 idiom.
 // 빈 문자열 가드가 없으면 .css?raw가 ""로 목킹되는 날 통째로 공허하게 통과한다.
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+
+import { MobileQuickBar, type MobileQuickBarItem } from "../src/surfaces/Sidebar";
 
 import controlsCssSource from "../css/controls.css?raw";
 import wheelPickerCssSource from "../css/wheel-picker.css?raw";
 import sidebarCssSource from "../css/sidebar.css?raw";
 import tabsCssSource from "../css/tabs.css?raw";
 import tokensCssSource from "../css/tokens.css?raw";
+
+afterEach(cleanup);
 
 describe("터치에서 들러붙는 호버", () => {
   // 터치 기기는 탭한 요소에 :hover를 다음 탭까지 붙여둔다. 가드가 없으면 눌렀다 뗀
@@ -183,5 +188,85 @@ describe("포커스 링은 토큰 하나가 정한다", () => {
     const rule = sidebarCssSource.match(/\.sidebar-slot \.app-select-trigger:focus-visible[\s\S]*?\{[^}]*\}/);
     expect(rule).not.toBeNull();
     expect(rule![0]).toMatch(/border-color:\s*var\(--accent\)/);
+  });
+});
+
+/* ── §16 ①: 빠른 바 항목은 자기 갈래를 말한다 ────────────────────────────────
+ *
+ * 🔴 **여기는 감시자가 하나도 없던 자리입니다.** `.active`를 재는 검사가 이 저장소에
+ * **0건**이었습니다 — 그래서 이관 전후로 킬 행렬을 대조할 수가 없었고, "검사가 초록"이
+ * 아무 증거도 안 됩니다. 셋을 새로 씁니다.
+ *
+ * 이관 검사의 짝은 **셋**입니다(값 행 이관에서 값을 치른 규칙):
+ *   ① 붙이는 쪽 — 갈래마다 무엇을 다는가 (그리고 **안 다는가**)
+ *   ② 칠하는 쪽 — CSS가 그 속성들을 앵커로 쓰는가
+ *   ③ **둘 다** — 렌더된 버튼에 클래스 사본이 없는가. ①·②만으로는 클래스를 되살려도
+ *      안 빨개집니다.
+ *
+ * ⚠️ 가장 놓치기 쉬운 칸은 **`kind: "action"`에 `active: true`** 입니다 — 어떤 기존
+ * 검사에서도 물려받을 수 없고, "친절한" 폴백이 조용히 기어들어올 자리입니다. */
+describe("빠른 바 항목은 자기 갈래를 말한다 (§16 ①)", () => {
+  const ANCHOR = '.mobile-quick-bar > button:is([aria-current="page"], [aria-expanded="true"])';
+
+  function open(items: MobileQuickBarItem[]) {
+    render(<MobileQuickBar items={items} />);
+  }
+  const item = (label: string) => screen.getByRole("button", { name: label });
+  const marks = (label: string) => [item(label).getAttribute("aria-current"), item(label).getAttribute("aria-expanded")];
+
+  it("page 항목: 활성이면 aria-current=\"page\", 펼침은 말하지 않는다", () => {
+    open([{ id: "home", label: "홈", icon: null, kind: "page", active: true, onClick: () => undefined }]);
+    expect(marks("홈")).toEqual(["page", null]);
+  });
+
+  /* ⚠️ `null`이지 `""`가 아닙니다 — 빈 값이 붙으면 맨 `[aria-current]` 선택자가
+   * 비활성 항목까지 물어 셋 다 칠해집니다. 사이드바의 `data-mobile-drawer` 주석이
+   * 같은 이유로 같은 말을 합니다. */
+  it("page 항목: 비활성이면 속성 자체가 없다 — 빈 값도 안 남긴다", () => {
+    open([{ id: "home", label: "홈", icon: null, kind: "page", active: false, onClick: () => undefined }]);
+    expect(marks("홈")).toEqual([null, null]);
+  });
+
+  /* 펼침 버튼은 **접혔을 때도** 답니다 — 그것이 계약입니다. "열 수 있다"는 사실 자체를
+   * 말해야 하고, 안 달면 스크린리더에는 그냥 버튼입니다. */
+  it("disclosure 항목: 접혔을 때도 aria-expanded를 단다", () => {
+    open([{ id: "menu", label: "메뉴", icon: null, kind: "disclosure", active: false, onClick: () => undefined }]);
+    expect(marks("메뉴")).toEqual([null, "false"]);
+  });
+
+  it("disclosure 항목: 펼쳐지면 true다 — 그리고 내비인 척하지 않는다", () => {
+    open([{ id: "menu", label: "메뉴", icon: null, kind: "disclosure", active: true, onClick: () => undefined }]);
+    expect(marks("메뉴")).toEqual([null, "true"]);
+  });
+
+  /* 🔴 **폴백이 기어들어올 자리입니다.** 대응하는 ARIA가 없으므로 아무것도 안 답니다 —
+   * `active: true`여도 그렇습니다. 그래서 활성 표시도 안 칠해집니다(위 문서화된 대가). */
+  it("action 항목: active여도 아무것도 안 단다", () => {
+    open([{ id: "scan", label: "스캔", icon: null, kind: "action", active: true, onClick: () => undefined }]);
+    expect(marks("스캔")).toEqual([null, null]);
+  });
+
+  it("세 갈래 어디에도 클래스 사본이 없다 — class 속성 자체가 없다", () => {
+    open([
+      { id: "menu", label: "메뉴", icon: null, kind: "disclosure", active: true, onClick: () => undefined },
+      { id: "home", label: "홈", icon: null, kind: "page", active: true, onClick: () => undefined },
+      { id: "scan", label: "스캔", icon: null, kind: "action", active: true, onClick: () => undefined },
+    ]);
+    expect(["메뉴", "홈", "스캔"].map((label) => item(label).getAttribute("class"))).toEqual([null, null, null]);
+  });
+
+  it("활성 표시를 칠하는 것은 그 두 속성이다", () => {
+    expect(sidebarCssSource.length).toBeGreaterThan(1000);
+    expect(sidebarCssSource).toContain(`${ANCHOR} {`);
+  });
+
+  /* 칠하는 자리가 셋입니다(본 규칙 · svg 팝 · 축소 모션 예외). 하나씩 박으면 되돌림
+   * 하나를 놓치므로 **셋 다 같은 앵커인 것**을 셉니다. */
+  it("칠하는 자리 셋이 모두 같은 앵커를 쓴다", () => {
+    expect(sidebarCssSource.split(ANCHOR).length - 1).toBe(3);
+  });
+
+  it("클래스 사본은 CSS에 안 남아 있다", () => {
+    expect(sidebarCssSource).not.toContain("> button.active");
   });
 });

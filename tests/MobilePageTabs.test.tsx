@@ -22,7 +22,7 @@ function Harness() {
   return <MobilePageTabsContext.Provider value={pageTabs.context}>
     <div data-testid="outside">바깥 영역</div>
     <SectionTabs ariaLabel="데모 섹션" value={tab} tabs={TABS} onChange={setTab} />
-    <MobileQuickBar barRef={pageTabs.quickBarRef} items={[{ id: "menu", label: "메뉴", icon: null, onClick: () => undefined }]} />
+    <MobileQuickBar barRef={pageTabs.quickBarRef} items={[{ id: "menu", label: "메뉴", icon: null, kind: "action", onClick: () => undefined }]} />
     <MobilePageTabs registration={pageTabs.registration} open={pageTabs.open} onToggle={pageTabs.setOpen} floatRef={pageTabs.floatRef} />
   </MobilePageTabsContext.Provider>;
 }

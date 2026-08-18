@@ -100,7 +100,9 @@ export function Sidebar({ brand, sections, slot, footer, collapsed = false, onTo
   // 실제로 닫힌 것이 맞고, 킷이 CSS 미디어 쿼리를 JS에 복제하지 않아도 됩니다.
   useBackToClose(mobileOpen && onMobileClose !== undefined, () => onMobileClose?.());
   /* 서랍이 열렸다는 것은 **순수 시각 상태**입니다(§16 ③) — 접근성 트리에 대응이 없습니다.
-   * 여는 트리거는 킷 밖(앱의 햄버거 버튼)이라 `aria-expanded`를 걸 자리가 여기 없습니다.
+   * 여는 트리거는 이 컴포넌트 밖입니다. 앱의 햄버거일 수도 있고, 킷 안이라면
+   * `MobileQuickBar`의 `kind: "disclosure"` 항목입니다 — 펼침 사실은 **거기가**
+   * `aria-expanded`로 답니다(2026-08-18). 여기 `<aside>`에 걸 자리는 여전히 없습니다.
    * ⚠️ 닫힐 때 `undefined`로 **아예 안 붙입니다** — 빈 값이 붙으면 나중에 맨
    * `[data-mobile-drawer]` 선택자를 쓸 수 없게 됩니다. */
   return <aside className={`sidebar ${className}`.trim()} data-mobile-drawer={mobileOpen ? "open" : undefined}>
@@ -130,7 +132,33 @@ export function Sidebar({ brand, sections, slot, footer, collapsed = false, onTo
   </aside>;
 }
 
-export type MobileQuickBarItem = { id: string; label: string; icon: ReactNode; active?: boolean; onClick: () => void; ariaLabel?: string };
+/**
+ * **`active`가 무슨 뜻인지는 항목이 말합니다**(§16 ①, 오너 결정 2026-08-18).
+ *
+ * 🔴 예전에는 셋 다 `className="active"` 하나로 칠했는데, 재 보니 그 클래스가 **한 사실이
+ * 아니라 둘**이었습니다. 보통 쓰는 `[메뉴 열기, 주요 액션, 홈]` 조합에서:
+ *
+ * ```
+ * menu   active: mobileOpen            "이 버튼이 서랍을 펼쳤다"   → aria-expanded
+ * entry  active: page === "entry"       "지금 이 페이지다"          → aria-current="page"
+ * home   active: page === "dashboard"   "지금 이 페이지다"          → aria-current="page"
+ * ```
+ *
+ * 통째로 `aria-current="page"`를 붙이면 "메뉴 열기"에 대해서는 **거짓말**입니다. 그래서
+ * 항목이 자기 갈래를 말하고, 킷이 그 갈래에 맞는 속성을 답니다.
+ *
+ * - `"page"` — 내비게이션. 활성일 때 `aria-current="page"`.
+ * - `"disclosure"` — 무언가를 펼치는 버튼. `aria-expanded`를 **접혔을 때도** 답니다
+ *   (그것이 펼침 버튼의 계약입니다 — 열 수 있다는 사실 자체를 말해야 합니다).
+ * - `"action"` — 그냥 실행. 대응하는 ARIA가 없으므로 **아무것도 안 답니다.**
+ *   ⚠️ 그래서 `active: true`여도 **활성 표시가 안 칠해집니다.** 표시가 필요하면
+ *   그 항목은 `action`이 아닙니다.
+ *
+ * **필수입니다.** 기본값을 두면 오너가 방금 답한 질문을 킷이 조용히 다시 답하는 셈입니다.
+ */
+export type MobileQuickBarKind = "page" | "disclosure" | "action";
+
+export type MobileQuickBarItem = { id: string; label: string; icon: ReactNode; kind: MobileQuickBarKind; active?: boolean; onClick: () => void; ariaLabel?: string };
 
 /**
  * 모바일 화면 아래 가운데에 떠 있는 빠른 바.
@@ -139,6 +167,9 @@ export type MobileQuickBarItem = { id: string; label: string; icon: ReactNode; a
  */
 export function MobileQuickBar({ items, ariaLabel = "빠른 메뉴", barRef, className = "" }: { items: MobileQuickBarItem[]; ariaLabel?: string; barRef?: Ref<HTMLElement>; className?: string }) {
   return <nav ref={barRef} className={`mobile-quick-bar ${className}`.trim()} aria-label={ariaLabel}>
-    {items.map((item) => <Pressable className={item.active ? "active" : undefined} onClick={item.onClick} aria-label={item.ariaLabel ?? item.label} key={item.id}>{item.icon}<span>{item.label}</span></Pressable>)}
+    {items.map((item) => <Pressable
+      aria-current={item.kind === "page" && item.active ? "page" : undefined}
+      aria-expanded={item.kind === "disclosure" ? Boolean(item.active) : undefined}
+      onClick={item.onClick} aria-label={item.ariaLabel ?? item.label} key={item.id}>{item.icon}<span>{item.label}</span></Pressable>)}
   </nav>;
 }

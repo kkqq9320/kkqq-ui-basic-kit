@@ -271,21 +271,32 @@
   .mobile-quick-bar > button > span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* 터치에서 :hover가 들러붙는 문제 — 위 nav 규칙의 주석 참고. 이 바는 터치 전용
    * 표면이라 증상이 가장 잘 보였다: 서랍을 열고 뒤로가기로 닫아도 메뉴 버튼이
-   * accent로 남아 "지금 선택된 항목"으로 읽혔다(.active는 흰 글자 + 30% 알약이라
+   * accent로 남아 "지금 선택된 항목"으로 읽혔다(활성 표시는 흰 글자 + 30% 알약이라
    * 실제 활성 표시와도 다르다). 좁은 데스크톱 창에서는 마우스 호버가 그대로 동작한다. */
   @media (hover: hover) {
     .mobile-quick-bar > button:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
   }
   /* 키보드 포커스 짝 — 없으면 Tab으로 왔을 때 브라우저 기본 링만 뜬다. */
   .mobile-quick-bar > button:focus-visible { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); outline: none; }
-  .mobile-quick-bar > button.active {
+  /* **활성 표시는 항목이 말한 갈래가 칠합니다**(§16 ①, 2026-08-18). 예전에는
+   * `.active` 하나였는데 그 클래스가 **한 사실이 아니라 둘**이었습니다 — 내비 항목의
+   * "지금 이 페이지다"와 서랍 버튼의 "내가 펼쳤다". `MobileQuickBarItem.kind`가
+   * 갈래를 말하고 킷이 맞는 속성을 답니다. `kind: "action"`은 대응 ARIA가 없어
+   * **칠해지지 않습니다** — 표시가 필요하면 그 항목은 action이 아닙니다.
+   *
+   * ⚠️ **여기서는 `:where()`가 아니라 `:is()`가 맞습니다.** §16이 `:is()`를 경고하는
+   * 이유는 **명시도가 올라가서**인데, 여기 인자는 둘 다 속성 선택자 (0,1,0)이라
+   * 안 올라갑니다. 손으로 셉니다: `.mobile-quick-bar`(0,1,0) + `button`(0,0,1) +
+   * `:is(...)`(0,1,0) = **(0,2,1)** — `.active`였을 때와 같습니다. `:where()`로 쓰면
+   * 0을 기여해 (0,1,1)로 **내려가** 캐스케이드가 바뀝니다. */
+  .mobile-quick-bar > button:is([aria-current="page"], [aria-expanded="true"]) {
     color: var(--sidebar-bright);
     background: color-mix(in srgb, var(--accent) 30%, transparent);
     box-shadow: 0 7px 18px color-mix(in srgb, var(--accent) 24%, transparent);
     backdrop-filter: blur(10px) saturate(140%);
     -webkit-backdrop-filter: blur(10px) saturate(140%);
   }
-  .mobile-quick-bar > button.active svg { animation: sidebar-nav-pop 320ms cubic-bezier(.2, 1.12, .35, 1); }
+  .mobile-quick-bar > button:is([aria-current="page"], [aria-expanded="true"]) svg { animation: sidebar-nav-pop 320ms cubic-bezier(.2, 1.12, .35, 1); }
 
   /* 아래로 스크롤 중이거나 가상 키보드가 열리면 떠 있는 바를 내립니다 */
   .app-shell.mobile-nav-hidden .mobile-quick-bar { opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(calc(100% + 32px)); }
@@ -304,6 +315,6 @@
   .mobile-quick-bar { transition: none; }
   .app-shell.mobile-keyboard-open .mobile-quick-bar,
   .app-shell.mobile-keyboard-open .mobile-page-tabs-float { transition: none; }
-  .sidebar nav :is(a, button)[aria-current="page"] svg, .mobile-quick-bar > button.active svg { animation: none; }
+  .sidebar nav :is(a, button)[aria-current="page"] svg, .mobile-quick-bar > button:is([aria-current="page"], [aria-expanded="true"]) svg { animation: none; }
   .sidebar nav :is(a, button)::before { transform: none; }
 }
