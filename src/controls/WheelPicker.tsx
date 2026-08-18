@@ -1913,6 +1913,17 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
   function moveSwipe(unit: WheelUnit, clientY: number, pointerId: number, buttons: number, column: HTMLElement) {
     if (buttons !== 1) return;
     const start = swipeRef.current;
+    /* ⚠️ **`Number.isFinite` 둘만 감시자가 없습니다 — 그리고 그게 맞습니다**(2026-08-18 실측:
+     * 지워도 검사 1654개 전부 초록). 무해해서 도달 불가인 것이 아니라 **도달 불가라서
+     * 무해**합니다: `clientY`는 `MouseEventInit`의 restricted double이라 브라우저도 스크립트도
+     * 비유한 값을 실을 수 없습니다(`TypeError: … not a finite floating-point value`).
+     * 감시자를 만들면 **브라우저가 만들 수 없는 이벤트를 조립하는 변화 감지기**가 됩니다.
+     *
+     * 지우지는 마세요 — NaN이 한 번이라도 들어오면 `--wheel-drag-offset: NaNpx`가 되어
+     * `translateY(calc(...))` 전체가 무효가 되고 값 컨테이너가 30px 튑니다.
+     *
+     * ⚠️ **`finishSwipe`의 같은 모양 가드는 성질이 다릅니다** — 그쪽은 비교만 감싸므로 진짜
+     * 등가입니다. 한 덩어리로 묶어 판단하지 마세요. */
     if (!start || start.unit !== unit || start.pointerId !== pointerId || !Number.isFinite(start.y) || !Number.isFinite(clientY)) return;
     let delta = clientY - start.y;
     // **여기가 "이 제스처는 탭이 아니라 드래그다"라고 정하는 한 자리입니다.** 클릭 억제와

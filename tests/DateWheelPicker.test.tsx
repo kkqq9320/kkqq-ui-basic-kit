@@ -583,6 +583,38 @@ describe("DateWheelPicker 스와이프", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  // 커서가 이웃 열로 새는 경로 — **마우스(간접 포인터)의 경로다.** 열은 `.wheel-columns`
+  // 그리드의 형제 `<section>`이고 사이가 `gap: 6px`뿐이라(css/wheel-picker.css:186),
+  // 대각선으로 끄는 드래그는 곧바로 옆 열 위로 간다. 마우스에는 **암묵 포인터 캡처가 없어**
+  // `pointermove`가 히트 테스트로 **커서 아래 요소**에 도착하고, React는 `event.target`에서
+  // 전파 경로를 다시 만들므로 **옆 열의** `onPointerMove`가 불려 `unit`이 옆 열 것이 된다.
+  // 명시적 캡처는 `moveSwipe`가 `Math.abs(delta) >= SWIPE_SLOP`(18)에서 비로소 거는데,
+  // 마우스 move는 샘플링이 성기어 **첫 move가 이미 30px을 넘긴 채 옆 열에 도착**할 수 있다 —
+  // 아래가 정확히 그 한 프레임이다.
+  //
+  // `moveSwipe`의 `start.unit !== unit` 절이 그것을 막는다. 없으면 그 move가 **옆 열의
+  // unit으로** 커밋된다 — 연도를 끌었는데 월이 굴러간다.
+  //
+  // ⚠️ **`finishSwipe`의 같은 이름 절과 다른 절이다.** 이쪽은 **move**가 이웃 열에 도착하는
+  // 경로(`moveSwipe`), 아래 "연 열에서 눌러 월 열에서 떼면"은 **pointerup**이 이웃 열에
+  // 도착하는 경로(`finishSwipe`)다. 한쪽 변이는 다른 쪽 검사를 안 건드린다(실측).
+  //
+  // ⚠️ 멀티터치는 이 절이 아니라 **`start.pointerId !== pointerId`가** 막는다(위 검사).
+  // 이 절만의 몫은 **포인터 하나가 열 경계를 넘는** 이 경로다.
+  //
+  // ⚠️ 단언은 **"월이 하나라도 움직였는가"**로 넓게 쓴다. `not.toHaveBeenCalledWith("2026-08-12")`로
+  // 좁히면, 낡은 기록이 남아 **반대 방향**으로 구르는 경로(측정된 `"2026-06-12"`)를 놓친다.
+  // "이 move를 통째로 무시한다"는 구현 선택이고 원래 열로 돌려주는 것도 정당한 리팩터라,
+  // 사용자가 보는 해악 하나 — *끌지 않은 열이 굴렀다* — 만 단언한다.
+  it("연도 열에서 시작한 드래그는 커서가 월 열로 새어도 월을 굴리지 않는다", () => {
+    const { onChange, year } = openWheel();
+    const month = screen.getByRole("group", { name: "월 07" });
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    onChange.mockClear();
+    pointer("pointerMove", month, { pointerId: 7, clientY: 60, buttons: 1 });   // delta -40, 커밋 경계 초과
+    expect(onChange.mock.calls.map(([next]) => String(next).slice(5, 7)).filter((m) => m !== "07")).toEqual([]);
+  });
+
   // 손을 뗄 때 30px 경계에 못 미치고 남은 거리가 18px 이상이면 그 방향으로 한 칸 더 간다.
   // 여기서는 100 → 80이므로 커밋 경계(30)는 못 넘고 놓기 경계(18)는 넘는다.
   it("손을 뗄 때 18px 이상 남아 있으면 그 방향으로 한 칸 더 커밋한다", () => {
@@ -702,6 +734,87 @@ describe("DateWheelPicker 스와이프", () => {
     pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerMove", year, { pointerId: 7, clientY: 0, buttons: 1 });
     expect(year.style.getPropertyValue("--wheel-drag-offset")).toBe("-15px");
+  });
+
+  // ── 커밋의 장부 (1) — 기준점은 커밋을 따라간다 ────────────────────────────────
+  //
+  // `start.y += direction > 0 ? -30 : 30` 한 줄이 "이 30px은 이미 썼다"고 장부에 적는다.
+  // 안 적으면 기준점이 **누른 자리에 그대로 남아** delta가 절대 줄지 않으므로, 한 번
+  // 30px을 넘긴 순간부터 **move가 도착할 때마다** 한 칸씩 커밋된다.
+  //
+  // 바로 위의 "한 프레임에 크게 뛰어도 오프셋은 ±15를 넘지 않는다"가 왜 이것을 못 잡는가:
+  // 그쪽은 move가 **하나뿐**이라 갱신된 기준점이 다음 프레임에 쓰이질 않고, 잔여 delta
+  // -70과 원래 delta -100이 **둘 다 클램프에 물려** 같은 `-15px`을 낸다.
+  it("60px을 끌면 두 칸 움직인다", () => {
+    const { onChange, year } = openWheel();
+    onChange.mockClear();
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", year, { pointerId: 7, clientY: 70, buttons: 1 });   // 누적 30px — 한 칸째
+    pointer("pointerMove", year, { pointerId: 7, clientY: 60, buttons: 1 });
+    pointer("pointerMove", year, { pointerId: 7, clientY: 50, buttons: 1 });
+    pointer("pointerMove", year, { pointerId: 7, clientY: 40, buttons: 1 });   // 누적 60px — 두 칸째
+    expect(onChange.mock.calls.flat()).toEqual(["2027-07-12", "2028-07-12"]);
+  });
+
+  // ⚠️ **이 검사의 킬셋은 위 검사의 부분집합이다**(실측: 임계를 30 -> 15로 바꾸는 변이는
+  // 위만 죽이고 이것은 초록으로 남는다). 커버리지가 아니라 **문서화**로 자리값을 번다 —
+  // 위가 "칸 간격이 30px이다"라면 이것은 **"멈춘 손가락은 아무것도 안 움직인다"**이고,
+  // 이쪽이 사용자가 실제로 밟는 경로다. 실기기에서 손가락은 완전히 멎지 않는다.
+  it("30px을 넘긴 뒤 그 자리에서 떨려도 더 커밋되지 않는다", () => {
+    const { onChange, year } = openWheel();
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", year, { pointerId: 7, clientY: 70, buttons: 1 });   // 30px — 한 칸. 여기까지는 옳다.
+    onChange.mockClear();
+    pointer("pointerMove", year, { pointerId: 7, clientY: 69, buttons: 1 });   // 손떨림
+    pointer("pointerMove", year, { pointerId: 7, clientY: 71, buttons: 1 });
+    pointer("pointerMove", year, { pointerId: 7, clientY: 70, buttons: 1 });
+    expect(onChange.mock.calls.flat()).toEqual([]);
+  });
+
+  // ── 커밋의 장부 (2) — 막힌 커밋은 기준점을 손가락 자리로 되돌린다 ─────────────
+  //
+  // `commitShift`가 `null`을 돌려주는 경우가 둘 있다 — 경계(`min`/`max`)에 막혔을 때, 그리고
+  // 격자가 열보다 커서 어느 쪽으로 밀어도 같은 값일 때. 그때는 **값이 안 움직였는데 delta는
+  // 그대로**라, 되돌리지 않으면 그 delta가 제스처가 끝날 때까지 살아남는다. 증상이 둘이고
+  // 아래에서 하나씩 본다 — **두 줄이 하나씩 나눠 지킨다**(반쪽씩 지워 재 봤다:
+  // `delta = 0`만 지우면 위가, `start.y = clientY`만 지우면 아래가 빨개진다). 그래서 둘 다 둔다.
+  //
+  // ⚠️ **아래 둘이 실제로 도달하는 것은 경계 쪽 하나뿐이다.** `next === sourceValue`(격자가
+  // 열보다 큼) 쪽은 안 밟는다 — 두 줄을 **공유**하므로 어느 줄을 건드려도 여기서 죽지만,
+  // "두 진입 조건이 다 고정됐다"는 뜻은 아니다.
+  //
+  // ⚠️ `openWheel`을 넓혀 `max`를 받게 하지 **않는다.** 이 describe의 다른 검사가 전부 그
+  // 헬퍼를 지나가므로, 인자를 늘리면 그것들의 픽스처가 같이 흔들린다. 중복은 고의다.
+  function openWheelAtMax() {
+    const onChange = vi.fn();
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-07-12" max="2026-07-12" onChange={onChange} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    return { onChange, year: screen.getByRole("group", { name: "연도 2026" }) };
+  }
+
+  // ⚠️ **제목을 "경계에 막히면 휠은 손가락을 따라가지 않는다"로 쓰지 말 것 — 거짓이다.**
+  // 30px을 안 넘는 move는 커밋 분기에 아예 안 들어가므로 `else`가 안 돌고 오프셋은 그대로
+  // 산다(실측: 경계에서 20px만 끌면 `-10px`). 경계에서도 휠은 ±15까지 손가락을 따라가고,
+  // 30px 경계를 넘을 때마다 0으로 튕기는 **톱니**다. 이 검사가 재는 것은 그 톱니의 이빨
+  // 하나 — **막힌 커밋이 휠을 클램프에 붙여 세우지 않는다**는 것뿐이다.
+  it("경계에서 막힌 커밋은 휠을 15px에 붙여 두지 않는다", () => {
+    const { year } = openWheelAtMax();
+    pointer("pointerDown", year, { pointerId: 7, clientY: 200, buttons: 1, button: 0 });
+    pointer("pointerMove", year, { pointerId: 7, clientY: 100, buttons: 1 });   // 100px 위로 — 전부 막힌다
+    expect(year.style.getPropertyValue("--wheel-drag-offset")).toBe("0px");
+  });
+
+  // **이쪽이 더 아픈 증상이다.** 경계에 100px을 밀어붙였다가 손가락을 되돌릴 때, 기준점이
+  // 안 따라왔으면 delta는 여전히 -70이라 되돌아온 30px이 **아무 일도 안 한다.** 밀어붙인
+  // 거리만큼 데드존이 생기는 셈이고, 그것은 클램프 대신 감쇠를 고른 이유(소스 주석:
+  // "데드존이 아예 없습니다")를 하필 경계에서 도로 무너뜨린다.
+  it("경계까지 밀어붙인 뒤 30px 되돌리면 반대로 한 칸 간다", () => {
+    const { onChange, year } = openWheelAtMax();
+    pointer("pointerDown", year, { pointerId: 7, clientY: 200, buttons: 1, button: 0 });
+    pointer("pointerMove", year, { pointerId: 7, clientY: 100, buttons: 1 });   // 막힌다 — 값은 그대로
+    onChange.mockClear();
+    pointer("pointerMove", year, { pointerId: 7, clientY: 130, buttons: 1 });   // 30px 되돌림
+    expect(onChange.mock.calls.flat()).toEqual(["2025-07-12"]);
   });
   // ── 포인터 캡처는 드래그를 위한 장치다. 누름은 아직 드래그가 아니다 ──────────
   //
@@ -1050,6 +1163,210 @@ describe("DateWheelPicker 스와이프", () => {
     pointer("pointerDown", row, { pointerId: 5, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerMove", row, { pointerId: 5, clientY: 60, buttons: 1 });
     expect(onChange).toHaveBeenCalledWith("2027-07-12");
+  });
+
+  /* ══ 기록 하나의 수명 ══════════════════════════════════════════════════════════
+   *
+   * `swipeRef`는 **열 여섯이 나눠 쓰는 가변 싱글턴 하나**입니다. 아래 검사들은 전부 그
+   * 기록의 수명에 대한 규칙이고, 실패 모양도 하나입니다 — **자기가 만들지 않은 기록을
+   * 읽은 제스처.**
+   *
+   * ⚠️ **"다음 pointerdown이 어차피 덮어쓴다"는 거짓입니다.** 열의 `onPointerDown`은
+   * `swipeRef`를 쓰기 **전에** 한 번 빠져나갑니다:
+   *
+   *     suppressColumnClickRef.current = false;
+   *     if (startsOnStepControl(event.target)) return;   // ← 여기서 반환
+   *     ... swipeRef.current = { ... };                  // ← 여기까지 못 옴
+   *
+   * 그래서 ± 버튼을 누르는 것은 **낡은 기록을 덮어쓰지 않습니다.** 낡은 `y`가 남아 있으면
+   * 그다음 손떨림 한 번이 그 옛 원점으로부터 60~90px 떨어진 것으로 읽혀 즉시 커밋되고,
+   * 같은 판정이 `suppressColumnClickRef`도 세워 **± 버튼의 클릭까지 삼킵니다.**
+   * 이 저장소에 이미 있는 오너 리포트("± 버튼이 안 먹는다")와 같은 증상입니다.
+   * (`startsOnStepControl` 주석의 "마우스는 누르고 떼는 사이에 2~3px 흔들리는 게 정상"이
+   * 그 손떨림의 근거이자 실측입니다.)
+   *
+   * ⚠️ 아래에서 **± 버튼**을 쓰는 셋(파기 1 · 파기 2 · 판독 신원 3)은 같은 기제를 지나지만
+   * 같은 검사가 아닙니다 — 낡은 기록을 남기는 **자리가 서로 다르고**, 한쪽 변이는 다른 쪽
+   * 검사를 건드리지 못합니다(실측 행렬).
+   *
+   * ⚠️ 이 경로들은 두 제스처가 같은 `pointerId`여야 하므로 **마우스**입니다(마우스는 늘 1로
+   * 고정). 터치는 손가락마다 id가 올라가므로 이 경로가 아닙니다 — 다만 홀드(파기 3)는
+   * **같은 제스처** 안이라 그 가정이 아예 필요 없고 터치에서 그대로 밟힙니다.
+   * ══════════════════════════════════════════════════════════════════════════ */
+
+  // [파기 1/3] `finishSwipe`의 `swipeRef.current = null` — **정상 종료**.
+  it("스와이프를 놓은 뒤 ± 버튼을 누르면, 그 버튼이 하는 일만 일어난다", () => {
+    const { onChange, year } = openWheel();
+    // 진짜 스와이프 하나 — 40px 끌어 한 칸 커밋하고 놓는다(놓을 때 남은 10px은 슬롭 미만).
+    pointer("pointerDown", rowAt(year, 0), { pointerId: 1, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", year, { pointerId: 1, clientY: 60, buttons: 1 });
+    pointer("pointerUp", year, { pointerId: 1, clientY: 60 });
+    onChange.mockClear();
+    // ± 버튼은 열 위아래 30px 트랙이라 방금 놓은 자리에서 60px쯤 떨어져 있다.
+    const next = screen.getByRole("button", { name: "연도 다음" });
+    pointer("pointerDown", next, { pointerId: 1, clientY: 160, buttons: 1, button: 0 });
+    pointer("pointerMove", next, { pointerId: 1, clientY: 163, buttons: 1 });   // 손떨림 3px
+    pointer("pointerUp", next, { pointerId: 1, clientY: 163 });
+    fireEvent.click(next);
+    expect(onChange.mock.calls.flat()).toEqual(["2027-07-12"]);
+  });
+
+  // [파기 2/3] 열 `onPointerCancel`의 `swipeRef.current = null` — **비정상 종료**.
+  //
+  // `pointercancel` 뒤에는 `pointerup`이 **안 옵니다** → `finishSwipe`가 영영 안 불림 →
+  // 위 줄로는 이 경우를 못 지웁니다.
+  //
+  // ⚠️ 이 검사가 지키는 것은 *"cancel이 오면 무엇이 잘못되는가"*이지 *"cancel이 얼마나 자주
+  // 오는가"*가 아닙니다. `css/wheel-picker.css:236`의 `.wheel-column { touch-action: none }`이
+  // 스크롤 탈취를 배제하므로 남는 발화원은 시스템 제스처·핀치·앱 전환뿐인데, **그 빈도는
+  // 에뮬레이션으로 못 쟀습니다 — 실기기 항목입니다.**
+  it("브라우저가 스와이프를 뺏은 뒤 ± 버튼을 누르면, 그 버튼이 하는 일만 일어난다", () => {
+    const { onChange, year } = openWheel();
+    pointer("pointerDown", rowAt(year, 0), { pointerId: 1, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", year, { pointerId: 1, clientY: 60, buttons: 1 });
+    pointer("pointerCancel", year, { pointerId: 1 });   // pointerup은 오지 않는다
+    onChange.mockClear();
+    const next = screen.getByRole("button", { name: "연도 다음" });
+    pointer("pointerDown", next, { pointerId: 1, clientY: 160, buttons: 1, button: 0 });
+    pointer("pointerMove", next, { pointerId: 1, clientY: 163, buttons: 1 });
+    pointer("pointerUp", next, { pointerId: 1, clientY: 163 });
+    fireEvent.click(next);
+    expect(onChange.mock.calls.flat()).toEqual(["2027-07-12"]);
+  });
+
+  // [파기 3/3] `columnHold`의 `onHold` 안 `swipeRef.current = null` — **다른 제스처가
+  // 진행 중인 스와이프를 선점**. 셋 중 도달성이 가장 넓습니다(같은 제스처라 터치 포함).
+  //
+  // 홀드가 발동하는 순간 손가락은 **아직 내려가 있고**(그것이 임계의 뜻입니다), 진행 중이던
+  // 기록에는 **초기화 전 값**(`start.value = baseValue`)이 들어 있습니다. 안 버리면,
+  // 초기화를 보고 이어서 끄는 손가락이 그 옛 값에서 커밋해 **초기화를 도로 지웁니다.**
+  //
+  // 구간 셋 중 이 검사가 재는 것은 마지막입니다:
+  //   4px 이내에 떼기     — 아무 일도 없다(`MOVE_TOLERANCE` 4 < `SWIPE_SLOP` 18).
+  //                          **이것이 이 결함이 여태 안 보였던 이유입니다.**
+  //   18~29px 뒤 떼기     — `finishSwipe`가 옛 값에서 한 칸 간다(같은 줄, 검사 안 붙임).
+  //   30px 이상 이동      — `moveSwipe`가 드래그 도중에 커밋한다  ← 여기
+  it("길게 눌러 초기화한 뒤 이어서 끌어도 초기화 전 값에서 커밋되지 않는다", () => {
+    vi.useFakeTimers();   // afterEach의 vi.useRealTimers()가 되돌린다
+    const { onChange } = openWheel();
+    const month = screen.getByRole("group", { name: "월 07" });
+    pointer("pointerDown", rowAt(month, 0), { pointerId: 1, clientY: 100, buttons: 1, button: 0 });
+    act(() => { vi.advanceTimersByTime(500); });   // 홀드 발동 — 월이 1월로
+    /* 🔴 초기화가 `columnMotions.mark`을 타서 값 컨테이너의 key가 바뀌었습니다 — 행을
+     * 다시 찾지 않으면 떨어져 나간 노드에 쏘게 되고, 그러면 변이에서도 초록입니다. */
+    pointer("pointerMove", rowAt(month, 0), { pointerId: 1, clientY: 40, buttons: 1 });
+    expect(onChange.mock.calls.flat()).toEqual(["2026-01-12"]);
+  });
+
+  // [판독 신원 1/3] `finishSwipe`의 `start.unit !== unit` 절 — **pointerup이 이웃 열에
+  // 도착하는** 경로. 위 "커서가 월 열로 새어도"와 다른 절입니다(그쪽은 `moveSwipe`).
+  //
+  // 세로로 5px만 움직여 옆 열로 넘어갔으므로 슬롭(18)을 안 넘겨 **캡처가 안 걸렸고**,
+  // 그 뒤 `moveSwipe`는 unit 불일치로 전부 빠지므로 캡처가 걸릴 기회가 영영 없습니다.
+  // `pointerup`은 월 열에 도착합니다.
+  //
+  // ⚠️ **jsdom에는 암묵 포인터 캡처가 아예 없습니다.** 이 검사가 증명하는 것은 "그런 이벤트
+  // 순서가 오면 가드가 막는다"이지, 실브라우저가 그 순서를 만든다는 것이 아닙니다 —
+  // 마우스에 암묵 캡처가 없다는 것은 명세이고 여기서 재지 않았습니다.
+  it("연 열에서 눌러 월 열에서 떼면 아무 열도 안 움직인다", () => {
+    const { onChange, year } = openWheel();
+    const month = screen.getByRole("group", { name: "월 07" });
+    onChange.mockClear();
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", month, { pointerId: 7, clientY: 95, buttons: 1 });    // 슬롭 미만 — 캡처 없음
+    pointer("pointerUp", month, { pointerId: 7, clientY: 80 });                  // 남은 20px은 슬롭 초과
+    expect(onChange.mock.calls.flat()).toEqual([]);
+  });
+
+  // [판독 신원 2/3] `finishSwipe`의 `start.pointerId !== pointerId` 절. `unit`은 둘 다
+  // `"year"`라 이 검사가 겨냥하는 것은 이 절 하나입니다.
+  //
+  // `swipeRef`는 나중 손가락(8) 것이고 먼저 누른 손가락(7)이 떼는 `pointerup`은 7로 옵니다.
+  // 절이 없으면 **가만히 있던 7을 떼는 것만으로** 8이 짚은 자리와의 거리가 커밋으로 읽힙니다.
+  it("같은 열에 손가락이 둘일 때, 먼저 뗀 손가락은 커밋하지 않는다", () => {
+    const { onChange, year } = openWheel();
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerDown", year, { pointerId: 8, clientY: 200, buttons: 1, button: 0 });
+    onChange.mockClear();
+    pointer("pointerUp", year, { pointerId: 7, clientY: 100 });
+    expect(onChange.mock.calls.flat()).toEqual([]);
+  });
+
+  // [판독 신원 3/3] **파기가 신원 가드보다 위에 있다**는 순서. `finishSwipe`의 첫 줄이
+  // `swipeRef.current = null`이고 신원 가드는 그다음입니다 — 즉 **신원이 어긋난 pointerup도
+  // 기록을 지웁니다.** 그 두 줄을 맞바꾸면(추출에서 가장 흔한 슬립) 위 검사들과 스위트
+  // 1637개가 **전부 초록인 채로** 기록이 살아남습니다.
+  //
+  // 위 "연 열에서 눌러 월 열에서 떼면"이 남긴 낡은 기록에 ± 손떨림을 하나 얹는 것이
+  // 그 순서를 보이게 만드는 자리입니다. 순서를 뒤집으면 연도가 **거꾸로 두 칸** 갑니다
+  // (실측 `["2025-07-12", "2024-07-12"]`).
+  it("신원이 어긋난 pointerup도 기록을 지운다 — 그 뒤 ± 버튼은 제 일만 한다", () => {
+    const { onChange, year } = openWheel();
+    const month = screen.getByRole("group", { name: "월 07" });
+    pointer("pointerDown", year, { pointerId: 1, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", month, { pointerId: 1, clientY: 95, buttons: 1 });
+    pointer("pointerUp", month, { pointerId: 1, clientY: 90 });   // 신원 불일치 — 커밋은 없다
+    onChange.mockClear();
+    const next = screen.getByRole("button", { name: "연도 다음" });
+    pointer("pointerDown", next, { pointerId: 1, clientY: 160, buttons: 1, button: 0 });
+    pointer("pointerMove", next, { pointerId: 1, clientY: 163, buttons: 1 });
+    pointer("pointerUp", next, { pointerId: 1, clientY: 163 });
+    fireEvent.click(next);
+    expect(onChange.mock.calls.flat()).toEqual(["2027-07-12"]);
+  });
+
+  /* ── 같은 기록의 DOM 그림자 ───────────────────────────────────────────────────
+   *
+   * `.dragging`과 `--wheel-drag-offset`은 React 밖에서 직접 쓰는 두 속성이고, 수명이
+   * `swipeRef`와 같습니다. 걷는 자리도 같습니다 — `clearSwipeVisual`의 호출자는 **둘**
+   * (`finishSwipe` · 열 `onPointerCancel`)이라 아래 검사도 둘입니다. */
+
+  // [그림자 1/3] 끄는 동안 열은 `dragging`이다 — `Math.abs(offset) > 2` 임계.
+  //
+  // ⚠️ **move를 넷으로 나눠 미는 것이 필수입니다.** `MOVE_TOLERANCE = 4`(columnHold)와
+  // `|offset| > 2`(즉 `|delta| > 4`)가 **같은 술어**라, 홀드를 끊는 move와 클래스를 붙이는
+  // move가 같은 프레임이면 React가 `className`을 다시 쓰면서 직접 붙인 클래스를 지웁니다
+  // (`columnHold.ts`의 `holdingUnit` 주석이 같은 함정을 이미 적어 두었습니다). 첫 move로
+  // 그 프레임을 태우고 나머지로 임계를 넘깁니다.
+  //
+  // ⚠️ **`MOVE_TOLERANCE`를 바꾸면 이 검사는 빨개집니다**(측정 범위 2·4·9·12에서는 초록).
+  // 그것은 결함이 아니라 성질입니다 — 이 검사는 fail-closed입니다. "놓으면 dragging이
+  // 걷힌다" 형태의 단언은 같은 변경에 **조용히 초록**이 되어(fail-open) 채택하지 않았습니다.
+  it("끄는 동안 열은 dragging이다", () => {
+    const { year } = openWheel();
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    for (const clientY of [95, 90, 85, 82]) pointer("pointerMove", year, { pointerId: 7, clientY, buttons: 1 });
+    expect(year.classList.contains("dragging")).toBe(true);
+  });
+
+  // [그림자 2/3] 손가락이 떠나면 열은 원래 자리로 돌아온다 — `clearSwipeVisual`의
+  // `removeProperty`, 호출자는 `finishSwipe`.
+  //
+  // `--wheel-drag-offset`은 인라인 커스텀 프로퍼티이고 **React는 자기가 안 쓴 커스텀
+  // 프로퍼티를 영영 안 지웁니다** — 안 걷으면 팝오버가 닫힐 때까지 굳습니다(실측: 같은 열을
+  // 다시 눌렀다 떼도, 다른 열을 눌러도 `-5px`가 남고 닫았다 열어야 사라집니다). 열이 최대
+  // 15px 어긋난 채로 남아 하이라이트 띠와 선택 행이 어긋납니다.
+  //
+  // 슬롭(18) 미만으로 놓는 경로를 씁니다 — 커밋이 없어 상태 변경도 리렌더도 없으므로
+  // `clearSwipeVisual`이 **유일한 청소부**입니다.
+  it("슬롭에 못 미쳐 놓으면 드래그 오프셋이 걷힌다", () => {
+    const { year } = openWheel();
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", year, { pointerId: 7, clientY: 95, buttons: 1 });
+    pointer("pointerMove", year, { pointerId: 7, clientY: 90, buttons: 1 });   // delta -10, offset -5
+    pointer("pointerUp", year, { pointerId: 7, clientY: 90 });                 // 18px 미만 -> 커밋 없음
+    expect(year.style.getPropertyValue("--wheel-drag-offset")).toBe("");
+  });
+
+  // [그림자 3/3] **같은 청소부의 두 번째 호출자**(열 `onPointerCancel`). 추출하면서 이쪽
+  // 호출만 떨어뜨리면 위 검사는 초록으로 남습니다 — 그래서 따로 둡니다.
+  it("브라우저가 제스처를 뺏어도 드래그 오프셋이 걷힌다", () => {
+    const { year } = openWheel();
+    pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", year, { pointerId: 7, clientY: 95, buttons: 1 });
+    pointer("pointerMove", year, { pointerId: 7, clientY: 90, buttons: 1 });
+    pointer("pointerCancel", year, { pointerId: 7 });
+    expect(year.style.getPropertyValue("--wheel-drag-offset")).toBe("");
   });
 });
 
@@ -4128,6 +4445,14 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
     expect(wheelPickerCssSource).toContain(".wheel-viewport { width: 100%; height: var(--wheel-rows-h);");
     expect(wheelPickerCssSource).toContain("height: calc(var(--wheel-rows-h) + 62px)");
     expect(wheelPickerCssSource).toContain("transform: translateY(calc(var(--wheel-rest) + var(--wheel-drag-offset, 0px)))");
+  });
+
+  // `.dragging`이 하는 일은 **100% 이 규칙 하나**입니다 — 드래그 중에는 열이 손가락보다
+  // 110ms 늦게 따라오면 안 되므로 트랜지션을 끕니다. JS 쪽 임계(`Math.abs(offset) > 2`)는
+  // 스와이프 블록의 "끄는 동안 열은 dragging이다"가 지키고, 규칙 자체는 여기가 지킵니다 —
+  // 바로 위 `translateY(calc(...))` 핀과 같은 두 겹 패턴입니다.
+  it("드래그 중에는 열의 트랜지션과 애니메이션이 꺼진다", () => {
+    expect(wheelPickerCssSource).toContain(".wheel-column.dragging .wheel-values { animation: none !important; transition: none; }");
   });
 
   // **모든 열이 함께 구릅니다** — 축 1. 규칙은 하나이고, 열마다 다른 것은 **시차뿐**입니다.
