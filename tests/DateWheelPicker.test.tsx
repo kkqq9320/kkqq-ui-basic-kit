@@ -6563,6 +6563,103 @@ describe("팝오버 버튼은 pointerup에서 확정된다 (오너 실기기 결
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  /* ── 신원과 뒷정리 ─────────────────────────────────────────────────────────
+   *
+   * 🔴 **이 describe는 "눌렀을 때 무슨 일이 일어나는가"만 재고 있었습니다.** 동사 열셋에
+   * 변이를 걸어 보니 **여섯이 0 red**였고 여섯이 전부 *신원과 뒷정리*였습니다
+   * (2026-08-18 실측). 휠 픽커의 다른 세 조각에서도 **네 라운드 연속** 같은 편향이
+   * 나왔고, `v0.14.0`의 고침 셋이 정확히 그 축의 구멍이었습니다.
+   *
+   * 아래 여섯이 그 축을 덮습니다. `openClearable`을 쓰는 것들은 **`run`이 관찰 가능해야**
+   * 하기 때문입니다 — `완료`는 값이 안 바뀌면 `onChange`를 안 부르므로 가드가 뚫려도 조용합니다
+   * (그래서 기존 "다른 버튼에서 떼면" 검사가 target 가드 변이를 **못 잡습니다**). */
+  const openClearable = (onChange = vi.fn()) => {
+    render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:07:41" fields={TIME_FIELDS} allowClear onChange={onChange} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    return onChange;
+  };
+
+  /* 기존 "다른 버튼에서 떼면 확정하지 않는다"는 `완료` 위에서 떼는데, 그 버튼의 `run`이
+   * 값을 안 바꿔서 가드가 없어도 조용합니다. 여기서는 `비우기` 위에서 뗍니다 — 뚫리면
+   * **빈 값이 나갑니다.** */
+  it("다른 버튼에서 떼면 그 버튼의 일도 일어나지 않는다", () => {
+    vi.useFakeTimers();
+    const onChange = openClearable();
+    pointer("pointerDown", screen.getByRole("button", { name: "지금" }), { pointerId: 11, clientX: 10, clientY: 10, button: 0, isPrimary: true });
+    pointer("pointerUp", screen.getByRole("button", { name: "비우기" }), { pointerId: 11, clientX: 10, clientY: 10 });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  /* 멀티터치 — 두 번째 손가락의 뗌이 첫 손가락이 누른 버튼을 확정하면 안 됩니다. */
+  it("다른 손가락이 떼면 확정하지 않는다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2031-05-08T15:00:00Z"));
+    const onChange = openTime();
+    const now = screen.getByRole("button", { name: "지금" });
+    pointer("pointerDown", now, { pointerId: 12, clientX: 10, clientY: 10, button: 0, isPrimary: true });
+    pointer("pointerUp", now, { pointerId: 13, clientX: 10, clientY: 10 });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  /* 시작 기록은 뗄 때 지웁니다. 안 지우면 **누름 없는 뗌**이 그 기록으로 또 확정합니다 —
+   * 포인터가 취소되거나 누름이 다른 요소로 간 뒤에 오는 뗌이 그 모양입니다. */
+  it("누름 없이 또 떼도 두 번 확정되지 않는다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2031-05-08T15:00:00Z"));
+    const onChange = openTime();
+    const now = screen.getByRole("button", { name: "지금" });
+    pointer("pointerDown", now, { pointerId: 14, clientX: 10, clientY: 10, button: 0, isPrimary: true });
+    pointer("pointerUp", now, { pointerId: 14, clientX: 10, clientY: 10 });
+    pointer("pointerUp", now, { pointerId: 14, clientX: 10, clientY: 10 });   // 누름 없이 또
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  /* 🔴 **삼킴 표식은 그 요소의 것입니다.** 터치에서는 click이 안 와서 표식이 남는데,
+   * 요소를 안 가리면 **다른 버튼의 첫 클릭**이 그 표식에 걸려 삼켜집니다. */
+  it("한 버튼을 탭한 뒤 다른 버튼을 클릭하면 그 버튼은 제 일을 한다", () => {
+    vi.useFakeTimers();
+    const onChange = openClearable();
+    const now = screen.getByRole("button", { name: "지금" });
+    pointer("pointerDown", now, { pointerId: 15, clientX: 10, clientY: 10, button: 0, isPrimary: true });
+    pointer("pointerUp", now, { pointerId: 15, clientX: 10, clientY: 10 });   // click은 안 옵니다(터치)
+    onChange.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "비우기" }));
+    expect(onChange).toHaveBeenCalledWith("");
+  });
+
+  /* 🔴 **삼키는 것은 한 번뿐입니다.** click 하나를 삼킨 뒤 표식을 안 지우면 그 버튼은
+   * 영영 클릭으로 안 눌립니다. */
+  it("삼키는 것은 한 번뿐이다 — 다음 클릭은 제 일을 한다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2031-05-08T15:00:00Z"));
+    const onChange = openTime();
+    const now = screen.getByRole("button", { name: "지금" });
+    pointer("pointerDown", now, { pointerId: 16, clientX: 10, clientY: 10, button: 0, isPrimary: true });
+    pointer("pointerUp", now, { pointerId: 16, clientX: 10, clientY: 10 });
+    fireEvent.click(now);   // 이 하나는 삼켜지는 것이 맞습니다
+    onChange.mockClear();
+    fireEvent.click(now);   // 그다음은 진짜 클릭입니다
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  /* 🔴 **누름이 표식을 지웁니다.** 터치 탭이 표식을 남긴 뒤, 같은 버튼에서 **슬롭을 넘겨
+   * 거부된** 마우스 제스처가 오면 뗌은 표식을 안 세웁니다 — 그런데 브라우저는 click을
+   * 보냅니다(누름과 뗌이 같은 요소이므로). 누름이 안 지웠으면 그 click이 옛 표식에 걸려
+   * 삼켜지고, **버튼이 안 눌립니다.** 소스 주석이 이 실패를 적어 두고도 검사가 없었습니다. */
+  it("탭이 남긴 표식은 다음 누름이 지운다 — 거부된 제스처 뒤의 클릭이 살아 있다", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2031-05-08T15:00:00Z"));
+    const onChange = openTime();
+    const now = screen.getByRole("button", { name: "지금" });
+    pointer("pointerDown", now, { pointerId: 17, clientX: 10, clientY: 10, button: 0, isPrimary: true });
+    pointer("pointerUp", now, { pointerId: 17, clientX: 10, clientY: 10 });   // 터치 탭 — click 없음, 표식 남음
+    onChange.mockClear();
+    pointer("pointerDown", now, { pointerId: 18, clientX: 10, clientY: 10, button: 0, isPrimary: true });
+    pointer("pointerUp", now, { pointerId: 18, clientX: 10, clientY: 60 });   // 슬롭 초과 — 뗌은 확정 안 함
+    fireEvent.click(now);   // 그래도 브라우저는 click을 보냅니다
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
   it("다른 버튼에서 떼면 확정하지 않는다", () => {
     vi.useFakeTimers();
     const onChange = openTime();
