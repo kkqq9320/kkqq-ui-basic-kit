@@ -7498,3 +7498,48 @@ describe("비보안 컨텍스트 — 클립보드 API가 없을 때", () => {
     expect(event.defaultPrevented).toBe(true);
   });
 });
+
+/* ── §16 ③: 휠의 시각 상태는 data-* 축이 칠한다 ──────────────────────────────
+ *
+ * 🔴 **이관 직후 재 보니 CSS 쪽이 비어 있었습니다.** `data-motion` 세 자리를 클래스로
+ * 되돌리는 변이가 **검사 하나**만 빨갛게 했고, 그것도 규칙 *순서*를 보다가 우연히 걸린
+ * 것이었습니다. 슬라이드가 영영 안 재생돼도 조용했을 자리입니다 — 사이드바에서 CSS만
+ * 되돌리는 변이가 1664개 초록이었던 것과 같은 구멍입니다.
+ *
+ * 붙이는 쪽(값·방향)은 동작 검사 아홉이 이미 봅니다. 여기는 **칠하는 쪽**과 **둘 다**입니다. */
+describe("휠의 시각 상태는 data-* 축이 칠한다 (§16 ③)", () => {
+  it("모션 두 값이 각자 자기 슬라이드를 칠한다", () => {
+    expect(wheelPickerCssSource.length).toBeGreaterThan(1000);
+    expect([
+      wheelPickerCssSource.includes(`.wheel-column[data-motion="next"] .wheel-values { animation: wheel-slide-next`),
+      wheelPickerCssSource.includes(`.wheel-column[data-motion="previous"] .wheel-values { animation: wheel-slide-previous`),
+    ]).toEqual([true, true]);
+  });
+
+  /* 축을 통째로 보는 자리 셋(액센트 행 팝 · 축소 모션 예외 둘)은 값을 안 가립니다.
+   * 🟢 축으로 묶은 덕에 `:is(.moving-next, .moving-previous)`가 필요 없어졌습니다 —
+   * 명시도는 (0,2,0)으로 같고, 뜻 없는 조합이 애초에 표현되지 않습니다. */
+  it("값을 안 가리는 자리는 축만 본다 — :is()가 없다", () => {
+    expect(wheelPickerCssSource.split(".wheel-column[data-motion] ").length - 1).toBe(3);
+    expect(wheelPickerCssSource).not.toContain(":is(.moving");
+  });
+
+  it("홀드 막대는 그 속성이 칠한다", () => {
+    expect(wheelPickerCssSource).toContain(".wheel-column[data-holding]::after { content:");
+  });
+
+  it("클래스 사본은 CSS에 안 남아 있다", () => {
+    expect(wheelPickerCssSource).not.toMatch(/\.(moving-next|moving-previous|holding)\b/);
+  });
+
+  /* **둘 다** 칸 — 위 둘만으로는 클래스를 되살려도 안 빨개집니다. */
+  it("렌더된 열에 클래스 사본이 없다 — class는 부품 이름만 싣는다", () => {
+    render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} />);
+    fireEvent.click(fieldOf("거래 날짜"));
+    fireEvent.click(screen.getByRole("button", { name: "연도 다음" }));
+
+    const year = screen.getByRole("group", { name: /^연도/ });
+    // ⚠️ `active`·`entering`은 아직 클래스입니다(다음 라운드) — 이 검사는 **이번에 옮긴 둘**만 봅니다.
+    expect([year.getAttribute("data-motion"), /moving-|holding/.test(year.className)]).toEqual(["next", false]);
+  });
+});
