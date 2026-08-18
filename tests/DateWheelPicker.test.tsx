@@ -15,6 +15,7 @@ import { type WheelUnit } from "../src/model/wheelModel";
 import { setHourFormat, getWheelRowsPerSide, setWheelRowsPerSide } from "../src/settings";
 import { Dialog } from "../src/surfaces/Dialog";
 import wheelPickerCssSource from "../css/wheel-picker.css?raw";
+import columnHoldSource from "../src/controls/columnHold.ts?raw";
 import tokensCssSource from "../css/tokens.css?raw";
 
 // vi.restoreAllMocks()가 필요합니다 — "지금 버튼이 시각을 가진 값에서도 열 모션을
@@ -5990,14 +5991,17 @@ describe("시각 묶음 경계 여백 (오너 리포트 5번)", () => {
   });
 });
 
-// ── 오너 리포트 4번 — 휠의 행을 2초 길게 누르면 그 열이 초기화된다 ────────────
+// ── 오너 리포트 4번 — 휠의 행을 길게 누르면 그 열이 초기화된다 ────────────────
 //
 // 제스처가 **± 버튼이 아니라 행**인 것은 오너 결정이다: ± 버튼에 걸면 그 버튼이 나중에
 // "꾹 눌러 연속 증감"을 가질 수 없게 되고, 그건 되돌릴 수 없는 문이다.
 describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () => {
-  // 오너 리포트 5차로 2000 → 700ms. 소스의 `WHEEL_HOLD_MS`와 같은 수여야 하고,
-  // 아래 "임계 전에 떼면"은 이 값에서 400을 빼므로 임계가 바뀌면 그 검사가 먼저 깨집니다 —
-  // 실제로 깨져서 알았습니다. 그게 이 상수를 검사에 둔 값어치입니다.
+  // 임계는 **500ms**다. 이력: 오너가 처음 2초로 정했고(2026-08-13) 실기기에서 길다고
+  // 판단해 내렸다(오너 리포트 5차). 살아 있는 수는 `src/controls/columnHold.ts`의
+  // `HOLD_MS`이고, 아래 "수 셋이 한 벌" 검사가 그것과 CSS를 대조한다.
+  //
+  // 아래 "임계 전에 떼면"은 이 값에서 400을 빼므로 임계가 바뀌면 그 검사가 먼저 깨진다 —
+  // 실제로 깨져서 알았다. 그게 이 상수를 검사에 둔 값어치다.
   const HOLD_MS = 500;
 
   const openTime = (value: string, onChange = vi.fn()) => {
@@ -6010,7 +6014,7 @@ describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () =
     return rowAt(column, offset);
   };
 
-  it("초 열의 행을 2초 누르면 초가 0이 된다", () => {
+  it("초 열의 행을 임계만큼 누르면 초가 0이 된다", () => {
     vi.useFakeTimers();
     const onChange = openTime("2026-08-12T15:07:41");
     const row = rowOf("초", 0);
@@ -6413,7 +6417,7 @@ describe("팝오버 바닥 폭 (오너 리포트: 데스크톱에서 답답함)"
 
 // ── 오너 리포트 5차 — 더블탭으로도 초기화, 그리고 홀드가 너무 느리다 ─────────────
 //
-// "지금 홀드로 0이나 1로 설정하는 게 너무 느린데" → 2000ms를 700ms로.
+// "지금 홀드로 0이나 1로 설정하는 게 너무 느린데" → 2000ms를 내렸다(지금은 500ms).
 // "더블탭으로 0이나 1로 할 수 있게 해" → **가운데(선택된) 행**을 두 번 탭하면 초기화.
 //
 // 🔴 **왜 가운데 행만인가.** 오프셋 행을 연달아 탭하는 것은 **이미 뜻이 있는 조작**입니다 —
@@ -6497,16 +6501,41 @@ describe("DateWheelPicker 더블탭 초기화 (오너 리포트 5차)", () => {
    * 홀드 쪽 검사("이미 그 값이면 아무 일도 안 일어난다")가 이미 지킵니다. */
 });
 
+/** 소스에 살아 있는 홀드 임계. **수를 여기 박지 않습니다** — 박으면 세 번째 사본이 됩니다. */
+function holdThreshold(): number | null {
+  const found = /const HOLD_MS = (\d+);/.exec(columnHoldSource);
+  return found ? Number(found[1]) : null;
+}
+
+/** 진행 막대의 지연·성장. ⚠️ `prefers-reduced-motion` 쪽 규칙도 같은 애니메이션 이름을
+ *  쓰므로, **본 규칙에만 있는 선언**(`border-radius`)을 앵커로 씁니다 — 안 그러면 어느
+ *  규칙을 읽었는지가 파일 순서에 달립니다. 축소 모션 쪽은 바로 아래 검사가 따로 박습니다. */
+function holdBarTiming(): { grow: number; delay: number } | null {
+  const found = /border-radius: 0 2px 2px 0; animation: wheel-hold (\d+)ms linear (\d+)ms forwards;/.exec(wheelPickerCssSource);
+  return found ? { grow: Number(found[1]), delay: Number(found[2]) } : null;
+}
+
 describe("길게 누르기 임계와 진행 막대 (오너 리포트 5·6차)", () => {
-  /* 🔴 **수 셋이 한 벌입니다:** 소스의 `WHEEL_HOLD_MS`(500) = CSS의 지연(200) +
-   * 성장(300). 하나만 바꾸면 막대가 다 찼는데 안 걸리거나, 걸렸는데 덜 찬 채 사라집니다 —
-   * 이 저장소가 "조용히 거짓말하는 표시"라고 부르는 것입니다.
+  /* 🔴 **수 셋이 한 벌입니다:** 소스의 `HOLD_MS` = CSS의 지연 + 성장. 하나만 바꾸면 막대가
+   * 다 찼는데 안 걸리거나, 걸렸는데 덜 찬 채 사라집니다 — 이 저장소가 "조용히 거짓말하는
+   * 표시"라고 부르는 것입니다.
    *
    * **지연 200ms는 오너 요청입니다** — "더블 터치할 때는 하단에 바가 안 나오는 게 좋겠어".
    * 더블탭의 한 탭은 보통 50~120ms라 지연 안에 끝나고, 그동안 막대는 `width: 0`이라
-   * 아무것도 안 그립니다. */
-  it("막대의 지연과 성장을 합치면 홀드 임계 500ms다", () => {
-    expect(wheelPickerCssSource).toContain("animation: wheel-hold 300ms linear 200ms forwards;");
+   * 아무것도 안 그립니다.
+   *
+   * 🔴 **한동안 CSS 쪽 문자열만 박아 두고 있었습니다.** CSS 주석은 *"검사가 소스의
+   * `DATE_WHEEL_HOLD_MS`와 대조합니다"* 라고 적고 있었는데 **그런 대조는 없었고, 그 심볼은
+   * 애초에 존재한 적도 없습니다.** 그래서 임계가 2000 → 500으로 내려간 뒤에도 주석 여럿이
+   * 2000·700을 말한 채 남았습니다(2026-08-18 정정). 지금은 **양쪽 소스를 읽어 덧셈을
+   * 맞춥니다** — 수 자체는 안 박으므로 셋을 함께 옮기는 것은 자유입니다. */
+  it("전제: 양쪽 소스에서 수를 실제로 읽어냈다", () => {
+    expect([holdThreshold(), holdBarTiming()].every((value) => value !== null)).toBe(true);
+  });
+
+  it("CSS 막대의 지연 + 성장이 소스의 HOLD_MS와 같다", () => {
+    const bar = holdBarTiming()!;
+    expect(bar.delay + bar.grow).toBe(holdThreshold());
   });
 
   it("움직임을 줄이는 환경에서도 지연은 남는다 — 더블탭에서 번쩍이면 안 된다", () => {
