@@ -3,7 +3,7 @@
 버전은 태그로 답니다. 소비 프로젝트는 SHA 대신 태그로 걸 수 있습니다:
 
 ```bash
-npm i github:kkqq9320/kkqq-ui-basic-kit#v0.13.0
+npm i github:kkqq9320/kkqq-ui-basic-kit#v0.14.0
 ```
 
 `0.x`에서는 **minor 자리가 breaking 자리**입니다(semver의 0.x 규칙).
@@ -14,6 +14,37 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.13.0
 ---
 
 ## 미출시
+
+_(비어 있습니다. **여기를 지우지 마세요** — 다음 변경의 노트가 그 PR 안에서 이 아래로
+들어옵니다. 한동안은 릴리스가 절을 없애고 다음 사람이 다시 만드는 방식이었는데, 그러다
+한 번 통째로 빠졌습니다.)_
+
+---
+
+## v0.14.0 — 2026-08-18
+
+[전체 diff: v0.13.0...v0.14.0](https://github.com/kkqq9320/kkqq-ui-basic-kit/compare/v0.13.0...v0.14.0)
+
+**휠 픽커의 제스처 조각이 전부 자기 파일로 나갔고, 그 과정에서 살아 있는 결함 셋이
+나왔습니다.** 배럴로 import 하는 앱은 **한 글자도 고칠 것이 없습니다** — 공개 이름 변화 0
+(`publicApi.test.ts`가 지킵니다), 그리고 이번에는 deep import 경로도 안 바뀝니다
+(`v0.13.0`과 달리 파일이 **늘기만** 했습니다).
+
+```
+controls/undoStack.ts     되돌리기 스택      controls/columnMotion.ts  열 이동 모션
+controls/columnHold.ts    길게 눌러 초기화   controls/columnSwipe.ts   끌어서 굴리기
+browser/clipboard.ts      클립보드 접근
+
+WheelPicker.tsx   2444 → 2102줄   (컴포넌트 안 최상위 선언 98 → 80)
+검사              1575 → 1654
+```
+
+🔴 **고침 셋이 이 릴리스의 값입니다.** 정리는 사용자가 못 느끼지만 아래 셋은 느낍니다 —
+그리고 셋 다 **"떼기 전에 동사마다 감시자가 있는지 재라"** 는 절차가 찾아냈습니다.
+조각을 옮기려고 잰 자리에서 결함이 나온 것이지, 결함을 찾으러 간 것이 아닙니다.
+
+⚠️ **`v0.13.1`이 아니라 `v0.14.0`인 이유:** 깨지는 것은 없지만 이 저장소에서 patch는
+**문서 전용**입니다(`v0.4.1`이 세운 기준). 코드가 바뀌면 minor입니다.
 
 ### 🧹 정리 — 스와이프가 자기 파일로 (`controls/columnSwipe.ts`). **휠 픽커의 제스처 조각은 이것으로 끝입니다**
 
