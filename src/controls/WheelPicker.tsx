@@ -16,6 +16,7 @@ import { Pressable } from "./Pressable";
 import { shiftedFrom, type WheelShiftContext } from "./wheelShift";
 import { useColumnMotions } from "./columnMotion";
 import { useUndoStack } from "./undoStack";
+import { useColumnHold } from "./columnHold";
 
 import { Button } from "./Button";
 import { createPortal } from "react-dom";
@@ -163,10 +164,6 @@ export const DEFAULT_WHEEL_LABELS = {
 } satisfies WheelLabels;
 
 /** 양끝 ±3은 보이지 않지만 미리 그려두는 프리로드 행입니다. */
-/** 휠의 행을 이만큼 누르고 있으면 그 열이 초기화됩니다(오너 리포트 4번, 오너 결정
- *  2026-08-13: 2초). 보통 앱의 롱프레스는 500~700ms이고 2초는 길게 느껴집니다 —
- *  오너가 그 값을 알고 고른 것이라 그대로 둡니다. 바꾸려면 여기 하나만 고치면 됩니다. */
-const WHEEL_HOLD_MS = 500;
 
 /** 두 탭이 이 안에 들어오면 더블탭입니다(오너 리포트 5차: "더블탭으로 0이나 1로 할 수
  *  있게 해"). 브라우저의 더블클릭 판정과 같은 눈금이고, 이보다 길게 잡으면 **천천히 두 번
@@ -1096,61 +1093,20 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    * 입니다(제스처들은 쓰기만 합니다). 그래서 **리타기팅이 하나도 없는 경우에도 필요합니다** —
    * 이미 그 값인 열을 길게 누르면 `resetColumn`이 조기 반환해 커밋 0 · 리마운트 0 · 캡처 0인데,
    * 손을 떼며 나는 click은 그대로 행에 도착합니다.
-   * (`tests/DateWheelPicker.test.tsx`의 *"초기화가 아무 일도 안 해도…"* 가 그 자리를 지킵니다.) */
-  const holdRef = useRef<{ unit: WheelUnit; pointerId: number; y: number; timer: number } | null>(null);
-  /* ⚠️ **누르고 있다는 표시는 상태입니다. `classList.add`가 아닙니다.** 이 열의
-   * `className`은 React가 매 렌더 통째로 다시 쓰므로, 직접 붙인 클래스는 바로 다음
-   * 렌더에 조용히 사라집니다 — 그리고 `pointerdown` 핸들러가 `setActiveUnit`을 부르므로
-   * 그 렌더는 **거의 언제나 일어납니다.** 처음에 `classList`로 붙였다가 검사가 잡았습니다. */
-  const [holdingUnit, setHoldingUnit] = useState<WheelUnit | null>(null);
-
-  function cancelHold() {
-    const hold = holdRef.current;
-    setHoldingUnit(null);
-    if (!hold) return;
-    window.clearTimeout(hold.timer);
-    /* ⚠️ **이 줄은 오늘 관찰 가능한 차이를 안 만듭니다**(2026-08-18 실측: 지워도 1630개 전부 초록).
-     * 그래도 남깁니다 — `holdRef.current`의 뜻이 *"지금 대기 중인 홀드"* 이고, 이 줄이 그
-     * 뜻을 참으로 만듭니다. 홀드를 자기 파일로 떼면 그 뜻이 **모듈의 불변식**이 되므로,
-     * 세 줄짜리 자가 치유(다음 `armHold`이 어차피 덮어씀)에 기대 깨 두는 것은 남는 장사가
-     * 아닙니다. (곁가지: 이 환경의 `window.setTimeout`은 숫자가 아니라 Node `Timeout` 객체를
-     * 돌려주므로 "타이머 id 재사용"이라는 사건 자체가 여기서는 안 일어납니다.) */
-    holdRef.current = null;
-  }
-
-  function armHold(unit: WheelUnit, pointerId: number, y: number) {
-    /* 🔴 **살아 있는 홀드는 하나입니다.** `holdRef`가 싱글턴이고 `cancelHold`은 그것만 보므로,
-     * 이 줄 없이 두 번째 누름이 덮어쓰면 앞 타이머는 **어떤 취소 경로로도 안 닿습니다** —
-     * 두 손가락을 다 뗀 뒤에 발동해 아무도 안 누르는데 값이 바뀝니다. 두 손가락 검사 둘이
-     * 그 자리를 지킵니다(`tests/DateWheelPicker.test.tsx`). */
-    cancelHold();
-    setHoldingUnit(unit);
-    const timer = window.setTimeout(() => {
-      /* ⚠️ 위 `cancelHold`의 같은 줄과 **같은 이유로** 남깁니다 — 지워도 1630개 전부
-       * 초록이지만(실측), 발동한 뒤에도 `holdRef`가 차 있으면 *"대기 중인 홀드"* 가 거짓이 됩니다. */
-      holdRef.current = null;
-      setHoldingUnit(null);
+   * (`tests/DateWheelPicker.test.tsx`의 *"초기화가 아무 일도 안 해도…"* 가 그 자리를 지킵니다.)
+   *
+   * **눌림을 시간으로 재는 일 자체는 `controls/columnHold.ts`에 있습니다** — 상태 둘(대기 중인
+   * 홀드 · 눈에 보이는 표시)과 출구 다섯(재무장·발동·취소·언마운트·비활성)의 격자입니다.
+   * 여기 남는 것은 **발동했을 때 이 컨트롤에서 무슨 뜻인가**입니다. */
+  const hold = useColumnHold({
+    active: open,
+    onHold: (unit) => {
       // 손 떼기가 만드는 클릭이 행의 평범한 이동으로 또 값을 바꾸지 않게 합니다.
       suppressColumnClickRef.current = true;
       swipeRef.current = null;
       resetColumn(unit);
-    }, WHEEL_HOLD_MS);
-    holdRef.current = { unit, pointerId, y, timer };
-  }
-
-  /* 홀드의 출구는 넷이 아니라 **다섯**입니다 — 재무장 · 발동 · 취소(움직임·손 떼기·포인터 취소) ·
-   * 언마운트, 그리고 **팝오버 닫힘.** 마지막 하나가 한동안 빠져 있었습니다.
-   *
-   * 🔴 누른 채 Escape나 안드로이드 뒤로가기로 **취소**하면 팝오버가 닫히고 값도 되돌아가는데,
-   * 500ms 뒤에 초기화가 발동해 **값이 다시 바뀌었습니다.** 이 킷의 주 타깃이 모바일이고 거기서
-   * 취소 수단은 뒤로가기뿐입니다(`useBackToClose(open, cancelAndClose)`) — 데스크톱 전용 구멍이 아닙니다.
-   *
-   * ⚠️ **`cancelAndClose`에 거는 것으로는 모자랍니다** — 소비자가 홀드 중에 `disabled`를 켜면
-   * `useLayoutEffect(() => { if (disabled) setOpen(false); }, [disabled])`가 그 함수를 **안 거치고**
-   * 닫습니다. 실측: 그 수정은 `disabled` 검사에서 빨간 채로 남습니다. 그래서 닫힘 **자체**에 겁니다.
-   *
-   * 반환하는 정리는 그대로 언마운트를 맡습니다 — 사라진 필드에 onChange를 보내는 자리입니다(§4.2). */
-  useEffect(() => { if (!open) cancelHold(); return cancelHold; }, [open]);
+    },
+  });
 
   /* 12시간제에서 **시 열에 친 숫자는 값이 아니라 읽기**입니다(3단계, 스펙 §7) —
    * 오후에 `3`을 치면 15시입니다. 어느 절반인지는 지금 값이 정하므로, 타이핑 경로
@@ -2265,7 +2221,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
 
             `onPointerDown`의 `setActiveUnit(unit)`이 **포인터 경로가 활성 세그먼트를 따라가는
             유일한 길**입니다(열의 `onFocus`가 하던 일). 지우지 마세요. */}
-        {columns.map((unit) => { const motion = columnMotions.of(unit); const unitMark = model.columnMark?.(unit, fields) ?? ""; return <section className={`wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}${holdingUnit === unit ? " holding" : ""}`} aria-label={columnName(unit)} data-unit={unit} role="group" style={{ "--wheel-unit-mark": JSON.stringify(unitMark) } as CSSProperties} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; columnMotions.clear(unit); undo.beginGesture(baseValue); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; armHold(unit, event.pointerId, event.clientY); }} onPointerMove={(event) => { const hold = holdRef.current; if (hold && hold.pointerId === event.pointerId && Math.abs(event.clientY - hold.y) > 4) cancelHold(); moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget); }} onPointerUp={(event) => { cancelHold(); finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget); undo.endGesture(); }} onPointerCancel={(event) => { cancelHold(); undo.endGesture(); swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {columns.map((unit) => { const motion = columnMotions.of(unit); const unitMark = model.columnMark?.(unit, fields) ?? ""; return <section className={`wheel-column${resolvedActiveUnit === unit ? " active" : ""}${entering ? " entering" : ""}${motion.playing ? ` moving-${motion.direction}` : ""}${hold.holdingUnit === unit ? " holding" : ""}`} aria-label={columnName(unit)} data-unit={unit} role="group" style={{ "--wheel-unit-mark": JSON.stringify(unitMark) } as CSSProperties} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; columnMotions.clear(unit); undo.beginGesture(baseValue); swipeRef.current = { unit, y: event.clientY, pointerId: event.pointerId, value: baseValue, captured: false }; hold.arm(unit, event.pointerId, event.clientY); }} onPointerMove={(event) => { hold.cancelIfMoved(event.pointerId, event.clientY); moveSwipe(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget); }} onPointerUp={(event) => { hold.cancel(); finishSwipe(unit, event.clientY, event.pointerId, event.currentTarget); undo.endGesture(); }} onPointerCancel={(event) => { hold.cancel(); undo.endGesture(); swipeRef.current = null; clearSwipeVisual(event.currentTarget); releaseColumnClickSuppression(); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <Pressable className="wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></Pressable>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이
