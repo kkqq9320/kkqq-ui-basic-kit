@@ -3,7 +3,7 @@
 버전은 태그로 답니다. 소비 프로젝트는 SHA 대신 태그로 걸 수 있습니다:
 
 ```bash
-npm i github:kkqq9320/kkqq-ui-basic-kit#v0.12.0
+npm i github:kkqq9320/kkqq-ui-basic-kit#v0.13.0
 ```
 
 `0.x`에서는 **minor 자리가 breaking 자리**입니다(semver의 0.x 규칙).
@@ -13,10 +13,26 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.12.0
 
 ---
 
-## 미출시
+## v0.13.0 — 2026-08-18
 
-**`src/` 이름·자리 정리 2라운드 — 소비자에게 보이는 변화가 0입니다.** 공개 이름이
-하나도 안 바뀌었고(`publicApi.test.ts`가 지킵니다) 파일만 갈라졌습니다.
+[전체 diff: v0.12.0...v0.13.0](https://github.com/kkqq9320/kkqq-ui-basic-kit/compare/v0.12.0...v0.13.0)
+
+**`src/` 정리 라운드 넷 + 이음매 셋.** 공개 이름은 **하나도 안 바뀌었고**
+(`publicApi.test.ts`가 지킵니다) 배럴로 import 하는 앱은 **한 글자도 고칠 것이
+없습니다.**
+
+🔴 **그런데 minor입니다 — `exports["./src/*"]`의 경로가 전부 바뀌었기 때문입니다.**
+
+```diff
+- import { Select } from "kkqq-ui-basic-kit/src/Select";
++ import { Select } from "kkqq-ui-basic-kit/src/controls/Select";
+```
+
+문서는 deep import를 가르친 적이 없고 실측상 그렇게 쓰는 소비자도 없지만, 그 경로는
+`package.json`이 열어 둔 표면입니다. 쓰던 앱은 **빌드에서** 깨집니다 — 화면이 달라지는
+것보다 큰 소리이고, `v0.4.0`에서 세운 규칙(*"타입만 보지 말고 소비자가 볼 것으로
+판단하라"*)이 여기서도 minor를 가리킵니다. 태그로 핀을 거는 킷에서 minor는 비용이 0이고,
+낮춰 부르는 쪽이 누군가를 놀라게 합니다.
 
 ### 더해진 것
 
@@ -29,6 +45,12 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.12.0
   지금은 화면의 버튼 77개 전부 `type="button"`입니다(브라우저 실측).
 
   `tests/pressable.test.tsx`가 **`src/`에 날 `<button>`이 다시 생기면** 빨개집니다.
+
+- **`AppShell`의 가상 키보드 보정을 `browser/keyboardCompensation.ts`로 떼어냈습니다** —
+  🔴 그 파일은 1063줄이었지만 **컴포넌트는 58줄**이었고 나머지가 전부 이것이었습니다.
+  이음매를 재니 교차 참조가 **일곱 개**뿐이라 한 줄이 그대로 나왔습니다.
+  `AppShell.tsx`는 **162줄**이 됐습니다. `browser/`에 둔 이유는 `visualViewport.ts`의
+  `useVirtualKeyboard`가 이 둘의 **입력**이기 때문입니다.
 
 - **휠의 이동 계산을 `controls/wheelShift.ts`로 떼어냈습니다** — "지금 값에서 이 열을
   이만큼 옮기면 무슨 값인가". 밖에서 물어오는 것이 **다섯**뿐이고 전부 입력이라, 훅이
