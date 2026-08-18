@@ -1138,8 +1138,19 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     holdRef.current = { unit, pointerId, y, timer };
   }
 
-  // 언마운트로 타이머가 살아남지 않게 합니다 — 사라진 필드에 onChange를 보내는 자리입니다(§4.2).
-  useEffect(() => cancelHold, []);
+  /* 홀드의 출구는 넷이 아니라 **다섯**입니다 — 재무장 · 발동 · 취소(움직임·손 떼기·포인터 취소) ·
+   * 언마운트, 그리고 **팝오버 닫힘.** 마지막 하나가 한동안 빠져 있었습니다.
+   *
+   * 🔴 누른 채 Escape나 안드로이드 뒤로가기로 **취소**하면 팝오버가 닫히고 값도 되돌아가는데,
+   * 500ms 뒤에 초기화가 발동해 **값이 다시 바뀌었습니다.** 이 킷의 주 타깃이 모바일이고 거기서
+   * 취소 수단은 뒤로가기뿐입니다(`useBackToClose(open, cancelAndClose)`) — 데스크톱 전용 구멍이 아닙니다.
+   *
+   * ⚠️ **`cancelAndClose`에 거는 것으로는 모자랍니다** — 소비자가 홀드 중에 `disabled`를 켜면
+   * `useLayoutEffect(() => { if (disabled) setOpen(false); }, [disabled])`가 그 함수를 **안 거치고**
+   * 닫습니다. 실측: 그 수정은 `disabled` 검사에서 빨간 채로 남습니다. 그래서 닫힘 **자체**에 겁니다.
+   *
+   * 반환하는 정리는 그대로 언마운트를 맡습니다 — 사라진 필드에 onChange를 보내는 자리입니다(§4.2). */
+  useEffect(() => { if (!open) cancelHold(); return cancelHold; }, [open]);
 
   /* 12시간제에서 **시 열에 친 숫자는 값이 아니라 읽기**입니다(3단계, 스펙 §7) —
    * 오후에 `3`을 치면 15시입니다. 어느 절반인지는 지금 값이 정하므로, 타이핑 경로
