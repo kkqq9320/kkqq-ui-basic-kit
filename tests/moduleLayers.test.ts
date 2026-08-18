@@ -138,7 +138,12 @@ describe("src/ 파일 이름 규칙과 의존 방향 (PRINCIPLES §15)", () => {
    * 조용하고, 누가 파일을 실제로 쪼개면 빨개집니다. **그때가 표를 고칠 때**입니다. */
   it("§15가 적은 크기가 실제 파일과 같은 자릿수다", () => {
     const claims = [...principles.matchAll(/`([\w/]+\.tsx?)` \(약 (\d+)줄\)/g)].map((match) => ({ file: match[1], claimed: Number(match[2]) }));
-    expect(claims.length).toBeGreaterThan(2);
+    /* 개수로 고정하지 않습니다 — 이 표는 **줄어드는 것이 목적**이라(파일을 쪼갤 때마다
+     * 행이 빠집니다) 개수 하한은 곧 거짓말이 됩니다. 실제로 `AppShell`을 쪼개자마자
+     * `> 2`가 빨개졌습니다. 대신 **아직 남아 있는 것 하나를 이름으로** 짚습니다 —
+     * 그것이 쪼개지면 그때 이 줄을 고치는 것이 맞습니다. */
+    expect(claims.length).toBeGreaterThan(0);
+    expect(claims.map((claim) => claim.file)).toContain("controls/WheelPicker.tsx");
     // 끝 개행 뒤의 빈 조각은 줄이 아닙니다 — `wc -l`과 같은 셈을 씁니다.
     const lineCount = (source: string | undefined) => (source === undefined ? undefined : source.split("\n").length - (source.endsWith("\n") ? 1 : 0));
     const wrong = claims
