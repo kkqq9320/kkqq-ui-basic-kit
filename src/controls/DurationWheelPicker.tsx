@@ -12,7 +12,7 @@
  */
 import { WheelPicker, DEFAULT_WHEEL_LABELS, type WheelPickerProps, type WheelLabels } from "./WheelPicker";
 import { durationModel } from "../model/duration";
-import type { WheelUnit } from "../model/instant";
+import type { WheelUnit } from "../model/wheelModel";
 
 const DURATION_FIELDS: WheelUnit[] = ["hour", "minute"];
 

@@ -10,7 +10,8 @@
  * 기본으로 안 그리는 것과 같습니다 — 초가 필요하면 `["hour","minute","second"]`.
  */
 import { WheelPicker, type WheelPickerProps } from "./WheelPicker";
-import { instantModel, type WheelUnit } from "../model/instant";
+import { instantModel } from "../model/instant";
+import { type WheelUnit } from "../model/wheelModel";
 
 const TIME_FIELDS: WheelUnit[] = ["hour", "minute"];
 

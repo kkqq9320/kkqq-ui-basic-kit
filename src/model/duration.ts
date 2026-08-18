@@ -25,7 +25,7 @@
  * 하는 일은 **휠이 어디서 순환하는가**뿐이고, 45일이 필요하면 월을 안 그리면 됩니다
  * (그때 일이 맨 위라 무제한입니다).
  */
-import type { WheelUnit, UnitParts, WheelModel, WheelStep, DateTriggerPart, TypingStep, HourDisplay, ValueFamily } from "./instant";
+import type { WheelUnit, UnitParts, WheelModel, WheelStep, DateTriggerPart, TypingStep, HourDisplay, ValueFamily } from "./wheelModel";
 
 /** 사다리. 시점과 **같은 순서**입니다 — 큰 단위가 앞. */
 const LADDER: WheelUnit[] = ["year", "month", "day", "hour", "minute", "second"];

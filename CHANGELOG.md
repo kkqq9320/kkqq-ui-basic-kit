@@ -30,6 +30,13 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.12.0
 
   `tests/pressable.test.tsx`가 **`src/`에 날 `<button>`이 다시 생기면** 빨개집니다.
 
+- **휠 모델의 계약을 `model/wheelModel.ts`로 떼어냈습니다** — 시점과 기간이 **둘 다
+  구현하는** 타입 아홉(`WheelUnit`·`WheelModel`·`WheelStep`·`TypingStep` …)이 시점
+  구현 파일 안에 살고 있었습니다. `model/duration.ts`가 `model/instant.ts`에서
+  가져가던 것이 **구현이 아니라 그 타입들뿐**이라 드러난 자리입니다.
+
+  🟢 공개 이름 변화 0 — 배럴로 나가는 `WheelUnit`·`HourFormat` 등은 그대로입니다.
+
 - **폴더 안의 되풀이 이름 넷을 걷었습니다.** 폴더가 이미 말한 것을 파일 이름이 다시
   말하면 이름이 아무것도 안 말합니다 — `shortcuts/shortcuts.ts`를 열기 전에는 안에
   무엇이 있는지 알 수 없었습니다.

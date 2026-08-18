@@ -35,8 +35,8 @@
  * 조용히 어긋납니다(이 저장소가 숫자로 이미 두 번 겪은 자리). **타입 전용 import라
  * 런타임 의존은 0**이고, 모델 쪽의 "아무것도 import 하지 않는다" 계약과도 어긋나지
  * 않습니다 — 방향이 반대입니다. */
-export type { HourFormat } from "./model/instant";
-import type { HourFormat } from "./model/instant";
+export type { HourFormat } from "./model/wheelModel";
+import type { HourFormat } from "./model/wheelModel";
 
 /* ---- 저장 ------------------------------------------------------------------
  *

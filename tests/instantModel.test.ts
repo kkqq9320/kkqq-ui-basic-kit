@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { flushBuffer, typeDigit, withUnitValue, lastDayOf, shiftDateValue, normalizeToFields, rangeKeyLength, validDateValue, dateTriggerParts, dateWheelLabel, instantModel, UNIT_LADDER, unitFloor, unitCeiling, unitDigits, familyOf, parseValue, serializeValue, isContiguous, comparisonPrecision, usableBound, outOfRange, clampToRange, meridiemOf, hourFromTwelve, twelveHourText, resetTarget, parsePasted, stepOf, snapToStep, snapValue } from "../src/model/instant";
-import type { WheelUnit } from "../src/model/instant";
+import type { WheelUnit } from "../src/model/wheelModel";
 
 const WEEKDAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
 
