@@ -1324,11 +1324,11 @@ describe("DateWheelPicker 스와이프", () => {
 
   // [그림자 1/3] 끄는 동안 열은 `dragging`이다 — `Math.abs(offset) > 2` 임계.
   //
-  // ⚠️ **move를 넷으로 나눠 미는 것이 필수입니다.** `MOVE_TOLERANCE = 4`(columnHold)와
-  // `|offset| > 2`(즉 `|delta| > 4`)가 **같은 술어**라, 홀드를 끊는 move와 클래스를 붙이는
-  // move가 같은 프레임이면 React가 `className`을 다시 쓰면서 직접 붙인 클래스를 지웁니다
-  // (`columnHold.ts`의 `holdingUnit` 주석이 같은 함정을 이미 적어 두었습니다). 첫 move로
-  // 그 프레임을 태우고 나머지로 임계를 넘깁니다.
+  // ✅ **그 함정은 닫혔습니다**(2026-08-19). 예전에는 `MOVE_TOLERANCE = 4`(columnHold)와
+  // `|offset| > 2`(즉 `|delta| > 4`)가 **같은 술어**라, 홀드를 끊는 move와 표시를 붙이는
+  // move가 같은 프레임이면 React가 `className`을 다시 쓰면서 직접 붙인 클래스를 지웠고,
+  // 그래서 move를 넷으로 나눠 밀었습니다. 지금 표시는 `data-dragging`이고 **React가**
+  // **관리하지 않는 속성**이라 안 지워집니다. 넷은 실제 제스처에 가까워 그대로 뒀습니다.
   //
   // ⚠️ **`MOVE_TOLERANCE`를 바꾸면 이 검사는 빨개집니다**(측정 범위 2·4·9·12에서는 초록).
   // 그것은 결함이 아니라 성질입니다 — 이 검사는 fail-closed입니다. "놓으면 dragging이
@@ -1338,6 +1338,22 @@ describe("DateWheelPicker 스와이프", () => {
     pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
     for (const clientY of [95, 90, 85, 82]) pointer("pointerMove", year, { pointerId: 7, clientY, buttons: 1 });
     expect(year.hasAttribute("data-dragging")).toBe(true);
+  });
+
+  /* 🔴 **그 임계에 감시자가 없었습니다.** `Math.abs(offset) > 2`를 통째로 없애는 변이가
+   * **511개 전부 초록**이었습니다(2026-08-19). 위 검사는 임계를 **넘긴** 쪽만 봅니다.
+   *
+   * 임계가 하는 일은 `animation: none !important`를 **언제 켜는가**입니다 — 1~2px 흔들림에
+   * 켜지면 탭에 가까운 조작에서 열의 애니메이션이 통째로 죽습니다. 그래서 "안 켜지는 쪽"을
+   * 따로 잽니다.
+   *
+   * ⚠️ 전제를 같이 둡니다 — `--wheel-drag-offset`이 실제로 쓰였는지 안 보면, move가 아예
+   * 안 걸린 경우와 **구별되지 않아** 공허하게 통과합니다. */
+  it("2px 이하로 흔들린 열에는 끄는 중 표시가 안 붙는다 — 임계", () => {
+    const { year } = openWheel();
+    pointer("pointerDown", year, { pointerId: 9, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", year, { pointerId: 9, clientY: 104, buttons: 1 });   // delta 4 → offset 2
+    expect([year.style.getPropertyValue("--wheel-drag-offset"), year.hasAttribute("data-dragging")]).toEqual(["2px", false]);
   });
 
   // [그림자 2/3] 손가락이 떠나면 열은 원래 자리로 돌아온다 — `clearSwipeVisual`의
