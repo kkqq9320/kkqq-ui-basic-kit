@@ -15,6 +15,27 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.14.0
 
 ## 미출시
 
+### 🔴 BREAKING — 상태 클래스 셋이 속성이 됐습니다 (§16)
+
+**클래스는 부품의 이름이고 상태는 속성입니다**(§16). 이 셋은 **결정이 필요 없는** 자리라
+먼저 옮겼습니다 — 소비자가 이 클래스를 직접 칠하고 있었다면 고쳐야 합니다.
+
+```diff
+- .panel-grid.stretch                    + .panel-grid[data-align="stretch"]
+- .sidebar.mobile-open                   + .sidebar[data-mobile-drawer="open"]
+- .wheel-meridiem button.selected        + .wheel-meridiem button[aria-pressed="true"]
+```
+
+🟢 **명시도는 셋 다 그대로입니다** — 속성 선택자는 클래스와 같은 (0,1,0)입니다. 그래서
+앱이 걸어 둔 조정이 흔들리지 않습니다.
+
+⚠️ 오전/오후 버튼은 `aria-pressed`를 **이미** 갖고 있었고 `.selected`는 같은 요소에 같은
+조건으로 붙은 **순수한 사본**이었습니다. 둘이 갈리면 화면과 스크린리더가 다른 말을 합니다.
+
+📌 **나머지 스물여섯은 안 건드렸습니다.** 대부분 *"부모가 클래스를 달고 자식이
+`aria-expanded`를 갖는"* 같은 모양에 걸려 있어 **한 결정이 열하나를 같이 정합니다** —
+§16의 표에 적어 뒀습니다.
+
 ### 📐 홀드 임계 표기를 살아 있는 수로 맞췄습니다 (동작 변화 0)
 
 길게 누르기 임계는 **500ms**인데(오너 리포트 5차로 2초에서 내려왔습니다) 저장소 곳곳의

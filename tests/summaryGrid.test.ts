@@ -104,10 +104,10 @@ describe("패널 그리드는 앱이 묶은 그룹이 줄을 다 쓰게 한다",
     expect(pageCssSource).toMatch(/^\.panel-grid\s*>\s*\.panel\s*\{[^}]*margin-bottom:\s*0/m);
   });
 
-  /* `stretch`는 위 `align-items: start`를 되돌리는 것이라, 규칙이 없으면 prop이 클래스를
+  /* `stretch`는 위 `align-items: start`를 되돌리는 것이라, 규칙이 없으면 prop이 표시를
    * 붙여도 **아무 일도 안 일어납니다** — 화면에서만 조용히 안 먹는 종류입니다. */
   it("stretch 규칙이 있고 align-items를 되돌린다", () => {
-    expect(pageCssSource).toMatch(/^\.panel-grid\.stretch\s*\{[^}]*align-items:\s*stretch/m);
+    expect(pageCssSource).toMatch(/^\.panel-grid\[data-align="stretch"\]\s*\{[^}]*align-items:\s*stretch/m);
   });
 
   it("두 그리드는 서로 반대다 — 한쪽으로 통일하면 다른 쪽이 깨진다", () => {

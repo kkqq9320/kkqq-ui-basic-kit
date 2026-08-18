@@ -6538,6 +6538,21 @@ describe("길게 누르기 임계와 진행 막대 (오너 리포트 5·6차)", 
     expect(bar.delay + bar.grow).toBe(holdThreshold());
   });
 
+  /* 🔴 **§16 ①의 자리입니다** — 오전/오후 버튼은 `aria-pressed`를 **이미** 갖고 있는데
+   * `.selected` 클래스가 **같은 요소에 같은 조건으로** 하나 더 붙어 있었습니다. 둘이 갈리면
+   * 화면과 스크린리더가 다른 말을 합니다. 지금은 속성 하나뿐입니다.
+   *
+   * 그 속성이 **실제로 칠해지는지**는 여기서 잽니다 — 동작 검사들은 `aria-pressed`가 붙는
+   * 것까지만 보고, CSS가 그것 대신 다른 것을 칠해도 조용합니다. 명시도는 (0,2,1)로 전과
+   * 같습니다(속성 선택자 = 클래스). */
+  it("오전/오후의 눌림은 aria-pressed가 칠한다 — 클래스 사본이 없다", () => {
+    expect(wheelPickerCssSource).toContain('.wheel-meridiem button[aria-pressed="true"] {');
+  });
+
+  it("그 호버 예외도 같은 속성을 본다", () => {
+    expect(wheelPickerCssSource).toContain('.wheel-meridiem button:not([aria-pressed="true"]):not(:disabled):hover');
+  });
+
   it("움직임을 줄이는 환경에서도 지연은 남는다 — 더블탭에서 번쩍이면 안 된다", () => {
     expect(wheelPickerCssSource).toContain(".wheel-column.holding::after { animation: wheel-hold 1ms linear 200ms forwards; }");
   });

@@ -157,7 +157,11 @@ export function FieldGrid({ children, min, max, justify, className = "" }: { chi
  * ```
  */
 export function PanelGrid({ children, min, max, justify, stretch = false, className = "" }: { children: ReactNode; min?: string; max?: string; justify?: GridJustify; stretch?: boolean; className?: string }) {
-  return <div className={`panel-grid ${stretch ? "stretch" : ""} ${className}`.replace(/ +/g, " ").trim()} style={trackStyle("--panel", min, max, justify)}>{children}</div>;
+  /* 상태는 클래스가 아니라 속성입니다(§16 ②) — `data-align`은 **한 축**이고 값이 하나입니다.
+   * ⚠️ 끌 때 `undefined`로 **아예 안 붙입니다**(`""`가 아니라). `Button`의 `size`가 같은
+   * 규칙이고 `tests/button.test.tsx`가 그것을 못박고 있습니다 — 빈 값이 붙으면 나중에 맨
+   * `[data-align]` 선택자를 쓸 수 없게 됩니다. */
+  return <div className={`panel-grid ${className}`.trim()} data-align={stretch ? "stretch" : undefined} style={trackStyle("--panel", min, max, justify)}>{children}</div>;
 }
 
 /**

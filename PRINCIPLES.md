@@ -1088,10 +1088,19 @@ nav(`aria-current="page"` + `class="active"`). 둘이 갈리면 **화면과 스�
 |---|---|---|
 | `.open` ×8 | select · sidebar · tabs · wheel | ① — `aria-expanded`가 이미 있는 자리가 대부분입니다 |
 | `.active` ×6 | sidebar(`.mobile-quick-bar`) · wheel | ①이 되려면 `aria-current`를 **더해야** 합니다(접근성 개선이라 따로 결정) |
-| `.selected` ×5 | wheel | ① 또는 ③ — 휠의 선택 행에 `aria-selected`가 맞는지 먼저 봐야 합니다 |
-| `.mobile-open` ×4 | sidebar · tabs | ③ |
+| `.selected` ×3 | wheel(**값 행만**) | ① 또는 ③ — 그 행에 `aria-selected`가 맞는지 먼저 봐야 합니다.<br>⚠️ ③도 갈래입니다("휠 중앙선에 있다"는 **순수 기하**) — 그쪽은 접근성 결정이 필요 없습니다 |
+| `.mobile-open` ×3 | tabs | ③ — 다만 같은 요소의 자식에 `aria-expanded`가 있어 아래 갈림에 걸립니다 |
 | `.moving-*` ×8 · `.entering` ×2 · `.holding` ×2 · `.editing` ×1 | wheel | ③ — 전부 순수 시각 상태 |
-| `.stretch` ×1 | page | ② — `PanelGrid`의 축입니다 |
+
+✅ **셋이 나갔습니다**(2026-08-18): `.stretch` → `data-align` · sidebar의 `.mobile-open` →
+`data-mobile-drawer` · 오전/오후의 `.selected` → 이미 있던 `aria-pressed`. 셋 다 **결정이 필요 없는**
+자리였습니다 — 앞의 둘은 대응하는 ARIA가 아예 없고(순수 시각·축), 셋째는 같은 요소에 같은
+조건의 속성이 **이미 있어** 순수한 클래스 사본이었습니다.
+
+🔴 **남은 것은 대부분 한 갈림에 걸려 있습니다** — `.open` 여덟과 tabs의 `.mobile-open` 셋은
+**부모가 클래스를 달고 자식(트리거)이 `aria-expanded`를 갖는** 같은 모양입니다. §16 ①이
+그것을 "사본"으로 보는가에 **한 답이 열하나를 같이 정합니다**: 예면 CSS 앵커를 트리거로
+옮기고(넷은 `:has()` 필요), 아니오면 컨테이너에 `data-*` 축을 답니다. **오너 결정 항목입니다.**
 
 백로그 8·9번(세그먼트 슬라이드·눌림 피드백)이 휠과 탭을 어차피 다시 엽니다. 그때
 같이 옮기는 것이 자연스럽습니다.
