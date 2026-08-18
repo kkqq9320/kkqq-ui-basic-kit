@@ -933,7 +933,7 @@ model/*.ts        값 모델(시점·기간). 화면도 DOM도 모릅니다
 
 | 자리 | 무엇이 어긋나는가 | 잰 이음매 |
 |---|---|---|
-| `controls/WheelPicker.tsx` (약 2235줄) | 규칙 4. 컴포넌트 안 최상위 선언 **87개**(들여쓰기 두 칸의 `const`·`function`·`let`) | 남은 조각 **둘**: 스와이프 3 · 홀드 7. ⚠️ 둘을 막고 있는 것은 `suppressColumnClickRef`가 **아니라** `swipeRef`입니다(아래).<br>클립보드는 **절반만** 나갔습니다 — 브라우저 접근은 바인딩 0이라 `browser/clipboard.ts`로 갔고, 남은 의미 절반은 `value`·`model`·`fields`·`hourDisplay`·`clampToRange`·`flushTyping`·`setTyping`·`clearedRef`·`undo`·`onChange` 열을 집습니다. **그건 단축키 계약이라 컨트롤에 있는 것이 맞습니다.**<br>나간 넷: 이동 계산 → `controls/wheelShift.ts` · 되돌리기 → `controls/undoStack.ts` · 열 모션 → `controls/columnMotion.ts` · 클립보드 접근 → `browser/clipboard.ts` |
+| `controls/WheelPicker.tsx` (약 2240줄) | 규칙 4. 컴포넌트 안 최상위 선언 **84개**(들여쓰기 두 칸의 `const`·`function`·`let`) | 남은 조각 **하나**: 스와이프. 바인딩은 3이지만 `swipeRef`에 **밖에서 써 넣는 자리가 셋**입니다(아래).<br>클립보드는 **절반만** 나갔습니다 — 브라우저 접근은 바인딩 0이라 `browser/clipboard.ts`로 갔고, 남은 의미 절반은 `value`·`model`·`fields`·`clampToRange`·`flushTyping`·`clearedRef`·`undo`·`onChange` 등을 집습니다. **그건 단축키 계약이라 컨트롤에 있는 것이 맞습니다.**<br>나간 다섯: 이동 계산 → `controls/wheelShift.ts` · 되돌리기 → `controls/undoStack.ts` · 열 모션 → `controls/columnMotion.ts` · 클립보드 접근 → `browser/clipboard.ts` · 홀드 → `controls/columnHold.ts` |
 | `model/instant.ts` (약 1000줄) | 규칙 4. 순수 함수 53개 | **3층이 이미 서 있습니다.** 아래층(값·단위+12시간)에서 위로 가는 화살표 **0**, 중간 여섯(step·range·typing·dateMath·display·paste)끼리 교차 **6개**. 계약 타입은 이미 `model/wheelModel.ts`로 나갔습니다 — 남은 것은 구현을 여섯으로 가르는 일이고, 그러려면 `model/instant/` 하위 폴더가 필요합니다(`model/`은 배럴 묶음이 아니라 예외 자리입니다) |
 | `surfaces/PageChrome.tsx` (약 209줄) | 규칙 4. **파일 이름이 아무것도 안 내보냅니다** — `PageChrome`이라는 심볼이 없습니다 | 공개 아홉(컴포넌트 여덟 + `GridJustify`). **여덟 사이의 상호참조 0.** 유일한 묶음은 격자 셋(`SummaryGrid` 21줄 · `FieldGrid` 35 · `PanelGrid` 17)이 비공개 `trackStyle`(16줄)과 `GridJustify`를 함께 쓰는 것입니다. 나머지 다섯(`PageHeader` 13 · `SectionHeading` 12 · `SummaryCard` 28 · `Panel` 11 · `DismissibleDetails` 22)은 서로도, 격자와도 무관합니다.<br>📌 `DismissibleDetails`는 **저장소 안에서 아무도 안 씁니다**(`demo/`·`src/` 0건, 배럴만) — 지우는 것은 breaking이라 오너 판단 항목입니다 |
 
@@ -945,6 +945,15 @@ model/*.ts        값 모델(시점·기간). 화면도 DOM도 모릅니다
 갈라 보니 **브라우저 접근 한 겹은 0**이었고 나머지 열이 값 모델과 단축키 계약이었습니다.
 층이 둘이면 아래층만 떼는 것이 맞습니다 — 위층까지 끌고 나가면 바인딩이 **파라미터로
 이름만 바꿔** 따라갑니다.
+
+🔴 **떼기 전에 그 조각의 동사마다 감시자가 있는지 재세요.** 홀드에서 이 규칙이 결함 하나를
+찾아냈습니다 — 동사 열둘 중 **다섯이 0 red**였고, 그중 하나를 밟아 보니 **팝오버가 닫혀도
+무장된 홀드가 살아남는** 살아 있는 결함이었습니다(누른 채 뒤로가기로 취소하면 500ms 뒤에
+값이 다시 바뀜). 감시자가 없는 상태에서 옮겼으면 그 결함이 새 파일로 조용히 따라갔을 것입니다.
+
+⚠️ **그리고 떼고 나서 한 번 더 재세요.** 추출이 계약을 명시하면 **전에는 안 보이던 칸**이
+드러납니다 — 홀드에서 `cancelIfMoved`의 포인터 구분이 그랬습니다(맨몸 `4`가 이름을 얻는
+순간 그것을 지키는 검사가 없다는 것도 같이 보였습니다).
 
 🔴 **바인딩 개수는 "밖에서 물어오는 것"만 셉니다 — "밖에서 써 넣는 것"은 안 셉니다.**
 그래서 **스와이프는 3이 말하는 것보다 훨씬 엉켜 있습니다** — 밖에서 써 넣는 자리 셋은
