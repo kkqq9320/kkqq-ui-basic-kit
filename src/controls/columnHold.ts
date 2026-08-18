@@ -99,9 +99,18 @@ export function useColumnHold({ active, onHold }: { active: boolean; onHold: (un
     if (hold && hold.pointerId === pointerId && Math.abs(y - hold.y) > MOVE_TOLERANCE) cancel();
   }
 
-  /* 비활성이 되면 끊고, 언마운트에서도 끊습니다. 언마운트 쪽은 **사라진 필드에 onChange를
-   * 보내는 자리**입니다(설계 스펙 §4.2). */
-  useEffect(() => { if (!active) cancel(); return cancel; }, [active]);
+  /* **정리 하나가 출구 둘을 맡습니다** — 언마운트, 그리고 `active`가 바뀌는 순간.
+   * React가 다음 이펙트 전에 앞 정리를 돌리므로, `active`가 꺼지면 그 정리가 끊습니다.
+   *
+   * ⚠️ **의존성 배열이 전부입니다.** 한동안 `[]`이었고, 그래서 언마운트만 맡고 **닫힘은
+   * 아무도 안 맡았습니다** — 누른 채 Escape·뒤로가기로 취소하면 값이 되돌아간 뒤 500ms
+   * 있다가 초기화가 발동했습니다(2026-08-18 고침).
+   *
+   * 🔬 처음 고칠 때 본문에 `if (!active) cancel();`을 같이 넣었는데 **변이로 재 보니
+   * 잉여였습니다**(지워도 검사 전부 초록) — 앞 정리가 이미 그 일을 합니다. 지웠습니다.
+   *
+   * 언마운트 쪽은 **사라진 필드에 onChange를 보내는 자리**입니다(설계 스펙 §4.2). */
+  useEffect(() => cancel, [active]);
 
   return { holdingUnit, arm, cancel, cancelIfMoved };
 }
