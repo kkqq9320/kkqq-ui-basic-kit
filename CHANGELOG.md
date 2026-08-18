@@ -30,6 +30,11 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.12.0
 
   `tests/pressable.test.tsx`가 **`src/`에 날 `<button>`이 다시 생기면** 빨개집니다.
 
+- **휠의 이동 계산을 `controls/wheelShift.ts`로 떼어냈습니다** — "지금 값에서 이 열을
+  이만큼 옮기면 무슨 값인가". 밖에서 물어오는 것이 **다섯**뿐이고 전부 입력이라, 훅이
+  아니라 **순수 모듈**입니다. 🔴 지금까지 이 계산은 팝오버를 열고 포인터를 만들어야만
+  검사할 수 있었는데 이제 세 줄입니다(`controls/selectKeyboard.ts`와 같은 이유).
+
 - **휠 모델의 계약을 `model/wheelModel.ts`로 떼어냈습니다** — 시점과 기간이 **둘 다
   구현하는** 타입 아홉(`WheelUnit`·`WheelModel`·`WheelStep`·`TypingStep` …)이 시점
   구현 파일 안에 살고 있었습니다. `model/duration.ts`가 `model/instant.ts`에서
