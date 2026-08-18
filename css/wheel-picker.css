@@ -53,14 +53,19 @@
  * 문자(`.`와 공백)라 `tnum` 여부와 무관하게 폭이 고정입니다. */
 .wheel-segment { font-variant-numeric: tabular-nums; }
 /* 활성 세그먼트는 **트리거가 포커스를 가진 동안에만** 보입니다 — 포커스 없는 필드에 활성
- * 표시가 남아 있으면 그 필드가 입력을 받는 중으로 읽힙니다(§4.5). `.active` 클래스 자체는
+ * 표시가 남아 있으면 그 필드가 입력을 받는 중으로 읽힙니다(§4.5). `data-active` 자체는
  * 포커스와 무관하게 붙고(컴포넌트가 resolvedActiveUnit으로 붙입니다), **감추는 일은 이
  * 규칙 하나가** 합니다. 트리거 안에서 포커스를 받을 수 있는 것은 트리거 자신뿐이라
  * `:focus-within`은 여기서 "트리거가 포커스를 가졌는가"와 정확히 같습니다.
  *
- * 특이도는 손으로 셉니다: `.wheel-trigger`(0,1,0) + `:focus-within`(0,1,0) +
- * `.wheel-segment`(0,1,0) + `.active`(0,1,0) = **(0,4,0)**. 미디어 쿼리는 특이도를
- * 더하지 않으므로 이 파일의 `@media` 블록들도 이 계산을 바꾸지 않습니다.
+ * 특이도는 손으로 셉니다: `.wheel-trigger`(0,1,0) + `[data-editing]`(0,1,0) +
+ * `:focus-within`(0,1,0) + `.wheel-segment`(0,1,0) + `[data-active]`(0,1,0) = **(0,5,0)**.
+ * 미디어 쿼리는 특이도를 더하지 않으므로 이 파일의 `@media` 블록들도 이 계산을 안 바꿉니다.
+ *
+ * 🔴 **여기 적힌 수가 한동안 (0,4,0)이었습니다**(2026-08-19 정정) — 게이트가 포커스에서
+ * 편집 중으로 바뀌며 `.editing`이 **선택자에 하나 더 붙었는데 손 셈이 안 따라갔습니다.**
+ * 결론(이 규칙이 `.wheel-segment` (0,1,0)를 이긴다)은 안 바뀌지만, **주석의 수도 낡습니다.**
+ * 속성 선택자는 클래스와 같은 (0,1,0)이라 이번 이관은 이 셈을 안 바꿉니다.
  *
  * 물어야 할 것은 "선택자에 `.wheel-segment`가 들어간 규칙"이 아니라 **"세그먼트
  * 요소에 매칭되는 규칙"** 전부입니다. 이 파일에서 그건 바로 위 `.wheel-segment`
@@ -98,7 +103,7 @@
  * **규칙은 여전히 하나입니다.** 테마별로 다른 값이 필요해도 규칙을 나누지 않습니다 —
  * 나누는 순간 이 세그먼트에 매칭되는 규칙이 둘이 되어 위 특이도 계산과 tests의
  * "규칙은 정확히 하나" 계약이 함께 깨집니다. 토큰이 그 요구를 규칙 밖에서 흡수합니다. */
-.wheel-trigger.editing:focus-within .wheel-segment.active { border-radius: 4px; color: var(--date-segment-active-text); background: var(--date-segment-active-background); }
+.wheel-trigger[data-editing]:focus-within .wheel-segment[data-active] { border-radius: 4px; color: var(--date-segment-active-text); background: var(--date-segment-active-background); }
 /* ⚠️ **여기 세그먼트 전용 확정 펄스 규칙이 있었습니다. 지웠습니다 — 목적이 사라졌습니다.**
  * 그 규칙은 "칩이 자기 `color`를 선언해 확정 펄스의 상속에서 빠지는 것"을 메우려고 있었는데,
  * 표시 게이트가 포커스에서 **편집 중**으로 바뀌면서(스펙 §4.5) **칩과 펄스가 겹칠 수가**
@@ -249,10 +254,10 @@
  * 유도해 비교하므로 한쪽만 바꾸면 빨개집니다. */
 .wheel-column:nth-child(2) { --wheel-enter-delay: 40ms; }
 .wheel-column:nth-child(3) { --wheel-enter-delay: 80ms; }
-.wheel-column.active, .wheel-column:focus-visible { border-color: color-mix(in srgb, var(--accent) 72%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 48%, var(--surface-soft)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent); }
+.wheel-column[data-active], .wheel-column:focus-visible { border-color: color-mix(in srgb, var(--accent) 72%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 48%, var(--surface-soft)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent); }
 @media (hover: hover) and (pointer: fine) {
   .wheel-column:hover { border-color: color-mix(in srgb, var(--accent) 48%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 28%, var(--surface-soft)); }
-  .wheel-column.active:hover { border-color: color-mix(in srgb, var(--accent) 72%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 48%, var(--surface-soft)); }
+  .wheel-column[data-active]:hover { border-color: color-mix(in srgb, var(--accent) 72%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 48%, var(--surface-soft)); }
 }
 .wheel-step { width: 100%; min-width: 0; height: 30px; min-height: 30px; max-height: 30px; display: grid; place-items: center; padding: 0; border: 0; color: var(--muted); background: transparent; }
 .wheel-step:hover:not(:disabled) { color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 65%, transparent); }
@@ -333,7 +338,7 @@
 .wheel-values { width: 100%; height: calc((var(--wheel-rows, 1) * 2 + 3) * 30px); display: grid; grid-auto-rows: 30px; overflow: hidden; transform: translateY(calc(var(--wheel-rest) + var(--wheel-drag-offset, 0px))); transform-origin: 50% 50%; transition: transform 110ms cubic-bezier(.22, .8, .3, 1); will-change: transform, opacity; }
 /* 팝오버 진입 — **열 셋이 함께 한 행만큼 굴러 내려와 멎습니다**(오너: "휠이 드르륵
  * 움직이는 것 같은 애니메이션"). 이동 신호와 넷으로 갈라 둡니다: 모든 열이 함께 움직인다
- * (이동은 한 열만) · 이름이 다르다 · 게이트가 다르다(`.entering`은 열림 창에만) ·
+ * (이동은 한 열만) · 이름이 다르다 · 게이트가 다르다(`data-entering`은 열림 창에만) ·
  * 길이와 커브가 다르다(280ms 감속 + 멎음 / 210ms).
  *
  * **320 → 280ms**(오너: "속도를 조금만 더 빠르게"). 210ms 바닥은 **풀지 않았습니다** —
@@ -354,7 +359,7 @@
  *
  * `backwards`가 필요합니다 — 시차를 기다리는 동안 2·3번 열이 제자리로 보였다가 시작
  * 위치로 튀는 것을 막습니다. */
-.wheel-column.entering .wheel-values { animation: wheel-enter 280ms cubic-bezier(.18, .85, .28, 1) var(--wheel-enter-delay, 0ms) backwards; }
+.wheel-column[data-entering] .wheel-values { animation: wheel-enter 280ms cubic-bezier(.18, .85, .28, 1) var(--wheel-enter-delay, 0ms) backwards; }
 .wheel-column.dragging .wheel-values { animation: none !important; transition: none; }
 .wheel-column[data-motion="next"] .wheel-values { animation: wheel-slide-next 210ms cubic-bezier(.2, .9, .25, 1); }
 .wheel-column[data-motion="previous"] .wheel-values { animation: wheel-slide-previous 210ms cubic-bezier(.2, .9, .25, 1); }
@@ -460,7 +465,7 @@
   100% { transform: scale(1.025); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .wheel-column.entering .wheel-values,
+  .wheel-column[data-entering] .wheel-values,
   .wheel-values,
   .wheel-column[data-motion] .wheel-values,
   .wheel-column[data-motion] .wheel-values button[aria-current="date"] { animation: none; transition: none; }
