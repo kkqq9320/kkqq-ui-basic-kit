@@ -51,20 +51,27 @@ home   active: page === "dashboard"   "지금 이 페이지다"          → ari
 여기서 `:is()`는 인자가 둘 다 속성 선택자라 명시도를 **안 올립니다**(`:where()`로 쓰면
 오히려 (0,1,1)로 내려가 캐스케이드가 바뀝니다).
 
-### 🔴 BREAKING — 상태 클래스 넷이 속성이 됐습니다 (§16)
+### 🔴 BREAKING — 상태 클래스 일곱이 속성이 됐습니다 (§16)
 
-**클래스는 부품의 이름이고 상태는 속성입니다**(§16). 이 넷은 **결정이 필요 없는** 자리라
+**클래스는 부품의 이름이고 상태는 속성입니다**(§16). 이 일곱은 **결정이 필요 없는** 자리라
 먼저 옮겼습니다 — 소비자가 이 클래스를 직접 칠하고 있었다면 고쳐야 합니다.
 
 ```diff
+- .wheel-column.moving-next             + .wheel-column[data-motion="next"]
+- .wheel-column.moving-previous         + .wheel-column[data-motion="previous"]
+- .wheel-column.holding                 + .wheel-column[data-holding]
 - .panel-grid.stretch                    + .panel-grid[data-align="stretch"]
 - .sidebar.mobile-open                   + .sidebar[data-mobile-drawer="open"]
 - .wheel-meridiem button.selected        + .wheel-meridiem button[aria-pressed="true"]
 - .wheel-values button.selected          + .wheel-values button[aria-current="date"]
 ```
 
-🟢 **명시도는 넷 다 그대로입니다** — 속성 선택자는 클래스와 같은 (0,1,0)입니다. 그래서
+🟢 **명시도는 일곱 다 그대로입니다** — 속성 선택자는 클래스와 같은 (0,1,0)입니다. 그래서
 앱이 걸어 둔 조정이 흔들리지 않습니다.
+
+🟢 **모션은 축으로 묶여 `:is()`가 필요 없어졌습니다** — `.wheel-column:is(.moving-next,
+.moving-previous)` (0,2,0)가 `.wheel-column[data-motion]` (0,2,0)이 됐습니다. 같은 명시도인데
+**한 축에 값 하나**라 뜻 없는 조합이 애초에 표현되지 않습니다.
 
 ⚠️ **뒤의 둘은 같은 이야기입니다.** 오전/오후 버튼과 휠의 값 행은 `aria-pressed`·`aria-current`를
 **이미** 갖고 있었고, `.selected`는 같은 요소에 **글자 그대로 같은 조건으로** 붙은 순수한

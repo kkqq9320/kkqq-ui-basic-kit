@@ -156,7 +156,7 @@ describe("DateWheelPicker", () => {
     fireEvent.click(screen.getByRole("button", { name: "오늘" }));
 
     // 연 2024 -> 2026 (앞으로), 월 07 -> 07 (그대로), 일 05 -> 12 (앞으로)
-    expect(columns.map((column) => /moving-\w+/.exec(column.className)?.[0] ?? null)).toEqual(["moving-next", null, "moving-next"]);
+    expect(columns.map((column) => column.getAttribute("data-motion"))).toEqual(["next", null, "next"]);
   });
 
   // 뒤로 가는 방향도 본다. 앞 테스트만 있으면 방향을 `"next"`로 고정하는 결함이 통과한다.
@@ -169,7 +169,7 @@ describe("DateWheelPicker", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "오늘" }));
 
-    expect(columns.map((column) => /moving-\w+/.exec(column.className)?.[0] ?? null)).toEqual(["moving-previous", "moving-previous", "moving-previous"]);
+    expect(columns.map((column) => column.getAttribute("data-motion"))).toEqual(["previous", "previous", "previous"]);
   });
 
   // 버튼과 Ctrl+;는 **같은 동작**이어야 한다. 이 킷에서 같은 규칙이 두 곳에 복제됐을 때
@@ -184,7 +184,7 @@ describe("DateWheelPicker", () => {
 
     fireEvent.keyDown(field, { code: "Semicolon", ctrlKey: true });
 
-    expect(columns.map((column) => /moving-\w+/.exec(column.className)?.[0] ?? null)).toEqual(["moving-next", null, "moving-next"]);
+    expect(columns.map((column) => column.getAttribute("data-motion"))).toEqual(["next", null, "next"]);
   });
   // ── commitToday의 값 분해를 모델로 옮긴다 (2b-2) ────────────────────────────
   //
@@ -228,7 +228,7 @@ describe("DateWheelPicker", () => {
     // 연 2024->2026(앞으로), 월 07->07(그대로), 일 05->12(앞으로). 시각 열(hour)은
     // Task 3부터 실제로 그려지지만(4번째 .wheel-column), 이 검사가 보는 것은
     // 여전히 처음 세 열의 모션뿐이다 — 그 열의 실제 라벨은 아래 "열 라벨" 블록이 고정한다.
-    expect(columns.slice(0, 3).map((column) => /moving-\w+/.exec(column.className)?.[0] ?? null)).toEqual(["moving-next", null, "moving-next"]);
+    expect(columns.slice(0, 3).map((column) => column.getAttribute("data-motion"))).toEqual(["next", null, "next"]);
 
     nowSpy.mockRestore();
   });
@@ -246,14 +246,14 @@ describe("DateWheelPicker", () => {
     fireEvent.pointerUp(yearPrevious, { pointerId: 1, clientY: 10 });
     fireEvent.click(yearPrevious);
     expect(onChange).toHaveBeenLastCalledWith("2025-07-12");
-    expect(yearPrevious.closest(".wheel-column")?.classList.contains("moving-previous")).toBe(true);
+    expect(yearPrevious.closest(".wheel-column")?.getAttribute("data-motion")).toBe("previous");
 
     const monthNext = screen.getByRole("button", { name: "월 다음" });
     fireEvent.pointerDown(monthNext, { pointerId: 2, clientY: 10 });
     fireEvent.pointerUp(monthNext, { pointerId: 2, clientY: 10 });
     fireEvent.click(monthNext);
     expect(onChange).toHaveBeenLastCalledWith("2026-08-12");
-    expect(monthNext.closest(".wheel-column")?.classList.contains("moving-next")).toBe(true);
+    expect(monthNext.closest(".wheel-column")?.getAttribute("data-motion")).toBe("next");
 
     const dayNext = screen.getByRole("button", { name: "일 다음" });
     fireEvent.pointerDown(dayNext, { pointerId: 3, clientY: 10 });
@@ -661,11 +661,11 @@ describe("DateWheelPicker 스와이프", () => {
     expect(year.querySelector(".wheel-values")).toBe(rowsBefore);
   });
 
-  it("드래그 중 커밋은 moving-* 클래스를 붙이지 않는다", () => {
+  it("드래그 중 커밋은 data-motion을 붙이지 않는다", () => {
     const { year } = openWheel();
     pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerMove", year, { pointerId: 7, clientY: 60, buttons: 1 });
-    expect(year.className).not.toMatch(/moving-/);
+    expect(year.getAttribute("data-motion")).toBeNull();
   });
 
   // 액센트 행(선택 행)은 `.dragging`이 **덮지 못한다** — 그 규칙은
@@ -709,7 +709,7 @@ describe("DateWheelPicker 스와이프", () => {
     // 두 번째 스와이프가 시작되는 순간. 여기서 비워지지 않으면 이 드래그 내내 슬라이드가
     // 무장된 채라, .dragging이 빠지는 프레임마다 from 키프레임이 번쩍인다.
     pointer("pointerDown", year, { pointerId: 8, clientY: 100, buttons: 1, button: 0 });
-    expect(year.className).not.toMatch(/moving-/);
+    expect(year.getAttribute("data-motion")).toBeNull();
   });
 
   // ── 화면은 손가락의 절반만 움직인다 ─────────────────────────────────────────
@@ -1123,7 +1123,7 @@ describe("DateWheelPicker 스와이프", () => {
     const { year } = openWheel();
     pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerUp", year, { pointerId: 7, clientY: 80 });
-    expect(year.classList.contains("moving-next")).toBe(true);
+    expect(year.getAttribute("data-motion")).toBe("next");
   });
 
   // ── ± 버튼 위에서 시작한 누름은 스와이프가 아니다 ────────────────────────────
@@ -3119,7 +3119,7 @@ describe("DateWheelPicker 타이핑", () => {
     await waitFor(() => expect(field.textContent).toBe("2031. 07. 12."));
     const yearAfter = screen.getByRole("group", { name: "연도 2031" });
     expect(yearAfter.querySelector(".wheel-values")).toBe(rowsBefore);   // 리마운트되지 않았다
-    expect(yearAfter.classList.contains("moving-next")).toBe(false);
+    expect(yearAfter.getAttribute("data-motion")).toBeNull();
   });
 
   it("Backspace가 버퍼에서 한 자리만 지운다", async () => {
@@ -4371,7 +4371,7 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
     fireEvent.click(trigger);
     await waitFor(() => expect(document.querySelector(".wheel-column")).not.toBeNull());
 
-    expect(columns().map((column) => /moving-\w+/.exec(column.className)?.[0] ?? null)).toEqual([null, null, null]);
+    expect(columns().map((column) => column.getAttribute("data-motion"))).toEqual([null, null, null]);
   });
 
   // ⚠️ **진입에서 "방향 없음" 계약은 걷혔습니다.** 오너가 뒤집었습니다:
@@ -4472,7 +4472,7 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // **파일 안의 순서**가 승부를 가릅니다. 이동을 뒤에 둡니다.
   it("이동 규칙이 진입 규칙보다 파일에서 뒤에 온다", () => {
     const enter = wheelPickerCssSource.indexOf(".wheel-column.entering .wheel-values");
-    const move = wheelPickerCssSource.indexOf(".wheel-column.moving-next .wheel-values");
+    const move = wheelPickerCssSource.indexOf(`.wheel-column[data-motion="next"] .wheel-values`);
     expect([enter >= 0, move >= 0, enter < move]).toEqual([true, true, true]);
   });
 
@@ -5177,7 +5177,7 @@ describe("DateWheelPicker 열 라벨 — 시·분·초는 두 자리 숫자만 (
     fireEvent.click(hourButton);
 
     expect(onChange).toHaveBeenCalledWith("2026-08-12T00:30");
-    expect(hourColumn?.classList.contains("moving-next")).toBe(true);
+    expect(hourColumn?.getAttribute("data-motion")).toBe("next");
   });
 });
 
@@ -5646,7 +5646,7 @@ describe("DateWheelPicker 오전/오후 버튼 (3단계)", () => {
     openAt("2026-08-12T03:00:05");
     fireEvent.click(screen.getByRole("button", { name: "오후" }));
     const hour = screen.getByRole("group", { name: "시 오전 03" });   // 값은 controlled라 그대로다
-    expect(/moving-\w+/.exec(hour.className)?.[0]).toBe("moving-next");
+    expect(hour.getAttribute("data-motion")).toBe("next");
   });
 
   it("오전으로 되돌릴 때는 반대 방향으로 재생한다 — 열이 24칸이라 위로 올라가는 이동이다", () => {
@@ -5654,7 +5654,7 @@ describe("DateWheelPicker 오전/오후 버튼 (3단계)", () => {
     openAt("2026-08-12T15:00:05");
     fireEvent.click(screen.getByRole("button", { name: "오전" }));
     const hour = screen.getByRole("group", { name: "시 오후 03" });
-    expect(/moving-\w+/.exec(hour.className)?.[0]).toBe("moving-previous");
+    expect(hour.getAttribute("data-motion")).toBe("previous");
   });
 
   /* 스펙 §7: "`오늘`·`완료`는 '확정·이동'인데 오전/오후는 **값의 절반**이라 성격이
@@ -6094,11 +6094,11 @@ describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () =
     openTime("2026-08-12T15:07:41");
     const row = rowOf("초", 0);
     const column = row.closest(".wheel-column")!;
-    expect(column.classList.contains("holding")).toBe(false);
+    expect(column.hasAttribute("data-holding")).toBe(false);
     pointer("pointerDown", row, { pointerId: 7, clientY: 100, button: 0, isPrimary: true });
-    expect(column.classList.contains("holding")).toBe(true);
+    expect(column.hasAttribute("data-holding")).toBe(true);
     pointer("pointerUp", row, { pointerId: 7, clientY: 100 });
-    expect(column.classList.contains("holding")).toBe(false);
+    expect(column.hasAttribute("data-holding")).toBe(false);
   });
 
   /* 🔴 **발동하는 순간 표시가 꺼져야 합니다 — 아직 손을 떼기 전입니다.** 초기화는 손가락이
@@ -6118,7 +6118,7 @@ describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () =
     act(() => { vi.advanceTimersByTime(HOLD_MS); });
     // 커밋이 `.wheel-values`를 리마운트하므로 열을 여기서 다시 잡습니다(`rowAt`은 자기 expect를 갖습니다).
     const column = screen.getByRole("group", { name: (name: string) => name.startsWith("초") });
-    expect(column.classList.contains("holding")).toBe(false);
+    expect(column.hasAttribute("data-holding")).toBe(false);
   });
 
 
@@ -6554,7 +6554,7 @@ describe("길게 누르기 임계와 진행 막대 (오너 리포트 5·6차)", 
   });
 
   it("움직임을 줄이는 환경에서도 지연은 남는다 — 더블탭에서 번쩍이면 안 된다", () => {
-    expect(wheelPickerCssSource).toContain(".wheel-column.holding::after { animation: wheel-hold 1ms linear 200ms forwards; }");
+    expect(wheelPickerCssSource).toContain(".wheel-column[data-holding]::after { animation: wheel-hold 1ms linear 200ms forwards; }");
   });
 });
 
