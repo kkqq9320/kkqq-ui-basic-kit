@@ -98,7 +98,7 @@ function activeSegment(): string | null {
  * (열 `onPointerDown`의 `setActiveUnit`·`setTyping(null)`은 이벤트 속성을 안 읽으므로
  * 평범한 `fireEvent.pointerDown`으로도 동작한다 — 그쪽 테스트는 그대로 둔다.)
  */
-function pointer(type: "pointerDown" | "pointerMove" | "pointerUp", element: Element, props: Record<string, unknown>) {
+function pointer(type: "pointerDown" | "pointerMove" | "pointerUp" | "pointerCancel", element: Element, props: Record<string, unknown>) {
   const event = createEvent[type](element);
   for (const [key, value] of Object.entries(props)) Object.defineProperty(event, key, { value, configurable: true });
   fireEvent(element, event);
@@ -874,6 +874,51 @@ describe("DateWheelPicker 스와이프", () => {
     pointer("pointerUp", row, { pointerId: 2, clientY: 105 });                 // 5px — finishSwipe는 아무것도 안 한다
     fireEvent.click(row);
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  /* 🔴 **포인터 시퀀스가 열 밖에서 끝나면 아무 출구도 없었습니다.**
+   *
+   * 스와이프를 끝내는 자리는 셋이었는데(열의 `onPointerUp` · 열의 `onPointerCancel` ·
+   * 홀드의 선점) **전부 시퀀스가 그 열 위에서 끝날 것을 요구합니다.** 마우스에는 암묵
+   * 캡처가 없고 명시 캡처는 세로 18px을 넘겨야 걸리므로, **가로로 끌어 열 밖에서 떼면**
+   * 어느 것도 안 돕니다. 남은 `swipeRef`는 다음 제스처가 읽습니다.
+   *
+   * 밟는 법: 열을 누른 채 옆으로 끌어 밖에서 떼고 → 같은 열의 **± 버튼**을 누릅니다.
+   * ± 버튼의 pointerdown은 `startsOnStepControl`에서 조기 반환하므로 낡은 기록을
+   * **덮어쓰지도 않고**, 뒤이은 pointermove가 그 기록으로 커밋합니다. */
+  it("열 밖에서 손을 뗀 뒤 그 열의 ± 버튼을 누르면, 그 버튼이 하는 일만 일어난다", () => {
+    const { onChange, year } = openWheel();
+    pointer("pointerDown", year, { pointerId: 1, clientY: 100, buttons: 1, button: 0 });
+    // ⚠️ 맨 fireEvent가 아니라 이 파일의 pointer 헬퍼입니다 — jsdom에는 PointerEvent가
+    // 없어서 fireEvent는 pointerId를 안 싣습니다(실측). 소스는 그 id로 자기 제스처를 가립니다.
+    pointer("pointerUp", document.body, { pointerId: 1 });   // 열 밖에서 뗀다
+    onChange.mockClear();
+    const next = screen.getByRole("button", { name: "연도 다음" });
+    pointer("pointerDown", next, { pointerId: 1, clientY: 160, buttons: 1, button: 0 });
+    pointer("pointerMove", next, { pointerId: 1, clientY: 163, buttons: 1 });
+    pointer("pointerUp", next, { pointerId: 1, clientY: 163 });
+    fireEvent.click(next);
+    expect(onChange.mock.calls.flat()).toEqual(["2027-07-12"]);
+  });
+
+  /* 같은 구멍의 **보이는 절반**입니다 — 청소부가 없으니 열이 끌린 모습 그대로 얼어붙습니다.
+   * `clearSwipeVisual`의 호출자 둘이 다 "시퀀스가 열 위에서 끝날 것"을 요구합니다.
+   *
+   * ⚠️ **move를 두 번 미는 것이 중요합니다.** 첫 move가 홀드를 끊어(`MOVE_TOLERANCE` 4)
+   * `setHoldingUnit(null)`이 렌더를 일으키고, 그 렌더가 `className`을 통째로 다시 써
+   * `classList`로 붙인 `.dragging`을 **지웁니다**(실측). 한 번만 밀면 이 검사는 클래스가
+   * 이미 없는 채로 빨개져 **엉뚱한 이유로** 빨간 검사가 됩니다.
+   *
+   * 📌 그 한 프레임 공백 자체는 이 라운드에서 안 고칩니다 — 커밋은 30px에서 나므로
+   * 그때는 클래스가 이미 붙어 있고, 억제할 애니메이션이 아직 없습니다. 원장에 적었습니다. */
+  it("열 밖에서 손을 떼면 끌린 표시가 걷힌다", () => {
+    const { year } = openWheel();
+    pointer("pointerDown", year, { pointerId: 1, clientY: 100, buttons: 1, button: 0 });
+    pointer("pointerMove", year, { pointerId: 1, clientY: 105, buttons: 1 });   // 홀드를 끊는 렌더
+    pointer("pointerMove", year, { pointerId: 1, clientY: 110, buttons: 1 });   // 이제 dragging이 남는다
+    expect(year.classList.contains("dragging")).toBe(true);   // 전제 — 걷을 것이 실제로 있다
+    pointer("pointerUp", document.body, { pointerId: 1 });
+    expect([year.classList.contains("dragging"), year.style.getPropertyValue("--wheel-drag-offset")]).toEqual([false, ""]);
   });
 
   /* ── 새 누름은 언제나 억제 없이 시작한다 ────────────────────────────────────
