@@ -1123,8 +1123,7 @@ boolean`을 받는 타입은 `SidebarNavItem`과 `MobileQuickBarItem` **둘뿐**
 |---|---|---|
 | `.open` ×8 | select · sidebar · tabs · wheel | ③ — **오너 결정 2026-08-18**: 부모의 `.open`은 자식 트리거의 `aria-expanded`와 **다른 사실**입니다(아래). `data-open` 축으로 |
 | `.mobile-open` ×3 | tabs | ③ — 위와 같은 결정에 걸립니다 |
-| `.active` ×3 | wheel(세그먼트 1 · 열 2) | ③ — **결정 아님**(2026-08-18 실측). 대응하는 ARIA가 없습니다(아래) |
-| `.entering` ×2 · `.editing` ×1 · `.dragging` ×1 | wheel | ③ — 전부 순수 시각 상태 |
+| `.dragging` ×1 | wheel | ③ — ⚠️ **소유자가 다릅니다**: `columnSwipe.ts`가 `classList`로 밀고 React는 모릅니다. `data-*`로 옮기면 **React가 더 이상 안 지웁니다** — 이관이 아니라 동작 변화라 따로 잽니다 |
 
 ✅ **다섯이 나갔습니다**(2026-08-18): `.stretch` → `data-align` · sidebar의 `.mobile-open` →
 `data-mobile-drawer` · 오전/오후의 `.selected` → 이미 있던 `aria-pressed` · 값 행의 `.selected` →
@@ -1134,13 +1133,21 @@ ARIA가 아예 없고(순수 시각·축), 둘은 같은 요소에 **같은 조�
 클래스 사본이었습니다. **다섯째만 결정이었습니다** — 그리고 그 결정을 실행하려다 결정문이
 코드보다 좁게 물었다는 것을 찾았습니다(아래).
 
-✅ **휠의 모션·홀드도 나갔습니다**(2026-08-19): `.moving-next`/`.moving-previous` → `data-motion`
+✅ **휠의 시각 상태가 다 나갔습니다**(2026-08-19): `.moving-next`/`.moving-previous` → `data-motion`
 축 하나로, `.holding` → `data-holding`. 🟢 **축으로 묶으니 `:is()`가 필요 없어졌습니다** —
 `.wheel-column:is(.moving-next, .moving-previous)` (0,2,0)가 `.wheel-column[data-motion]` (0,2,0)이
 됐습니다. 같은 명시도인데 **한 축에 값 하나**(②)라 `class="moving-next moving-previous"` 같은
-뜻 없는 조합이 애초에 표현되지 않습니다.
+뜻 없는 조합이 애초에 표현되지 않습니다. 이어서 `.active`(세그먼트 1 · 열 2) → `data-active`,
+`.entering` → `data-entering`, `.editing` → `data-editing`. 값이 하나뿐인 것들은 **존재 여부**로
+두고 꺼졌을 때는 안 붙입니다.
 
-📐 **남은 것은 18개입니다**(2026-08-19 실측). 위 표를 더한 수가 아니라 `css/`를 센 수입니다 —
+🔴 **그 자리의 손 셈이 틀려 있었습니다**(2026-08-19 정정). `css/wheel-picker.css`가
+*"특이도는 손으로 셉니다"* 라며 **(0,4,0)** 이라고 적고 있었는데, 실제 선택자는
+`.wheel-trigger.editing:focus-within .wheel-segment.active` — 클래스가 **다섯**입니다.
+게이트가 포커스에서 편집 중으로 바뀌며 `.editing`이 하나 더 붙었는데 셈이 안 따라갔습니다.
+결론은 안 바뀌지만 **주석의 수도 낡습니다** — 이번 달에만 네 번째입니다.
+
+📐 **남은 것은 12개입니다**(2026-08-19 실측). 위 표를 더한 수가 아니라 `css/`를 센 수입니다 —
 이번에 세면서 표에 `.dragging` 한 줄이 빠져 있는 것을 찾았습니다. 표의 수는 **소스에서 다시 재기**
 전에는 믿지 마세요 — 이제 `tests/stateClasses.test.ts`가 이 표와 `css/`를 대조합니다.
 

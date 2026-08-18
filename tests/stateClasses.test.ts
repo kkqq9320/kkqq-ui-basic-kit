@@ -83,7 +83,13 @@ describe("§16 상태 클래스 표는 소스와 맞는다", () => {
   it("전제: 표를 찾아 쌍을 실제로 뽑았다", () => {
     expect(statesSection()).not.toBe("");
     expect(claimedCounts().map(([name]) => name)).toContain("open");
-    expect(claimedCounts().length).toBeGreaterThan(4);
+    // ⚠️ 문턱을 **1로** 둡니다. 표는 이관이 진행될수록 줄어들고, 실제로 > 4가 이관 도중
+    // 빨개졌습니다(남은 행이 셋). 이 전제가 잡으려는 것은 "행이 몇 개인가"가 아니라
+    // **"파싱이 아무것도 못 찾았는가"** 입니다. 위 `toContain("open")`이 특정 행 하나를 따로
+    // 못 박고, 합계는 아래 검사가 봅니다.
+    // 🔜 표가 **비는 날** 이 파일의 일이 달라집니다 — 그때는 §16의 그 절이 "남은 것 없음"이
+    //    되어야 하고, 이 검사들은 그 문장을 지키는 쪽으로 바뀌어야 합니다.
+    expect(claimedCounts().length).toBeGreaterThan(0);
   });
 
   /* **exhaustive 형태입니다** — 이름마다 따로 단언하면 첫 실패에서 멈춰 나머지가 실행조차

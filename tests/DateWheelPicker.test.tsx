@@ -78,7 +78,7 @@ function fieldOf(name: string) {
  *  (css/wheel-picker.css의 `.wheel-trigger:focus-within …`). 그래서 이 헬퍼는
  *  "화면에 보이는가"가 아니라 "컴포넌트가 어느 세그먼트를 활성으로 보고 있는가"를 읽는다. */
 function activeSegment(): string | null {
-  return document.querySelector(".wheel-segment.active")?.getAttribute("data-unit") ?? null;
+  return document.querySelector('.wheel-segment[data-active]')?.getAttribute("data-unit") ?? null;
 }
 
 /**
@@ -273,8 +273,8 @@ describe("DateWheelPicker", () => {
     const year = screen.getByRole("group", { name: "연도 2026" });
     const month = screen.getByRole("group", { name: "월 07" });
     fireEvent.pointerDown(month, { pointerId: 11, clientY: 80, buttons: 1 });
-    expect(month.classList.contains("active")).toBe(true);
-    expect(year.classList.contains("active")).toBe(false);
+    expect(month.hasAttribute("data-active")).toBe(true);
+    expect(year.hasAttribute("data-active")).toBe(false);
     fireEvent.pointerCancel(month, { pointerId: 11 });
   });
 
@@ -1495,7 +1495,7 @@ describe("DateWheelPicker 포커스 불변식 — 키보드를 받는 동안 act
 
 // 초판의 이 블록은 "어느 열이 포커스를 쥐고 있는가"로 세그먼트 이동을 읽었다. 열이
 // 포커스를 받지 않게 되면서(설계 스펙 §5·§6.2) 그 채널이 사라졌고, 이제 활성 세그먼트를
-// `activeSegment()`(트리거의 `.wheel-segment.active`)로 읽는다.
+// `activeSegment()`(트리거의 `.wheel-segment[data-active]`)로 읽는다.
 describe("DateWheelPicker 세그먼트 이동", () => {
   async function openPicker() {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
@@ -1675,7 +1675,7 @@ describe("DateWheelPicker 리뷰 Finding 1 — activeUnit의 수명과 클램프
 
     fireEvent.click(screen.getByRole("button", { name: "일 열 제거" }));
 
-    expect(screen.getByRole("group", { name: "연도 2026" }).classList.contains("active")).toBe(true);
+    expect(screen.getByRole("group", { name: "연도 2026" }).hasAttribute("data-active")).toBe(true);
   });
 });
 
@@ -2514,7 +2514,7 @@ describe("DateWheelPicker 활성 표시는 편집 중에만", () => {
     fireEvent.click(trigger);
     return trigger;
   }
-  const editing = (trigger: HTMLElement) => trigger.classList.contains("editing");
+  const editing = (trigger: HTMLElement) => trigger.hasAttribute("data-editing");
 
   it("팝오버를 열면 편집이 시작된다", async () => {
     const trigger = open();
@@ -2533,7 +2533,7 @@ describe("DateWheelPicker 활성 표시는 편집 중에만", () => {
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
 
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
-    expect(trigger.classList.contains("editing")).toBe(true);
+    expect(trigger.hasAttribute("data-editing")).toBe(true);
   });
 
   // **오너가 말한 그것.**
@@ -2643,8 +2643,8 @@ describe("DateWheelPicker 활성 표시는 편집 중에만", () => {
   // 경로에서 표시가 남습니다. 규칙은 여전히 **하나**이고 조건이 하나 붙었을 뿐입니다.
   it("규칙은 하나이고, 포커스와 편집 중 둘 다 건다", () => {
     const rules = wheelPickerCssSource.replace(/\/\*[\s\S]*?\*\//g, "").match(/[^{}]+(?=\{)/g) ?? [];
-    const painting = rules.map((r) => r.replace(/\s+/g, " ").trim()).filter((r) => /\.wheel-segment\.active/.test(r));
-    expect(painting).toEqual([".wheel-trigger.editing:focus-within .wheel-segment.active"]);
+    const painting = rules.map((r) => r.replace(/\s+/g, " ").trim()).filter((r) => /\.wheel-segment\[data-active\]/.test(r));
+    expect(painting).toEqual([".wheel-trigger[data-editing]:focus-within .wheel-segment[data-active]"]);
   });
 });
 
@@ -4396,7 +4396,7 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // 이동 규칙이 진입 규칙과 **같은 특이도**이고 파일에서 **뒤에** 오므로, 커밋 프레임에서는
   // 이동이 이깁니다. 아래 "이동 규칙이 뒤에 온다"가 그것을 고정합니다.
   it("진입은 값 컨테이너를 굴리고, 열의 entering이 그것을 연다", () => {
-    expect(wheelPickerCssSource).toMatch(/\.wheel-column\.entering \.wheel-values \{[^}]*animation: wheel-enter 280ms/);
+    expect(wheelPickerCssSource).toMatch(/\.wheel-column\[data-entering\] \.wheel-values \{[^}]*animation: wheel-enter 280ms/);
   });
 
   it("진입 키프레임이 있다", () => {
@@ -4471,7 +4471,7 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // 진입이 다시 재생되면 슬라이드와 겹칩니다. 둘은 특이도가 같으므로(둘 다 (0,3,0))
   // **파일 안의 순서**가 승부를 가릅니다. 이동을 뒤에 둡니다.
   it("이동 규칙이 진입 규칙보다 파일에서 뒤에 온다", () => {
-    const enter = wheelPickerCssSource.indexOf(".wheel-column.entering .wheel-values");
+    const enter = wheelPickerCssSource.indexOf(".wheel-column[data-entering] .wheel-values");
     const move = wheelPickerCssSource.indexOf(`.wheel-column[data-motion="next"] .wheel-values`);
     expect([enter >= 0, move >= 0, enter < move]).toEqual([true, true, true]);
   });
@@ -4484,7 +4484,7 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // 이웃한 이동 규칙이 이미 같은 이유로 그렇게 돼 있습니다.
   it("reduced-motion에서 진입의 이동이 제거된다", () => {
     const reduced = /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\n\}/.exec(wheelPickerCssSource)?.[0] ?? "(reduced 블록이 없다)";
-    expect(reduced).toMatch(/\.wheel-column\.entering \.wheel-values/);
+    expect(reduced).toMatch(/\.wheel-column\[data-entering\] \.wheel-values/);
   });
 
   // ── DOM: 게이트가 실제로 열리고 닫히는가 ────────────────────────────────────
@@ -4495,7 +4495,7 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // 고정합니다.
   it("팝오버가 열리면 세 열 모두 entering이 붙는다", () => {
     openPicker();
-    expect(columns().map((column) => column.classList.contains("entering"))).toEqual([true, true, true]);
+    expect(columns().map((column) => column.hasAttribute("data-entering"))).toEqual([true, true, true]);
   });
 
   // 위가 전제입니다 — 클래스가 아예 안 붙으면 이 테스트는 공허 통과합니다.
@@ -4503,7 +4503,7 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
     vi.useFakeTimers();
     openPicker();
     act(() => { vi.advanceTimersByTime(1000); });
-    expect(columns().map((column) => column.classList.contains("entering"))).toEqual([false, false, false]);
+    expect(columns().map((column) => column.hasAttribute("data-entering"))).toEqual([false, false, false]);
   });
 
   // ── 게이트 창과 CSS 총 길이는 **같은 수여야 합니다** ────────────────────────
@@ -4520,23 +4520,30 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // 이 둘은 값을 바꾼 지금도 초록입니다(커플링이 지켜지고 있으므로). 빨개질 수 있다는
   // 것은 뮤테이션으로 확인했습니다 — JS 상수만 줄이면 앞이, 늘리면 뒤가 죽습니다.
   function enterTotalFromCss() {
-    const duration = /\.wheel-column\.entering \.wheel-values \{[^}]*animation: wheel-enter (\d+)ms/.exec(wheelPickerCssSource)?.[1];
+    const duration = /\.wheel-column\[data-entering\] \.wheel-values \{[^}]*animation: wheel-enter (\d+)ms/.exec(wheelPickerCssSource)?.[1];
     const lastDelay = /\.wheel-column:nth-child\(3\) \{[^}]*--wheel-enter-delay:\s*(\d+)ms/.exec(wheelPickerCssSource)?.[1];
     return Number(duration) + Number(lastDelay);
   }
+
+  // 전제 — 위 함수가 못 읽으면 NaN이고, `advanceTimersByTime(NaN)`은 **아무 시간도 안**
+  // **흘립니다**. 그러면 아래 둘은 "게이트가 안 걷혔다"를 재는 것이 아니라 **아무 일도 안**
+  // **일어난 것**을 재게 됩니다. 이관에서 정규식이 안 맞아 실제로 그 모양이 됐었습니다.
+  it("전제: CSS에서 진입 총 길이를 실제로 읽어냈다", () => {
+    expect(Number.isFinite(enterTotalFromCss())).toBe(true);
+  });
 
   it("게이트는 마지막 열이 멎기 전에 걷히지 않는다", () => {
     vi.useFakeTimers();
     openPicker();
     act(() => { vi.advanceTimersByTime(enterTotalFromCss() - 30); });
-    expect(columns().map((column) => column.classList.contains("entering"))).toEqual([true, true, true]);
+    expect(columns().map((column) => column.hasAttribute("data-entering"))).toEqual([true, true, true]);
   });
 
   it("게이트는 마지막 열이 멎은 직후 걷힌다", () => {
     vi.useFakeTimers();
     openPicker();
     act(() => { vi.advanceTimersByTime(enterTotalFromCss() + 30); });
-    expect(columns().map((column) => column.classList.contains("entering"))).toEqual([false, false, false]);
+    expect(columns().map((column) => column.hasAttribute("data-entering"))).toEqual([false, false, false]);
   });
 });
 
@@ -4753,7 +4760,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
 
     expect([
       document.querySelector(".dropdown-value-commit") !== null,
-      trigger.classList.contains("editing"),
+      trigger.hasAttribute("data-editing"),
     ]).toEqual([true, false]);
   });
 
@@ -4842,7 +4849,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     // 포커스 없는 필드에 활성 표시가 남으면 그 필드가 입력을 받는 중으로 읽힌다(§4.5).
     //
     // ⚠️ **이 테스트가 묻는 것이 바뀌었다. 지키려는 계약은 그대로다.**
-    // 예전에는 "`.wheel-segment.active`에 매칭되는 규칙이 통틀어 하나"였다. 반전 칩이
+    // 예전에는 "활성 세그먼트에 매칭되는 규칙이 통틀어 하나"였다. 반전 칩이
     // 들어오면서 그 세그먼트를 겨냥하는 규칙이 하나 더 생겼는데(확정 펄스를 명시로 거는
     // 규칙), **그것은 정지 상태의 그림을 그리지 않는다** — `animation` 하나만 선언한다.
     // 지키려던 것은 규칙 개수가 아니라 **"활성 표시를 그리는 자리가 하나이고 그것이 포커스로
@@ -4851,8 +4858,8 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     // 같은 규칙의 선택자 목록에 끼어 오든 여전히 둘 다 터진다.
     it("활성 세그먼트의 정지 그림을 그리는 규칙은 포커스로 게이트된 하나뿐이다", () => {
       const painting = cssRules(wheelPickerCssSource)
-        .filter((rule) => /\.wheel-segment\.active/.test(rule.selector) && /(^|[\s;])background\s*:/.test(rule.body));
-      expect(painting.map((rule) => rule.selector)).toEqual([".wheel-trigger.editing:focus-within .wheel-segment.active"]);
+        .filter((rule) => /\.wheel-segment\[data-active\]/.test(rule.selector) && /(^|[\s;])background\s*:/.test(rule.body));
+      expect(painting.map((rule) => rule.selector)).toEqual([".wheel-trigger[data-editing]:focus-within .wheel-segment[data-active]"]);
     });
 
     /** 토큰 블록 하나에서 커스텀 프로퍼티 값을 읽는다. 블록 안에 중첩 규칙이 없다는 전제. */
@@ -4902,7 +4909,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
       const targeted = cssRules(wheelPickerCssSource).filter((rule) => /\.wheel-(segment|punctuation)/.test(rule.selector));
       expect(targeted.map((rule) => [rule.selector, declaresColor(rule.body)])).toEqual([
         [".wheel-segment", false],
-        [".wheel-trigger.editing:focus-within .wheel-segment.active", true],
+        [".wheel-trigger[data-editing]:focus-within .wheel-segment[data-active]", true],
       ]);
     });
 
@@ -4931,7 +4938,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     // 이유는 서로 다른 요구이기 때문이다 — 하나는 "칩 위 글자가 읽히는가", 다른 하나는
     // "칩이 필드에서 도드라지는가"다. 반전을 그만두는 순간 두 수는 갈라진다.
     it("활성 세그먼트의 배경과 글자색은 값을 박지 않고 토큰을 참조한다", () => {
-      const rule = cssRules(wheelPickerCssSource).find((candidate) => candidate.selector === ".wheel-trigger.editing:focus-within .wheel-segment.active");
+      const rule = cssRules(wheelPickerCssSource).find((candidate) => candidate.selector === ".wheel-trigger[data-editing]:focus-within .wheel-segment[data-active]");
       expect([
         /(^|[\s;])background:\s*([^;]+)/.exec(rule?.body ?? "")?.[2].trim() ?? null,
         /(^|[\s;])color:\s*([^;]+)/.exec(rule?.body ?? "")?.[2].trim() ?? null,
@@ -7533,13 +7540,22 @@ describe("휠의 시각 상태는 data-* 축이 칠한다 (§16 ③)", () => {
   });
 
   /* **둘 다** 칸 — 위 둘만으로는 클래스를 되살려도 안 빨개집니다. */
-  it("렌더된 열에 클래스 사본이 없다 — class는 부품 이름만 싣는다", () => {
+  /* 🔴 **"둘 다" 칸입니다.** 칠하는 쪽·붙이는 쪽만 보면 클래스 사본을 되살려도 안 빨개집니다 —
+   * 실제로 이 검사가 좁았을 때(이번에 옮긴 둘만 봤을 때) 열에 `active`를 되살리는 변이가
+   * **511개 전부 초록**이었습니다.
+   *
+   * 이제 휠의 상태 클래스가 다 나갔으므로 **완전 일치**로 못 박습니다: 이 셋의 `class`는
+   * **부품 이름 하나뿐**이어야 합니다. 상태는 전부 속성이 싣습니다. */
+  it("렌더된 열·세그먼트·트리거의 class는 부품 이름뿐이다", () => {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} />);
-    fireEvent.click(fieldOf("거래 날짜"));
+    const trigger = fieldOf("거래 날짜");
+    fireEvent.click(trigger);
     fireEvent.click(screen.getByRole("button", { name: "연도 다음" }));
 
     const year = screen.getByRole("group", { name: /^연도/ });
-    // ⚠️ `active`·`entering`은 아직 클래스입니다(다음 라운드) — 이 검사는 **이번에 옮긴 둘**만 봅니다.
-    expect([year.getAttribute("data-motion"), /moving-|holding/.test(year.className)]).toEqual(["next", false]);
+    const segment = trigger.querySelector(".wheel-segment")!;
+    // 전제 — 상태가 실제로 붙어 있는 순간을 보고 있다(안 그러면 아래가 공허합니다).
+    expect([year.getAttribute("data-motion"), segment.hasAttribute("data-unit")]).toEqual(["next", true]);
+    expect([year.className, segment.className, trigger.className]).toEqual(["wheel-column", "wheel-segment", "wheel-trigger"]);
   });
 });
