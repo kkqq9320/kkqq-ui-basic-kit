@@ -5843,6 +5843,25 @@ describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () =
     expect(onChange.mock.calls.map((call) => String(call[0]))).toEqual([]);
   });
 
+  /* 🔴 **다른 손가락의 움직임은 이 홀드를 안 끊습니다.** 홀드가 끊기는 조건은 *"누른 그
+   * 손가락이 움직였다"* 이지 *"아무 손가락이나 움직였다"* 가 아닙니다 — 화면에 손가락이
+   * 둘 있으면 가만히 있는 쪽의 홀드가 옆 손가락 때문에 죽습니다.
+   *
+   * ⚠️ 이 자리는 **추출하고 나서** 감시자가 없다는 것이 드러났습니다(`cancelIfMoved`에서
+   * `hold.pointerId === pointerId` 를 지우는 변이가 0 red였습니다). 위 두 손가락 검사 둘은
+   * 아무도 **움직이지 않아서** 이 가드를 안 밟습니다. */
+  it("다른 손가락이 움직여도 누르고 있는 쪽의 홀드는 살아 있다", () => {
+    vi.useFakeTimers();
+    const onChange = openTime("2026-08-12T15:07:41");
+    const secondRow = rowOf("초", 0);
+    pointer("pointerDown", secondRow, { pointerId: 41, clientY: 100, button: 0, isPrimary: true });
+    pointer("pointerDown", rowOf("분", 0), { pointerId: 42, clientY: 100, button: 0, isPrimary: false });
+    // 41번 손가락이 움직입니다 — 대기 중인 홀드는 42번의 것입니다.
+    pointer("pointerMove", secondRow, { pointerId: 41, clientY: 140, buttons: 1 });
+    act(() => { vi.advanceTimersByTime(HOLD_MS); });
+    expect(onChange.mock.calls.map((call) => String(call[0]))).toContain("2026-08-12T15:00:41");
+  });
+
   /* 🔴 **팝오버가 닫히는 것도 홀드의 출구입니다** — 한동안 아니었습니다.
    *
    * `cancelHold`을 부르는 자리는 다섯이었는데(재무장 · 언마운트 · 4px 움직임 · 손 떼기 ·
