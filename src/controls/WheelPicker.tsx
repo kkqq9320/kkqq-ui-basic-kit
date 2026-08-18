@@ -25,6 +25,7 @@ import { type WheelModel, type WheelUnit, type HourDisplay, type WheelStep } fro
 import { getHourFormat, getHourFormatServerSnapshot, getWheelRowsPerSide, getWheelRowsPerSideServerSnapshot, subscribeHourFormat, subscribeWheelRowsPerSide } from "../settings";
 import { useBackToClose, useEscapeToClose } from "../browser/popupDismiss";
 import { isPrimaryButton } from "../browser/pointerButton";
+import { canReadClipboard, catchDefaultPaste, readClipboard, writeClipboard } from "../browser/clipboard";
 import { dropdownViewportSpace, focusTriggerOnClick, onViewportChange } from "../browser/positioning";
 
 /* `todayIn`은 `index.ts`가 내보내고, `WheelUnit`은 tests/DateWheelPicker.test.tsx가
@@ -1245,84 +1246,17 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
 
   /* ---- 클립보드(Ctrl+C · Ctrl+V) ----------------------------------------
    *
-   * ⚠️ **접근은 이 두 함수 뒤로 격리합니다.** 어느 경로가 실제로 되는지는 **실브라우저
-   * 에서만** 확정됩니다 — 이 저장소의 계측 환경(브라우저 pane)은 CDP로 합성한 키를
-   * 쓰는데 그건 브라우저의 편집 명령을 돌리지 않아서, `copy`/`paste` 이벤트가 안 오는
-   * 것이 브라우저의 성질인지 계측기의 한계인지 **가려낼 수 없습니다**(같은 이유로 그
-   * 환경에서는 `event.code`가 늘 빈 문자열입니다). 그래서 실제로 잰 것만 코드로
-   * 굳힙니다: `navigator.clipboard`는 보안 컨텍스트가 아니면 아예 없고, 사용자 제스처
-   * 없이 부르면 `NotAllowedError`로 거절합니다.
-   *
-   * 없거나 거절당하면 **조용히 아무것도 하지 않습니다.** 폰에는 Ctrl 키가 없어 이
-   * 경로는 데스크톱 전용이고, 데스크톱에서 실패하는 경우는 권한 거절뿐입니다.
+   * **브라우저 접근은 `browser/clipboard.ts`에 있습니다** — 보안 컨텍스트 여부,
+   * `execCommand` 폴백, 임시 textarea, 포커스 복원까지. 여기 남는 것은 **이 컨트롤에서
+   * 그게 무슨 뜻인가**입니다: 무엇을 쓰는가(화면에 보이는 그대로), 붙여넣은 글자를
+   * 어떻게 값으로 받아들이는가, 그리고 `preventDefault`를 걸지 말지.
    */
-  /* 🔴 **비보안 컨텍스트 폴백**(2026-08-16). 위 문단이 잰 그대로 —
-   * `http://<LAN-IP>:15277`에서는 `navigator.clipboard`가 **아예 없습니다**(실측:
-   * `isSecureContext: false`). 즉 API만 쓰면 이 기능은 **정확히 필요한 그 환경에서만**
-   * 조용히 아무 일도 안 합니다.
-   *
-   * `execCommand`는 폐기 예정이지만 **비보안 컨텍스트에서 동작하는 유일한 경로**이고,
-   * 이 저장소가 이미 같은 자리에서 같은 폴백을 쓰고 있습니다 — 데모의 TRACE 패널
-   * 복사 버튼(`demo/EventTracePanel.tsx`)이 그것이고, 오너가 폰에서 실제로 써 왔습니다.
-   * 즉 **추측이 아니라 이 저장소에서 이미 동작이 확인된 패턴**입니다.
-   *
-   * ⚠️ 임시 `<textarea>`는 화면 밖이 아니라 **투명하게 제자리**에 둡니다. `display: none`
-   * 이나 화면 밖이면 브라우저가 선택을 안 만들어 `execCommand`가 실패하고, 화면 밖으로
-   * 밀면 iOS가 거기로 스크롤합니다. 그리고 **포커스를 반드시 되돌립니다** — 안 그러면
-   * 복사 한 번에 키보드 조작이 통째로 죽습니다(이 컨트롤은 키를 트리거가 받습니다). */
-  /** 🔴 **`lib.dom`은 `navigator.clipboard`를 언제나 있는 것으로 선언하는데, 실측은**
-   *  **반대입니다** — 비보안 컨텍스트에서는 `undefined`입니다(`http://10.1.1.254:15277`에서
-   *  잰 값). 그 사실을 타입으로 적어 둡니다. 안 그러면 `if (navigator.clipboard?.readText)`가
-   *  `TS2774: This condition will always return true`로 거절당하고, 더 나쁘게는 **읽는
-   *  사람이 그 가드를 군더더기로 보고 지웁니다.** */
+
   /* 붙여넣기는 `await`를 건너므로 **이 렌더의 `value` 클로저가 낡습니다.**
    * `commitAndClose`가 바로 그 함정으로 방금 지운 값을 되살렸던 자리와 같은 결이라,
    * 그쪽이 택한 방법(렌더 클로저 대신 기준값을 따로 들기)을 여기서도 씁니다. */
   const valueRef = useRef(value);
   valueRef.current = value;
-
-  const clipboardApi = (): Clipboard | undefined => navigator.clipboard as Clipboard | undefined;
-
-  /** 복사와 붙여넣기가 **같은 임시 요소**를 씁니다. 다른 것은 `readonly` 하나인데,
-   *  그게 결정적입니다 — **읽기 전용 textarea에는 붙여넣기가 안 됩니다.** */
-  function makeScratchTextarea(text: string, readOnly: boolean) {
-    const scratch = document.createElement("textarea");
-    scratch.value = text;
-    if (readOnly) scratch.setAttribute("readonly", "");
-    scratch.setAttribute("aria-hidden", "true");
-    scratch.tabIndex = -1;
-    scratch.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;padding:0;border:0;opacity:0;";
-    document.body.appendChild(scratch);
-    return scratch;
-  }
-
-  function writeClipboard(text: string) {
-    const api = clipboardApi();
-    if (api?.writeText) {
-      void api.writeText(text).catch(() => { /* 권한 거절 — 무시 */ });
-      return;
-    }
-    const active = document.activeElement as HTMLElement | null;
-    const scratch = makeScratchTextarea(text, true);
-    try {
-      /* ⚠️ **`focus()`를 명시로 부릅니다 — `select()`에 맡기지 않습니다.** 데모의 검증된
-       * 폴백이 그렇게 하고 있고(`demo/EventTracePanel.tsx`), 엔진마다 `select()`가 포커스를
-       * 옮기는지가 다릅니다. 실제로 이것 없이 쓴 첫 판은 **아래 포커스 복원이 검사로
-       * 증명될 수 없었습니다** — jsdom의 `select()`는 포커스를 안 옮겨서 트리거가 포커스를
-       * 잃은 적이 없었고, `active?.focus?.()`를 지우는 변이가 **0 red**였습니다. */
-      scratch.focus();
-      scratch.select();
-      document.execCommand("copy");
-    } catch {
-      /* 폴백도 막혔습니다 — 조용히 넘어갑니다. 이 경로에는 알릴 자리가 없습니다. */
-    } finally {
-      scratch.remove();
-      active?.focus?.();
-    }
-  }
-  async function readClipboard(): Promise<string | null> {
-    try { return (await clipboardApi()?.readText()) ?? null; } catch { return null; }
-  }
 
   /** Ctrl+C — **화면에 보이는 그대로** 씁니다(오너: "포맷된 날짜를 클립보드에"). 치던
    *  버퍼를 먼저 확정하는 이유는, 안 그러면 화면에는 `20‒‒`가 보이는데 클립보드에는
@@ -1388,21 +1322,14 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    * textarea는 편집 가능하므로 거기로는 확실히 옵니다.
    */
   function pasteFromKeydown(event: ReactKeyboardEvent) {
-    if (clipboardApi()?.readText) {
+    if (canReadClipboard()) {
       event.preventDefault();
       void pasteValue();
       return;
     }
-    const active = document.activeElement as HTMLElement | null;
-    const scratch = makeScratchTextarea("", false);
-    scratch.focus();
-    // ⚠️ `preventDefault`를 **안 부릅니다.** 이 줄이 이 분기의 전부입니다.
-    window.setTimeout(() => {
-      const text = scratch.value;
-      scratch.remove();
-      active?.focus?.();
-      applyPastedText(text);
-    }, 0);
+    // ⚠️ `preventDefault`를 **안 부릅니다.** 이 줄이 이 분기의 전부입니다 —
+    // 왜 안 부르는지는 `browser/clipboard.ts`의 `catchDefaultPaste`에 있습니다.
+    catchDefaultPaste(applyPastedText);
   }
 
   /* 🔴 **비보안 컨텍스트의 붙여넣기 경로**(2026-08-16). 읽기에는 복사 같은 폴백이
