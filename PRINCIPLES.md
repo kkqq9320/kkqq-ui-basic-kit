@@ -933,9 +933,9 @@ model/*.ts        값 모델(시점·기간). 화면도 DOM도 모릅니다
 
 | 자리 | 무엇이 어긋나는가 | 잰 이음매 |
 |---|---|---|
-| `controls/WheelPicker.tsx` (약 2235줄) | 규칙 4. 컴포넌트 안 최상위 선언 **87개**(들여쓰기 두 칸의 `const`·`function`·`let`) | 남은 조각 **둘**: 스와이프 3 · 홀드 7. ⚠️ 둘은 `suppressColumnClickRef`를 함께 쓰므로 **같이 봐야 합니다**(아래).<br>클립보드는 **절반만** 나갔습니다 — 브라우저 접근은 바인딩 0이라 `browser/clipboard.ts`로 갔고, 남은 의미 절반은 `value`·`model`·`fields`·`hourDisplay`·`clampToRange`·`flushTyping`·`setTyping`·`clearedRef`·`undo`·`onChange` 열을 집습니다. **그건 단축키 계약이라 컨트롤에 있는 것이 맞습니다.**<br>나간 넷: 이동 계산 → `controls/wheelShift.ts` · 되돌리기 → `controls/undoStack.ts` · 열 모션 → `controls/columnMotion.ts` · 클립보드 접근 → `browser/clipboard.ts` |
+| `controls/WheelPicker.tsx` (약 2235줄) | 규칙 4. 컴포넌트 안 최상위 선언 **87개**(들여쓰기 두 칸의 `const`·`function`·`let`) | 남은 조각 **둘**: 스와이프 3 · 홀드 7. ⚠️ 둘을 막고 있는 것은 `suppressColumnClickRef`가 **아니라** `swipeRef`입니다(아래).<br>클립보드는 **절반만** 나갔습니다 — 브라우저 접근은 바인딩 0이라 `browser/clipboard.ts`로 갔고, 남은 의미 절반은 `value`·`model`·`fields`·`hourDisplay`·`clampToRange`·`flushTyping`·`setTyping`·`clearedRef`·`undo`·`onChange` 열을 집습니다. **그건 단축키 계약이라 컨트롤에 있는 것이 맞습니다.**<br>나간 넷: 이동 계산 → `controls/wheelShift.ts` · 되돌리기 → `controls/undoStack.ts` · 열 모션 → `controls/columnMotion.ts` · 클립보드 접근 → `browser/clipboard.ts` |
 | `model/instant.ts` (약 1000줄) | 규칙 4. 순수 함수 53개 | **3층이 이미 서 있습니다.** 아래층(값·단위+12시간)에서 위로 가는 화살표 **0**, 중간 여섯(step·range·typing·dateMath·display·paste)끼리 교차 **6개**. 계약 타입은 이미 `model/wheelModel.ts`로 나갔습니다 — 남은 것은 구현을 여섯으로 가르는 일이고, 그러려면 `model/instant/` 하위 폴더가 필요합니다(`model/`은 배럴 묶음이 아니라 예외 자리입니다) |
-| `surfaces/PageChrome.tsx` · `surfaces/SectionTabs.tsx` | 규칙 4. 파일 이름이 대표 컴포넌트 이름이 아닌 묶음 파일입니다 | 안 쟀습니다(각 200줄 안팎이라 급하지 않습니다) |
+| `surfaces/PageChrome.tsx` (약 209줄) | 규칙 4. **파일 이름이 아무것도 안 내보냅니다** — `PageChrome`이라는 심볼이 없습니다 | 공개 아홉(컴포넌트 여덟 + `GridJustify`). **여덟 사이의 상호참조 0.** 유일한 묶음은 격자 셋(`SummaryGrid` 21줄 · `FieldGrid` 35 · `PanelGrid` 17)이 비공개 `trackStyle`(16줄)과 `GridJustify`를 함께 쓰는 것입니다. 나머지 다섯(`PageHeader` 13 · `SectionHeading` 12 · `SummaryCard` 28 · `Panel` 11 · `DismissibleDetails` 22)은 서로도, 격자와도 무관합니다.<br>📌 `DismissibleDetails`는 **저장소 안에서 아무도 안 씁니다**(`demo/`·`src/` 0건, 배럴만) — 지우는 것은 breaking이라 오너 판단 항목입니다 |
 
 ⚠️ **선언 개수는 세는 법을 같이 적습니다.** 여기 한동안 `91`이 적혀 있었는데 세는 법이
 안 남아 있어 **같은 수가 다시 안 나옵니다**(지금 법으로 `v0.13.0`은 98). 재는 법 없는
@@ -947,12 +947,38 @@ model/*.ts        값 모델(시점·기간). 화면도 DOM도 모릅니다
 이름만 바꿔** 따라갑니다.
 
 🔴 **바인딩 개수는 "밖에서 물어오는 것"만 셉니다 — "밖에서 써 넣는 것"은 안 셉니다.**
-그래서 **스와이프는 3이 말하는 것보다 훨씬 엉켜 있습니다**: `swipeRef`·`suppressColumnClickRef`에
-**밖에서 써 넣는 자리가 셋**입니다(열의 `onPointerDown`, `armHold`의 타이머, `onPointerCancel`).
-게다가 `suppressColumnClickRef`는 스와이프의 것이 아닙니다 — 홀드가 *"새 장치를 만들지 않고
-그것을 쓴다"* 고 그 자리 주석에 적고 있습니다. **다음에 조각을 고를 때는 바인딩 수가 아니라
-"이 상태에 밖에서 써 넣는 곳이 있는가"로 고르세요.** 되돌리기가 먼저 나온 이유가 그것입니다
-(밖에서 읽기만 하고 아무도 안 써 넣습니다).
+그래서 **스와이프는 3이 말하는 것보다 훨씬 엉켜 있습니다** — 밖에서 써 넣는 자리 셋은
+전부 **`swipeRef`** 쪽입니다:
+
+```bash
+grep -on 'swipeRef.current = [^;]*' src/controls/WheelPicker.tsx
+#  1116  armHold의 타이머        2219  열의 onPointerDown        2219  onPointerCancel
+#  (2002 finishSwipe는 자기 것)
+```
+
+⚠️ **여기 한동안 `swipeRef`와 `suppressColumnClickRef`가 한 덩어리로 적혀 있었고, 그
+덩어리 때문에 "홀드와 스와이프는 같이 봐야 한다"는 틀린 결론이 나왔습니다.** 갈라 재면:
+
+```bash
+grep -n 'suppressColumnClickRef.current' src/controls/WheelPicker.tsx
+#  홀드      읽기 0 · 쓰기 1  (1115 — armHold 타이머 본문, onFire 페이로드 안)
+#  스와이프  읽기 0 · 쓰기 3  (1911 · 1942 · 2008)
+#  컴포넌트  읽기 2 (1997 가드 · 2219 onClickCapture) · 쓰기 2 (1997 rAF · 2219 onPointerDown)
+```
+
+**표식을 읽는 것은 컴포넌트뿐입니다 — 이 표식은 분리를 막지 않습니다.** 홀드의 쓰기 한 줄은
+타이머 본문 세 줄 안에 있어 `onFire` 콜백과 함께 나갑니다.
+
+**다음에 조각을 고를 때는 바인딩 수가 아니라 "이 상태에 밖에서 써 넣는 곳이 있는가"로
+고르세요.** 되돌리기가 먼저 나온 이유가 그것입니다(밖에서 읽기만 하고 아무도 안 써 넣습니다).
+그리고 **묶어 적은 이름은 갈라서 다시 세세요** — 이 저장소가 같은 실수를 두 번 했습니다
+(브리핑의 "주석 인용 295건"도 폴더 비용과 이름 비용을 묶어 놓은 것이었습니다).
+
+✅ **`surfaces/SectionTabs.tsx`는 이 표에서 빠졌습니다(2026-08-18 실측).** 한동안 "묶음
+파일"로 적혀 있었는데 재 보니 **한 기제의 양 끝**이었습니다 — `SectionTabs`가
+`MobilePageTabsContext`에 자기를 **등록**하고 `MobilePageTabs`가 폰에서 그것을 **그립니다**.
+파일 이름은 그 기제의 한쪽 끝이지만 그쪽이 대표(소비자가 쓰는 것)이므로 규칙 1을 지킵니다.
+**쪼갤 이음매가 없습니다.** — 안 잰 항목을 표에 올려 두면 "위반"으로 읽힙니다.
 
 ⚠️ **줄 수는 근거가 아닙니다 — 잰 이음매가 근거입니다.** `AppShell.tsx`가 그 차이를
 보여 줬습니다: 1063줄이었지만 **컴포넌트는 58줄**이었고 나머지가 키보드 보정
