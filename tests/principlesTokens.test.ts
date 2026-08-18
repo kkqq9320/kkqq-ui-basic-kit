@@ -17,7 +17,7 @@
 import { describe, expect, it } from "vitest";
 
 import principles from "../PRINCIPLES.md?raw";
-import { THEME_TOKEN_GROUPS } from "../src/theme/themeTokens";
+import { THEME_TOKEN_GROUPS } from "../src/theme/tokens";
 import tokensCssSource from "../css/tokens.css?raw";
 
 const cssModules = import.meta.glob("../css/*.css", { query: "?raw", import: "default", eager: true }) as Record<string, string>;

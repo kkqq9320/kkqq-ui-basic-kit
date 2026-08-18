@@ -1,6 +1,6 @@
 /* 앱의 토큰 목록을 **한 번만** 묶는 객체.
  *
- * `themeTokens.ts`의 함수들은 전부 `tokens` 인자를 받고 기본값이 킷의 목록입니다.
+ * `theme/tokens.ts`의 함수들은 전부 `tokens` 인자를 받고 기본값이 킷의 목록입니다.
  * 앱이 자기 토큰을 더하면 **모든 호출부에 그 목록을 다시 넘겨야** 하고, 하나만
  * 빠뜨리면 앱의 색이 말없이 사라집니다(실측: 목록을 안 넘긴 `readTokenOverrides`가
  * `--brand-2`를 버림. 저장소에는 그대로 남아 있어 더 알기 어렵습니다).
@@ -18,7 +18,7 @@ import {
   type ThemeName,
   type ThemeToken,
   type ThemeTokenGroup,
-} from "./themeTokens";
+} from "./tokens";
 
 const THEMES = ["light", "dark"] as const;
 

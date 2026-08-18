@@ -30,6 +30,21 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.12.0
 
   `tests/pressable.test.tsx`가 **`src/`에 날 `<button>`이 다시 생기면** 빨개집니다.
 
+- **폴더 안의 되풀이 이름 넷을 걷었습니다.** 폴더가 이미 말한 것을 파일 이름이 다시
+  말하면 이름이 아무것도 안 말합니다 — `shortcuts/shortcuts.ts`를 열기 전에는 안에
+  무엇이 있는지 알 수 없었습니다.
+
+  ```
+  shortcuts/shortcuts.ts        →  shortcuts/combo.ts
+  shortcuts/shortcutStorage.ts  →  shortcuts/storage.ts
+  theme/themeTokens.ts          →  theme/tokens.ts
+  theme/themePalette.ts         →  theme/palette.ts
+  ```
+
+  🟢 **공개 이름은 하나도 안 바뀝니다** — 배럴이 같은 이름을 계속 내보냅니다.
+  컴포넌트 파일(`ShortcutProvider.tsx` 등)은 접두사가 **내보내는 이름**이라 그대로입니다.
+  `tests/`는 평면이라 접두사가 일을 하므로 역시 그대로입니다.
+
 - **`src/`가 폴더로 묶였습니다** — `controls/` · `surfaces/` · `theme/` · `shortcuts/` ·
   `browser/` · `model/`. **축을 새로 만들지 않았습니다**: 배럴이 이미 가진 여섯 역할
   묶음 그대로라 **목차와 파일 트리가 같은 축**입니다.

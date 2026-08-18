@@ -16,11 +16,11 @@
  * ✅ **지속성이 붙었습니다**(2026-08-16, 설계 스펙 §16-3). 한동안 인메모리였던 이유는
  * "킷이 `localStorage`를 어떻게 소유하는가"가 테마 설정 작업에서 정해지는 중이었기
  * 때문입니다 — 먼저 정하면 킷 안에 저장 규약이 두 개 생깁니다. 그 작업이 끝나서
- * **`themeTokens.ts`의 규약을 그대로 따릅니다**: `namespace:키`, 읽기·쓰기 **둘 다**
+ * **`theme/tokens.ts`의 규약을 그대로 따릅니다**: `namespace:키`, 읽기·쓰기 **둘 다**
  * `try/catch`, 읽은 값은 **믿지 않고 검증**.
  *
  * 🔴 **`try/catch`가 읽기에도 필요한 이유**: 쿠키·사이트 데이터를 전면 차단한
- * 브라우저에서는 `localStorage`에 **접근만 해도** 예외가 납니다(`themeTokens.ts`가
+ * 브라우저에서는 `localStorage`에 **접근만 해도** 예외가 납니다(`theme/tokens.ts`가
  * 그 자리를 실제로 밟았습니다 — 색 하나 바꾸면 편집기가 죽었습니다).
  *
  * 🔴 **그리고 이것이 왜 함수를 둘로 가르는가.** `useSyncExternalStore`의 세 번째 인자는
@@ -40,7 +40,7 @@ import type { HourFormat } from "./model/instant";
 
 /* ---- 저장 ------------------------------------------------------------------
  *
- * `themeTokens.ts`가 `themeColors:<테마>`를 쓰므로 같은 `namespace:키` 모양입니다.
+ * `theme/tokens.ts`가 `themeColors:<테마>`를 쓰므로 같은 `namespace:키` 모양입니다.
  * 설정마다 키가 따로인 것은 일부러입니다 — 한 덩어리 JSON으로 묶으면 값 하나가
  * 깨졌을 때 **나머지까지 같이 버리게** 됩니다. */
 const HOUR_FORMAT_KEY = "settings:hourFormat";

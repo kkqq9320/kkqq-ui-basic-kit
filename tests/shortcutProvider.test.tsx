@@ -11,8 +11,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ShortcutProvider, useShortcutRegistry, type ShortcutAction, type ShortcutRegistry } from "../src/shortcuts/ShortcutProvider";
 import { Select } from "../src/controls/Select";
-import { sidebarToggleAction } from "../src/shortcuts/shortcuts";
-import { createShortcutStorage, type ShortcutStorage } from "../src/shortcuts/shortcutStorage";
+import { sidebarToggleAction } from "../src/shortcuts/combo";
+import { createShortcutStorage, type ShortcutStorage } from "../src/shortcuts/storage";
 
 afterEach(() => {
   cleanup();

@@ -14,7 +14,7 @@
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { beginRecording, endRecording, isRecording, shouldTrigger } from "../src/shortcuts/shortcuts";
+import { beginRecording, endRecording, isRecording, shouldTrigger } from "../src/shortcuts/combo";
 
 afterEach(cleanup);
 

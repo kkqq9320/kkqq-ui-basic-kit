@@ -68,6 +68,27 @@ describe("src/ 파일 이름 규칙과 의존 방향 (PRINCIPLES §15)", () => {
     expect(wrong).toEqual([]);
   });
 
+  /* §15 — **폴더 안에서는 접두사를 되풀이하지 않습니다.** 폴더가 이미 말한 것을 파일
+   * 이름이 다시 말하면 이름이 아무것도 안 말합니다: `shortcuts/shortcuts.ts`를 열기
+   * 전에는 안에 무엇이 있는지 알 수 없었습니다.
+   *
+   * **컴포넌트 파일은 해당 없습니다** — `shortcuts/ShortcutProvider.tsx`의 `Shortcut`은
+   * 되풀이가 아니라 **내보내는 컴포넌트의 이름**이고, 규칙 1이 파일 이름과 공개 이름을
+   * 같게 요구합니다. 그래서 소문자 모듈만 봅니다. */
+  it("소문자 모듈 이름이 자기 폴더 이름을 되풀이하지 않는다", () => {
+    const inFolders = modules.filter((module) => !module.isComponentFile && module.id.includes("/"));
+    // 전제 — 폴더 안 소문자 모듈이 없으면 아래가 공허합니다.
+    expect(inFolders.length).toBeGreaterThan(5);
+    const repeated = inFolders
+      .filter((module) => {
+        const [folder, name] = [module.id.slice(0, module.id.indexOf("/")), module.id.slice(module.id.lastIndexOf("/") + 1)];
+        const singular = folder.endsWith("s") ? folder.slice(0, -1) : folder;
+        return name.toLowerCase().startsWith(folder.toLowerCase()) || name.toLowerCase().startsWith(singular.toLowerCase());
+      })
+      .map((module) => module.file);
+    expect(repeated).toEqual([]);
+  });
+
   /* §15 규칙 2 — 소문자 모듈은 컴포넌트를 렌더하지 않습니다. JSX가 들어가면 파일이
    * `.tsx`여야 하고, 그러면 규칙 1이 먼저 빨개집니다. 여기서는 "컴포넌트를 내보내는가"를
    * 봅니다 — JSX 없이 `createElement`로 써도 잡히도록 이름 규칙으로 판정합니다. */

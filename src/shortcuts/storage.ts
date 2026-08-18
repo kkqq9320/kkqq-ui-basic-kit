@@ -1,14 +1,14 @@
-/* 단축키 사용자 덮어쓰기의 저장소. `themePalette.ts`의 모양을 따릅니다 — 저장 실패는
+/* 단축키 사용자 덮어쓰기의 저장소. `theme/palette.ts`의 모양을 따릅니다 — 저장 실패는
  * 던지지 않고 `boolean`/`{}`로 알리고, 왕복 불가능한 값은 이름을 남기고 버립니다.
  *
- * ⚠️ **`themeTokens.ts`와 저장 모양이 다릅니다.** `writeTokenOverrides`는 저장소에
+ * ⚠️ **`theme/tokens.ts`와 저장 모양이 다릅니다.** `writeTokenOverrides`는 저장소에
  * **맨 맵**을 넣고, 버전 붙은 봉투는 `serialize`/`parse`(백업 내보내기 전용)에서만
  * 등장합니다. 여기서는 **저장소 자체**가 봉투입니다(`{ version: 1, bindings: {...} }`)
  * — 설계 스펙 §7이 그렇게 못박았습니다. 맨 맵을 저장하면 나중에 봉투 모양으로
  * 옮길 때 옛 사용자의 저장값을 못 읽는 마이그레이션이 생기므로, 처음부터 봉투로
  * 시작합니다.
  */
-import { normalizeCombo } from "./shortcuts";
+import { normalizeCombo } from "./combo";
 
 /** 액션 id → 조합 문자열. **`null`과 "키 없음"은 다릅니다**(설계 스펙 §7.1) —
  *  `null`은 "사용자가 이 액션의 조합을 지웠다", 키가 아예 없는 것은 "기본값
@@ -59,7 +59,7 @@ export type ShortcutStorage = {
   parse(input: unknown): ParsedShortcutBindings | null;
 };
 
-/** `themeTokens.ts`의 `storageKey`(`themeColors:${theme}`)와 같은 관례를 따릅니다 —
+/** `theme/tokens.ts`의 `storageKey`(`themeColors:${theme}`)와 같은 관례를 따릅니다 —
  *  킷 네임스페이스 접두어 없이 도메인 이름 그대로입니다. 테마는 라이트/다크 변형이
  *  있어 콜론 뒤에 그 이름이 붙지만, 단축키 덮어쓰기는 변형이 없는 맵 하나뿐이라
  *  접미사가 없습니다. */

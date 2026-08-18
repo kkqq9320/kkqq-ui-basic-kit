@@ -1063,13 +1063,25 @@ import 경로                    114곳   ← 전부 컴파일러가 잡습니�
 
 이름을 바꾸는 것은 **253건이 전부 사정권**에 들어옵니다. 그래서 폴더가 먼저입니다.
 
-### 아직 이름이 어긋나는 자리 — 폴더가 드러낸 것
+### 폴더 안에서는 접두사를 되풀이하지 않습니다
 
-폴더로 묶고 나니 **같은 말을 두 번 하는 이름**이 보입니다. 이름 바꾸기는 위 253건이
-걸린 별도 라운드라 이번에 안 했고, 여기 적어 둡니다:
+폴더가 이미 말한 것을 파일 이름이 다시 말하면 이름이 아무것도 안 말합니다.
+`shortcuts/shortcuts.ts`를 열기 전에는 안에 무엇이 있는지 알 수 없습니다.
 
-| 지금 | 문제 | 후보 |
-|---|---|---|
-| `shortcuts/shortcuts.ts` | 폴더 안에서 파일 이름이 아무것도 안 말합니다 | `shortcuts/combo.ts` |
-| `theme/themeTokens.ts` · `theme/themePalette.ts` | 같은 되풀이 | `theme/tokens.ts` · `theme/palette.ts` |
-| `shortcuts/shortcutStorage.ts` | 같음 | `shortcuts/storage.ts` |
+```
+shortcuts/shortcuts.ts        →  shortcuts/combo.ts      조합의 문법과 판정
+shortcuts/shortcutStorage.ts  →  shortcuts/storage.ts    사용자 덮어쓰기 저장소
+theme/themeTokens.ts          →  theme/tokens.ts         노출 목록 + 저장소 읽기·쓰기
+theme/themePalette.ts         →  theme/palette.ts        목록을 미리 매어 둔 것
+```
+
+**컴포넌트 파일은 해당 없습니다** — `shortcuts/ShortcutProvider.tsx`의 `Shortcut`은
+되풀이가 아니라 **내보내는 컴포넌트의 이름**입니다(규칙 1). 파일 이름과 공개 이름이
+같아야 하므로 여기서 접두사를 떼면 규칙이 깨집니다.
+
+⚠️ **`tests/`는 평면이라 접두사가 일을 합니다.** `tests/shortcutStorage.test.ts`를
+`tests/storage.test.ts`로 바꾸면 무엇의 저장소인지 알 수 없습니다. 이 규칙은 `src/`의
+것이고, 폴더가 없는 곳에서는 이름이 그 일을 대신해야 합니다.
+
+⚠️ **주석 인용은 폴더까지 붙여 씁니다** — `` `theme/tokens.ts` ``. 폴더가 생긴 뒤로는
+파일명만 쓰면 `css/tokens.css`와 헷갈립니다.

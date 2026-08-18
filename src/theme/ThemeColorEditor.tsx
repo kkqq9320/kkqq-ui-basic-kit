@@ -27,8 +27,8 @@ import {
   type ThemeName,
   type ThemeToken,
   type ThemeTokenGroup,
-} from "./themeTokens";
-import { type ThemePalette } from "./themePalette";
+} from "./tokens";
+import { type ThemePalette } from "./palette";
 
 /** 이 시간 동안 조용하면 한 번의 조작이 끝난 것으로 봅니다. 피커를 끄는 동안의
  *  간격보다는 넉넉하고, 색을 고르고 다시 잡기까지보다는 짧습니다. */

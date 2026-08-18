@@ -9,7 +9,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createShortcutStorage } from "../src/shortcuts/shortcutStorage";
+import { createShortcutStorage } from "../src/shortcuts/storage";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -148,7 +148,7 @@ describe("parse", () => {
     expect(parsed?.dropped).toEqual(["toggle"]);
   });
 
-  /* "Ctrl+Shift"는 수식어만 있고 키가 없습니다 — `shortcuts.ts`의 `parseCombo`가
+  /* "Ctrl+Shift"는 수식어만 있고 키가 없습니다 — `shortcuts/combo.ts`의 `parseCombo`가
    * 명시적으로 거부하는 자리입니다("키가 없다" 주석). 임의의 한글 문자열은 `code`로
    * 그대로 통과해 버리지 *않으므로*(parseCombo가 code 자체의 값은 검증하지 않음),
    * 실제로 거부되는 이 모양을 씁니다. */

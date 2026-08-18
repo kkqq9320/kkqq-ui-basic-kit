@@ -1523,7 +1523,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    *  한동안 조건 없이 걸었고, 그래서 **복사할 것이 없는데도 브라우저의 복사를 막았습니다.**
    *
    *  왜 그게 결함인가: 이 저장소는 `Ctrl+C`를 앱이 **다시 정의하지 못하게** 막아 뒀습니다
-   *  (`src/shortcuts/shortcuts.ts`의 `UNBINDABLE_EDIT_CODES`, 오너 결정 2026-08-13 —
+   *  (`src/shortcuts/combo.ts`의 `UNBINDABLE_EDIT_CODES`, 오너 결정 2026-08-13 —
    *  "복사·붙여넣기·되돌리기는 너무 중요해서 앱이 다시 정의하면 안 된다"). 그 키를 그렇게
    *  보호해 놓고 **픽커 자신이 빈 값에서 먹는 것**은 같은 원칙을 어기는 자리입니다.
    *  페이지에서 드래그해 둔 글자를 복사하려던 사람은 아무것도 못 얻습니다. */
@@ -2007,7 +2007,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
        *
        * 대가가 둘이었습니다: (1) 위 `setTyping(null)`이 치던 버퍼를 **버려 놓고** 절반
        * 전환은 실패하는 **파괴적 no-op**, (2) `defaultPrevented`를 단축키 모듈이 신호로
-       * 읽으므로(`shortcuts.ts`의 규칙 1) 앱이 그 구역에 걸어 둔 **맨 `a`/`p` 액션까지
+       * 읽으므로(`shortcuts/combo.ts`의 규칙 1) 앱이 그 구역에 걸어 둔 **맨 `a`/`p` 액션까지
        * 삼켰습니다 — 픽커에 포커스가 있는 동안만 그 키가 죽습니다.
        *
        * 이 분기는 "여기서 a/p는 뜻이 없다"는 다른 두 조건(24시간제·활성 세그먼트가 시가

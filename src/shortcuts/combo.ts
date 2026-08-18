@@ -66,8 +66,8 @@ export const BARE_KEY_SCOPE_ATTR = "data-kkqq-shortcut-scope";
  *
  * `bindingOf`(`ShortcutProvider.tsx`)와 녹음기(`ShortcutSettings.tsx`) **둘 다** 이
  * 관문을 봐야 합니다 — 전에는 녹음기 안에만 있어서 `defaultCombo`·`overrides`로 들어오는
- * 조합이 그 관문을 그냥 우회했습니다(전체 리뷰 Important 2). 그래서 한 곳(`shortcuts.ts`)에
- * 두고 둘이 같이 가져다 씁니다 — §9의 파일 경계(로직은 `shortcuts.ts`)를 그대로 따릅니다. */
+ * 조합이 그 관문을 그냥 우회했습니다(전체 리뷰 Important 2). 그래서 한 곳(`shortcuts/combo.ts`)에
+ * 두고 둘이 같이 가져다 씁니다 — §9의 파일 경계(로직은 `shortcuts/combo.ts`)를 그대로 따릅니다. */
 export const UNBINDABLE_CODES: ReadonlySet<string> = new Set(["Escape", "Tab"]);
 
 /** 텍스트를 넣는 자리가 **아닌** input type. 나머지는 전부 타이핑 대상으로 봅니다 —
