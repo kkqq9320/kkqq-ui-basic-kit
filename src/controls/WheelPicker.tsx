@@ -1109,13 +1109,25 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     setHoldingUnit(null);
     if (!hold) return;
     window.clearTimeout(hold.timer);
+    /* ⚠️ **이 줄은 오늘 관찰 가능한 차이를 안 만듭니다**(2026-08-18 실측: 지워도 1630개 전부 초록).
+     * 그래도 남깁니다 — `holdRef.current`의 뜻이 *"지금 대기 중인 홀드"* 이고, 이 줄이 그
+     * 뜻을 참으로 만듭니다. 홀드를 자기 파일로 떼면 그 뜻이 **모듈의 불변식**이 되므로,
+     * 세 줄짜리 자가 치유(다음 `armHold`이 어차피 덮어씀)에 기대 깨 두는 것은 남는 장사가
+     * 아닙니다. (곁가지: 이 환경의 `window.setTimeout`은 숫자가 아니라 Node `Timeout` 객체를
+     * 돌려주므로 "타이머 id 재사용"이라는 사건 자체가 여기서는 안 일어납니다.) */
     holdRef.current = null;
   }
 
   function armHold(unit: WheelUnit, pointerId: number, y: number) {
+    /* 🔴 **살아 있는 홀드는 하나입니다.** `holdRef`가 싱글턴이고 `cancelHold`은 그것만 보므로,
+     * 이 줄 없이 두 번째 누름이 덮어쓰면 앞 타이머는 **어떤 취소 경로로도 안 닿습니다** —
+     * 두 손가락을 다 뗀 뒤에 발동해 아무도 안 누르는데 값이 바뀝니다. 두 손가락 검사 둘이
+     * 그 자리를 지킵니다(`tests/DateWheelPicker.test.tsx`). */
     cancelHold();
     setHoldingUnit(unit);
     const timer = window.setTimeout(() => {
+      /* ⚠️ 위 `cancelHold`의 같은 줄과 **같은 이유로** 남깁니다 — 지워도 1630개 전부
+       * 초록이지만(실측), 발동한 뒤에도 `holdRef`가 차 있으면 *"대기 중인 홀드"* 가 거짓이 됩니다. */
       holdRef.current = null;
       setHoldingUnit(null);
       // 손 떼기가 만드는 클릭이 행의 평범한 이동으로 또 값을 바꾸지 않게 합니다.
@@ -1126,8 +1138,19 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     holdRef.current = { unit, pointerId, y, timer };
   }
 
-  // 언마운트로 타이머가 살아남지 않게 합니다 — 사라진 필드에 onChange를 보내는 자리입니다(§4.2).
-  useEffect(() => cancelHold, []);
+  /* 홀드의 출구는 넷이 아니라 **다섯**입니다 — 재무장 · 발동 · 취소(움직임·손 떼기·포인터 취소) ·
+   * 언마운트, 그리고 **팝오버 닫힘.** 마지막 하나가 한동안 빠져 있었습니다.
+   *
+   * 🔴 누른 채 Escape나 안드로이드 뒤로가기로 **취소**하면 팝오버가 닫히고 값도 되돌아가는데,
+   * 500ms 뒤에 초기화가 발동해 **값이 다시 바뀌었습니다.** 이 킷의 주 타깃이 모바일이고 거기서
+   * 취소 수단은 뒤로가기뿐입니다(`useBackToClose(open, cancelAndClose)`) — 데스크톱 전용 구멍이 아닙니다.
+   *
+   * ⚠️ **`cancelAndClose`에 거는 것으로는 모자랍니다** — 소비자가 홀드 중에 `disabled`를 켜면
+   * `useLayoutEffect(() => { if (disabled) setOpen(false); }, [disabled])`가 그 함수를 **안 거치고**
+   * 닫습니다. 실측: 그 수정은 `disabled` 검사에서 빨간 채로 남습니다. 그래서 닫힘 **자체**에 겁니다.
+   *
+   * 반환하는 정리는 그대로 언마운트를 맡습니다 — 사라진 필드에 onChange를 보내는 자리입니다(§4.2). */
+  useEffect(() => { if (!open) cancelHold(); return cancelHold; }, [open]);
 
   /* 12시간제에서 **시 열에 친 숫자는 값이 아니라 읽기**입니다(3단계, 스펙 §7) —
    * 오후에 `3`을 치면 15시입니다. 어느 절반인지는 지금 값이 정하므로, 타이핑 경로

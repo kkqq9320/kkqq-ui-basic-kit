@@ -5727,6 +5727,27 @@ describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () =
     expect(column.classList.contains("holding")).toBe(false);
   });
 
+  /* 🔴 **발동하는 순간 표시가 꺼져야 합니다 — 아직 손을 떼기 전입니다.** 초기화는 손가락이
+   * 내려가 있는 채로 일어나므로(그것이 500ms의 뜻입니다), 발동 뒤에도 표시가 남아 있으면
+   * 사용자는 **아직 뭔가 진행 중**이라고 읽습니다.
+   *
+   * 위 검사가 이 자리를 못 밟은 이유: 그쪽은 손을 떼서 확인하는데, **떼면 `onPointerUp`의
+   * `cancelHold()`가 어차피 끕니다.** 그래서 타이머 본문의 `setHoldingUnit(null)`을 지워도
+   * 위 검사는 초록입니다.
+   *
+   * ⚠️ 미세한 움직임이 대신 꺼 주지도 않습니다 — `onPointerMove`의 취소는
+   * `holdRef.current`를 가드로 쓰는데 타이머 본문이 그것을 이미 비웠기 때문입니다. */
+  it("초기화가 걸리는 순간 표시가 사라진다 — 아직 손을 떼지 않았어도", () => {
+    vi.useFakeTimers();
+    openTime("2026-08-12T15:07:41");
+    pointer("pointerDown", rowOf("초", 0), { pointerId: 21, clientY: 100, button: 0, isPrimary: true });
+    act(() => { vi.advanceTimersByTime(HOLD_MS); });
+    // 커밋이 `.wheel-values`를 리마운트하므로 열을 여기서 다시 잡습니다(`rowAt`은 자기 expect를 갖습니다).
+    const column = screen.getByRole("group", { name: (name: string) => name.startsWith("초") });
+    expect(column.classList.contains("holding")).toBe(false);
+  });
+
+
   it("이미 그 값이면 아무 일도 안 일어난다", () => {
     vi.useFakeTimers();
     const onChange = openTime("2026-08-12T15:07:00");
@@ -5770,6 +5791,104 @@ describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () =
     pointer("pointerDown", step, { pointerId: 9, clientY: 100, button: 0, isPrimary: true });
     act(() => { vi.advanceTimersByTime(HOLD_MS); });
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  /* ── 뒷정리 ─────────────────────────────────────────────────────────────────
+   *
+   * 🔴 **이 describe는 행복 경로만 재고 있었습니다.** 홀드의 동사 열둘에 변이를 걸어 보니
+   * **다섯이 0 red**였고, 그 다섯이 전부 `holdRef`·`holdingUnit`의 **뒷정리**였습니다
+   * (2026-08-18 실측). 잡히던 일곱은 전부 *사용자가 보는 것*이고, 안 잡히던 다섯은 전부
+   * *안 보이는 상태 정리*입니다 — 축 하나가 통째로 비어 있었습니다.
+   *
+   * 아래 넷이 그중 셋을 막습니다. 나머지 둘(타이머 발동 뒤 `holdRef` 비우기,
+   * `cancelHold`의 `holdRef` 비우기)은 **오늘 관찰 가능한 차이가 0**이라 검사를 안 세웠습니다 —
+   * 근거는 소스 주석에 있습니다. */
+
+  /* 살아 있는 홀드는 **하나**입니다 — `holdRef`가 싱글턴이고 `cancelHold`은 그것만 봅니다.
+   * 그래서 두 번째 누름이 덮어쓰면 앞 타이머는 **어떤 취소 경로로도 안 닿습니다**(미아 타이머).
+   * `armHold`의 첫 줄 `cancelHold()`가 그것을 막습니다.
+   *
+   * ⚠️ **이 검사는 특성화(characterization)입니다.** *"나중 열 하나만"* 은 오너 결정이 아니라
+   * 싱글턴 `holdRef`의 성질입니다 — 언젠가 pointerId별 Map으로 바꾸면 **결함이 아닌데도**
+   * 빨개집니다. 그때는 이 검사를 고치는 것이 맞습니다. 진짜 계약은 아래 "둘 다 임계 전에 떼면"
+   * 쪽이고, 그것이 1차 감시자입니다.
+   *
+   * ⚠️ 실기기에서 두 손가락이 실제로 어떤 pointerId 열을 만드는지는 **확인 못 했습니다.**
+   * jsdom이 만드는 것은 "손 떼기 없는 두 번째 pointerdown"이라는 **모양**입니다. */
+  it("두 손가락이 다른 열을 누르면 나중 열 하나만 초기화된다", () => {
+    vi.useFakeTimers();
+    const onChange = openTime("2026-08-12T15:07:41");
+    pointer("pointerDown", rowOf("초", 0), { pointerId: 11, clientY: 100, button: 0, isPrimary: true });
+    pointer("pointerDown", rowOf("분", 0), { pointerId: 12, clientY: 100, button: 0, isPrimary: false });
+    act(() => { vi.advanceTimersByTime(HOLD_MS); });
+    expect(onChange.mock.calls.map((call) => String(call[0]))).toEqual(["2026-08-12T15:00:41"]);
+  });
+
+  /* 🔴 **1차 감시자.** 미아 타이머가 있으면 **아무도 안 누르고 있는데** 값이 바뀝니다 —
+   * 두 손가락을 다 뗀 뒤에 앞 타이머가 발동합니다. 위 특성화와 달리 이것은 구현이 어떻게
+   * 바뀌든 참이어야 하는 계약입니다. */
+  it("두 손가락 다 임계 전에 떼면 아무 열도 초기화되지 않는다", () => {
+    vi.useFakeTimers();
+    const onChange = openTime("2026-08-12T15:07:41");
+    const secondRow = rowOf("초", 0);
+    pointer("pointerDown", secondRow, { pointerId: 51, clientY: 100, button: 0, isPrimary: true });
+    act(() => { vi.advanceTimersByTime(100); });
+    const minuteRow = rowOf("분", 0);
+    pointer("pointerDown", minuteRow, { pointerId: 52, clientY: 100, button: 0, isPrimary: false });
+    act(() => { vi.advanceTimersByTime(200); });
+    pointer("pointerUp", secondRow, { pointerId: 51, clientY: 100 });
+    act(() => { vi.advanceTimersByTime(100); });
+    pointer("pointerUp", minuteRow, { pointerId: 52, clientY: 100 });
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(onChange.mock.calls.map((call) => String(call[0]))).toEqual([]);
+  });
+
+  /* 🔴 **팝오버가 닫히는 것도 홀드의 출구입니다** — 한동안 아니었습니다.
+   *
+   * `cancelHold`을 부르는 자리는 다섯이었는데(재무장 · 언마운트 · 4px 움직임 · 손 떼기 ·
+   * 포인터 취소) **닫힘이 그중에 없었습니다.** 그래서 누른 채 Escape나 안드로이드
+   * 뒤로가기로 **취소**하면, 팝오버는 닫히고 값도 되돌아간 뒤 500ms 있다가 초기화가
+   * 발동해 **값이 다시 바뀌었습니다.**
+   *
+   * 이 킷의 주 타깃이 모바일이고 거기서 취소 수단은 뒤로가기뿐입니다
+   * (`useBackToClose(open, cancelAndClose)`) — 그래서 데스크톱 전용 구멍이 아닙니다. */
+  it("누른 채 Escape로 취소하면 홀드도 같이 취소된다", () => {
+    vi.useFakeTimers();
+    const onChange = openTime("2026-08-12T15:07:41");
+    pointer("pointerDown", rowOf("초", 0), { pointerId: 31, clientY: 100, button: 0, isPrimary: true });
+    fireEvent.keyDown(fieldOf("거래 시각"), { key: "Escape" });
+    act(() => { vi.advanceTimersByTime(HOLD_MS); });
+    expect(onChange.mock.calls.map((call) => String(call[0]))).toEqual([]);
+  });
+
+  /* ⚠️ **닫힘 경로가 `cancelAndClose` 하나가 아닙니다.** 소비자가 홀드 중에 `disabled`를 켜면
+   * `useLayoutEffect(() => { if (disabled) setOpen(false); }, [disabled])`가 **그 함수를 안 거치고**
+   * 닫습니다. 그래서 정리는 취소 함수가 아니라 **닫힘 자체**에 걸어야 합니다 —
+   * `cancelAndClose`에 `cancelHold()`를 더하는 수정은 이 검사에서 빨간 채로 남습니다(실측). */
+  it("누른 채 disabled가 켜지면 홀드도 같이 취소된다", () => {
+    vi.useFakeTimers();
+    const onChange = vi.fn();
+    const { rerender } = render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:07:41" fields={TIME_FIELDS} onChange={onChange} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    pointer("pointerDown", rowOf("초", 0), { pointerId: 32, clientY: 100, button: 0, isPrimary: true });
+    rerender(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:07:41" fields={TIME_FIELDS} onChange={onChange} disabled />);
+    act(() => { vi.advanceTimersByTime(HOLD_MS); });
+    expect(onChange.mock.calls.map((call) => String(call[0]))).toEqual([]);
+  });
+
+  /* ⚠️ **이 검사는 describe의 맨 마지막이어야 합니다.** 여기서 처음으로 이 파일이
+   * `useBackToClose`의 언마운트 `setTimeout(0)`(→ `history.back()`)을 흘려보냅니다.
+   * (`:1513`의 *"이 파일은 그 타이머를 흘려보내지 않으므로"* 는 이 검사 뒤로 거짓입니다.) */
+  it("누른 채 언마운트되면 사라진 필드에 onChange를 보내지 않는다", () => {
+    vi.useFakeTimers();
+    const onChange = vi.fn();
+    const { unmount } = render(<DateWheelPicker ariaLabel="거래 시각" value="2026-08-12T15:07:41" fields={TIME_FIELDS} onChange={onChange} />);
+    fireEvent.click(fieldOf("거래 시각"));
+    pointer("pointerDown", rowOf("초", 0), { pointerId: 10, clientY: 100, button: 0, isPrimary: true });
+    const before = onChange.mock.calls.length;
+    unmount();
+    act(() => { vi.advanceTimersByTime(HOLD_MS); });
+    expect(onChange.mock.calls.length).toBe(before);
   });
 });
 
