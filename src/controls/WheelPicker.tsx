@@ -1109,13 +1109,25 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     setHoldingUnit(null);
     if (!hold) return;
     window.clearTimeout(hold.timer);
+    /* ⚠️ **이 줄은 오늘 관찰 가능한 차이를 안 만듭니다**(2026-08-18 실측: 지워도 1630개 전부 초록).
+     * 그래도 남깁니다 — `holdRef.current`의 뜻이 *"지금 대기 중인 홀드"* 이고, 이 줄이 그
+     * 뜻을 참으로 만듭니다. 홀드를 자기 파일로 떼면 그 뜻이 **모듈의 불변식**이 되므로,
+     * 세 줄짜리 자가 치유(다음 `armHold`이 어차피 덮어씀)에 기대 깨 두는 것은 남는 장사가
+     * 아닙니다. (곁가지: 이 환경의 `window.setTimeout`은 숫자가 아니라 Node `Timeout` 객체를
+     * 돌려주므로 "타이머 id 재사용"이라는 사건 자체가 여기서는 안 일어납니다.) */
     holdRef.current = null;
   }
 
   function armHold(unit: WheelUnit, pointerId: number, y: number) {
+    /* 🔴 **살아 있는 홀드는 하나입니다.** `holdRef`가 싱글턴이고 `cancelHold`은 그것만 보므로,
+     * 이 줄 없이 두 번째 누름이 덮어쓰면 앞 타이머는 **어떤 취소 경로로도 안 닿습니다** —
+     * 두 손가락을 다 뗀 뒤에 발동해 아무도 안 누르는데 값이 바뀝니다. 두 손가락 검사 둘이
+     * 그 자리를 지킵니다(`tests/DateWheelPicker.test.tsx`). */
     cancelHold();
     setHoldingUnit(unit);
     const timer = window.setTimeout(() => {
+      /* ⚠️ 위 `cancelHold`의 같은 줄과 **같은 이유로** 남깁니다 — 지워도 1630개 전부
+       * 초록이지만(실측), 발동한 뒤에도 `holdRef`가 차 있으면 *"대기 중인 홀드"* 가 거짓이 됩니다. */
       holdRef.current = null;
       setHoldingUnit(null);
       // 손 떼기가 만드는 클릭이 행의 평범한 이동으로 또 값을 바꾸지 않게 합니다.
