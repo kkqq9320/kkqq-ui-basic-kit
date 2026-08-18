@@ -56,10 +56,17 @@ function statesSection(): string {
  *  여럿을 셉니다(`.moving-next` + `.moving-previous`).
  *
  *  ⚠️ **표 행(`|`로 시작하는 줄)만 봅니다.** 같은 절의 산문도 `` `.dragging` ×1 ``처럼
- *  적고 있어서, 절 전체를 훑으면 같은 것을 두 번 셉니다. */
+ *  적고 있어서, 절 전체를 훑으면 같은 것을 두 번 셉니다.
+ *
+ *  **같은 이름이 여러 행에 나오면 더합니다.** `.active`가 그렇습니다 — 빠른 바의 셋과
+ *  휠의 셋은 **갈래가 달라**(① / ③) 행을 나눠 적는데, `css/`에서는 한 이름입니다. */
 function claimedCounts(): Array<[string, number]> {
   const rows = statesSection().split("\n").filter((line) => line.startsWith("|"));
-  return [...rows.join("\n").matchAll(/`\.([\w-]+\*?)`\s*×(\d+)/g)].map((row) => [row[1], Number(row[2])]);
+  const summed = new Map<string, number>();
+  for (const row of rows.join("\n").matchAll(/`\.([\w-]+\*?)`\s*×(\d+)/g)) {
+    summed.set(row[1], (summed.get(row[1]) ?? 0) + Number(row[2]));
+  }
+  return [...summed];
 }
 
 /** 그 이름이 `css/`의 선택자에 몇 번 나오는가. 뒤에 글자가 더 붙는 것은 다른

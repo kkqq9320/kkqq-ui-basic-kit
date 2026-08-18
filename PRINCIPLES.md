@@ -1088,7 +1088,8 @@ nav(`aria-current="page"` + `class="active"`). 둘이 갈리면 **화면과 스�
 |---|---|---|
 | `.open` ×8 | select · sidebar · tabs · wheel | ③ — **오너 결정 2026-08-18**: 부모의 `.open`은 자식 트리거의 `aria-expanded`와 **다른 사실**입니다(아래). `data-open` 축으로 |
 | `.mobile-open` ×3 | tabs | ③ — 위와 같은 결정에 걸립니다 |
-| `.active` ×6 | sidebar(`.mobile-quick-bar`) · wheel | ① — **오너 결정 2026-08-18**: **항목이 자기 역할을 말하게** 합니다(`MobileQuickBarItem`에 필드 하나 추가). 내비 항목만 `aria-current`를 답니다 |
+| `.active` ×3 | sidebar(`.mobile-quick-bar`) | ① — **오너 결정 2026-08-18**: **항목이 자기 역할을 말하게** 합니다. ⚠️ 그 결정보다 코드가 넓습니다(아래) |
+| `.active` ×3 | wheel(세그먼트 1 · 열 2) | ③ — **결정 아님**(2026-08-18 실측). 대응하는 ARIA가 없습니다(아래) |
 | `.moving-*` ×8 · `.entering` ×2 · `.holding` ×2 · `.editing` ×1 · `.dragging` ×1 | wheel | ③ — 전부 순수 시각 상태 |
 
 ✅ **넷이 나갔습니다**(2026-08-18): `.stretch` → `data-align` · sidebar의 `.mobile-open` →
@@ -1137,6 +1138,43 @@ ARIA가 아예 없고(순수 시각·축), 뒤의 둘은 같은 요소에 **같�
 *"[메뉴 열기, 주요 액션, 홈]"* 이고 **셋 중 하나만 내비게이션**입니다 — "메뉴 열기"에
 붙이면 거짓말입니다. 그래서 **항목이 자기 역할을 말하게** 합니다:
 `MobileQuickBarItem`에 필드를 하나 더하고, 그 항목만 `aria-current`를 답니다.
+
+🔴 **그런데 그 결정이 답한 질문이 코드가 묻는 질문보다 좁습니다**(2026-08-18 실측).
+데모가 넘기는 셋을 실제로 읽으니 `.active`가 **한 사실이 아니라 둘**이었습니다:
+
+```
+menu   active: mobileOpen           ← 이 버튼이 서랍을 펼쳤다   aria-expanded
+entry  active: page === "entry"      ← 지금 이 페이지다          aria-current="page"
+home   active: page === "dashboard"  ← 지금 이 페이지다          aria-current="page"
+```
+
+결정은 *"내비 항목만 `aria-current`"* 라고만 말합니다. 나머지 하나가 **무엇을 다는지**는
+안 말합니다 — `role: "action"` 같은 이름으로 뭉뚱그리면 데모가 **이미 표현하고 있는**
+펼침 사실을 조용히 버립니다. 그리고 아무 ARIA도 없는 순수 액션 항목이 들어오면 **칠할
+앵커가 없습니다**(지금은 세 항목이 한 규칙으로 칠해집니다, `css/sidebar.css:281`).
+
+⚠️ 그래서 이 자리는 `.open`과 같은 위험을 갖습니다 — 항목마다 앵커가 갈리면 한 이관
+안에서 명시도의 방향도 갈립니다. **오너에게 다시 물을 자리입니다**(위 표에 ⚠️로 표시).
+
+### 🔴 휠의 `.active`는 왜 ③인가 (2026-08-18 실측, 결정 아님)
+
+표에서 빠른 바와 **한 행에 묶여 있었는데** 다른 질문입니다. 둘 다 `resolvedActiveUnit`이
+붙이고, 대응하는 ARIA가 **없습니다**:
+
+- `.wheel-segment.active` — 세그먼트는 트리거 버튼 안의 `<span>`입니다. 포커스를 못 받고
+  위젯도 아니라 `aria-activedescendant`의 대상이 아닙니다(id도 없습니다). 값은 트리거의
+  접근성 이름이 이미 싣고 있고, 이 표시는 **편집 위치를 눈으로 보여 주는 것**입니다.
+- `.wheel-column.active` — 열은 `role="group"`입니다. "지금 조작 중인 묶음"에 해당하는
+  ARIA가 없습니다. 규칙 자체가 `:focus-visible`과 **한 선택자 목록**으로 묶여 있는 것이
+  그 성격을 말합니다(`css/wheel-picker.css:252`).
+
+🟢 명시도는 양쪽 다 그대로입니다 — `.wheel-segment.active`가 걸린 규칙은 (0,4,0),
+`.wheel-column.active`는 (0,2,0)이고 `data-*`도 클래스와 같은 (0,1,0)을 기여합니다.
+**방향이 안 갈리므로 안전한 이관입니다** — 휠의 다른 ③들(`.moving-*` · `.entering` ·
+`.holding` · `.editing` · `.dragging`)과 한 벌로 옮기면 됩니다.
+
+⚠️ `.wheel-segment.active`를 옮길 때는 **"세그먼트에 매칭되는 규칙은 정확히 하나"**
+계약을 같이 보세요 — 바로 위 주석이 그 셈을 손으로 적고 있고 검사가 그것을 겁니다.
 
 백로그 8·9번(세그먼트 슬라이드·눌림 피드백)이 휠과 탭을 어차피 다시 엽니다. 그때
 같이 옮기는 것이 자연스럽습니다.
