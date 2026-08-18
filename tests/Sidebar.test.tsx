@@ -41,6 +41,28 @@ describe("터치에서 들러붙는 호버", () => {
   });
 });
 
+describe("모바일 서랍의 표식 (§16 ③)", () => {
+  /* 🔴 **JSX가 붙이는 것과 CSS가 칠하는 것이 같아야 합니다.** 서랍 열림은 `.mobile-open`
+   * 클래스였다가 `data-mobile-drawer="open"`이 됐는데(2026-08-18), 재 보니 **CSS만 되돌려도
+   * 1664개가 전부 초록**이었습니다 — 그 상태에서 서랍은 **영영 안 열립니다.** 동작 검사들은
+   * 속성이 붙는 것까지만 보고 무엇이 칠해지는지는 안 봅니다.
+   *
+   * ⚠️ **이관 자체가 만드는 구멍입니다.** 다음에 `.open`·`.moving-*`을 옮길 때도 **양쪽을
+   * 짝으로** 재세요(오전/오후 쪽 짝은 `tests/DateWheelPicker.test.tsx`에 있습니다). */
+  it("서랍 열림은 data-mobile-drawer가 칠한다 — JSX가 붙이는 그것이다", () => {
+    expect(sidebarCssSource.length).toBeGreaterThan(1000);
+    expect(sidebarCssSource).toContain('.sidebar[data-mobile-drawer="open"] { transform: translateX(0); }');
+  });
+
+  /* 🔴 **자리가 계약의 일부입니다** — 바로 위 `.sidebar-collapsed .sidebar`도 (0,2,0)이고
+   * 같은 `transform`을 씁니다. 명시도가 같으니 **순서로만 갈립니다.** */
+  it("그 규칙이 접힘 규칙보다 뒤에 온다 — 명시도가 같아 순서가 유일한 판정이다", () => {
+    const drawer = sidebarCssSource.indexOf('.sidebar[data-mobile-drawer="open"]');
+    const collapsed = sidebarCssSource.indexOf(".sidebar-collapsed .sidebar {");
+    expect([drawer > -1, collapsed > -1, drawer > collapsed]).toEqual([true, true, true]);
+  });
+});
+
 describe("키보드 포커스 표시", () => {
   // 호버 스타일만 있고 포커스 짝이 없으면 Tab으로 왔을 때 킷 스타일 없이 브라우저
   // 기본 링만 뜬다. 바로 아래 .sidebar-icon-button(:156)이 이미 쓰는 짝이다.
