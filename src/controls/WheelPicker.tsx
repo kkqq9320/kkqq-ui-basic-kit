@@ -2000,16 +2000,25 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     column.style.removeProperty("--wheel-drag-offset");
   }
 
-  /* ⚠️ **미결: 이 rAF가 실제로 하는 일을 못 찾았습니다**(2026-08-18 실측). 표식을 내리는
-   * 자리는 둘인데(여기, 그리고 열의 `onPointerDown`), **열 안의 click은 언제나 그 열의
-   * pointerdown 뒤에 옵니다** — 행은 `tabIndex={-1}`이라 키보드로 활성화되지 않고, ± 버튼도
-   * 같은 열 안입니다. 그래서 여기서 안 내려도 다음 누름이 내립니다.
+  /* 표식을 내리는 자리는 **둘**이고 역할이 다릅니다.
    *
-   * 변이 셋이 **1628개 전부 초록**입니다: 이 본문을 no-op으로, rAF를 `setTimeout(0)`으로,
-   * 그리고 `onPointerDown`의 리셋 삭제(그 셋째는 이제 프로브가 잡습니다).
-   * **지우지 않은 이유:** 이 자리는 실기기에서만 갈리는 것이 여럿이고(터치의 click 미발생,
-   * 포인터 캡처 리타기팅), 잰 것은 jsdom뿐입니다. **감시자를 못 만든 코드를 지우는 것은
-   * 감시자를 못 만든 코드를 고치는 것과 같습니다.** 오너 판단 항목으로 둡니다. */
+   *     여기(rAF)          정상 경로의 내림 — 손을 뗀 다음 프레임에 내립니다.
+   *     열 onPointerDown   백스톱 — 다음 누름이 무조건 억제 없이 시작하게 합니다.
+   *
+   * ⚠️ **미결: 백스톱이 정상 경로를 완전히 덮습니다**(2026-08-18 실측). 열 안의 click은
+   * 언제나 그 열의 pointerdown 뒤에 오므로(행은 `tabIndex={-1}`이라 키보드 활성화가 없고,
+   * ± 버튼도 같은 열 안입니다) **여기서 안 내려도 관찰 가능한 차이를 못 만들었습니다** —
+   * 이 본문을 no-op으로 바꾸는 변이와 rAF를 `setTimeout(0)`으로 바꾸는 변이 둘 다
+   * 1628개 전부 초록이었습니다.
+   *
+   * 백스톱 쪽은 반대로 살아 있습니다 — **rAF가 안 도는 때**가 있기 때문입니다(탭이
+   * 백그라운드로 가면 브라우저가 rAF를 멈춥니다). `tests/DateWheelPicker.test.tsx`의
+   * *"한 열에서 스와이프한 뒤에도 다른 열의 행 클릭은 살아 있다"* 가 그 자리를 지킵니다.
+   *
+   * **그래서 남는 질문은 하나입니다: 실기기에서 그 덮음이 깨지는 경우가 있는가.**
+   * 지우지 않았습니다 — 이 자리는 실기기에서만 갈리는 것이 여럿이고(터치의 click 미발생,
+   * 포인터 캡처 리타기팅) 잰 것은 jsdom뿐입니다. **감시자를 못 만든 코드를 지우는 것은
+   * 감시자를 못 만든 코드를 고치는 것과 같습니다.** 오너 판단 항목입니다. */
   function releaseColumnClickSuppression() {
     if (suppressColumnClickRef.current) requestAnimationFrame(() => { suppressColumnClickRef.current = false; });
   }
