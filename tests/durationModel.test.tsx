@@ -13,7 +13,7 @@ import { WheelPicker, DEFAULT_WHEEL_LABELS } from "../src/controls/WheelPicker";
 import { DEFAULT_DURATION_LABELS } from "../src/controls/DurationWheelPicker";
 import { instantModel } from "../src/model/instant";
 import { durationModel, parseDuration, serializeDuration, durationCeiling } from "../src/model/duration";
-import type { WheelUnit } from "../src/model/instant";
+import type { WheelUnit } from "../src/model/wheelModel";
 
 afterEach(cleanup);
 

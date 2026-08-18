@@ -10,7 +10,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DateWheelPicker } from "../src/controls/DateWheelPicker";
 import { DEFAULT_WHEEL_LABELS, type WheelLabels } from "../src/controls/WheelPicker";
-import { instantModel, type WheelUnit } from "../src/model/instant";
+import { instantModel } from "../src/model/instant";
+import { type WheelUnit } from "../src/model/wheelModel";
 import { setHourFormat, getWheelRowsPerSide, setWheelRowsPerSide } from "../src/settings";
 import { Dialog } from "../src/surfaces/Dialog";
 import wheelPickerCssSource from "../css/wheel-picker.css?raw";
