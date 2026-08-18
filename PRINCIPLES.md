@@ -1123,7 +1123,6 @@ boolean`을 받는 타입은 `SidebarNavItem`과 `MobileQuickBarItem` **둘뿐**
 |---|---|---|
 | `.open` ×8 | select · sidebar · tabs · wheel | ③ — **오너 결정 2026-08-18**: 부모의 `.open`은 자식 트리거의 `aria-expanded`와 **다른 사실**입니다(아래). `data-open` 축으로 |
 | `.mobile-open` ×3 | tabs | ③ — 위와 같은 결정에 걸립니다 |
-| `.dragging` ×1 | wheel | ③ — ⚠️ **소유자가 다릅니다**: `columnSwipe.ts`가 `classList`로 밀고 React는 모릅니다. `data-*`로 옮기면 **React가 더 이상 안 지웁니다** — 이관이 아니라 동작 변화라 따로 잽니다 |
 
 ✅ **다섯이 나갔습니다**(2026-08-18): `.stretch` → `data-align` · sidebar의 `.mobile-open` →
 `data-mobile-drawer` · 오전/오후의 `.selected` → 이미 있던 `aria-pressed` · 값 행의 `.selected` →
@@ -1147,7 +1146,17 @@ ARIA가 아예 없고(순수 시각·축), 둘은 같은 요소에 **같은 조�
 게이트가 포커스에서 편집 중으로 바뀌며 `.editing`이 하나 더 붙었는데 셈이 안 따라갔습니다.
 결론은 안 바뀌지만 **주석의 수도 낡습니다** — 이번 달에만 네 번째입니다.
 
-📐 **남은 것은 12개입니다**(2026-08-19 실측). 위 표를 더한 수가 아니라 `css/`를 센 수입니다 —
+✅ **`.dragging`도 나갔습니다**(2026-08-19). 이것만 소유자가 달랐습니다 — `columnSwipe.ts`가
+`classList`로 밀고 React는 모릅니다. **재 보니 이미 순수 이관이었습니다:** 바로 앞 라운드가
+`className`을 상수 `"wheel-column"`으로 만들면서 React가 그 속성을 더 이상 안 건드리게 됐고,
+`classList`로 붙인 것이 렌더를 넘겨 살아남습니다(프로브로 확인 — `class="wheel-column dragging"`).
+
+🟢 **그 김에 한 프레임 공백이 닫혔습니다.** 전에는 홀드가 끊기는 렌더가 `.dragging`을 지워서
+그 프레임에 `animation: none`이 사라졌습니다. `data-*`로 옮기면 그 취약함이 **원리적으로**
+없어집니다 — React가 관리하지 않는 속성이라, 나중에 누가 `className`에 상태를 다시 끼워 넣어도
+안 흔들립니다.
+
+📐 **남은 것은 11개입니다**(2026-08-19 실측). 위 표를 더한 수가 아니라 `css/`를 센 수입니다 —
 이번에 세면서 표에 `.dragging` 한 줄이 빠져 있는 것을 찾았습니다. 표의 수는 **소스에서 다시 재기**
 전에는 믿지 마세요 — 이제 `tests/stateClasses.test.ts`가 이 표와 `css/`를 대조합니다.
 
