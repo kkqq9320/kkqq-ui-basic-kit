@@ -1089,7 +1089,14 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    *
    * ⚠️ **손 떼기가 만드는 행 클릭을 억제해야 합니다.** 안 그러면 초기화 뒤에 그 행의
    * 평범한 이동이 한 번 더 붙어 값이 두 번 바뀝니다. 스와이프가 이미 같은 문제를 갖고
-   * 있어 `suppressColumnClickRef`가 있습니다 — **새 장치를 만들지 않고 그것을 씁니다.** */
+   * 있어 `suppressColumnClickRef`가 있습니다 — **새 장치를 만들지 않고 그것을 씁니다.**
+   *
+   * 🔴 **그 표식은 스와이프의 것도 홀드의 것도 아니라 열의 것입니다** — 뜻은 *"이 열에서
+   * 시작한 포인터 시퀀스를 제스처가 차지했다"* 이고, 읽는 곳은 열의 `onClickCapture` 하나뿐
+   * 입니다(제스처들은 쓰기만 합니다). 그래서 **리타기팅이 하나도 없는 경우에도 필요합니다** —
+   * 이미 그 값인 열을 길게 누르면 `resetColumn`이 조기 반환해 커밋 0 · 리마운트 0 · 캡처 0인데,
+   * 손을 떼며 나는 click은 그대로 행에 도착합니다.
+   * (`tests/DateWheelPicker.test.tsx`의 *"초기화가 아무 일도 안 해도…"* 가 그 자리를 지킵니다.) */
   const holdRef = useRef<{ unit: WheelUnit; pointerId: number; y: number; timer: number } | null>(null);
   /* ⚠️ **누르고 있다는 표시는 상태입니다. `classList.add`가 아닙니다.** 이 열의
    * `className`은 React가 매 렌더 통째로 다시 쓰므로, 직접 붙인 클래스는 바로 다음
@@ -1993,6 +2000,16 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
     column.style.removeProperty("--wheel-drag-offset");
   }
 
+  /* ⚠️ **미결: 이 rAF가 실제로 하는 일을 못 찾았습니다**(2026-08-18 실측). 표식을 내리는
+   * 자리는 둘인데(여기, 그리고 열의 `onPointerDown`), **열 안의 click은 언제나 그 열의
+   * pointerdown 뒤에 옵니다** — 행은 `tabIndex={-1}`이라 키보드로 활성화되지 않고, ± 버튼도
+   * 같은 열 안입니다. 그래서 여기서 안 내려도 다음 누름이 내립니다.
+   *
+   * 변이 셋이 **1628개 전부 초록**입니다: 이 본문을 no-op으로, rAF를 `setTimeout(0)`으로,
+   * 그리고 `onPointerDown`의 리셋 삭제(그 셋째는 이제 프로브가 잡습니다).
+   * **지우지 않은 이유:** 이 자리는 실기기에서만 갈리는 것이 여럿이고(터치의 click 미발생,
+   * 포인터 캡처 리타기팅), 잰 것은 jsdom뿐입니다. **감시자를 못 만든 코드를 지우는 것은
+   * 감시자를 못 만든 코드를 고치는 것과 같습니다.** 오너 판단 항목으로 둡니다. */
   function releaseColumnClickSuppression() {
     if (suppressColumnClickRef.current) requestAnimationFrame(() => { suppressColumnClickRef.current = false; });
   }
