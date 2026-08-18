@@ -20,6 +20,7 @@ import { describe, expect, it } from "vitest";
 
 const cssModules = import.meta.glob("../css/*.css", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 const controls = cssModules["../css/controls.css"];
+const markupSources = import.meta.glob("../{src,demo}/**/*.tsx", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 const allCss = Object.entries(cssModules).filter(([path]) => !path.endsWith("tokens.css")).map(([, source]) => source).join("\n");
 
 const VARIANTS = ["primary", "secondary", "danger", "text"];
@@ -99,6 +100,42 @@ describe("액션 버튼 — 종류는 data-variant 한 축이다", () => {
     expect(geometry).not.toBe("");
     expect(geometry).not.toContain("text");
     expect(geometry).toContain("primary");
+  });
+
+  /* 🔴 **`.page-action-button`이 `.action-button`을 부분 문자열로 포함합니다.**
+   *
+   * `Button` 라운드의 이관 스크립트가 그것을 몰라서 `className="page-action-button"`을
+   * **가운데만 잘라** `className="page-"`로 만들었습니다. `v0.12.0`에 그대로 실려
+   * 나갔고, 오너가 화면에서 잡았습니다 — 아이콘이 stroke 대신 검은 채움으로 58px이
+   * 됐습니다(규칙이 안 걸리니 SVG 기본값).
+   *
+   * **아이콘 전용 버튼은 `Button`이 안 덮는다고 문서에 적어 놓고, 스크립트는 그걸
+   * 몰랐습니다.** 문서에 적은 경계는 도구가 안 읽습니다. 그래서 여기서 셉니다 —
+   * 이 다섯(여섯)은 CSS가 기하를 정해 둔 자리이고, 마크업에서 사라지면 규칙이 죽습니다. */
+  const CONTEXT_BUTTONS = ["page-action-button", "sidebar-icon-button", "sidebar-collapse-button", "theme-color-icon-button", "mobile-page-tabs-button", "wheel-step"];
+  /* ⚠️ **정직한 범위:** 이 검사는 "그 이름이 코드베이스에서 사라졌는가"를 봅니다.
+   * 두 자리 중 **하나만** 잘못되면 다른 하나가 남아 통과합니다(변이로 확인). 그
+   * 경우는 아래 "잘린 조각" 검사가 잡습니다 — 둘이 짝입니다. */
+  it("문맥별 아이콘 버튼 클래스가 CSS에도 마크업에도 살아 있다", () => {
+    const markup = Object.values(markupSources).join(" ");
+    expect(markup.length).toBeGreaterThan(5000);
+    const missing = CONTEXT_BUTTONS.flatMap((name) => [
+      ...(code(allCss).includes(`.${name}`) ? [] : [`${name}: CSS 규칙 없음`]),
+      ...(markup.includes(name) ? [] : [`${name}: 마크업에서 안 붙음`]),
+    ]);
+    expect(missing).toEqual([]);
+  });
+
+  /* 위와 같은 사고의 **일반형**: 클래스 이름을 부분 문자열로 수술하면 `"page-"` 같은
+   * 잘린 조각이 남습니다. 사람 눈에는 안 띄고 CSS는 조용히 안 걸립니다. */
+  it("잘린 클래스 조각이 마크업에 없다", () => {
+    const bad: string[] = [];
+    for (const [path, source] of Object.entries(markupSources))
+      for (const m of code(source).matchAll(/className="([^"]*)"/g))
+        for (const cls of m[1].split(/\s+/))
+          if (cls && (cls.endsWith("-") || cls.startsWith("-") || cls.includes("--")))
+            bad.push(`${path.replace("../", "")}: "${cls}"`);
+    expect(bad).toEqual([]);
   });
 
   /* 옛 이름이 되살아나지 않게 합니다. 죽은 클래스 둘(`file-button`·`link-button`)은
