@@ -1,11 +1,11 @@
 /// <reference types="vite/client" />
 
-/* **`AppShell.tsx`가 손으로 베껴 든 모션 값 둘이 `tokens.css`와 갈라지면 안 된다.**
+/* **키보드 보정이 손으로 베껴 든 모션 값 둘이 `tokens.css`와 갈라지면 안 된다.**
  *
  * `scrollTop`은 CSS로 트랜지션되지 않아서, 키보드 보정 스크롤은 킷이 rAF로 직접 굴립니다.
  * 그 곡선과 길이는 CSS 쪽 트랜지션과 **같아야** 합니다 — 같은 화면에서 하나는 CSS가,
  * 하나는 JS가 움직이는데 둘의 리듬이 다르면 "뚝뚝 끊긴다"로 보입니다(owner 리포트가 그
- * 자리였습니다). 그래서 400ms와 `cubic-bezier(.32,.72,0,1)`이 **`tokens.css`와 `AppShell.tsx`
+ * 자리였습니다). 그래서 400ms와 `cubic-bezier(.32,.72,0,1)`이 **`tokens.css`와 `browser/keyboardCompensation.ts`
  * 두 곳에** 삽니다.
  *
  * 지금 두 값은 일치합니다 — 이 파일은 결함을 고치는 게 아니라 **갈라짐을 막습니다.**
@@ -16,7 +16,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import appShellSource from "../src/surfaces/AppShell.tsx?raw";
+import keyboardSource from "../src/browser/keyboardCompensation.ts?raw";
 import tokensCssSource from "../css/tokens.css?raw";
 
 /** `--motion-reposition: 400ms;` 의 밀리초. 주석 안의 숫자에 안 걸리게 **선언 형태만** 잡습니다. */
@@ -30,7 +30,7 @@ const tokenEasing = () =>
     .map((part) => Number(part.trim()));
 
 /** `const KEYBOARD_SCROLL_ANIMATION_MS = 400;` */
-const sourceDuration = () => Number(/const KEYBOARD_SCROLL_ANIMATION_MS = (\d+);/.exec(appShellSource)?.[1]);
+const sourceDuration = () => Number(/const KEYBOARD_SCROLL_ANIMATION_MS = (\d+);/.exec(keyboardSource)?.[1]);
 
 /** `createCubicBezierEasing(0.32, 0.72, 0, 1)` — **숫자로 부르는 호출**의 인자 넷.
  *
@@ -40,11 +40,11 @@ const sourceDuration = () => Number(/const KEYBOARD_SCROLL_ANIMATION_MS = (\d+);
  * "쓸 수 있는 값이냐"를 물어야 합니다. */
 const sourceEasing = () =>
   /createCubicBezierEasing\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/
-    .exec(appShellSource)
+    .exec(keyboardSource)
     ?.slice(1, 5)
     .map(Number);
 
-describe("AppShell이 베낀 모션 값은 tokens.css와 같다", () => {
+describe("키보드 보정이 베낀 모션 값은 tokens.css와 같다", () => {
   /* 전제 확인 넷 — 정규식이 하나라도 못 잡으면 아래 비교가 `NaN === NaN`이나
    * `undefined === undefined`가 되어 **공허하게 통과**합니다. 이 저장소가
    * "빈 입력으로 만족되는 단언은 테스트가 아니다"로 여러 번 값을 치른 자리입니다. */
