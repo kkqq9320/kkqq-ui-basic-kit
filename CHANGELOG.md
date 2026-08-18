@@ -15,6 +15,42 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.14.0
 
 ## 미출시
 
+### 🔴 BREAKING — `MobileQuickBarItem`에 `kind`가 생겼습니다 (필수, §16 ①)
+
+빠른 바 항목의 `.active` 하나가 **한 사실이 아니라 둘**을 말하고 있었습니다. 흔히 쓰는
+`[메뉴 열기, 주요 액션, 홈]` 조합에서:
+
+```
+menu   active: mobileOpen            "이 버튼이 서랍을 펼쳤다"   → aria-expanded
+entry  active: page === "entry"       "지금 이 페이지다"          → aria-current="page"
+home   active: page === "dashboard"   "지금 이 페이지다"          → aria-current="page"
+```
+
+통째로 `aria-current="page"`를 붙이면 "메뉴 열기"에 대해서는 거짓말입니다. 그래서
+**항목이 자기 갈래를 말합니다.**
+
+```diff
+  { id: "menu", label: "메뉴", icon: <MenuIcon />,
++   kind: "disclosure",
+    active: mobileOpen, onClick: () => setMobileOpen(true) }
+```
+
+| `kind` | 활성일 때 다는 것 | 활성 표시 |
+|---|---|---|
+| `"page"` | `aria-current="page"` | 칠해집니다 |
+| `"disclosure"` | `aria-expanded` (**접혔을 때도** 답니다) | 칠해집니다 |
+| `"action"` | 없음 — 대응 ARIA가 없습니다 | **안 칠해집니다** |
+
+⚠️ **필수입니다** — 기본값을 두면 킷이 대신 추측하게 됩니다. `tsc`가 항목마다 한 번씩
+묻습니다. 그리고 **`kind: "action"`은 `active: true`여도 아무것도 안 칠해집니다.** 표시가
+필요하면 그 항목은 `action`이 아닙니다 — 화면만 "여기 있다"고 말하고 스크린리더는 침묵하는
+것이 §16이 없애려는 상태입니다.
+
+🟢 **CSS 명시도는 그대로입니다** — `.mobile-quick-bar > button.active` (0,2,1) →
+`.mobile-quick-bar > button:is([aria-current="page"], [aria-expanded="true"])` (0,2,1).
+여기서 `:is()`는 인자가 둘 다 속성 선택자라 명시도를 **안 올립니다**(`:where()`로 쓰면
+오히려 (0,1,1)로 내려가 캐스케이드가 바뀝니다).
+
 ### 🔴 BREAKING — 상태 클래스 넷이 속성이 됐습니다 (§16)
 
 **클래스는 부품의 이름이고 상태는 속성입니다**(§16). 이 넷은 **결정이 필요 없는** 자리라

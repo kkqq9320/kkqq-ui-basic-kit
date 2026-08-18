@@ -764,9 +764,9 @@ function Demo() {
           }}
         />}
         quickBar={<MobileQuickBar barRef={pageTabs.quickBarRef} items={[
-          { id: "menu", label: "메뉴", icon: <Glyph d={ICONS.menu} />, active: mobileOpen, onClick: () => setMobileOpen(true) },
-          { id: "entry", label: "입력", icon: <Glyph d={ICONS.entry} />, active: page === "entry", onClick: () => setPage("entry") },
-          { id: "home", label: "홈", icon: <Glyph d={ICONS.dashboard} />, active: page === "dashboard", onClick: () => setPage("dashboard") },
+          { id: "menu", label: "메뉴", icon: <Glyph d={ICONS.menu} />, kind: "disclosure", active: mobileOpen, onClick: () => setMobileOpen(true) },
+          { id: "entry", label: "입력", icon: <Glyph d={ICONS.entry} />, kind: "page", active: page === "entry", onClick: () => setPage("entry") },
+          { id: "home", label: "홈", icon: <Glyph d={ICONS.dashboard} />, kind: "page", active: page === "dashboard", onClick: () => setPage("dashboard") },
         ]} />}
         pageTabs={<MobilePageTabs registration={pageTabs.registration} open={pageTabs.open} onToggle={pageTabs.setOpen} floatRef={pageTabs.floatRef} />}
       >

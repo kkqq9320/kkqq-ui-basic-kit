@@ -627,6 +627,25 @@ useEffect(() => localStorage.setItem("sidebarCollapsed", String(collapsed)), [co
 `href`를 주면 `<a>`로, 없으면 `<button>`으로 렌더합니다.
 
 `MobileQuickBar`는 CSS 그리드가 64px **3칸 고정**이라 항목 3개를 전제로 합니다.
+**항목마다 `kind`를 적어야 합니다** — `active`가 무슨 뜻인지가 항목마다 다르기 때문입니다:
+
+```tsx
+quickBar={<MobileQuickBar items={[
+  { id: "menu",  label: "메뉴", icon: <MenuIcon />,  kind: "disclosure", active: mobileOpen,          onClick: () => setMobileOpen(true) },
+  { id: "entry", label: "입력", icon: <EntryIcon />, kind: "page",       active: page === "entry",     onClick: () => setPage("entry") },
+  { id: "home",  label: "홈",   icon: <HomeIcon />,  kind: "page",       active: page === "dashboard", onClick: () => setPage("dashboard") },
+]} />}
+```
+
+| `kind` | 활성일 때 다는 것 | 활성 표시 |
+|---|---|---|
+| `"page"` | `aria-current="page"` | 칠해집니다 |
+| `"disclosure"` | `aria-expanded`(접혔을 때도 답니다) | 칠해집니다 |
+| `"action"` | 없음 — 대응하는 ARIA가 없습니다 | **안 칠해집니다** |
+
+⚠️ `kind: "action"`에 `active: true`를 줘도 아무것도 안 칠해집니다. 표시가 필요하면 그
+항목은 `action`이 아닙니다 — 화면만 "여기 있다"고 말하고 스크린리더는 침묵하는 것이
+이 킷이 없애려는 상태입니다(PRINCIPLES §16).
 
 #### `data-keyboard-keep-visible` — 필드뿐 아니라 그 아래 액션까지 같이 들어올리기
 
