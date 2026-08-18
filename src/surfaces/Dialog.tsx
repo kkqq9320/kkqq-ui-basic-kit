@@ -82,7 +82,7 @@ export function Dialog({ open, onClose, ariaLabel, children, onSubmit, wide = fa
      * 포커스 가능성도 안 봅니다 — `<input type="hidden">`은 `input:not([disabled])`에
      * **글자 그대로 매치되고**(폼 안에 흔합니다), `display:none` 서브트리 안의 버튼·앵커도
      * 그대로 걸립니다. 그런 요소에 `focus()`를 부르면 **예외도 안 던지고 조용히 아무 일도
-     * 안 합니다**(이 저장소가 `src/shortcuts/shortcuts.ts`에서 이미 실측해 적어 둔 사실입니다).
+     * 안 합니다**(이 저장소가 `src/shortcuts/combo.ts`에서 이미 실측해 적어 둔 사실입니다).
      *
      * 그게 왜 결함이었나: 감싸기가 `preventDefault()`를 **먼저** 부르고 `focus()`를 뒤에
      * 불렀습니다. 옮기기가 조용히 실패하면 **기본 이동은 이미 막혔고 대신 갈 곳으로도 못

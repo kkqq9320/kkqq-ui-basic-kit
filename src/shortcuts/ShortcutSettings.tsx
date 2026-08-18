@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "../controls/Button";
 
 import { useShortcutRegistry } from "./ShortcutProvider";
-import { beginRecording, bindingWarning, comboFromEvent, endRecording, findConflict, formatCombo, UNBINDABLE_CODES, unbindableReason, type UnbindableReason } from "./shortcuts";
+import { beginRecording, bindingWarning, comboFromEvent, endRecording, findConflict, formatCombo, UNBINDABLE_CODES, unbindableReason, type UnbindableReason } from "./combo";
 
 export type ShortcutSettingsProps = {
   /** 있으면 이 함수로 커밋합니다(앱이 소유) — 지금까지의 동작입니다. **없으면**
@@ -33,7 +33,7 @@ export type ShortcutSettingsProps = {
 
 /** `code`는 사람이 읽기 나쁩니다. 빠진 항목은 원시 `code`가 그대로 보일 뿐
  * **동작은 안 틀립니다**(스펙 §4) — 설정 화면에서 눈에 띄면 그때 더하면 됩니다. */
-const CODE_LABELS: Record<string, string> = { Semicolon: ";", Comma: ",", Period: "./shortcuts", Slash: "/", Backslash: "\\", Quote: "'", BracketLeft: "[", BracketRight: "]", Minus: "-", Equal: "=", Backquote: "`", Space: "Space" };
+const CODE_LABELS: Record<string, string> = { Semicolon: ";", Comma: ",", Period: "./combo", Slash: "/", Backslash: "\\", Quote: "'", BracketLeft: "[", BracketRight: "]", Minus: "-", Equal: "=", Backquote: "`", Space: "Space" };
 
 function labelForCode(code: string): string {
   if (CODE_LABELS[code]) return CODE_LABELS[code];
@@ -50,7 +50,7 @@ export function displayCombo(combo: string): string {
 
 const MODIFIER_CODES = /^(Control|Alt|Shift|Meta|OS)/;
 
-/** 등록 금지의 **문구**는 UI의 것입니다 — `shortcuts.ts`는 이유 코드만 줍니다(§9의
+/** 등록 금지의 **문구**는 UI의 것입니다 — `shortcuts/combo.ts`는 이유 코드만 줍니다(§9의
  * 파일 경계). `kit-listener`는 여기 안 씁니다: `Escape`·`Tab`은 그 자리에서 녹음을
  * 조용히 취소하는 것이 계약이라(§6.2 — 포커스가 나가야 하고 `Escape`가 전파돼야
  * 합니다) 이 표에 닿기 전에 걸러집니다. `bindingOf` 쪽에서만 그 이유를 씁니다. */
@@ -68,7 +68,7 @@ export function ShortcutSettings({ onChange, className }: ShortcutSettingsProps)
   // `DateWheelPicker`의 `fields` 오배선 경고와 같은 선례를 그대로 따릅니다(전체 리뷰
   // Important 2) — `import.meta.env`는 Vite 전용 확장이라 그 자리가 아예 없는
   // 번들러도 있습니다. `?.` 없이 `.DEV`를 읽으면 그 자리에서 `TypeError`를 던지므로
-  // (이 킷은 `exports["./shortcuts"]`가 소스를 그대로 내보내 소비자의 번들러를 그대로 탑니다),
+  // (이 킷은 `exports["./combo"]`가 소스를 그대로 내보내 소비자의 번들러를 그대로 탑니다),
   // 옵셔널 체이닝이 "던지지 않는다"는 목적이 실제로 성립하는 데 필수입니다.
   const importMetaEnv = (import.meta as { env?: { DEV?: boolean } }).env;
   // 배선 누락 경고를 인스턴스당 한 번만 냅니다 — 녹음·지우기마다 매번 찍히면 신호가
@@ -106,7 +106,7 @@ export function ShortcutSettings({ onChange, className }: ShortcutSettingsProps)
       // Escape·Tab은 preventDefault를 부르지 않습니다 — 스펙 §6.2. Tab은 포커스가
       // 그대로 나가야 "포커스가 나가면 녹음 종료"가 성립하고, Escape는 document의
       // 다른 리스너(다이얼로그 닫기 등)로 그대로 전파돼야 합니다. 이 목록(UNBINDABLE_CODES)은
-      // shortcuts.ts에 있습니다 — bindingOf(ShortcutProvider.tsx)도 같은 목록을 봐야
+      // shortcuts/combo.ts에 있습니다 — bindingOf(ShortcutProvider.tsx)도 같은 목록을 봐야
       // defaultCombo·overrides로 들어오는 조합도 똑같이 막힙니다(전체 리뷰 Important 2).
       if (UNBINDABLE_CODES.has(event.code)) { setRecording(null); return; }
       // 규칙 6만 살려 둡니다 — 안 그러면 Ctrl+S를 등록하려다 브라우저 저장

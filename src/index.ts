@@ -37,13 +37,13 @@ export { SectionTabs, MobilePageTabs, MobilePageTabsContext, useMobilePageTabs, 
 export { Dialog, DialogHeading, DialogActions, type DialogProps } from "./surfaces/Dialog";
 
 /* ── 테마 ── */
-export { THEME_TOKEN_GROUPS, THEME_TOKENS, applyTokenOverrides, defaultTokenValue, normalizeColor, readThemeDefaults, readTokenOverrides, toRgbText, writeTokenOverrides, type ThemeName, type ThemeToken, type ThemeTokenGroup } from "./theme/themeTokens";
-export { createThemePalette, type ThemePalette, type ThemeColorBackup, type ParsedThemeColors } from "./theme/themePalette";
+export { THEME_TOKEN_GROUPS, THEME_TOKENS, applyTokenOverrides, defaultTokenValue, normalizeColor, readThemeDefaults, readTokenOverrides, toRgbText, writeTokenOverrides, type ThemeName, type ThemeToken, type ThemeTokenGroup } from "./theme/tokens";
+export { createThemePalette, type ThemePalette, type ThemeColorBackup, type ParsedThemeColors } from "./theme/palette";
 export { ThemeColorEditor, type ThemeColorEditorProps } from "./theme/ThemeColorEditor";
 
 /* ── 단축키 ── */
-export { BARE_KEY_SCOPE_ATTR, KIT_RESERVED, SIDEBAR_TOGGLE_ID, findConflict, formatCombo, normalizeCombo, parseCombo, shouldTrigger, sidebarToggleAction, type Combo, type Conflict, type SidebarToggleActionOptions } from "./shortcuts/shortcuts";
-export { createShortcutStorage, type ShortcutStorage, type ShortcutBindings, type ShortcutBackup, type ParsedShortcutBindings } from "./shortcuts/shortcutStorage";
+export { BARE_KEY_SCOPE_ATTR, KIT_RESERVED, SIDEBAR_TOGGLE_ID, findConflict, formatCombo, normalizeCombo, parseCombo, shouldTrigger, sidebarToggleAction, type Combo, type Conflict, type SidebarToggleActionOptions } from "./shortcuts/combo";
+export { createShortcutStorage, type ShortcutStorage, type ShortcutBindings, type ShortcutBackup, type ParsedShortcutBindings } from "./shortcuts/storage";
 export { ShortcutProvider, useShortcutRegistry, type ShortcutAction, type ShortcutProviderProps, type ShortcutRegistry } from "./shortcuts/ShortcutProvider";
 export { ShortcutSettings, displayCombo, type ShortcutSettingsProps } from "./shortcuts/ShortcutSettings";
 

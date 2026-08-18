@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { formatCombo, comboFromEvent, parseCombo, shouldTrigger, unbindableReason } from "./shortcuts";
-import { type ShortcutBindings, type ShortcutStorage } from "./shortcutStorage";
+import { formatCombo, comboFromEvent, parseCombo, shouldTrigger, unbindableReason } from "./combo";
+import { type ShortcutBindings, type ShortcutStorage } from "./storage";
 
 export type ShortcutAction = {
   /** 안정적인 식별자. **바뀌면 그 액션의 덮어쓰기가 고아가 됩니다**(스펙 §3.1). */
@@ -164,13 +164,13 @@ export function ShortcutProvider({ actions, overrides, storage, children }: Shor
       // 전에는 이 관문이 ShortcutSettings의 녹음기 안에만 있어서 여길 우회할 수 있었고,
       // 그 결과 예를 들어 Shift+Tab을 바인딩하면 Dialog의 포커스 트랩(감싸지 않는 평범한
       // Tab에서는 preventDefault를 안 부름)과 부딪혀 포커스가 아예 안 나갔습니다
-      // (전체 리뷰 Important 2). 이유별 목록은 shortcuts.ts의 unbindableReason에 있습니다 —
+      // (전체 리뷰 Important 2). 이유별 목록은 shortcuts/combo.ts의 unbindableReason에 있습니다 —
       // Escape·Tab(킷 리스너), 맨 Enter·Space(활성화), Ctrl+C/V/X/Z/Y(브라우저 편집).
       if (unbindableReason(combo)) return null;
       return formatCombo(combo);
     }
     // ⚠️ 값 검증(정규화·UNBINDABLE_CODES)은 여기(bindingOf)와 녹음기(ShortcutSettings)
-    // 딱 두 곳입니다 — §9 파일 경계와 shortcuts.ts의 UNBINDABLE_CODES 주석이 이미
+    // 딱 두 곳입니다 — §9 파일 경계와 shortcuts/combo.ts의 UNBINDABLE_CODES 주석이 이미
     // "두 소비자가 같은 관문을 봐야 한다"고 못박아 둔 구조입니다. setBinding은 그
     // 위에 저장 배선만 얹으므로 여기서 다시 검증하지 않습니다 — 세 번째 관문을
     // 만들면 셋이 갈릴 여지가 생깁니다.

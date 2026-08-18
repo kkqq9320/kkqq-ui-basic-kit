@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { bindingWarning, comboFromEvent, formatCombo, hasModifier, normalizeCombo, parseCombo, sidebarToggleAction, unbindableReason } from "../src/shortcuts/shortcuts";
+import { bindingWarning, comboFromEvent, formatCombo, hasModifier, normalizeCombo, parseCombo, sidebarToggleAction, unbindableReason } from "../src/shortcuts/combo";
 
 /* **등록 금지 관문(스펙 §6.2).** 여기가 정본이고 `bindingOf`와 녹음기가 같이 봅니다.
  *
