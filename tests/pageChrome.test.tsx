@@ -45,12 +45,12 @@ describe("SectionHeading: §7의 예약된 설명 줄", () => {
 describe("PanelGrid: 앱이 정하는 것들", () => {
   it("기본은 자연 높이다 — stretch 표시가 없다", () => {
     const { container } = render(<PanelGrid><Panel>내용</Panel></PanelGrid>);
-    expect(container.querySelector(".panel-grid")?.classList.contains("stretch")).toBe(false);
+    expect(container.querySelector(".panel-grid")?.hasAttribute("data-align")).toBe(false);
   });
 
   it("stretch를 켜면 표시가 붙는다", () => {
     const { container } = render(<PanelGrid stretch><Panel>내용</Panel></PanelGrid>);
-    expect(container.querySelector(".panel-grid")?.classList.contains("stretch")).toBe(true);
+    expect(container.querySelector(".panel-grid")?.getAttribute("data-align")).toBe("stretch");
   });
 
   it("min은 그 통에만 걸린다 — 전역 토큰을 건드리지 않는다", () => {
@@ -165,7 +165,7 @@ describe("여섯 컴포넌트가 모두 className을 받는다", () => {
   it("PanelGrid는 stretch와 className을 같이 받는다", () => {
     const { container } = render(<PanelGrid stretch className="mine"><Panel>ㄱ</Panel></PanelGrid>);
     const el = container.querySelector(".panel-grid") as HTMLElement;
-    expect(el.classList.contains("stretch")).toBe(true);
+    expect(el.getAttribute("data-align")).toBe("stretch");
     expect(el.classList.contains("mine")).toBe(true);
   });
 });
