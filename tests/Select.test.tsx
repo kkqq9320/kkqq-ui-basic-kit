@@ -1076,7 +1076,7 @@ describe("떠 있다는 표식 (§16 ③)", () => {
   it("열면 그 축이 붙는다", () => {
     const { container } = render(<Select ariaLabel="항목" value="" options={OPTIONS} onChange={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /^항목/ }));
-    expect(container.querySelector(".app-select")!.hasAttribute("data-open")).toBe(true);
+    expect(container.querySelector(".app-select")!.matches('[data-open="true"]')).toBe(true);
   });
 
   /* 칠하는 쪽 — 위 둘은 속성이 붙는 것까지만 봅니다. CSS가 그것 대신 다른 것을

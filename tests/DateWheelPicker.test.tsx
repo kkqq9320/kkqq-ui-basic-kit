@@ -273,8 +273,8 @@ describe("DateWheelPicker", () => {
     const year = screen.getByRole("group", { name: "연도 2026" });
     const month = screen.getByRole("group", { name: "월 07" });
     fireEvent.pointerDown(month, { pointerId: 11, clientY: 80, buttons: 1 });
-    expect(month.hasAttribute("data-active")).toBe(true);
-    expect(year.hasAttribute("data-active")).toBe(false);
+    expect(month.matches('[data-active="true"]')).toBe(true);
+    expect(year.matches('[data-active="true"]')).toBe(false);
     fireEvent.pointerCancel(month, { pointerId: 11 });
   });
 
@@ -1030,9 +1030,9 @@ describe("DateWheelPicker 스와이프", () => {
     pointer("pointerDown", year, { pointerId: 1, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerMove", year, { pointerId: 1, clientY: 105, buttons: 1 });   // 홀드를 끊는 렌더
     pointer("pointerMove", year, { pointerId: 1, clientY: 110, buttons: 1 });   // 이제 dragging이 남는다
-    expect(year.hasAttribute("data-dragging")).toBe(true);   // 전제 — 걷을 것이 실제로 있다
+    expect(year.matches('[data-dragging="true"]')).toBe(true);   // 전제 — 걷을 것이 실제로 있다
     pointer("pointerUp", document.body, { pointerId: 1 });
-    expect([year.hasAttribute("data-dragging"), year.style.getPropertyValue("--wheel-drag-offset")]).toEqual([false, ""]);
+    expect([year.matches('[data-dragging="true"]'), year.style.getPropertyValue("--wheel-drag-offset")]).toEqual([false, ""]);
   });
 
   /* ── 새 누름은 언제나 억제 없이 시작한다 ────────────────────────────────────
@@ -1337,7 +1337,7 @@ describe("DateWheelPicker 스와이프", () => {
     const { year } = openWheel();
     pointer("pointerDown", year, { pointerId: 7, clientY: 100, buttons: 1, button: 0 });
     for (const clientY of [95, 90, 85, 82]) pointer("pointerMove", year, { pointerId: 7, clientY, buttons: 1 });
-    expect(year.hasAttribute("data-dragging")).toBe(true);
+    expect(year.matches('[data-dragging="true"]')).toBe(true);
   });
 
   /* 🔴 **그 임계에 감시자가 없었습니다.** `Math.abs(offset) > 2`를 통째로 없애는 변이가
@@ -1353,7 +1353,7 @@ describe("DateWheelPicker 스와이프", () => {
     const { year } = openWheel();
     pointer("pointerDown", year, { pointerId: 9, clientY: 100, buttons: 1, button: 0 });
     pointer("pointerMove", year, { pointerId: 9, clientY: 104, buttons: 1 });   // delta 4 → offset 2
-    expect([year.style.getPropertyValue("--wheel-drag-offset"), year.hasAttribute("data-dragging")]).toEqual(["2px", false]);
+    expect([year.style.getPropertyValue("--wheel-drag-offset"), year.matches('[data-dragging="true"]')]).toEqual(["2px", false]);
   });
 
   // [그림자 2/3] 손가락이 떠나면 열은 원래 자리로 돌아온다 — `clearSwipeVisual`의
@@ -1691,7 +1691,7 @@ describe("DateWheelPicker 리뷰 Finding 1 — activeUnit의 수명과 클램프
 
     fireEvent.click(screen.getByRole("button", { name: "일 열 제거" }));
 
-    expect(screen.getByRole("group", { name: "연도 2026" }).hasAttribute("data-active")).toBe(true);
+    expect(screen.getByRole("group", { name: "연도 2026" }).matches('[data-active="true"]')).toBe(true);
   });
 });
 
@@ -2530,7 +2530,7 @@ describe("DateWheelPicker 활성 표시는 편집 중에만", () => {
     fireEvent.click(trigger);
     return trigger;
   }
-  const editing = (trigger: HTMLElement) => trigger.hasAttribute("data-editing");
+  const editing = (trigger: HTMLElement) => trigger.matches('[data-editing="true"]');
 
   it("팝오버를 열면 편집이 시작된다", async () => {
     const trigger = open();
@@ -2549,7 +2549,7 @@ describe("DateWheelPicker 활성 표시는 편집 중에만", () => {
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
 
     await screen.findByRole("dialog", { name: "거래 날짜 선택" });
-    expect(trigger.hasAttribute("data-editing")).toBe(true);
+    expect(trigger.matches('[data-editing="true"]')).toBe(true);
   });
 
   // **오너가 말한 그것.**
@@ -4511,7 +4511,7 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // 고정합니다.
   it("팝오버가 열리면 세 열 모두 entering이 붙는다", () => {
     openPicker();
-    expect(columns().map((column) => column.hasAttribute("data-entering"))).toEqual([true, true, true]);
+    expect(columns().map((column) => column.matches('[data-entering="true"]'))).toEqual([true, true, true]);
   });
 
   // 위가 전제입니다 — 클래스가 아예 안 붙으면 이 테스트는 공허 통과합니다.
@@ -4519,7 +4519,7 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
     vi.useFakeTimers();
     openPicker();
     act(() => { vi.advanceTimersByTime(1000); });
-    expect(columns().map((column) => column.hasAttribute("data-entering"))).toEqual([false, false, false]);
+    expect(columns().map((column) => column.matches('[data-entering="true"]'))).toEqual([false, false, false]);
   });
 
   // ── 게이트 창과 CSS 총 길이는 **같은 수여야 합니다** ────────────────────────
@@ -4552,14 +4552,14 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
     vi.useFakeTimers();
     openPicker();
     act(() => { vi.advanceTimersByTime(enterTotalFromCss() - 30); });
-    expect(columns().map((column) => column.hasAttribute("data-entering"))).toEqual([true, true, true]);
+    expect(columns().map((column) => column.matches('[data-entering="true"]'))).toEqual([true, true, true]);
   });
 
   it("게이트는 마지막 열이 멎은 직후 걷힌다", () => {
     vi.useFakeTimers();
     openPicker();
     act(() => { vi.advanceTimersByTime(enterTotalFromCss() + 30); });
-    expect(columns().map((column) => column.hasAttribute("data-entering"))).toEqual([false, false, false]);
+    expect(columns().map((column) => column.matches('[data-entering="true"]'))).toEqual([false, false, false]);
   });
 });
 
@@ -4776,7 +4776,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
 
     expect([
       document.querySelector(".dropdown-value-commit") !== null,
-      trigger.hasAttribute("data-editing"),
+      trigger.matches('[data-editing="true"]'),
     ]).toEqual([true, false]);
   });
 
@@ -6117,11 +6117,11 @@ describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () =
     openTime("2026-08-12T15:07:41");
     const row = rowOf("초", 0);
     const column = row.closest(".wheel-column")!;
-    expect(column.hasAttribute("data-holding")).toBe(false);
+    expect(column.matches('[data-holding="true"]')).toBe(false);
     pointer("pointerDown", row, { pointerId: 7, clientY: 100, button: 0, isPrimary: true });
-    expect(column.hasAttribute("data-holding")).toBe(true);
+    expect(column.matches('[data-holding="true"]')).toBe(true);
     pointer("pointerUp", row, { pointerId: 7, clientY: 100 });
-    expect(column.hasAttribute("data-holding")).toBe(false);
+    expect(column.matches('[data-holding="true"]')).toBe(false);
   });
 
   /* 🔴 **발동하는 순간 표시가 꺼져야 합니다 — 아직 손을 떼기 전입니다.** 초기화는 손가락이
@@ -6141,7 +6141,7 @@ describe("DateWheelPicker 길게 눌러 초기화 (오너 리포트 4번)", () =
     act(() => { vi.advanceTimersByTime(HOLD_MS); });
     // 커밋이 `.wheel-values`를 리마운트하므로 열을 여기서 다시 잡습니다(`rowAt`은 자기 expect를 갖습니다).
     const column = screen.getByRole("group", { name: (name: string) => name.startsWith("초") });
-    expect(column.hasAttribute("data-holding")).toBe(false);
+    expect(column.matches('[data-holding="true"]')).toBe(false);
   });
 
 
@@ -7563,7 +7563,7 @@ describe("휠의 시각 상태는 data-* 축이 칠한다 (§16 ③)", () => {
     const root = container.querySelector(".wheel-picker")!;
     expect(root.getAttribute("data-open")).toBeNull();
     fireEvent.click(fieldOf("거래 날짜"));
-    expect(root.hasAttribute("data-open")).toBe(true);
+    expect(root.matches('[data-open="true"]')).toBe(true);
   });
 
   it("그 축이 실제로 칠한다 — 쌓임과 트리거 강조", () => {
