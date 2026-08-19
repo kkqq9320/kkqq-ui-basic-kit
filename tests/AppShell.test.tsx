@@ -1877,6 +1877,12 @@ describe("AppShell: 안 쓰게 된 관찰과 타이머는 남지 않는다", () 
     await waitFor(() => expect(root.scrollTop).toBeGreaterThan(0));   // 전제 — 살아 있을 때는 실제로 옮깁니다
 
     const settled = root.scrollTop;
+
+    /* ⚠️ **기하를 바꿔 둬야 갈립니다.** 안 바꾸면 뒤늦은 재조준이 **같은 목표를 다시**
+     * **계산**해 스크롤이 그대로라, 타이머를 안 껐어도 초록입니다 — 처음에 실제로 그랬고
+     * 변이가 0 red로 알려 줬습니다. 필드를 더 아래로 옮겨, 타이머가 살아 있으면 반드시
+     * 한 번 더 움직이게 만듭니다. */
+    stubRectBottom(textarea, 1500);
     textarea.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));   // 정착 타이머를 예약합니다
     cleanup();                     // 그 타이머가 살아 있는 채로 언마운트
     await new Promise((resolve) => setTimeout(resolve, 200));
