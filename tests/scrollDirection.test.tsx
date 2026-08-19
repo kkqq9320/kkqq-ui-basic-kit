@@ -117,15 +117,55 @@ describe("useScrollDirectionHidden", () => {
     expect(hidden()).toBe(true);
   });
 
-  it("맨 위 18px 안에서는 무조건 나타난다", () => {
+  /* 🔴 **처음 쓴 이 검사는 게이트를 못 쟀습니다.** 500 → 10은 위로 490이라 **평범한
+   * 방향 판정만으로도** 나타납니다 — 게이트를 통째로 없애는 변이가 0 red였습니다.
+   * 두 원인이 픽스처에서 같은 답을 내면 그 검사는 둘을 못 가릅니다.
+   *
+   * 가르려면 **누적이 모자란 위쪽 이동이 맨 위 구역에 닿게** 해야 합니다. 게이트가
+   * 없으면 10px로는 아무 일도 안 일어나 숨은 채로 남습니다. */
+  it("맨 위 18px 안에 닿으면 누적이 모자라도 나타난다 — 게이트", () => {
     const root = makeRoot("root");
     const { Probe, hidden } = probe();
     render(<Probe />);
 
-    scrollTo(root, 500);
+    scrollTo(root, 25);    // 아래로 25 → 숨음 (맨 위 구역 바로 밖)
     expect(hidden()).toBe(true);
-    scrollTo(root, 10);   // 맨 위 근처 — 아래로 갔든 위로 갔든 나타나야 합니다
+    scrollTo(root, 15);    // 위로 10뿐 — 누적은 모자라지만 맨 위 구역에 닿았습니다
     expect(hidden()).toBe(false);
+  });
+
+  /* 게이트는 나타내기만 하는 게 아니라 **누적과 방향도 버립니다.** 안 버리면 맨 위를
+   * 지나온 뒤의 첫 짧은 이동이 **옛 누적을 이어받아** 곧바로 판정을 뒤집습니다. */
+  it("맨 위를 지나면 누적과 방향을 버린다", () => {
+    const root = makeRoot("root");
+    root.scrollTop = 100;
+    const { Probe, hidden } = probe();
+    render(<Probe />);
+
+    scrollTo(root, 110);   // 아래로 10 — 누적 10 (아직 판정 없음)
+    scrollTo(root, 15);    // 맨 위 구역: 나타나고, 누적·방향을 버립니다
+    expect(hidden()).toBe(false);
+
+    scrollTo(root, 30);    // 아래로 15 — 버렸으면 15뿐이라 모자랍니다
+    expect(hidden()).toBe(false);   // 안 버렸으면 10+15=25로 숨어 버립니다
+  });
+
+  /* 🔴 **1px 미만은 방향으로도 안 칩니다.** 트랙패드의 관성 꼬리가 0.5px씩 반대로
+   * 튀는데, 그것을 방향 전환으로 받으면 **모으던 누적이 매번 버려져** 바가 영영
+   * 안 숨습니다. 그래서 게이트가 `setHidden`보다 **앞에** 있습니다.
+   *
+   * ⚠️ 가르려면 누적이 임계 **직전**일 때 미세하게 튀어야 합니다 — 그냥 0.5px만
+   * 밀면 게이트가 있든 없든 아무 일도 안 일어나 구별이 안 됩니다. */
+  it("1px 미만의 반대 방향 흔들림은 누적을 안 버린다", () => {
+    const root = makeRoot("root");
+    root.scrollTop = 100;
+    const { Probe, hidden } = probe();
+    render(<Probe />);
+
+    scrollTo(root, 117);     // 아래로 17 — 임계 직전
+    scrollTo(root, 116.5);   // 위로 0.5 — 무시돼야 합니다
+    scrollTo(root, 118.5);   // 아래로 2 → 17+2 = 19 → 숨음
+    expect(hidden()).toBe(true);
   });
 
   /* 🔴 **뒷정리.** 스크롤 루트가 갈리면 옛 루트의 리스너를 떼야 합니다. 안 떼면 **더는
@@ -153,4 +193,13 @@ describe("useScrollDirectionHidden", () => {
     scrollTo(first, 900);                       // 옛 루트를 아무리 굴려도
     expect(seen[seen.length - 1]).toBe(false);  // 판정은 안 바뀐다
   });
+  /* 📌 **`setHidden` 뒤의 `distance = 0`은 관찰 차이가 없습니다**(2026-08-19 실측).
+   * 그 줄을 지우는 변이는 0 red인데, **못 잡는 게 아니라 잡을 것이 없습니다**:
+   *
+   *   판정 뒤 같은 방향으로 더 가면 → 같은 값으로 `setHidden`을 다시 부를 뿐입니다
+   *   방향을 바꾸면 → 그 자리에서 어차피 누적을 버립니다
+   *
+   * 즉 남은 누적이 바꿀 수 있는 것은 **이미 그 값인 상태**뿐입니다. 이 저장소의 규칙대로
+   * *등가*와 *못 밟음*을 갈라 적습니다 — 여기 검사를 억지로 만들면 그 검사는 화면에
+   * 안 보이는 것을 재게 되고, 나중에 정당한 정리를 막습니다. */
 });
