@@ -2104,6 +2104,65 @@ describe("AppShell: 안 쓰게 된 관찰과 타이머는 남지 않는다", () 
   /* `focusin`은 뷰포트가 정착할 때까지 기다렸다 재조준합니다. 그 타이머가 예약된 채
    * 언마운트되면 **죽은 훅이 스크롤을 옮깁니다** — 사용자에게는 화면을 떠난 뒤 스크롤이
    * 한 번 튀는 모습입니다. */
+  /* 🔴 **키보드가 닫힐 때 예약된 재조준이 남으면 안 됩니다** — focusin 창구의
+   * `clearTimeout(focusSettleTimer)`. 배터리가 0 red로 보고했고, 아래 언마운트 검사가
+   * 그 줄을 못 죽이는 이유는 **환경**이었습니다(언마운트 뒤 `document.activeElement`가
+   * `body`로 떨어지는데 jsdom에서 `body`의 rect는 전부 0 → `reposition`이 돌아도
+   * "움직일 필요 없음"). 그 자리는 그대로 두고, **다른 경로**로 잡습니다.
+   *
+   * 🟢 **이 이펙트의 의존성은 `[keyboard.open, scrollRootId]`입니다** — 그러니 정리가
+   * 실제로 도는 계기는 언마운트 말고 **키보드가 닫힐 때**입니다. 그 경로에서는 초점이
+   * 여전히 `#root` 안의 필드에 있으므로 `reposition`의 `contains` 가드를 통과하고,
+   * 그 자리의 rect는 이 파일이 이미 스텁으로 쥐고 있습니다 — 환경이 안 가립니다.
+   *
+   * 무엇이 잘못되는가: 닫힌 **뒤에** 재조준이 돌면 `visibleBottom`이 이미 전체 높이라
+   * 킷이 요청한 적 없는 스크롤이 일어납니다(§16.2). 게다가 §9 때문에 닫을 때
+   * 되돌리지 않으므로 그 초과분은 **영구히** 남습니다 — 열고 닫을 때마다 페이지가
+   * 조금씩 밀립니다. owner 실기기 트레이스가 잡았던 그 증상과 같은 모양입니다.
+   *
+   * 시간은 가짜 타이머로 잡습니다 — 80ms 창구와 벽시계가 경합하지 않습니다. */
+  it("키보드가 닫히면 focusin이 예약해 둔 재조준이 스크롤을 못 옮긴다", () => {
+    vi.useFakeTimers();
+    installReducedMotionPreference();   // 애니메이션을 걷어내 관측을 프레임에서 떼어냅니다
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 900);   // 한참 아래 — 재조준이 돌면 스크롤이 반드시 움직입니다
+    root.scrollTop = 0;
+
+    act(() => { textarea.focus(); viewport.openKeyboard(350); });
+    act(() => { vi.advanceTimersByTime(200); });
+    const settled = root.scrollTop;
+    expect(settled).toBeGreaterThan(0);   // 전제 — 살아 있을 때는 실제로 옮깁니다
+
+    // 기하를 더 아래로 옮겨 둡니다 — 예약된 재조준이 살아 있으면 반드시 한 번 더
+    // 움직일 상태입니다.
+    stubRectBottom(textarea, 1500);
+    act(() => { textarea.dispatchEvent(new FocusEvent("focusin", { bubbles: true })); });
+
+    // 정착 창구(KEYBOARD_VIEWPORT_SETTLE_MS = 80ms)가 지나기 **전에** 닫습니다.
+    act(() => { viewport.closeKeyboard(); });
+    act(() => { vi.advanceTimersByTime(300); });
+
+    expect(root.scrollTop).toBe(settled);
+  });
+  /* 📌 **같은 창구의 디바운스(`repositionAfterViewportSettles` 안의 `clearTimeout`)는
+   * 아직 0 red이고, 지금은 그게 맞습니다**(2026-08-19 실측).
+   *
+   * 그 줄을 지우면 focusin 둘에 타이머가 둘 생깁니다. 그런데 `reposition`은 부를 때마다
+   * **살아 있는 지오메트리를 다시 읽으므로**(rect도 viewport도) 두 번째 실행이 첫 번째를
+   * 스스로 바로잡습니다 — 영구히 남는 차이가 없습니다. 디바운스의 값은 *"팬이 도는
+   * 도중에 재지 않는다"* 라는 **한때의** 성질이지 최종 상태가 아닙니다.
+   *
+   * ⚠️ **억지로 갈리게 만들 수는 있습니다 — 그러면 스텁을 재게 됩니다.** `stubRectBottom`은
+   * scrollTop과 무관하게 같은 rect를 돌려주므로 두 번째 실행이 같은 overshoot를 또
+   * 더합니다(이중 적용). 실제 브라우저에서는 첫 스크롤로 rect가 그만큼 올라가 두 번째가
+   * 0을 냅니다. 그런 검사는 킷이 아니라 픽스처를 지킵니다 —
+   * `stubRectBottomFollowingScroll`이 이 파일에 따로 있는 이유가 그것입니다.
+   *
+   * 🔜 **다시 봐야 하는 날:** `reposition`이 지오메트리를 캐시하기 시작하면 자기교정이
+   * 사라지고 이 자리는 진짜 구멍이 됩니다. 그때는 위 검사와 같은 방식(가짜 타이머로
+   * 창구를 쥐고, 두 focusin 사이에 팬을 끼워 넣기)으로 세울 수 있습니다. */
   it("언마운트 뒤에는 예약된 재조준이 스크롤을 못 옮긴다", async () => {
     const viewport = installFakeVisualViewport(844);
     const root = renderIntoScrollRoot(<Page />);
