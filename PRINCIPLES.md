@@ -526,7 +526,7 @@ eyebrow → 페이지 제목 → 설명 → (탭) → 섹션 제목 → 섹션 �
   포털 메뉴(450)만 그 위로 올라옵니다. 포털 메뉴는 백드롭 바깥에 렌더되므로
   메뉴를 눌러도 다이얼로그가 닫히지 않습니다.
 
-구현: `src/Dialog.tsx`(`Dialog` · `DialogHeading` · `DialogActions`),
+구현: `surfaces/Dialog.tsx`(`Dialog` · `DialogHeading` · `DialogActions`),
 `css/dialog.css`(`.dialog-backdrop` / `.dialog` / `.dialog-wide` /
 `.dialog-scroll` / `.dialog-actions`).
 
@@ -687,7 +687,7 @@ tab 정거장이 하나도 없고, 포커스가 그 안으로 들어가는 일�
 좁혔습니다: 팝오버가 **열려 있을 때만** 먹으므로, 필드에 포커스가 있어도 닫혀 있으면
 `Ctrl+S`는 브라우저 몫입니다.
 
-**이 넷은 `KIT_RESERVED`에 등록돼 있습니다**(`src/shortcuts.ts`). 예약 비교가
+**이 넷은 `KIT_RESERVED`에 등록돼 있습니다**(`shortcuts/combo.ts`). 예약 비교가
 `Shift`·`Alt`·`Meta`를 접으므로 소비자 앱은 `Ctrl+Shift+Z`(다시 하기)를 포함해 이 넷의
 모든 변형을 액션에 걸 수 없습니다 — 안전한 쪽으로 넓게 틀리는 쪽을 택한 대가입니다.
 **"조합이 막혔나"를 파기 전에 "키가 도착은 하나"를 먼저 봤어야 했습니다.** 판정은 `event.code === "Semicolon"`으로
