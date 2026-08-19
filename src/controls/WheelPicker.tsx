@@ -1886,7 +1886,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
   // 붙어 model.columns(fields)가 fields와 갈라지면, 지역 변수 하나로 묶어 두지 않으면
   // CSS 열 폭을 정하는 data-fields만 옛 값을 씁니다.
   const columns = model.columns(fields);
-  return <div className={`wheel-picker${open ? " open" : ""} ${className}`.trim()} ref={rootRef}>
+  return <div className={`wheel-picker ${className}`.trim()} data-open={open ? "" : undefined} ref={rootRef}>
     {/* onFocus는 세션 기준값을 찍는 두 지점 중 나머지 하나입니다(다른 하나는 위의 닫힘
         이펙트) — 설계 스펙 §6.4. React의 onFocus는 native focusin에 대응합니다.
 

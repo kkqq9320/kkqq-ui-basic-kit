@@ -538,7 +538,7 @@ describe("Select", () => {
       expect(stateRule![0]).toMatch(/outline:\s*var\(--focus-ring\)/);
       // 세 상태가 한 규칙에 같이 있어야 한 곳만 고쳐도 셋이 함께 움직인다.
       expect(stateRule![0]).toMatch(/:focus-visible/);
-      expect(stateRule![0]).toMatch(/\.app-select\.open/);
+      expect(stateRule![0]).toMatch(/\.app-select\[data-open\]/);
       // disabled는 빠져야 한다 — :hover는 disabled에도 매칭된다.
       expect(stateRule![0]).toMatch(/:hover:not\(:disabled\)/);
     });
@@ -1056,5 +1056,43 @@ describe("Select 포털 메뉴는 위로 뒤집혀도 트리거에 붙는다", (
     const menu = document.querySelector<HTMLElement>(".app-select-menu")!;
 
     expect(menu.style.bottom).toBe("");
+  });
+});
+
+/* ── §16 ③: 떠 있다는 표식은 컨테이너의 축이 싣는다 ─────────────────────────
+ *
+ * 🔴 **이 자리는 감시자가 0이었습니다.** `.open` 클래스였을 때부터 그랬고, 축으로 옮긴
+ * 뒤에 재 보니 **축을 통째로 떼도 1690개가 전부 초록**이었습니다(2026-08-19). 그 상태에서
+ * 메뉴는 z-index를 못 받아 다른 것에 가려지고 셰브런도 안 돕니다.
+ *
+ * 오너 결정(2026-08-18): 부모의 `open`은 자식 트리거의 `aria-expanded`와 **다른 사실**입니다 —
+ * *"이 묶음이 지금 떠 있다"*(z-index·배치)에 대응하는 ARIA가 없어 ③입니다. */
+describe("떠 있다는 표식 (§16 ③)", () => {
+  it("닫혀 있으면 축이 아예 없다 — 빈 값도 안 남긴다", () => {
+    const { container } = render(<Select ariaLabel="항목" value="" options={OPTIONS} onChange={vi.fn()} />);
+    expect(container.querySelector(".app-select")!.getAttribute("data-open")).toBeNull();
+  });
+
+  it("열면 그 축이 붙는다", () => {
+    const { container } = render(<Select ariaLabel="항목" value="" options={OPTIONS} onChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /^항목/ }));
+    expect(container.querySelector(".app-select")!.hasAttribute("data-open")).toBe(true);
+  });
+
+  /* 칠하는 쪽 — 위 둘은 속성이 붙는 것까지만 봅니다. CSS가 그것 대신 다른 것을
+   * 칠해도 조용합니다(사이드바에서 CSS만 되돌리는 변이가 1664개 초록이었습니다). */
+  it("그 축이 실제로 칠한다 — 자리 셋", () => {
+    expect(selectCssSource.length).toBeGreaterThan(1000);
+    expect([
+      selectCssSource.includes(".app-select[data-open] { z-index: 80; }"),
+      selectCssSource.includes(".app-select[data-open] > .app-select-trigger"),
+      selectCssSource.includes("[data-open] > .app-select-trigger .dropdown-chevron"),
+    ]).toEqual([true, true, true]);
+  });
+
+  it("클래스 사본은 CSS에 안 남아 있다", () => {
+    // ⚠️ `.open`이 아니라 **선택자 모양**을 봅니다 — 앞엣것은 산문에도 걸려 이 검사가
+    //    엉뚱한 이유로 빨개집니다(실제로 그랬습니다).
+    expect([selectCssSource.includes(".app-select.open"), selectCssSource.includes(".open >")]).toEqual([false, false]);
   });
 });

@@ -51,10 +51,10 @@ home   active: page === "dashboard"   "지금 이 페이지다"          → ari
 여기서 `:is()`는 인자가 둘 다 속성 선택자라 명시도를 **안 올립니다**(`:where()`로 쓰면
 오히려 (0,1,1)로 내려가 캐스케이드가 바뀝니다).
 
-### 🔴 BREAKING — 상태 클래스 열둘이 속성이 됐습니다 (§16)
+### 🔴 BREAKING — 상태 클래스가 전부 속성이 됐습니다 (§16, 스물셋)
 
-**클래스는 부품의 이름이고 상태는 속성입니다**(§16). 이 열둘은 **결정이 필요 없는** 자리라
-먼저 옮겼습니다 — 소비자가 이 클래스를 직접 칠하고 있었다면 고쳐야 합니다.
+**클래스는 부품의 이름이고 상태는 속성입니다**(§16). **§16이 세던 상태 클래스가 0이 됐습니다** —
+소비자가 이 클래스들을 직접 칠하고 있었다면 고쳐야 합니다.
 
 ```diff
 - .wheel-column.moving-next             + .wheel-column[data-motion="next"]
@@ -65,13 +65,17 @@ home   active: page === "dashboard"   "지금 이 페이지다"          → ari
 - .wheel-segment.active                 + .wheel-segment[data-active]
 - .wheel-trigger.editing                + .wheel-trigger[data-editing]
 - .wheel-column.dragging               + .wheel-column[data-dragging]
+- .app-select.open                      + .app-select[data-open]
+- .wheel-picker.open                    + .wheel-picker[data-open]
+- .mobile-page-tabs-float.open          + .mobile-page-tabs-float[data-open]
+- .settings-tabs.mobile-open            + .settings-tabs[data-mobile-open]
 - .panel-grid.stretch                    + .panel-grid[data-align="stretch"]
 - .sidebar.mobile-open                   + .sidebar[data-mobile-drawer="open"]
 - .wheel-meridiem button.selected        + .wheel-meridiem button[aria-pressed="true"]
 - .wheel-values button.selected          + .wheel-values button[aria-current="date"]
 ```
 
-🟢 **명시도는 열둘 다 그대로입니다** — 속성 선택자는 클래스와 같은 (0,1,0)입니다. 그래서
+🟢 **명시도는 전부 그대로입니다** — 속성 선택자는 클래스와 같은 (0,1,0)입니다. 그래서
 앱이 걸어 둔 조정이 흔들리지 않습니다.
 
 🟢 **모션은 축으로 묶여 `:is()`가 필요 없어졌습니다** — `.wheel-column:is(.moving-next,

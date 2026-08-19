@@ -5,7 +5,7 @@
  * 값이 움직여도 화살표 버튼을 밀거나 가리면 안 됩니다.
  */
 .wheel-picker { position: relative; width: 100%; min-width: 0; }
-.wheel-picker.open { z-index: 80; }
+.wheel-picker[data-open] { z-index: 80; }
 
 /* 트리거: 41px로 다른 입력 컨트롤과 높이를 맞춥니다. */
 /* `display: grid`는 장식이 아닙니다 — `<button>`은 블록 컨테이너 안에서 저절로
@@ -131,7 +131,7 @@
 /* :hover는 disabled 요소에도 매칭되므로 명시적으로 뺀다 — 안 그러면 흐려진 필드가
  * 마우스만 올려도 강조 테두리로 살아난다. :focus-visible은 disabled가 포커스를 못
  * 받으니 따로 뺄 필요가 없다. */
-.wheel-trigger-shell:has(:hover:not(:disabled), :focus-visible), .wheel-picker.open .wheel-trigger-shell { border-color: var(--accent); outline: var(--focus-ring); }
+.wheel-trigger-shell:has(:hover:not(:disabled), :focus-visible), .wheel-picker[data-open] .wheel-trigger-shell { border-color: var(--accent); outline: var(--focus-ring); }
 /* 링은 위에서 **shell**이 그린다. 안쪽 버튼의 기본 아웃라인을 끄지 않으면 브라우저가
  * 자기 포커스 링(엔진에 따라 흰색·검정)을 그 안에 하나 더 그려 두 겹이 된다 — Tab으로
  * 옮겨 다니면 드롭다운은 강조색 링 하나, 날짜는 링 두 개가 나온다.
