@@ -8,7 +8,7 @@ import { StrictMode, useLayoutEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppShell, Dialog, Select, Sidebar } from "../src";
-import { takeUnlandedBackCountForTest } from "../src/browser/popupDismiss";
+import { takeUnlandedBackCountForTest, useBackToClose, useEscapeToClose } from "../src/browser/popupDismiss";
 
 const STACK_KEY = "__dsPopupStack";
 
@@ -782,5 +782,62 @@ describe("B2: A가 닫히며 B의 표식을 뽑는 문제", () => {
     // 엉뚱하게 B를 닫혀버린다 — A는 예전 표식이 여전히 "맨 위"인 것처럼 보여 안 닫힌다.
     expect(screen.queryByRole("listbox", { name: "A" })).toBeNull();
     expect(screen.getByRole("listbox", { name: "B" })).toBeTruthy();
+  });
+});
+
+/* ── 언마운트 뒤에는 아무것도 안 받는다 (뒷정리) ─────────────────────────────
+ *
+ * 🔴 **이 파일에 검사가 스물일곱인데 뒷정리는 하나도 안 잡혔습니다**(2026-08-19 실측).
+ * `popupDismiss.ts`의 정리 동사 **다섯 중 다섯**이 0 red였습니다 — 지우는 변이가
+ * 1699개를 전부 초록으로 통과했습니다.
+ *
+ * 위 검사들이 **동작**을 아주 촘촘히 재는데도 그렇습니다. 이유는 축이 다르기 때문입니다 —
+ * 저것들은 *"열려 있을 때 뒤로가기가 무엇을 하는가"* 를 재고, 이 셋은 **"닫힌 뒤에
+ * 아무 일도 안 일어나는가"** 를 잽니다. 이번 달에 다섯 번 뚫린 그 축입니다.
+ *
+ * 🟢 여기는 `visualViewport`와 달리 **관찰점이 있습니다** — `onClose`가 스파이라
+ * `positioning.test.tsx`의 좋은 모양(*"해제하면 더는 안 부른다"*)을 그대로 씁니다.
+ * 리스너 장부 같은 우회가 필요 없습니다. */
+describe("언마운트 뒤에는 아무 이벤트도 안 받는다 (뒷정리)", () => {
+  const EscapeProbe = ({ onClose }: { onClose: () => void }) => { useEscapeToClose(true, onClose); return null; };
+  const BackProbe = ({ onClose }: { onClose: () => void }) => { useBackToClose(true, onClose); return null; };
+
+  it("useEscapeToClose: 언마운트 뒤 Escape는 안 닫는다", () => {
+    const onClose = vi.fn();
+    const view = render(<EscapeProbe onClose={onClose} />);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);   // 전제 — 살아 있을 때는 실제로 닫는다
+
+    view.unmount();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  /* 🔴 **리스너를 떼는 것만으로는 모자랍니다.** Escape는 모듈 스코프 스택에서 *가장
+   * 깊은 것*을 임자로 고릅니다 — 죽은 항목이 스택에 남으면 그것이 계속 이기고, **다음에
+   * 열리는 팝업의 Escape가 아무 일도 안 하게** 됩니다. 정리에 `splice`가 있는 이유이고,
+   * 위 검사는 그것을 안 봅니다(자기 리스너는 어차피 떼졌으니까). */
+  it("useEscapeToClose: 죽은 항목이 스택에 남아 다음 팝업을 먹지 않는다", () => {
+    const first = vi.fn();
+    render(<EscapeProbe onClose={first} />).unmount();
+
+    const second = vi.fn();
+    render(<EscapeProbe onClose={second} />);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect([first.mock.calls.length, second.mock.calls.length]).toEqual([0, 1]);
+  });
+
+  /* 언마운트가 예약한 `back()`은 이 파일 머리의 `backSpy`가 받습니다 — 그것이 쏘는
+   * popstate가 **떼졌어야 할 리스너**에 닿으면 죽은 팝업이 `onClose`를 부릅니다. */
+  it("useBackToClose: 언마운트 뒤 popstate는 안 닫는다", () => {
+    vi.useFakeTimers();
+    const onClose = vi.fn();
+    const view = render(<BackProbe onClose={onClose} />);
+    expect(stack().length).toBe(1);   // 전제 — 표식이 실제로 쌓였다
+
+    view.unmount();
+    act(() => { vi.advanceTimersByTime(50); });
+    fireEvent.popState(window, { state: null });
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
