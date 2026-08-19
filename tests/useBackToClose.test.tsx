@@ -169,9 +169,29 @@ describe("다이얼로그 뒤로가기", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("StrictMode에서 열자마자 닫히지 않는다", async () => {
-    // effect가 mount → cleanup → mount로 두 번 도는 개발 모드 동작.
-    // 정리 단계의 history.back()을 즉시 부르면 여기서 다이얼로그가 사라졌다.
+  /* 🔴 **이 검사는 자기 이름이 말하는 경로를 안 밟습니다**(2026-08-19 실측). 아래 표식
+   * 프로브가 그것을 보여 줍니다 — `useBackToClose`의 layout effect가 이 검사에서
+   * **한 번만** 돕니다(`|eff(true):body`). 두 번 돌면 `|eff…|eff…`가 나와야 합니다.
+   *
+   * 잰 것:
+   * ```
+   * 이 환경의 StrictMode는 실제로 두 번 돈다   프로브: useEffect·useLayoutEffect 둘 다
+   *                                          runs = "LEleLE" (React 19.2.8)
+   * 그런데 이 훅의 효과는 한 번만 돈다        Harness의 open은 처음부터 true이고
+   *                                          Dialog.tsx:55가 무조건 부르는데도
+   * 정리 함수도 안 돈다                       그래서 예약된 back()도 안 생긴다
+   * 그 결과 재마운트 취소용 clearTimeout이     그 줄을 지워도 1718개 전부 초록
+   * 통째로 안 밟힌다
+   * ```
+   *
+   * ⚠️ **왜 안 도는지는 아직 못 밝혔습니다.** 그래서 이 검사를 지우지도, 고친 척하지도
+   * 않습니다 — 지금 증명하는 것은 *"이 구성에서 다이얼로그가 20ms 뒤에도 살아 있다"*
+   * 까지이고, **StrictMode 재마운트 회귀는 아직 아무도 안 지키고 있습니다.**
+   * 이어서 할 사람은 원장의 `감시자 채우기 6차`를 보세요.
+   *
+   * (원래 주석: effect가 mount → cleanup → mount로 두 번 도는 개발 모드 동작.
+   *  정리 단계의 history.back()을 즉시 부르면 여기서 다이얼로그가 사라졌다.) */
+  it("열자마자 닫히지 않는다 — ⚠️ StrictMode 재마운트는 이 구성에서 안 일어난다", async () => {
     render(<Harness wrapper={StrictMode} />);
     expect(screen.getByRole("dialog")).toBeTruthy();
 
