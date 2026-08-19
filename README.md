@@ -125,8 +125,8 @@ npm i file:../kkqq-ui-basic-kit
 다른 id를 쓴다면 세 곳을 함께 바꾸세요:
 
 1. `css/tokens.css` 맨 아래 미디어 쿼리의 `#root` 선택자
-2. `src/SectionTabs.tsx`의 `document.getElementById("root")`
-3. `Select`가 부르는 `captureScrollSnapshot()` — `src/positioning.ts`의
+2. `src/surfaces/SectionTabs.tsx`의 `document.getElementById("root")`
+3. `Select`가 부르는 `captureScrollSnapshot()` — `src/browser/positioning.ts`의
    `scrollRootId` 기본값. `useScrollDirectionHidden(id)`도 같은 인자를 받습니다.
 
 Next.js App Router처럼 마운트 지점을 직접 정할 수 없는 환경이라면,

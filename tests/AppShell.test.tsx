@@ -38,7 +38,7 @@
 // 길이도 여기서는 반증할 수 없다 — 실기기에서만 확인된다.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -1440,60 +1440,30 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     expect(root.scrollTop).toBe(835);
   });
 
-  /* 🔴 **붙들려 있는 동안에는 재지 않습니다** — 그 가드가 0 red였습니다(2026-08-19 실측).
-   * 소스의 주석이 *"바로 이 고침이 없애려던 그 이동"* 이라고 적어 둔 자리인데 지키는
-   * 검사가 없었습니다.
+  /* 🔴 **여기 감시자가 있어야 하는데 못 세웠습니다**(2026-08-19, 네 번 시도).
    *
-   * 무엇이 잘못되는가: 창구 동안 `clientHeight`는 우리가 못 박은 값이라 **브라우저의
-   * 실제 지오메트리가 아닙니다.** 닫은 직후 사용자가 스크롤하면 주소창이 접혀 실제
-   * 높이가 **커지는데**, 붙든 값(작은 쪽)으로 재면 `naturalMax`를 과대평가해 안전선보다
-   * 많이 걷어냅니다 → `scrollHeight`가 줄고 → 브라우저가 `scrollTop`을 clamp합니다.
+   * 지키려던 것: `recompute`의 `if (heightPinned) return;`. 소스 주석이 *"바로 이 고침이
+   * 없애려던 그 이동"* 이라고 적어 둔 자리이고, 그 줄을 지우면 예약 여백이 **406px →
+   * 368px**로 깎입니다(프로브로 실측). 그런데 **검사로는 못 잡았습니다.**
    *
-   * ⚠️ **가르려면 창구 도중 실제 높이가 붙든 값과 달라져야 합니다.** 같으면 붙들었든
-   * 아니든 산수가 같아 가드를 지워도 초록입니다 — 그래서 `setClientHeight`로 주소창이
-   * 접히는 순간을 만듭니다. */
-  it("붙들려 있는 동안의 스크롤은 예약 여백을 걷어내지 않는다 — 붙든 값으로 재면 안 된다", async () => {
-    Object.defineProperty(window, "innerHeight", { configurable: true, value: 1059 });
-    const viewport = installFakeVisualViewport(1060);
-    const root = renderIntoScrollRoot(<Page />);
-    const textarea = screen.getByLabelText("메모");
-    stubRectBottom(textarea, 50);
-    const scrollStub = installClampingScrollRoot(root, 1997, 1060);
-
-    textarea.focus();
-    viewport.openKeyboard(407);
-    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(true));
-    root.scrollTop = scrollStub.currentMax();   // 맨 아래 — 걷어낼 여백이 생기는 자리
-
-    viewport.closeKeyboard();
-    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(false));
-
-    // 전제 둘 — 붙들려 있고, 걷어낼 여백이 실제로 있다. 아니면 아래가 공허합니다.
-    expect(root.style.height).not.toBe("");
-    const reserved = keyboardInsetOf(root);
-    expect(reserved).not.toBe("0px");
-
-    // 창구 도중 주소창이 접혀 **실제** 높이가 커집니다. 붙든 인라인 값이 아직 이기므로
-    // `clientHeight`는 여전히 작게 읽힙니다 — 지금 재면 과대평가입니다.
-    scrollStub.setClientHeight(1200);
-
-    /* ⚠️ **위로 실제로 옮겨야 합니다.** 이벤트만 쏘면 목표가 그대로라 `recompute`가
-     * `next === current`로 즉시 빠져나갑니다 — 가드를 지워도 초록이라 아무것도 못 가릅니다
-     * (실측). 위로 끝까지 올려야 "이제 여백이 필요 없다"는 계산이 실제로 나옵니다. */
-    root.scrollTop = 0;
-    root.dispatchEvent(new Event("scroll"));
-
-    /* ⚠️ **벽시계로 기다리면 흔들립니다.** 처음엔 `setTimeout(60)`으로 뒀는데, 부하에 따라
-     * rAF 프레임이 한 번도 안 도는 실행이 있어 **변이를 놓쳤다 잡았다** 했습니다(실측:
-     * 같은 변이가 1 red와 0 red를 오갔습니다). 프레임을 **세어** 기다립니다 — 걷어내기가
-     * 시작됐다면 이 안에 반드시 보입니다. */
-    for (let frame = 0; frame < 6; frame += 1) {
-      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
-    }
-
-    expect(keyboardInsetOf(root)).toBe(reserved);
-  });
-
+   * ```
+   * setTimeout(60)      판별됨 — 그러나 흔들림(rAF가 한 번도 안 도는 실행이 있음)
+   * rAF 6프레임 세기     흔들림 방향이 뒤집힘 — 프레임이 느리면 120ms 정착 타이머가
+   *                     먼저 터져 **안 바뀐 코드에서 빨개짐**(전체 스위트 부하에서 발생)
+   * rAF를 직접 돌리기    안정적 — 그러나 판별력 0
+   * + act()로 감싸기     여전히 판별력 0
+   * ```
+   *
+   * 🔴 **왜 어려운가:** 정상 해제(정착 타이머)와 변이가 **같은 관찰값**을 냅니다 — 둘 다
+   * 여백을 깎습니다. 다른 것은 **오직 시점**뿐이라, 시간을 흘리면 판별되지만 창구(120ms)와
+   * 경합하고, 안 흘리면 결정론적이지만 아무것도 안 보입니다.
+   *
+   * 🔜 **제대로 하려면 가짜 타이머**로 시간 자체를 잡아야 합니다(`vi.useFakeTimers`에
+   * rAF까지 포함). 이 파일은 전부 진짜 타이머로 돌고 `viewport.openKeyboard`·`waitFor`가
+   * 거기 얹혀 있어, 한 검사만 바꿔 끼우는 것이 이 라운드의 범위를 넘습니다.
+   *
+   * ⚠️ **흔들리는 감시자는 없는 것보다 나쁘고, 못 실패하는 초록은 검사가 아닙니다.**
+   * 그래서 넣지 않고 자리를 비워 둡니다 — 원장에 네 번의 시도를 다 적었습니다. */
   it("붙들어 둔 #root 높이는 창구가 끝나기 전에 다시 열려도 남지 않는다 — 인라인 height 누수", async () => {
     // 리뷰가 커버리지 0으로 실증한 구멍: 이펙트 cleanup의 unpinHeight()를 통째로 지워도
     // 전체 스위트가 초록이었다. 그런데 그게 새면 #root에 인라인 height가 **영구히** 남고,
