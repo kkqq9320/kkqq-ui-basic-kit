@@ -1482,7 +1482,14 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
      * (실측). 위로 끝까지 올려야 "이제 여백이 필요 없다"는 계산이 실제로 나옵니다. */
     root.scrollTop = 0;
     root.dispatchEvent(new Event("scroll"));
-    await new Promise((resolve) => setTimeout(resolve, 60));   // rAF 몇 프레임 — 걷혔다면 보입니다
+
+    /* ⚠️ **벽시계로 기다리면 흔들립니다.** 처음엔 `setTimeout(60)`으로 뒀는데, 부하에 따라
+     * rAF 프레임이 한 번도 안 도는 실행이 있어 **변이를 놓쳤다 잡았다** 했습니다(실측:
+     * 같은 변이가 1 red와 0 red를 오갔습니다). 프레임을 **세어** 기다립니다 — 걷어내기가
+     * 시작됐다면 이 안에 반드시 보입니다. */
+    for (let frame = 0; frame < 6; frame += 1) {
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    }
 
     expect(keyboardInsetOf(root)).toBe(reserved);
   });
