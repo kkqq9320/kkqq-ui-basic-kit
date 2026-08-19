@@ -27,6 +27,11 @@ const existing = new Set<string>([
   ...pathsUnder("css/", Object.keys(import.meta.glob("../css/**/*", { query: "?raw", import: "default", eager: true }))),
   ...pathsUnder("demo/", Object.keys(import.meta.glob("../demo/**/*", { query: "?raw", import: "default", eager: true }))),
   ...pathsUnder("tests/", Object.keys(import.meta.glob("../tests/**/*", { query: "?raw", import: "default", eager: true }))),
+  /* 🔴 **`import.meta.glob`은 부르는 파일 자신을 뺍니다.** 그래서 위 glob에 이 파일이
+   * 없고, 문서가 `tests/docPaths.test.ts`를 가리키면 "없는 파일"로 잡힙니다 —
+   * `CLAUDE.md`가 이 검사를 이름으로 소개하자마자 그렇게 됐습니다(2026-08-19 실측).
+   * 자기 이름만 손으로 더합니다. */
+  "tests/docPaths.test.ts",
 ]);
 
 /* 🔴 **`CHANGELOG.md`는 뺍니다 — 그건 역사입니다.** `v0.12.0` 절이 `src/WheelPicker.tsx`를
