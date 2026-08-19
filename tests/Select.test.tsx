@@ -538,7 +538,7 @@ describe("Select", () => {
       expect(stateRule![0]).toMatch(/outline:\s*var\(--focus-ring\)/);
       // 세 상태가 한 규칙에 같이 있어야 한 곳만 고쳐도 셋이 함께 움직인다.
       expect(stateRule![0]).toMatch(/:focus-visible/);
-      expect(stateRule![0]).toMatch(/\.app-select\[data-open\]/);
+      expect(stateRule![0]).toMatch(/\.app-select\[data-open="true"\]/);
       // disabled는 빠져야 한다 — :hover는 disabled에도 매칭된다.
       expect(stateRule![0]).toMatch(/:hover:not\(:disabled\)/);
     });
@@ -1076,7 +1076,7 @@ describe("떠 있다는 표식 (§16 ③)", () => {
   it("열면 그 축이 붙는다", () => {
     const { container } = render(<Select ariaLabel="항목" value="" options={OPTIONS} onChange={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /^항목/ }));
-    expect(container.querySelector(".app-select")!.hasAttribute("data-open")).toBe(true);
+    expect(container.querySelector(".app-select")!.matches('[data-open="true"]')).toBe(true);
   });
 
   /* 칠하는 쪽 — 위 둘은 속성이 붙는 것까지만 봅니다. CSS가 그것 대신 다른 것을
@@ -1084,9 +1084,9 @@ describe("떠 있다는 표식 (§16 ③)", () => {
   it("그 축이 실제로 칠한다 — 자리 셋", () => {
     expect(selectCssSource.length).toBeGreaterThan(1000);
     expect([
-      selectCssSource.includes(".app-select[data-open] { z-index: 80; }"),
-      selectCssSource.includes(".app-select[data-open] > .app-select-trigger"),
-      selectCssSource.includes("[data-open] > .app-select-trigger .dropdown-chevron"),
+      selectCssSource.includes(`.app-select[data-open="true"] { z-index: 80; }`),
+      selectCssSource.includes(`.app-select[data-open="true"] > .app-select-trigger`),
+      selectCssSource.includes(`[data-open="true"] > .app-select-trigger .dropdown-chevron`),
     ]).toEqual([true, true, true]);
   });
 

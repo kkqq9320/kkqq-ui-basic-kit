@@ -97,7 +97,7 @@ describe("떠 있다 / 펼쳤다의 표식 (§16 ③)", () => {
 
   it("플로팅 메뉴: 닫혀 있으면 축이 없고, 열면 붙는다", () => {
     const toggle = openFloatMenu();
-    expect(floatCard().hasAttribute("data-open")).toBe(true);
+    expect(floatCard().matches('[data-open="true"]')).toBe(true);
     fireEvent.click(toggle);
     expect(floatCard().getAttribute("data-open")).toBeNull();
   });
@@ -107,7 +107,7 @@ describe("떠 있다 / 펼쳤다의 표식 (§16 ③)", () => {
     const card = screen.getByRole("button", { name: /^데모 섹션:/ });
     expect(tabsRoot().getAttribute("data-mobile-open")).toBeNull();
     fireEvent.click(card);
-    expect(tabsRoot().hasAttribute("data-mobile-open")).toBe(true);
+    expect(tabsRoot().matches('[data-mobile-open="true"]')).toBe(true);
     fireEvent.click(card);
     expect(tabsRoot().getAttribute("data-mobile-open")).toBeNull();
   });

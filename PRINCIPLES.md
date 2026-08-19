@@ -934,7 +934,7 @@ model/*.ts        값 모델(시점·기간). 화면도 DOM도 모릅니다
 | 자리 | 무엇이 어긋나는가 | 잰 이음매 |
 |---|---|---|
 | `controls/WheelPicker.tsx` (약 2100줄) | 규칙 4. 컴포넌트 안 최상위 선언 **80개**(들여쓰기 두 칸의 `const`·`function`·`let`) | ✅ **제스처 조각은 다 나갔습니다.** 남은 것은 `tapActivation`(브라우저가 click을 안 만들 때 pointerup에서 대신 확정 + 뒤따르는 click 삼키기) 하나이고, **밖에서 그 상태에 써 넣는 곳 0**입니다(실측: 다섯 쓰기가 전부 그 함수 안). 목적지는 `controls/Pressable.tsx`가 자기 주석에 이미 예약해 뒀습니다 — 백로그 9번(눌림 피드백)과 같은 라운드가 맞습니다.<br>클립보드는 **절반만** 나갔습니다 — 브라우저 접근은 바인딩 0이라 `browser/clipboard.ts`로 갔고, 남은 의미 절반은 `value`·`model`·`fields`·`clampToRange`·`flushTyping`·`clearedRef`·`undo`·`onChange` 등을 집습니다. **그건 단축키 계약이라 컨트롤에 있는 것이 맞습니다.**<br>나간 여섯: 이동 계산 → `controls/wheelShift.ts` · 되돌리기 → `controls/undoStack.ts` · 열 모션 → `controls/columnMotion.ts` · 클립보드 접근 → `browser/clipboard.ts` · 홀드 → `controls/columnHold.ts` · 스와이프 → `controls/columnSwipe.ts` |
-| `model/instant.ts` (1004줄) | 규칙 4. 최상위 선언 **53개**(export 35) | 🟢 **가를 수 있습니다 — 순환 0**(2026-08-19 실측, Tarjan). 위상은 **4층**입니다(§15가 한동안 "3층"이라 적고 있었습니다): 0층 27 · 1층 10 · 2층 14 · 3층 2(`clampToRange`·`outOfRange`). 화살표 75개.<br>⚠️ **남은 것은 측정이 아니라 결정입니다** — 0층 스물일곱이 거의 전부에게 쓰이므로 자연스러운 모양은 *공용 아래층 하나 + 그 위 여섯*(일곱 파일)입니다. 여섯의 **소속 목록**은 아직 아무 데도 안 적혀 있습니다.<br>계약 타입은 이미 `model/wheelModel.ts`로 나갔습니다. `model/instant/` 하위 폴더가 필요합니다(`model/`은 배럴 묶음이 아니라 예외 자리입니다) |
+| `model/instant.ts` (1004줄) | 규칙 4. 최상위 선언 **53개**(export 35) | 📌 **오너 결정 2026-08-19: 안 가릅니다 — 알면서 남겨 둡니다.** 결함이 아니라 위생이고, 지금은 값이 파일 일곱 개의 대가보다 크지 않습니다. 마음이 바뀌면 아래 측정으로 그날 바로 시작할 수 있습니다.<br>🟢 **가를 수 있습니다 — 순환 0**(2026-08-19 실측, Tarjan). 위상은 **4층**입니다(§15가 한동안 "3층"이라 적고 있었습니다): 0층 27 · 1층 10 · 2층 14 · 3층 2(`clampToRange`·`outOfRange`). 화살표 75개.<br>⚠️ **남은 것은 측정이 아니라 결정입니다** — 0층 스물일곱이 거의 전부에게 쓰이므로 자연스러운 모양은 *공용 아래층 하나 + 그 위 여섯*(일곱 파일)입니다. 여섯의 **소속 목록**은 아직 아무 데도 안 적혀 있습니다.<br>계약 타입은 이미 `model/wheelModel.ts`로 나갔습니다. `model/instant/` 하위 폴더가 필요합니다(`model/`은 배럴 묶음이 아니라 예외 자리입니다) |
 | `surfaces/PageChrome.tsx` (약 209줄) | 규칙 4. **파일 이름이 아무것도 안 내보냅니다** — `PageChrome`이라는 심볼이 없습니다 | 공개 아홉(컴포넌트 여덟 + `GridJustify`). **여덟 사이의 상호참조 0.** 유일한 묶음은 격자 셋(`SummaryGrid` 21줄 · `FieldGrid` 35 · `PanelGrid` 17)이 비공개 `trackStyle`(16줄)과 `GridJustify`를 함께 쓰는 것입니다. 나머지 다섯(`PageHeader` 13 · `SectionHeading` 12 · `SummaryCard` 28 · `Panel` 11 · `DismissibleDetails` 22)은 서로도, 격자와도 무관합니다.<br>📌 `DismissibleDetails`는 **저장소 안에서 아무도 안 씁니다**(`demo/`·`src/` 0건, 배럴만) — 지우는 것은 breaking이라 오너 판단 항목입니다 |
 
 ⚠️ **화살표를 셀 때는 주석을 먼저 걷으세요.** 안 걷으면 **다음 선언의 문서 주석이 앞
@@ -1093,6 +1093,26 @@ boolean`을 받는 타입은 `SidebarNavItem`과 `MobileQuickBarItem` **둘뿐**
 
 **② 종류·축은 `data-*`, 한 축에 값 하나.** `data-variant="primary"` 처럼.
 한 축에 값이 하나뿐이라 **뜻 없는 조합이 애초에 표현되지 않습니다.**
+
+**②-b 속성은 **항상 값을 싣습니다.** 켜짐을 값 없이 표현하지 마세요.**
+
+```html
+<div data-align="stretch">     축이면 상태 이름을        (값이 둘 이상 생길 수 있는 것)
+<div data-motion="next">       상태 이름을
+<div data-holding="true">      불리언이면 "true"를        (두 번째 값이 안 보이는 것)
+<div>                          꺼졌으면 속성 자체가 없습니다
+```
+
+⚠️ **꺼졌을 때 빈 값을 남기지 마세요.** `data-holding=""`이 붙어 있으면 나중에 맨
+`[data-holding]` 선택자를 쓸 수 없습니다 — 켜짐·꺼짐이 **둘 다 매칭**됩니다. React에서는
+`undefined`를 주면 속성이 아예 안 붙습니다.
+
+🔴 **한동안 이 규칙이 안 적혀 있었고, 그래서 관습이 갈라졌습니다**(2026-08-19 정정).
+§16 이관을 하면서 불리언 일곱(`data-open` · `data-holding` · `data-active` …)을 **존재
+여부만으로** 붙였습니다 — *"안 쓸 값(`"false"`)을 암시하지 말자"* 는 논리였는데, 그러면
+한 저장소에 두 관습이 생기고 **두 번째 값이 필요해지는 날 소비자에게 BREAKING**입니다.
+값 방식은 값을 하나 더하면 그만입니다. `css/page.css`의 `data-align` 주석이 *"두 번째
+값이 생기면"* 을 이미 대비하고 있었습니다 — 기존 관습에 이유가 있었습니다.
 
 **③ ARIA에 대응이 없는 순수 시각 상태만 `data-*`.** "지금 애니메이션 중"처럼 보조기술이
 알 필요 없는 것.

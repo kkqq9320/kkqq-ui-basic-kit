@@ -15,6 +15,30 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.15.0
 
 ## 미출시
 
+### 🔴 BREAKING — 상태 속성이 값을 싣습니다 (§16 ②-b)
+
+`v0.15.0`에서 상태 클래스를 속성으로 옮기면서 **불리언 일곱을 존재 여부만으로** 붙였습니다.
+이제 **전부 값을 싣습니다** — 저장소 안에 두 관습이 생겼고, 두 번째 값이 필요해지는 날
+소비자에게 또 BREAKING이 되기 때문입니다.
+
+```diff
+- [data-open]          + [data-open="true"]
+- [data-mobile-open]   + [data-mobile-open="true"]
+- [data-holding]       + [data-holding="true"]
+- [data-active]        + [data-active="true"]
+- [data-entering]      + [data-entering="true"]
+- [data-editing]       + [data-editing="true"]
+- [data-dragging]      + [data-dragging="true"]
+```
+
+🟢 **명시도는 그대로입니다** — 속성 선택자는 값이 있든 없든 (0,1,0)입니다.
+🟢 **`data-motion`은 그대로**입니다 — `next`·`previous`를 싣는 **진짜 축**이고,
+`[data-motion]`(값을 안 가림)은 *"어느 쪽으로든 움직이는 중"* 을 뜻하는 정당한 검사입니다.
+
+⚠️ 꺼졌을 때는 여전히 **속성이 아예 없습니다**(빈 값을 안 남깁니다). 앱이 `[data-open]`으로
+걸어 뒀다면 그대로 동작합니다 — 값을 **가리는** 선택자만 고치면 됩니다.
+
+
 ---
 
 ## v0.15.0 — 2026-08-19
