@@ -3,7 +3,7 @@
 버전은 태그로 답니다. 소비 프로젝트는 SHA 대신 태그로 걸 수 있습니다:
 
 ```bash
-npm i github:kkqq9320/kkqq-ui-basic-kit#v0.14.0
+npm i github:kkqq9320/kkqq-ui-basic-kit#v0.15.0
 ```
 
 `0.x`에서는 **minor 자리가 breaking 자리**입니다(semver의 0.x 규칙).
@@ -14,6 +14,22 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.14.0
 ---
 
 ## 미출시
+
+---
+
+## v0.15.0 — 2026-08-19
+
+[전체 diff: v0.14.0...v0.15.0](https://github.com/kkqq9320/kkqq-ui-basic-kit/compare/v0.14.0...v0.15.0)
+
+**상태를 클래스로 말하던 자리가 전부 속성이 됐습니다.** §16이 세던 상태 클래스가
+**스물셋에서 0**이 됐고, 그 과정에서 **감시자가 0이던 자리를 다섯 군데** 찾았습니다 —
+이관마다 *"CSS만 되돌리면 몇 개가 빨개지는가"* 를 재면서 나왔습니다.
+
+배럴로 import 하고 킷의 CSS를 그대로 쓰는 앱은 **한 글자도 고칠 것이 없습니다.**
+고쳐야 하는 것은 둘입니다:
+
+1. 킷의 **상태 클래스를 직접 칠하던** 앱 (아래 diff 표)
+2. `MobileQuickBar`를 쓰는 앱 — 항목마다 `kind`가 **필수**가 됐습니다
 
 ### 🔴 BREAKING — `MobileQuickBarItem`에 `kind`가 생겼습니다 (필수, §16 ①)
 
