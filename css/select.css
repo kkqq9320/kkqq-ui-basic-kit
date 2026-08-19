@@ -17,7 +17,7 @@
  * wheel-picker.css:21) — Select 트리거 하나만 빠져 있었다.
  *
  * :focus-visible은 PRINCIPLES §11의 "포커스 링은 3px 강조색 아웃라인"을 트리거에서
- * 실제로 지키는 자리다. 열린 상태도 함께 강조한다 — 날짜 필드가 .open에서 하는 것과
+ * 실제로 지키는 자리다. 열린 상태도 함께 강조한다 — 날짜 필드가 data-open에서 하는 것과
  * 같고, 안 그러면 메뉴가 떠 있는데 앵커는 평상시 모습으로 남는다.
  * :hover는 disabled에도 매칭되므로 명시적으로 뺀다(wheel-picker.css:21과 같은 이유). */
 .app-select-trigger:hover:not(:disabled), .app-select-trigger:focus-visible, .app-select[data-open] > .app-select-trigger { border-color: var(--accent); outline: var(--focus-ring); }
