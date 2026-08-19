@@ -8,15 +8,6 @@
 import type { WheelUnit, WheelStep, UnitParts } from "../wheelModel";
 import { parseValue, serializeValue } from "./serialize";
 import { DEFAULT_FIELDS, lastDayOf, snapToStep, stepOf, unitCeiling, unitFloor } from "./units";
-/** 오전↔오후 한 번에 넘어가기가 시 열에서 몇 칸 이동인가(3단계, 스펙 §7).
- *
- *  🔴 **자리올림 없음 규칙의 유일한 예외가 여기입니다.** 오전↔오후는 독립된 값이
- *  아니라 시(時)라는 한 숫자의 **다른 절반**이라, 그 조작은 곧 시 값을 ±12 옮기는
- *  일입니다. 그래도 열 밖으로는 안 샙니다 — `shiftDateValue`가 시 열 안에서
- *  순환하므로 **날짜는 그대로**입니다(오후 11시 → 오전 11시, 전날이 되지 않습니다).
- *
- *  부호가 있는 이유는 화면입니다: 열은 오전 00…11 다음에 오후 12…23이 오는 24칸이라,
- *  오후로 갈 때는 아래로, 오전으로 되돌릴 때는 위로 도는 것이 눈에 맞습니다. */
 /** 열의 행을 길게 눌렀을 때 그 열이 갈 값(오너 리포트 4번, 오너 결정 2026-08-13).
  *
  * **모든 열은 바닥값으로, 연도만 지금 연도로.** 연도에는 바닥이 없어서입니다 — "0년"은

@@ -26,6 +26,10 @@
 import { describe, expect, it } from "vitest";
 
 import * as kit from "../src/index";
+import * as instantBarrel from "../src/model/instant";
+
+/** 조각을 직접 부르는 곳이 있는지 보려면 소스를 전부 읽어야 합니다. */
+const allSources = import.meta.glob("../{src,tests,demo}/**/*.{ts,tsx}", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 
 const indexSource = Object.values(
   import.meta.glob("../src/index.ts", { query: "?raw", import: "default", eager: true }) as Record<string, string>,
@@ -87,5 +91,55 @@ describe("공개 API — 배럴이 내보내는 이름", () => {
    * 타입은 런타임에 없으므로 값만 비교합니다. */
   it("실제로 import 되는 것이 값 목록과 정확히 같다", () => {
     expect(Object.keys(kit).sort()).toEqual([...PUBLIC_VALUES].sort());
+  });
+});
+
+/* 🔴 **두 번째 배럴 — `src/model/instant.ts`.**
+ *
+ * 2026-08-19에 그 파일(1004줄)을 `src/model/instant/` 여덟 조각으로 갈랐습니다. 그
+ * 이동을 값싸게 만든 것은 **배럴이 남아 부르는 쪽이 조각을 모른다**는 것 하나였습니다 —
+ * `src` 넷 · `tests` 넷이 전부 `model/instant`만 부릅니다.
+ *
+ * 그런데 그 조건을 **아무도 재고 있지 않았습니다.** `PRINCIPLES.md` §15는 이 파일이
+ * 지킨다고 적고 있었는데, 위의 것들은 전부 `src/index.ts`만 봅니다(`model/instant`가
+ * 이 파일에 **0건**이었습니다). 이름 하나가 조용히 빠져도 지금 검사 1729개가 전부
+ * 초록입니다 — 이 저장소가 `src/index.ts`에서 이미 겪은 그 구멍과 **같은 모양**입니다.
+ *
+ * 값과 타입을 나누지 않습니다 — 이 배럴은 값만 내보냅니다(타입 계약은
+ * `model/wheelModel.ts`가 따로 갖고 있습니다). 그래서 런타임 키 하나로 충분합니다.
+ */
+describe("model/instant 배럴의 공개 이름", () => {
+  const INSTANT_PUBLIC = [
+    "MERIDIEM_NOTCHES", "MERIDIEM_UNIT", "UNIT_LADDER", "WHEEL_FILL",
+    "clampToRange", "comparisonPrecision", "dateTriggerParts", "dateWheelLabel",
+    "familyOf", "flushBuffer", "hourFromTwelve", "instantModel",
+    "isContiguous", "lastDayOf", "meridiemOf", "normalizeToFields",
+    "outOfRange", "parsePasted", "parseValue", "rangeKeyLength",
+    "resetTarget", "serializeValue", "shiftDateValue", "snapToStep",
+    "snapValue", "stepOf", "todayIn", "twelveHourText",
+    "typeDigit", "unitCeiling", "unitDigits", "unitFloor",
+    "usableBound", "validDateValue", "withUnitValue",
+  ];
+
+  it("내보내는 이름이 목록과 정확히 같다", () => {
+    expect(Object.keys(instantBarrel).sort()).toEqual([...INSTANT_PUBLIC].sort());
+  });
+
+  /* 전제 — 목록이 비거나 배럴을 못 읽으면 위 검사가 공허하게 통과할 수 있습니다.
+   * 그리고 개수를 따로 못 박아, 목록에 이름을 **더하면서** 지우는 실수를 잡습니다. */
+  it("목록을 실제로 읽어냈고 개수가 서른다섯이다", () => {
+    expect(INSTANT_PUBLIC.length).toBe(35);
+    expect(new Set(INSTANT_PUBLIC).size).toBe(35);   // 중복 없음
+    expect(Object.keys(instantBarrel).length).toBeGreaterThan(30);
+  });
+
+  /* 🔴 **조각을 직접 부르는 곳이 생기면 이 배럴은 더 이상 안전망이 아닙니다.**
+   * 갈라짐이 값쌌던 이유가 "부르는 쪽이 조각을 모른다"였으니, 그 전제를 지킵니다. */
+  it("배럴 밖에서 조각을 직접 import 하지 않는다", () => {
+    const deep = Object.entries(allSources)
+      .filter(([path]) => !path.includes("/model/instant"))
+      .filter(([, source]) => /from\s+"[^"]*model\/instant\/[^"]+"/.test(source))
+      .map(([path]) => path);
+    expect(deep).toEqual([]);
   });
 });

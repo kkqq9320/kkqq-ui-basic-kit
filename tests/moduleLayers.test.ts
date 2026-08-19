@@ -81,9 +81,15 @@ describe("src/ 파일 이름 규칙과 의존 방향 (PRINCIPLES §15)", () => {
     expect(inFolders.length).toBeGreaterThan(5);
     const repeated = inFolders
       .filter((module) => {
-        const [folder, name] = [module.id.slice(0, module.id.indexOf("/")), module.id.slice(module.id.lastIndexOf("/") + 1)];
-        const singular = folder.endsWith("s") ? folder.slice(0, -1) : folder;
-        return name.toLowerCase().startsWith(folder.toLowerCase()) || name.toLowerCase().startsWith(singular.toLowerCase());
+        /* 🔴 **경로 조각을 전부 봅니다.** 처음엔 `indexOf("/")`로 **첫 조각만** 봤는데,
+         * 두 겹 폴더(`model/instant/`)가 생기자 안쪽 이름(`instant`)에는 아무것도 안
+         * 닿았습니다 — `model/instant/instantModel.ts` 같은 것을 통과시킵니다. */
+        const segments = module.id.split("/").slice(0, -1);
+        const name = module.id.slice(module.id.lastIndexOf("/") + 1);
+        return segments.some((folder) => {
+          const singular = folder.endsWith("s") ? folder.slice(0, -1) : folder;
+          return name.toLowerCase().startsWith(folder.toLowerCase()) || name.toLowerCase().startsWith(singular.toLowerCase());
+        });
       })
       .map((module) => module.file);
     expect(repeated).toEqual([]);

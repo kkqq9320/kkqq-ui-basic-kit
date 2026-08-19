@@ -380,8 +380,9 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    * 핀을 올리는 소비자는 다른 휠을 봅니다. */
   const rowsPerSide = useSyncExternalStore(subscribeWheelRowsPerSide, getWheelRowsPerSide, getWheelRowsPerSideServerSnapshot);
   const offsets = useMemo(() => wheelOffsets(rowsPerSide), [rowsPerSide]);
-  // 모델은 전역 설정을 안 읽습니다(`src/model/instant.ts`는 아무것도 import 하지
-  // 않는 것이 계약입니다) — 기계가 읽어서 인자로 내려보냅니다. 매 렌더 새 객체를
+  // 모델은 전역 설정을 안 읽습니다(`src/model/instant/`는 DOM도 React도 설정 모듈도
+  // import 하지 않는 것이 계약입니다 — 자기 조각끼리는 씁니다) — 기계가 읽어서 인자로
+  // 내려보냅니다. 매 렌더 새 객체를
   // 만들면 모델 호출이 달라 보이므로 묶습니다.
   /* 🔴 `?? DEFAULT`가 필요한 이유 — `hintNow`가 이미 같은 자리에 검사를 갖고 있습니다.
    * 병합이 `{ ...DEFAULT, ...labelOverrides }`라, override가 이 키를 **명시적으로**

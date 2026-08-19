@@ -84,6 +84,14 @@ export function unitCeiling(unit: WheelUnit, context: { year: number; month: num
   return 59;   // minute, second
 }
 
+/* ---- fields: 어느 단위를 쓰는가 ------------------------------------------
+ *
+ * 위 격자 구역은 여기서 끝납니다. 아래 셋은 **`fields` 배열 자체를 읽는** 것들이고,
+ * 그 뒤 `lastDayOf`는 달력 원시입니다.
+ *
+ * ⚠️ main에서는 이 구역을 "값 형식" 배너가 닫고 있었는데 그 배너가 `serialize.ts`로
+ * 갔습니다. 배너는 **뒤따르는 것**에 붙는 글이라, 파일을 가를 때 자기 구역의 절반만
+ * 데려가면 남은 절반이 앞 구역에 삼켜집니다. */
 /** `fields` 중 사다리에서 가장 아래(깊은) 단위의 인덱스. 이보다 아래인 단위는
  *  값 문자열에도 없고 바닥값으로 눌립니다.
  *
@@ -123,10 +131,11 @@ export function isContiguous(fields: WheelUnit[]): boolean {
 }
 
 /** 연도를 다루면서 0~99를 1900년대로 옮기지 않는 안전한 말일 계산.
- *  shiftDateValue(±1 이동, 이 파일 안)도 이 함수를 씁니다 — 그쪽이
+ *  `dateMath.ts`의 `shiftDateValue`(±1 이동)도 이 함수를 씁니다 — 그쪽이
  *  한때 `new Date(Date.UTC(year, ...))`로 직접 계산해 같은 0~99 재매핑 함정에
- *  빠졌었습니다(0년을 1900년으로 읽어 윤년 판정이 틀림). 말일 계산은 이 파일에
- *  하나만 둡니다. */
+ *  빠졌었습니다(0년을 1900년으로 읽어 윤년 판정이 틀림). 말일 계산은 **이 모델
+ *  전체에 하나만** 둡니다 — 그래서 `instant/` 조각 어디에도 두 번째 구현이
+ *  없어야 합니다. */
 export function lastDayOf(year: number, monthIndex: number) {
   const probe = new Date(0);
   probe.setUTCFullYear(year, monthIndex + 1, 0);
