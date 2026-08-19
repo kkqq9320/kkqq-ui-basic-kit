@@ -72,14 +72,19 @@ function pressBack() {
   });
 }
 
-function Harness({ wrapper: Wrapper = ({ children }: { children: React.ReactNode }) => <>{children}</> }: { wrapper?: React.ComponentType<{ children: React.ReactNode }> }) {
+/** ⚠️ **StrictMode를 이 안에서 그리지 마세요.** React 19에서 초기 마운트의 이중 호출은
+ *  `<StrictMode>`가 **render()의 루트일 때만** 일어납니다 — 부모가 그리는 자식으로
+ *  들어가면 그 서브트리는 한 번만 돕니다(2026-08-19 실측, 아래 재마운트 검사 참고).
+ *  그래서 `wrapper` prop을 걷어냈습니다: 그 prop이 있는 한 검사는 자기 이름이 말하는
+ *  경로를 안 밟으면서 초록이었습니다. */
+function Harness() {
   function Inner() {
     const [open, setOpen] = useState(true);
     return <Dialog open={open} onClose={() => setOpen(false)} ariaLabel="분류 등록">
       <button type="button" onClick={() => setOpen(false)}>닫기</button>
     </Dialog>;
   }
-  return <Wrapper><Inner /></Wrapper>;
+  return <Inner />;
 }
 
 // 모바일 드로어는 킷에서 가장 큰 오버레이인데(position:fixed, z-index 60, 자기 백드롭까지
@@ -169,38 +174,46 @@ describe("다이얼로그 뒤로가기", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  /* 🔴 **이 검사는 자기 이름이 말하는 경로를 안 밟습니다**(2026-08-19 실측). 아래 표식
-   * 프로브가 그것을 보여 줍니다 — `useBackToClose`의 layout effect가 이 검사에서
-   * **한 번만** 돕니다(`|eff(true):body`). 두 번 돌면 `|eff…|eff…`가 나와야 합니다.
+  /* StrictMode의 개발 모드 재마운트(mount → cleanup → mount)에서 팝업이 열리자마자
+   * 닫히던 회귀. 정리 단계가 예약한 `back()`을 재마운트가 취소하지 않으면 그 back()이
+   * 0ms 뒤에 터져 방금 다시 붙은 표식을 뽑습니다.
    *
-   * 잰 것:
+   * 🔴 **이 검사는 한동안 자기 이름이 말하는 경로를 안 밟고 있었습니다**(2026-08-19에
+   * 규명). `render(<Harness wrapper={StrictMode} />)`로 **StrictMode를 Harness 안에서**
+   * 그리고 있었는데, 그러면 이중 호출이 아예 안 일어납니다:
+   *
    * ```
-   * 이 환경의 StrictMode는 실제로 두 번 돈다   프로브: useEffect·useLayoutEffect 둘 다
-   *                                          runs = "LEleLE" (React 19.2.8)
-   * 그런데 이 훅의 효과는 한 번만 돈다        Harness의 open은 처음부터 true이고
-   *                                          Dialog.tsx:55가 무조건 부르는데도
-   * 정리 함수도 안 돈다                       그래서 예약된 back()도 안 생긴다
-   * 그 결과 재마운트 취소용 clearTimeout이     그 줄을 지워도 1718개 전부 초록
-   * 통째로 안 밟힌다
+   * render(<StrictMode><Sibling /></StrictMode>)        L E l e L E   두 번 돈다
+   * render(<Harness wrapper={StrictMode} />)            L E           한 번만 돈다
    * ```
    *
-   * ⚠️ **왜 안 도는지는 아직 못 밝혔습니다.** 그래서 이 검사를 지우지도, 고친 척하지도
-   * 않습니다 — 지금 증명하는 것은 *"이 구성에서 다이얼로그가 20ms 뒤에도 살아 있다"*
-   * 까지이고, **StrictMode 재마운트 회귀는 아직 아무도 안 지키고 있습니다.**
-   * 이어서 할 사람은 원장의 `감시자 채우기 6차`를 보세요.
+   * 같은 `render()` 안에 형제 프로브를 넣어 나란히 쟀습니다 — **형제도 한 번만** 돌았고,
+   * `useBackToClose`의 정리도 예약된 back()도 통째로 안 밟혔습니다. React 19는 초기
+   * 마운트의 이중 호출을 **루트 엘리먼트가 `<StrictMode>`일 때** 켭니다.
    *
-   * (원래 주석: effect가 mount → cleanup → mount로 두 번 도는 개발 모드 동작.
-   *  정리 단계의 history.back()을 즉시 부르면 여기서 다이얼로그가 사라졌다.) */
-  it("열자마자 닫히지 않는다 — ⚠️ StrictMode 재마운트는 이 구성에서 안 일어난다", async () => {
-    render(<Harness wrapper={StrictMode} />);
+   * ⚠️ 그래서 **StrictMode는 render()의 루트여야 합니다.** 앞선 라운드는 *"이 환경의
+   * StrictMode는 두 번 도는데 이 훅만 안 돈다"* 라는 모순으로 남겨 뒀는데, 그 둘을
+   * **서로 다른 render()에서** 쟀던 것이 원인이었습니다 — 한 번에 재니 모순이
+   * 사라졌습니다. 재현이 안 되면 **재는 자리부터 합치세요.** */
+  it("StrictMode 재마운트에서 열자마자 닫히지 않는다", async () => {
+    render(<StrictMode><Harness /></StrictMode>);
     expect(screen.getByRole("dialog")).toBeTruthy();
 
+    // 정리가 예약한 back()은 0ms 타이머다 — 매크로태스크 한 틱이면 충분하지만,
+    // 재마운트가 취소를 놓쳤을 때 확실히 터지도록 넉넉히 기다린다.
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(screen.getByRole("dialog")).toBeTruthy();
-    // 표식은 두 번 쌓이지 않는다
-    expect(stack()).toHaveLength(1);
   });
 
+  /* 위와 같은 재마운트에서 **표식이 두 번 쌓이지 않는지**. 다른 사실이라 따로 둡니다 —
+   * 한 it에 있으면 위 단언이 먼저 터질 때 이건 실행조차 안 됩니다. 표식이 둘이면
+   * 사용자는 뒤로가기를 두 번 눌러야 하고, 첫 번째는 먹통으로 보입니다. */
+  it("StrictMode 재마운트에서 표식이 두 번 쌓이지 않는다", async () => {
+    render(<StrictMode><Harness /></StrictMode>);
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(stack()).toHaveLength(1);
+  });
   it("직접 닫으면 남긴 표식을 걷어내 뒤로가기 횟수가 밀리지 않는다", () => {
     vi.useFakeTimers();
     render(<Harness />);
@@ -334,6 +347,36 @@ describe("B1: 킷 팝업이 열린 동안만 scrollRestoration을 manual로 바�
     expect(stub.value).toBe("auto");
   });
 
+  /* 🔴 **복원은 멱등해야 합니다** — `releaseScrollRestoration`의 `if (savedScrollRestoration
+   * === null) return;`. 소스가 *"잡고 있지 않으면 아무것도 안 합니다(멱등)"* 라고 적어 둔
+   * 자리인데 지키는 검사가 없었습니다(2026-08-19 실측: 그 줄을 지워도 1727개 전부 초록).
+   *
+   * 값이 큰 이유: `scrollRestoration`은 **앱이 소유한 전역**입니다. 잡고 있지도 않으면서
+   * 쓰면 킷이 남의 값을 덮어씁니다 — 가드가 없으면 두 번째 호출이 `null`을 씁니다.
+   *
+   * 🟢 **이 멱등성이 다른 두 자리를 등가로 만듭니다.** `cancelPendingReleaseOnDrain`의
+   * `removeEventListener`와 drain 리스너의 자기 제거는 둘 다 변이해도 0 red인데, 그건
+   * 검사가 없어서가 아니라 **남은 리스너가 하는 일이 멱등이라 관찰 차이가 없기**
+   * 때문입니다(둘 다 재서 확인). 그 등가는 이 가드에 **기대고** 있으므로, 여기가
+   * 무너지면 저 둘도 더 이상 등가가 아닙니다. 그래서 여기를 지킵니다.
+   *
+   * popstate 둘을 한 `act()` 안에서 쏩니다 — 그 사이엔 React가 아직 리렌더를 안 해
+   * 리스너가 그대로 붙어 있고, 그래서 `handlePopState`의 빈 스택 경로가 **두 번** 탑니다. */
+  it("스택이 빈 popstate가 두 번 와도 원래 값을 한 번만 쓴다 — 복원은 멱등이다", () => {
+    const stub = installScrollRestorationStub("auto");
+    render(<Harness />);
+    expect(stub.value).toBe("manual");   // 전제: 킷이 잡았다
+
+    act(() => {
+      window.history.replaceState(null, "");
+      window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+      window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+    });
+
+    expect(stub.setter.mock.calls.map((call) => call[0])).toEqual(["manual", "auto"]);
+    expect(stub.value).toBe("auto");
+    expect(stack()).toHaveLength(0);
+  });
   it("복원은 back()이 실제로 이전 항목에 착지한(popstate) 뒤에만 일어난다", () => {
     // 실 기기 검증으로 잡은 회귀: history.scrollRestoration은 전역 스위치가 아니라
     // "지금 current인 항목"에 새겨지는 값이다. back()을 부르기 *직전*(아직 지금 항목이
