@@ -7551,6 +7551,28 @@ describe("휠의 시각 상태는 data-* 축이 칠한다 (§16 ③)", () => {
     expect(wheelPickerCssSource).toContain(".wheel-column[data-holding]::after { content:");
   });
 
+  /* 🔴 **팝오버가 떠 있다는 표식에도 감시자가 0이었습니다**(2026-08-19). 축을 통째로 떼는
+   * 변이가 1696개 전부 초록이었습니다 — 그 상태에서 팝오버는 `z-index: 80`을 못 받아
+   * 다른 쌓임 맥락에 **가려질 수 있습니다.** jsdom은 그것을 못 보므로 붙는가·칠하는가를
+   * 나눠서 봅니다.
+   *
+   * 오너 결정(2026-08-18): 부모의 `open`은 트리거의 `aria-expanded`와 **다른 사실**입니다 —
+   * *"이 묶음이 지금 떠 있다"* 에 대응하는 ARIA가 없어 ③입니다. */
+  it("팝오버가 떠 있다는 축은 열렸을 때만 붙는다", () => {
+    const { container } = render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} />);
+    const root = container.querySelector(".wheel-picker")!;
+    expect(root.getAttribute("data-open")).toBeNull();
+    fireEvent.click(fieldOf("거래 날짜"));
+    expect(root.hasAttribute("data-open")).toBe(true);
+  });
+
+  it("그 축이 실제로 칠한다 — 쌓임과 트리거 강조", () => {
+    expect([
+      wheelPickerCssSource.includes(".wheel-picker[data-open] { z-index: 80; }"),
+      wheelPickerCssSource.includes(".wheel-picker[data-open] .wheel-trigger"),
+    ]).toEqual([true, true]);
+  });
+
   it("클래스 사본은 CSS에 안 남아 있다", () => {
     expect(wheelPickerCssSource).not.toMatch(/\.(moving-next|moving-previous|holding)\b/);
   });
