@@ -934,8 +934,14 @@ model/*.ts        값 모델(시점·기간). 화면도 DOM도 모릅니다
 | 자리 | 무엇이 어긋나는가 | 잰 이음매 |
 |---|---|---|
 | `controls/WheelPicker.tsx` (약 2100줄) | 규칙 4. 컴포넌트 안 최상위 선언 **80개**(들여쓰기 두 칸의 `const`·`function`·`let`) | ✅ **제스처 조각은 다 나갔습니다.** 남은 것은 `tapActivation`(브라우저가 click을 안 만들 때 pointerup에서 대신 확정 + 뒤따르는 click 삼키기) 하나이고, **밖에서 그 상태에 써 넣는 곳 0**입니다(실측: 다섯 쓰기가 전부 그 함수 안). 목적지는 `controls/Pressable.tsx`가 자기 주석에 이미 예약해 뒀습니다 — 백로그 9번(눌림 피드백)과 같은 라운드가 맞습니다.<br>클립보드는 **절반만** 나갔습니다 — 브라우저 접근은 바인딩 0이라 `browser/clipboard.ts`로 갔고, 남은 의미 절반은 `value`·`model`·`fields`·`clampToRange`·`flushTyping`·`clearedRef`·`undo`·`onChange` 등을 집습니다. **그건 단축키 계약이라 컨트롤에 있는 것이 맞습니다.**<br>나간 여섯: 이동 계산 → `controls/wheelShift.ts` · 되돌리기 → `controls/undoStack.ts` · 열 모션 → `controls/columnMotion.ts` · 클립보드 접근 → `browser/clipboard.ts` · 홀드 → `controls/columnHold.ts` · 스와이프 → `controls/columnSwipe.ts` |
-| `model/instant.ts` (약 1000줄) | 규칙 4. 순수 함수 53개 | **3층이 이미 서 있습니다.** 아래층(값·단위+12시간)에서 위로 가는 화살표 **0**, 중간 여섯(step·range·typing·dateMath·display·paste)끼리 교차 **6개**. 계약 타입은 이미 `model/wheelModel.ts`로 나갔습니다 — 남은 것은 구현을 여섯으로 가르는 일이고, 그러려면 `model/instant/` 하위 폴더가 필요합니다(`model/`은 배럴 묶음이 아니라 예외 자리입니다) |
+| `model/instant.ts` (1004줄) | 규칙 4. 최상위 선언 **53개**(export 35) | 🟢 **가를 수 있습니다 — 순환 0**(2026-08-19 실측, Tarjan). 위상은 **4층**입니다(§15가 한동안 "3층"이라 적고 있었습니다): 0층 27 · 1층 10 · 2층 14 · 3층 2(`clampToRange`·`outOfRange`). 화살표 75개.<br>⚠️ **남은 것은 측정이 아니라 결정입니다** — 0층 스물일곱이 거의 전부에게 쓰이므로 자연스러운 모양은 *공용 아래층 하나 + 그 위 여섯*(일곱 파일)입니다. 여섯의 **소속 목록**은 아직 아무 데도 안 적혀 있습니다.<br>계약 타입은 이미 `model/wheelModel.ts`로 나갔습니다. `model/instant/` 하위 폴더가 필요합니다(`model/`은 배럴 묶음이 아니라 예외 자리입니다) |
 | `surfaces/PageChrome.tsx` (약 209줄) | 규칙 4. **파일 이름이 아무것도 안 내보냅니다** — `PageChrome`이라는 심볼이 없습니다 | 공개 아홉(컴포넌트 여덟 + `GridJustify`). **여덟 사이의 상호참조 0.** 유일한 묶음은 격자 셋(`SummaryGrid` 21줄 · `FieldGrid` 35 · `PanelGrid` 17)이 비공개 `trackStyle`(16줄)과 `GridJustify`를 함께 쓰는 것입니다. 나머지 다섯(`PageHeader` 13 · `SectionHeading` 12 · `SummaryCard` 28 · `Panel` 11 · `DismissibleDetails` 22)은 서로도, 격자와도 무관합니다.<br>📌 `DismissibleDetails`는 **저장소 안에서 아무도 안 씁니다**(`demo/`·`src/` 0건, 배럴만) — 지우는 것은 breaking이라 오너 판단 항목입니다 |
+
+⚠️ **화살표를 셀 때는 주석을 먼저 걷으세요.** 안 걷으면 **다음 선언의 문서 주석이 앞
+선언의 본문으로** 세어집니다. 실제로 `pad`(한 줄짜리 자릿수 채우기)가 3층으로 올라가고
+`pad ↔ normalizeToFields ↔ serializeValue`라는 **없는 순환**이 나왔습니다(2026-08-19).
+걷고 다시 재니 순환 0, `pad`는 0층입니다. 이 저장소가 추출 스크립트에서 이미 같은
+함정에 걸린 적이 있습니다(주석 경계).
 
 ⚠️ **선언 개수는 세는 법을 같이 적습니다.** 여기 한동안 `91`이 적혀 있었는데 세는 법이
 안 남아 있어 **같은 수가 다시 안 나옵니다**(지금 법으로 `v0.13.0`은 98). 재는 법 없는
