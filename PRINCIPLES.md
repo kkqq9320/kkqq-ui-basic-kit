@@ -942,23 +942,29 @@ model/instant/    한 모델이 커지면 그 모델 이름의 폴더로 갈라�
 **여덟 조각과 배럴 하나**가 됐습니다:
 
 ```
-units      143줄  사다리와 그 위에서만 뜻이 서는 것들 — 형제 import 0
-serialize  122줄  값 문자열 ↔ 필드 (정규 형식만)
-range      176줄  경계 — 비교 정밀도 둘을 함께 데려갔습니다
-typing      87줄  숫자 입력 버퍼
-meridiem    59줄  오전/오후
-dateMath   176줄  값을 옮기기
-display    153줄  화면에 나가는 글자
-paste      113줄  붙여넣은 글자 해석
-instant.ts  59줄  배럴 + instantModel
-
-세는 법: grep -c '' <파일>   (wc -l과 같은 셈, 2026-08-19 측정)
+units      사다리와 그 위에서만 뜻이 서는 것들 — 형제 import 0
+serialize  값 문자열 ↔ 필드 (정규 형식만)
+range      경계 — 비교 정밀도 둘을 함께 데려갔습니다
+typing     숫자 입력 버퍼
+meridiem   오전/오후
+dateMath   값을 옮기기
+display    화면에 나가는 글자
+paste      붙여넣은 글자 해석
+instant.ts 배럴 + instantModel
 ```
+
+🔴 **여기 조각별 줄 수를 적었다가 걷어냈습니다.** 세는 법까지 붙여 심었는데도 **같은
+세션의 다음 커밋이 두 칸을 낡게 만들었습니다**(주석 두 줄을 더했을 뿐인데). 세는 법은
+숫자가 **틀렸을 때 반증을 쉽게** 할 뿐, 낡는 것을 막지 못합니다. 줄 수는 검사를 걸 수
+있는 종류이므로(§15의 `(약 N줄)` 행이 그렇습니다) **검사가 없으면 아예 적지 마세요.**
+제일 큰 조각은 `controls/WheelPicker.tsx`와 달리 표에 안 올립니다 — 이 폴더는 "안 지키는
+자리"가 아니라 지킨 자리라서입니다.
 
 **부르는 쪽은 한 줄도 안 바뀌었습니다** — `model/instant.ts`가 배럴로 남습니다.
 
 ```
-배럴을 import 하는 구문 아홉 (파일 여덟) — src 셋 · tests 다섯 · demo 0
+배럴을 import/export 하는 **구문 아홉**, **파일 여덟** — 파일로 세면 src 셋 · tests 다섯 ·
+demo 0입니다(`WheelPicker.tsx`가 두 구문). 단위가 섞이지 않게 둘 다 적습니다.
 세는 법: grep -rn 'from "…model/instant"' src tests demo --include=*.ts --include=*.tsx
 ⚠️ demo는 주석에서 이름만 언급합니다. `model/instant` 문자열이 든 파일을 세면
    주석까지 딸려 들어옵니다 — 그래서 import 구문으로 셉니다.

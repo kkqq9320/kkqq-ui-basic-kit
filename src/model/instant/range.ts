@@ -3,6 +3,7 @@
  * 경계 문자열은 값보다 짧을 수 있어(연만, 연월만 …) **비교 정밀도를 먼저 맞춥니다** —
  * 그래서 `precisionThrough`·`comparisonPrecision`이 여기 있습니다. 킷 안에서 그 둘을
  * 쓰는 곳은 이 파일뿐이고, `comparisonPrecision`은 그 위에 **배럴이 내보내는 공개 이름**
+ * 이기도 합니다 — 소비자가 직접 부를 수 있으므로 "이 파일뿐"은 킷 안에서만 참입니다.
  */
 
 import type { WheelUnit, UnitParts, ValueFamily } from "../wheelModel";
