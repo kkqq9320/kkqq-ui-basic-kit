@@ -1511,7 +1511,7 @@ describe("DateWheelPicker 포커스 불변식 — 키보드를 받는 동안 act
 
 // 초판의 이 블록은 "어느 열이 포커스를 쥐고 있는가"로 세그먼트 이동을 읽었다. 열이
 // 포커스를 받지 않게 되면서(설계 스펙 §5·§6.2) 그 채널이 사라졌고, 이제 활성 세그먼트를
-// `activeSegment()`(트리거의 `.wheel-segment[data-active]`)로 읽는다.
+// `activeSegment()`(트리거의 `.wheel-segment[data-active="true"]`)로 읽는다.
 describe("DateWheelPicker 세그먼트 이동", () => {
   async function openPicker() {
     render(<ControlledDateWheel initialValue="2026-07-12" />);
@@ -2659,8 +2659,8 @@ describe("DateWheelPicker 활성 표시는 편집 중에만", () => {
   // 경로에서 표시가 남습니다. 규칙은 여전히 **하나**이고 조건이 하나 붙었을 뿐입니다.
   it("규칙은 하나이고, 포커스와 편집 중 둘 다 건다", () => {
     const rules = wheelPickerCssSource.replace(/\/\*[\s\S]*?\*\//g, "").match(/[^{}]+(?=\{)/g) ?? [];
-    const painting = rules.map((r) => r.replace(/\s+/g, " ").trim()).filter((r) => /\.wheel-segment\[data-active\]/.test(r));
-    expect(painting).toEqual([".wheel-trigger[data-editing]:focus-within .wheel-segment[data-active]"]);
+    const painting = rules.map((r) => r.replace(/\s+/g, " ").trim()).filter((r) => /\.wheel-segment\[data-active="true"\]/.test(r));
+    expect(painting).toEqual([`.wheel-trigger[data-editing="true"]:focus-within .wheel-segment[data-active="true"]`]);
   });
 });
 
@@ -4412,7 +4412,7 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // 이동 규칙이 진입 규칙과 **같은 특이도**이고 파일에서 **뒤에** 오므로, 커밋 프레임에서는
   // 이동이 이깁니다. 아래 "이동 규칙이 뒤에 온다"가 그것을 고정합니다.
   it("진입은 값 컨테이너를 굴리고, 열의 entering이 그것을 연다", () => {
-    expect(wheelPickerCssSource).toMatch(/\.wheel-column\[data-entering\] \.wheel-values \{[^}]*animation: wheel-enter 280ms/);
+    expect(wheelPickerCssSource).toMatch(/\.wheel-column\[data-entering="true"\] \.wheel-values \{[^}]*animation: wheel-enter 280ms/);
   });
 
   it("진입 키프레임이 있다", () => {
@@ -4469,7 +4469,7 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // 스와이프 블록의 "끄는 동안 열은 dragging이다"가 지키고, 규칙 자체는 여기가 지킵니다 —
   // 바로 위 `translateY(calc(...))` 핀과 같은 두 겹 패턴입니다.
   it("드래그 중에는 열의 트랜지션과 애니메이션이 꺼진다", () => {
-    expect(wheelPickerCssSource).toContain(".wheel-column[data-dragging] .wheel-values { animation: none !important; transition: none; }");
+    expect(wheelPickerCssSource).toContain(`.wheel-column[data-dragging="true"] .wheel-values { animation: none !important; transition: none; }`);
   });
 
   // **모든 열이 함께 구릅니다** — 축 1. 규칙은 하나이고, 열마다 다른 것은 **시차뿐**입니다.
@@ -4487,7 +4487,7 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // 진입이 다시 재생되면 슬라이드와 겹칩니다. 둘은 특이도가 같으므로(둘 다 (0,3,0))
   // **파일 안의 순서**가 승부를 가릅니다. 이동을 뒤에 둡니다.
   it("이동 규칙이 진입 규칙보다 파일에서 뒤에 온다", () => {
-    const enter = wheelPickerCssSource.indexOf(".wheel-column[data-entering] .wheel-values");
+    const enter = wheelPickerCssSource.indexOf(`.wheel-column[data-entering="true"] .wheel-values`);
     const move = wheelPickerCssSource.indexOf(`.wheel-column[data-motion="next"] .wheel-values`);
     expect([enter >= 0, move >= 0, enter < move]).toEqual([true, true, true]);
   });
@@ -4500,7 +4500,7 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // 이웃한 이동 규칙이 이미 같은 이유로 그렇게 돼 있습니다.
   it("reduced-motion에서 진입의 이동이 제거된다", () => {
     const reduced = /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\n\}/.exec(wheelPickerCssSource)?.[0] ?? "(reduced 블록이 없다)";
-    expect(reduced).toMatch(/\.wheel-column\[data-entering\] \.wheel-values/);
+    expect(reduced).toMatch(/\.wheel-column\[data-entering="true"\] \.wheel-values/);
   });
 
   // ── DOM: 게이트가 실제로 열리고 닫히는가 ────────────────────────────────────
@@ -4536,7 +4536,7 @@ describe("DateWheelPicker 팝오버 진입 애니메이션", () => {
   // 이 둘은 값을 바꾼 지금도 초록입니다(커플링이 지켜지고 있으므로). 빨개질 수 있다는
   // 것은 뮤테이션으로 확인했습니다 — JS 상수만 줄이면 앞이, 늘리면 뒤가 죽습니다.
   function enterTotalFromCss() {
-    const duration = /\.wheel-column\[data-entering\] \.wheel-values \{[^}]*animation: wheel-enter (\d+)ms/.exec(wheelPickerCssSource)?.[1];
+    const duration = /\.wheel-column\[data-entering="true"\] \.wheel-values \{[^}]*animation: wheel-enter (\d+)ms/.exec(wheelPickerCssSource)?.[1];
     const lastDelay = /\.wheel-column:nth-child\(3\) \{[^}]*--wheel-enter-delay:\s*(\d+)ms/.exec(wheelPickerCssSource)?.[1];
     return Number(duration) + Number(lastDelay);
   }
@@ -4874,8 +4874,8 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     // 같은 규칙의 선택자 목록에 끼어 오든 여전히 둘 다 터진다.
     it("활성 세그먼트의 정지 그림을 그리는 규칙은 포커스로 게이트된 하나뿐이다", () => {
       const painting = cssRules(wheelPickerCssSource)
-        .filter((rule) => /\.wheel-segment\[data-active\]/.test(rule.selector) && /(^|[\s;])background\s*:/.test(rule.body));
-      expect(painting.map((rule) => rule.selector)).toEqual([".wheel-trigger[data-editing]:focus-within .wheel-segment[data-active]"]);
+        .filter((rule) => /\.wheel-segment\[data-active="true"\]/.test(rule.selector) && /(^|[\s;])background\s*:/.test(rule.body));
+      expect(painting.map((rule) => rule.selector)).toEqual([`.wheel-trigger[data-editing="true"]:focus-within .wheel-segment[data-active="true"]`]);
     });
 
     /** 토큰 블록 하나에서 커스텀 프로퍼티 값을 읽는다. 블록 안에 중첩 규칙이 없다는 전제. */
@@ -4925,7 +4925,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
       const targeted = cssRules(wheelPickerCssSource).filter((rule) => /\.wheel-(segment|punctuation)/.test(rule.selector));
       expect(targeted.map((rule) => [rule.selector, declaresColor(rule.body)])).toEqual([
         [".wheel-segment", false],
-        [".wheel-trigger[data-editing]:focus-within .wheel-segment[data-active]", true],
+        [`.wheel-trigger[data-editing="true"]:focus-within .wheel-segment[data-active="true"]`, true],
       ]);
     });
 
@@ -4954,7 +4954,7 @@ describe("DateWheelPicker 트리거 세그먼트", () => {
     // 이유는 서로 다른 요구이기 때문이다 — 하나는 "칩 위 글자가 읽히는가", 다른 하나는
     // "칩이 필드에서 도드라지는가"다. 반전을 그만두는 순간 두 수는 갈라진다.
     it("활성 세그먼트의 배경과 글자색은 값을 박지 않고 토큰을 참조한다", () => {
-      const rule = cssRules(wheelPickerCssSource).find((candidate) => candidate.selector === ".wheel-trigger[data-editing]:focus-within .wheel-segment[data-active]");
+      const rule = cssRules(wheelPickerCssSource).find((candidate) => candidate.selector === `.wheel-trigger[data-editing="true"]:focus-within .wheel-segment[data-active="true"]`);
       expect([
         /(^|[\s;])background:\s*([^;]+)/.exec(rule?.body ?? "")?.[2].trim() ?? null,
         /(^|[\s;])color:\s*([^;]+)/.exec(rule?.body ?? "")?.[2].trim() ?? null,
@@ -6577,7 +6577,7 @@ describe("길게 누르기 임계와 진행 막대 (오너 리포트 5·6차)", 
   });
 
   it("움직임을 줄이는 환경에서도 지연은 남는다 — 더블탭에서 번쩍이면 안 된다", () => {
-    expect(wheelPickerCssSource).toContain(".wheel-column[data-holding]::after { animation: wheel-hold 1ms linear 200ms forwards; }");
+    expect(wheelPickerCssSource).toContain(`.wheel-column[data-holding="true"]::after { animation: wheel-hold 1ms linear 200ms forwards; }`);
   });
 });
 
@@ -7548,7 +7548,7 @@ describe("휠의 시각 상태는 data-* 축이 칠한다 (§16 ③)", () => {
   });
 
   it("홀드 막대는 그 속성이 칠한다", () => {
-    expect(wheelPickerCssSource).toContain(".wheel-column[data-holding]::after { content:");
+    expect(wheelPickerCssSource).toContain(`.wheel-column[data-holding="true"]::after { content:`);
   });
 
   /* 🔴 **팝오버가 떠 있다는 표식에도 감시자가 0이었습니다**(2026-08-19). 축을 통째로 떼는
@@ -7568,8 +7568,8 @@ describe("휠의 시각 상태는 data-* 축이 칠한다 (§16 ③)", () => {
 
   it("그 축이 실제로 칠한다 — 쌓임과 트리거 강조", () => {
     expect([
-      wheelPickerCssSource.includes(".wheel-picker[data-open] { z-index: 80; }"),
-      wheelPickerCssSource.includes(".wheel-picker[data-open] .wheel-trigger"),
+      wheelPickerCssSource.includes(`.wheel-picker[data-open="true"] { z-index: 80; }`),
+      wheelPickerCssSource.includes(`.wheel-picker[data-open="true"] .wheel-trigger`),
     ]).toEqual([true, true]);
   });
 

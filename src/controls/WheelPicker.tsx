@@ -1886,7 +1886,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
   // 붙어 model.columns(fields)가 fields와 갈라지면, 지역 변수 하나로 묶어 두지 않으면
   // CSS 열 폭을 정하는 data-fields만 옛 값을 씁니다.
   const columns = model.columns(fields);
-  return <div className={`wheel-picker ${className}`.trim()} data-open={open ? "" : undefined} ref={rootRef}>
+  return <div className={`wheel-picker ${className}`.trim()} data-open={open ? "true" : undefined} ref={rootRef}>
     {/* onFocus는 세션 기준값을 찍는 두 지점 중 나머지 하나입니다(다른 하나는 위의 닫힘
         이펙트) — 설계 스펙 §6.4. React의 onFocus는 native focusin에 대응합니다.
 
@@ -1921,7 +1921,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
         포커스된 버튼을 언마운트하면 focus만 기록되고 blur는 없으며 activeElement는 body로
         갑니다). 그래서 이 핸들러와 그 규칙이 충돌하지 않습니다. tests의 "버퍼를 든 채
         언마운트되면 확정하지 않고 버린다"가 그 전제까지 함께 지킵니다. */}
-    <div className="wheel-trigger-shell"><Pressable id={id} buttonRef={triggerRef} className="wheel-trigger" data-editing={editing ? "" : undefined} aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onPaste={handlePaste} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onBlur={() => { setEditing(false); flushTyping(); }} onClick={(event) => {
+    <div className="wheel-trigger-shell"><Pressable id={id} buttonRef={triggerRef} className="wheel-trigger" data-editing={editing ? "true" : undefined} aria-label={triggerName} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popoverId : undefined} disabled={disabled} onPaste={handlePaste} onFocus={() => { sessionStartValueRef.current = value; clearedRef.current = false; }} onBlur={() => { setEditing(false); flushTyping(); }} onClick={(event) => {
       // 맨 앞이어야 합니다 — 아래 어느 갈래로 빠지든 포커스는 트리거에 와야 합니다.
       // 근거는 positioning.ts의 헬퍼 주석(맥은 mousedown에서 포커스를 걷어갑니다).
       focusTriggerOnClick(event.currentTarget);
@@ -2018,7 +2018,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
              `.active` 클래스 자체는 포커스와 무관하게 붙고, **감추는 일은 CSS가 합니다**
              (`.wheel-trigger:focus-within` — §4.5: 포커스 없는 필드에 활성 표시가 남으면
              그 필드가 입력을 받는 중으로 읽힙니다). */
-          : <span className="wheel-segment" data-unit={part.unit} data-active={resolvedActiveUnit === part.unit ? "" : undefined} key={part.unit}>{part.text}</span>)
+          : <span className="wheel-segment" data-unit={part.unit} data-active={resolvedActiveUnit === part.unit ? "true" : undefined} key={part.unit}>{part.text}</span>)
         : labels.placeholder}</span><i className="wheel-trigger-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm2-2v4m10-4v4M3 9h18" /></svg></i></Pressable></div>
     {/* onMouseDown의 기본 동작을 막는 것이 §6.2의 불변식("키보드를 받는 동안
         activeElement는 언제나 트리거")을 **팝오버 쪽에서** 지키는 장치입니다 — 설계 스펙 §6.3.
@@ -2083,7 +2083,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
 
             `onPointerDown`의 `setActiveUnit(unit)`이 **포인터 경로가 활성 세그먼트를 따라가는
             유일한 길**입니다(열의 `onFocus`가 하던 일). 지우지 마세요. */}
-        {columns.map((unit) => { const motion = columnMotions.of(unit); const unitMark = model.columnMark?.(unit, fields) ?? ""; return <section className="wheel-column" aria-label={columnName(unit)} data-unit={unit} data-active={resolvedActiveUnit === unit ? "" : undefined} data-entering={entering ? "" : undefined} data-motion={motion.playing ? motion.direction : undefined} data-holding={hold.holdingUnit === unit ? "" : undefined} role="group" style={{ "--wheel-unit-mark": JSON.stringify(unitMark) } as CSSProperties} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; columnMotions.clear(unit); undo.beginGesture(baseValue); swipe.begin(unit, event.pointerId, event.clientY, baseValue); hold.arm(unit, event.pointerId, event.clientY); }} onPointerMove={(event) => { hold.cancelIfMoved(event.pointerId, event.clientY); swipe.move(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget); }} onPointerUp={(event) => { hold.cancel(); swipe.end(unit, event.clientY, event.pointerId, event.currentTarget); undo.endGesture(); }} onPointerCancel={(event) => { hold.cancel(); undo.endGesture(); swipe.abort(event.currentTarget); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
+        {columns.map((unit) => { const motion = columnMotions.of(unit); const unitMark = model.columnMark?.(unit, fields) ?? ""; return <section className="wheel-column" aria-label={columnName(unit)} data-unit={unit} data-active={resolvedActiveUnit === unit ? "true" : undefined} data-entering={entering ? "true" : undefined} data-motion={motion.playing ? motion.direction : undefined} data-holding={hold.holdingUnit === unit ? "true" : undefined} role="group" style={{ "--wheel-unit-mark": JSON.stringify(unitMark) } as CSSProperties} onWheel={(event) => handleWheel(event, unit)} onPointerDown={(event) => { setTyping(null); if (!isPrimaryButton(event)) return; setActiveUnit(unit); suppressColumnClickRef.current = false; if (startsOnStepControl(event.target)) return; columnMotions.clear(unit); undo.beginGesture(baseValue); swipe.begin(unit, event.pointerId, event.clientY, baseValue); hold.arm(unit, event.pointerId, event.clientY); }} onPointerMove={(event) => { hold.cancelIfMoved(event.pointerId, event.clientY); swipe.move(unit, event.clientY, event.pointerId, event.buttons, event.currentTarget); }} onPointerUp={(event) => { hold.cancel(); swipe.end(unit, event.clientY, event.pointerId, event.currentTarget); undo.endGesture(); }} onPointerCancel={(event) => { hold.cancel(); undo.endGesture(); swipe.abort(event.currentTarget); }} onClickCapture={(event) => { if (suppressColumnClickRef.current) { event.preventDefault(); event.stopPropagation(); } }} key={unit}>
           <Pressable className="wheel-step" tabIndex={-1} aria-label={`${labels.units[unit]} ${labels.previous}`} disabled={!shifted(unit, -1)} onClick={() => applyShift(unit, -1)}><svg viewBox="0 0 16 16"><path d="m3.5 10 4.5-4 4.5 4" /></svg></Pressable>
           {/* 행은 tab 순서에 들어가지 않습니다 — ↑/↓가 같은 일을 하고, 열당 5개씩이라
               날짜 하나를 지나가는 데 Tab을 15번 눌러야 했습니다. 값이 바뀔 때마다 이

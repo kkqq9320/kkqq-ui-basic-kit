@@ -5,7 +5,7 @@
  * 값이 움직여도 화살표 버튼을 밀거나 가리면 안 됩니다.
  */
 .wheel-picker { position: relative; width: 100%; min-width: 0; }
-.wheel-picker[data-open] { z-index: 80; }
+.wheel-picker[data-open="true"] { z-index: 80; }
 
 /* 트리거: 41px로 다른 입력 컨트롤과 높이를 맞춥니다. */
 /* `display: grid`는 장식이 아닙니다 — `<button>`은 블록 컨테이너 안에서 저절로
@@ -58,8 +58,8 @@
  * 규칙 하나가** 합니다. 트리거 안에서 포커스를 받을 수 있는 것은 트리거 자신뿐이라
  * `:focus-within`은 여기서 "트리거가 포커스를 가졌는가"와 정확히 같습니다.
  *
- * 특이도는 손으로 셉니다: `.wheel-trigger`(0,1,0) + `[data-editing]`(0,1,0) +
- * `:focus-within`(0,1,0) + `.wheel-segment`(0,1,0) + `[data-active]`(0,1,0) = **(0,5,0)**.
+ * 특이도는 손으로 셉니다: `.wheel-trigger`(0,1,0) + `[data-editing="true"]`(0,1,0) +
+ * `:focus-within`(0,1,0) + `.wheel-segment`(0,1,0) + `[data-active="true"]`(0,1,0) = **(0,5,0)**.
  * 미디어 쿼리는 특이도를 더하지 않으므로 이 파일의 `@media` 블록들도 이 계산을 안 바꿉니다.
  *
  * 🔴 **여기 적힌 수가 한동안 (0,4,0)이었습니다**(2026-08-19 정정) — 게이트가 포커스에서
@@ -103,7 +103,7 @@
  * **규칙은 여전히 하나입니다.** 테마별로 다른 값이 필요해도 규칙을 나누지 않습니다 —
  * 나누는 순간 이 세그먼트에 매칭되는 규칙이 둘이 되어 위 특이도 계산과 tests의
  * "규칙은 정확히 하나" 계약이 함께 깨집니다. 토큰이 그 요구를 규칙 밖에서 흡수합니다. */
-.wheel-trigger[data-editing]:focus-within .wheel-segment[data-active] { border-radius: 4px; color: var(--date-segment-active-text); background: var(--date-segment-active-background); }
+.wheel-trigger[data-editing="true"]:focus-within .wheel-segment[data-active="true"] { border-radius: 4px; color: var(--date-segment-active-text); background: var(--date-segment-active-background); }
 /* ⚠️ **여기 세그먼트 전용 확정 펄스 규칙이 있었습니다. 지웠습니다 — 목적이 사라졌습니다.**
  * 그 규칙은 "칩이 자기 `color`를 선언해 확정 펄스의 상속에서 빠지는 것"을 메우려고 있었는데,
  * 표시 게이트가 포커스에서 **편집 중**으로 바뀌면서(스펙 §4.5) **칩과 펄스가 겹칠 수가**
@@ -131,7 +131,7 @@
 /* :hover는 disabled 요소에도 매칭되므로 명시적으로 뺀다 — 안 그러면 흐려진 필드가
  * 마우스만 올려도 강조 테두리로 살아난다. :focus-visible은 disabled가 포커스를 못
  * 받으니 따로 뺄 필요가 없다. */
-.wheel-trigger-shell:has(:hover:not(:disabled), :focus-visible), .wheel-picker[data-open] .wheel-trigger-shell { border-color: var(--accent); outline: var(--focus-ring); }
+.wheel-trigger-shell:has(:hover:not(:disabled), :focus-visible), .wheel-picker[data-open="true"] .wheel-trigger-shell { border-color: var(--accent); outline: var(--focus-ring); }
 /* 링은 위에서 **shell**이 그린다. 안쪽 버튼의 기본 아웃라인을 끄지 않으면 브라우저가
  * 자기 포커스 링(엔진에 따라 흰색·검정)을 그 안에 하나 더 그려 두 겹이 된다 — Tab으로
  * 옮겨 다니면 드롭다운은 강조색 링 하나, 날짜는 링 두 개가 나온다.
@@ -254,10 +254,10 @@
  * 유도해 비교하므로 한쪽만 바꾸면 빨개집니다. */
 .wheel-column:nth-child(2) { --wheel-enter-delay: 40ms; }
 .wheel-column:nth-child(3) { --wheel-enter-delay: 80ms; }
-.wheel-column[data-active], .wheel-column:focus-visible { border-color: color-mix(in srgb, var(--accent) 72%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 48%, var(--surface-soft)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent); }
+.wheel-column[data-active="true"], .wheel-column:focus-visible { border-color: color-mix(in srgb, var(--accent) 72%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 48%, var(--surface-soft)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent); }
 @media (hover: hover) and (pointer: fine) {
   .wheel-column:hover { border-color: color-mix(in srgb, var(--accent) 48%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 28%, var(--surface-soft)); }
-  .wheel-column[data-active]:hover { border-color: color-mix(in srgb, var(--accent) 72%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 48%, var(--surface-soft)); }
+  .wheel-column[data-active="true"]:hover { border-color: color-mix(in srgb, var(--accent) 72%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 48%, var(--surface-soft)); }
 }
 .wheel-step { width: 100%; min-width: 0; height: 30px; min-height: 30px; max-height: 30px; display: grid; place-items: center; padding: 0; border: 0; color: var(--muted); background: transparent; }
 .wheel-step:hover:not(:disabled) { color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 65%, transparent); }
@@ -359,8 +359,8 @@
  *
  * `backwards`가 필요합니다 — 시차를 기다리는 동안 2·3번 열이 제자리로 보였다가 시작
  * 위치로 튀는 것을 막습니다. */
-.wheel-column[data-entering] .wheel-values { animation: wheel-enter 280ms cubic-bezier(.18, .85, .28, 1) var(--wheel-enter-delay, 0ms) backwards; }
-.wheel-column[data-dragging] .wheel-values { animation: none !important; transition: none; }
+.wheel-column[data-entering="true"] .wheel-values { animation: wheel-enter 280ms cubic-bezier(.18, .85, .28, 1) var(--wheel-enter-delay, 0ms) backwards; }
+.wheel-column[data-dragging="true"] .wheel-values { animation: none !important; transition: none; }
 .wheel-column[data-motion="next"] .wheel-values { animation: wheel-slide-next 210ms cubic-bezier(.2, .9, .25, 1); }
 .wheel-column[data-motion="previous"] .wheel-values { animation: wheel-slide-previous 210ms cubic-bezier(.2, .9, .25, 1); }
 .wheel-values button { width: 100%; min-width: 0; height: 30px; min-height: 30px; max-height: 30px; padding: 0 3px; border: 0; border-radius: 5px; color: color-mix(in srgb, var(--text) 58%, var(--muted)); background: transparent; font-size: var(--font-size-control); line-height: 30px; white-space: nowrap; transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease, transform var(--motion-fast) ease; }
@@ -384,7 +384,7 @@
  * ⚠️ 여기 한동안 **2000ms**와 `DATE_WHEEL_HOLD_MS`가 적혀 있었습니다 — 임계가 500으로
  * 내려간 뒤(오너 리포트 5차)에도 안 고쳐졌고, 그 심볼은 **애초에 존재한 적이 없습니다.**
  * 수를 주석에 적을 때는 그것을 대조하는 검사를 같이 두세요(2026-08-18 정정). */
-.wheel-column[data-holding]::after { content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--accent); border-radius: 0 2px 2px 0; animation: wheel-hold 300ms linear 200ms forwards; }
+.wheel-column[data-holding="true"]::after { content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--accent); border-radius: 0 2px 2px 0; animation: wheel-hold 300ms linear 200ms forwards; }
 @keyframes wheel-hold { to { width: 100%; } }
 
 /* 액션 행은 팝오버 바닥에 **붙습니다.**
@@ -465,7 +465,7 @@
   100% { transform: scale(1.025); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .wheel-column[data-entering] .wheel-values,
+  .wheel-column[data-entering="true"] .wheel-values,
   .wheel-values,
   .wheel-column[data-motion] .wheel-values,
   .wheel-column[data-motion] .wheel-values button[aria-current="date"] { animation: none; transition: none; }
@@ -474,5 +474,5 @@
    *
    * 그래서 **지연은 남깁니다** — 더블탭의 첫 탭에서 막대가 번쩍이면 안 됩니다.
    * 0ms짜리 애니메이션이 지연 뒤에 한 번에 채웁니다. */
-  .wheel-column[data-holding]::after { animation: wheel-hold 1ms linear 200ms forwards; }
+  .wheel-column[data-holding="true"]::after { animation: wheel-hold 1ms linear 200ms forwards; }
 }

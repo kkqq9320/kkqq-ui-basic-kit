@@ -464,7 +464,7 @@ export function Select({ value, options, onChange, ariaLabel, placeholder = "선
     >{option.label}</Pressable>)}
   </div>;
 
-  return <div className={`app-select dropdown-align-${align} ${openAbove ? "drop-up" : ""} ${className}`.trim()} data-open={open ? "" : undefined} ref={rootRef}>
+  return <div className={`app-select dropdown-align-${align} ${openAbove ? "drop-up" : ""} ${className}`.trim()} data-open={open ? "true" : undefined} ref={rootRef}>
     <Pressable buttonRef={triggerRef}
       className="app-select-trigger"
       aria-label={ariaLabel}

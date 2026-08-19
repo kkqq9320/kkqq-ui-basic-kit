@@ -202,7 +202,7 @@ export function useColumnSwipe({ active, containerRef, commit, onGesture, onGest
     // 감당하는 기하 상한(±30, 값 컨테이너 210px - 뷰포트 150px - 기본 translateY -30px)
     // 안쪽이라 뷰포트 끝에 빈 띠가 생기지 않습니다.
     const offset = Math.max(-15, Math.min(15, delta * 0.5));
-    if (Math.abs(offset) > 2) column.dataset.dragging = "";
+    if (Math.abs(offset) > 2) column.dataset.dragging = "true";
     else delete column.dataset.dragging;
     column.style.setProperty("--wheel-drag-offset", `${offset}px`);
   }

@@ -89,7 +89,7 @@ export function SectionTabs<T extends string>({ value, tabs, onChange, ariaLabel
     setMobileOpen(false);
     onChange(nextValue);
   }
-  return <div ref={rootRef} className={`settings-tabs ${className}`.trim()} data-mobile-open={mobileOpen ? "" : undefined}>
+  return <div ref={rootRef} className={`settings-tabs ${className}`.trim()} data-mobile-open={mobileOpen ? "true" : undefined}>
     <Pressable className="mobile-tab-card" aria-label={`${ariaLabel}: ${currentTab.label}`} aria-haspopup="true" aria-expanded={mobileOpen} onClick={() => setMobileOpen((open) => !open)}><span>{currentTab.label}</span><i aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" /></svg></i></Pressable>
     <div className="settings-tab-options" role="tablist" aria-label={ariaLabel}>
       {tabs.map((tab) => <Pressable role="tab" aria-selected={tab.value === value} onClick={() => selectTab(tab.value)} key={tab.value}>{tab.label}</Pressable>)}
@@ -105,7 +105,7 @@ export function SectionTabs<T extends string>({ value, tabs, onChange, ariaLabel
 export function MobilePageTabs({ registration, open, onToggle, label = "페이지", floatRef, className = "" }: { className?: string; registration: MobilePageTabRegistration | null; open: boolean; onToggle: (open: boolean) => void; label?: string; floatRef?: Ref<HTMLDivElement> }) {
   // floatRef는 useMobilePageTabs가 만든 것을 그대로 넘겨야 바깥 클릭 닫기가 동작합니다.
   if (!registration) return null;
-  return <div ref={floatRef} className={`mobile-page-tabs-float ${className}`.trim()} data-open={open ? "" : undefined}>
+  return <div ref={floatRef} className={`mobile-page-tabs-float ${className}`.trim()} data-open={open ? "true" : undefined}>
     <div className="mobile-quick-tab-menu" role="tablist" aria-label={registration.ariaLabel}>
       {registration.tabs.map((tab) => <Pressable role="tab" aria-selected={tab.value === registration.currentValue} key={tab.value} onClick={() => { registration.onSelect(tab.value); onToggle(false); }}>{tab.label}</Pressable>)}
     </div>
