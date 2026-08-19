@@ -72,19 +72,26 @@ function pressBack() {
   });
 }
 
+/** ⚠️ **모듈 스코프에 둡니다 — `Harness` 안에서 정의하지 마세요.** 안에서 정의하면
+ *  `Harness`가 리렌더될 때마다 **새 컴포넌트 타입**이 되어 서브트리가 통째로
+ *  언마운트·재마운트됩니다. StrictMode가 흉내 내는 재마운트와 **다른 것**인데 겉보기가
+ *  같아서, 언젠가 `Harness`에 상태가 하나 붙는 순간 아래 재마운트 검사가 조용히 다른
+ *  것을 재게 됩니다. 지금은 초기 마운트뿐이라 그 차이가 안 드러납니다. */
+function Inner({ onClose }: { onClose?: () => void }) {
+  const [open, setOpen] = useState(true);
+  const close = () => { setOpen(false); onClose?.(); };
+  return <Dialog open={open} onClose={close} ariaLabel="분류 등록">
+    <button type="button" onClick={close}>닫기</button>
+  </Dialog>;
+}
+
 /** ⚠️ **StrictMode를 이 안에서 그리지 마세요.** React 19에서 초기 마운트의 이중 호출은
  *  `<StrictMode>`가 **render()의 루트일 때만** 일어납니다 — 부모가 그리는 자식으로
  *  들어가면 그 서브트리는 한 번만 돕니다(2026-08-19 실측, 아래 재마운트 검사 참고).
- *  그래서 `wrapper` prop을 걷어냈습니다: 그 prop이 있는 한 검사는 자기 이름이 말하는
+ *  그래서 옛 `wrapper` prop을 걷어냈습니다: 그 prop이 있는 한 검사는 자기 이름이 말하는
  *  경로를 안 밟으면서 초록이었습니다. */
-function Harness() {
-  function Inner() {
-    const [open, setOpen] = useState(true);
-    return <Dialog open={open} onClose={() => setOpen(false)} ariaLabel="분류 등록">
-      <button type="button" onClick={() => setOpen(false)}>닫기</button>
-    </Dialog>;
-  }
-  return <Inner />;
+function Harness({ onClose }: { onClose?: () => void } = {}) {
+  return <Inner onClose={onClose} />;
 }
 
 // 모바일 드로어는 킷에서 가장 큰 오버레이인데(position:fixed, z-index 60, 자기 백드롭까지
@@ -362,9 +369,15 @@ describe("B1: 킷 팝업이 열린 동안만 scrollRestoration을 manual로 바�
    *
    * popstate 둘을 한 `act()` 안에서 쏩니다 — 그 사이엔 React가 아직 리렌더를 안 해
    * 리스너가 그대로 붙어 있고, 그래서 `handlePopState`의 빈 스택 경로가 **두 번** 탑니다. */
+  /* 🔴 **전제를 꼭 다세요 — 이 검사의 판별력은 popstate가 정말 두 번 닿는 데 있습니다.**
+   * 한 번만 닿으면 그 시점의 `savedScrollRestoration`은 아직 `"auto"`라, 가드가 있든
+   * 없든 쓰는 값이 같아 **초록입니다**(실측으로 확인했습니다 — 한 번만 쏘고 가드를 지우니
+   * 통과했습니다). `onClose` 호출 수가 그 전제입니다: 두 번이면 `handlePopState`의 빈 스택
+   * 경로가 두 번 탔다는 뜻입니다. */
   it("스택이 빈 popstate가 두 번 와도 원래 값을 한 번만 쓴다 — 복원은 멱등이다", () => {
     const stub = installScrollRestorationStub("auto");
-    render(<Harness />);
+    const onClose = vi.fn();
+    render(<Harness onClose={onClose} />);
     expect(stub.value).toBe("manual");   // 전제: 킷이 잡았다
 
     act(() => {
@@ -372,6 +385,8 @@ describe("B1: 킷 팝업이 열린 동안만 scrollRestoration을 manual로 바�
       window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
       window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
     });
+
+    expect(onClose).toHaveBeenCalledTimes(2);   // 전제: 둘 다 리스너에 닿았다
 
     expect(stub.setter.mock.calls.map((call) => call[0])).toEqual(["manual", "auto"]);
     expect(stub.value).toBe("auto");
