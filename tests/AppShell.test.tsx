@@ -1476,7 +1476,13 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     // 창구 도중 주소창이 접혀 **실제** 높이가 커집니다. 붙든 인라인 값이 아직 이기므로
     // `clientHeight`는 여전히 작게 읽힙니다 — 지금 재면 과대평가입니다.
     scrollStub.setClientHeight(1200);
+
+    /* ⚠️ **위로 실제로 옮겨야 합니다.** 이벤트만 쏘면 목표가 그대로라 `recompute`가
+     * `next === current`로 즉시 빠져나갑니다 — 가드를 지워도 초록이라 아무것도 못 가릅니다
+     * (실측). 위로 끝까지 올려야 "이제 여백이 필요 없다"는 계산이 실제로 나옵니다. */
+    root.scrollTop = 0;
     root.dispatchEvent(new Event("scroll"));
+    await new Promise((resolve) => setTimeout(resolve, 60));   // rAF 몇 프레임 — 걷혔다면 보입니다
 
     expect(keyboardInsetOf(root)).toBe(reserved);
   });
