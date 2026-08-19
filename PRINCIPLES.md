@@ -892,6 +892,8 @@ Enter (완료)         →  확정값 == 기준값  →  신호 없음
 PascalCase.tsx    컴포넌트를 내보내는 파일
 camelCase.ts      컴포넌트가 아닌 것 — 순수 계산 · 훅 · DOM 헬퍼 · 상수
 model/*.ts        값 모델(시점·기간). 화면도 DOM도 모릅니다
+model/instant/    한 모델이 커지면 그 모델 이름의 폴더로 갈라집니다. 배럴은
+                  `model/instant.ts`에 그대로 남아 부르는 쪽이 조각을 모릅니다
 ```
 
 ### 규칙 2 — 소문자 모듈은 컴포넌트를 내보내지 않습니다
@@ -934,8 +936,54 @@ model/*.ts        값 모델(시점·기간). 화면도 DOM도 모릅니다
 | 자리 | 무엇이 어긋나는가 | 잰 이음매 |
 |---|---|---|
 | `controls/WheelPicker.tsx` (약 2100줄) | 규칙 4. 컴포넌트 안 최상위 선언 **80개**(들여쓰기 두 칸의 `const`·`function`·`let`) | ✅ **제스처 조각은 다 나갔습니다.** 남은 것은 `tapActivation`(브라우저가 click을 안 만들 때 pointerup에서 대신 확정 + 뒤따르는 click 삼키기) 하나이고, **밖에서 그 상태에 써 넣는 곳 0**입니다(실측: 다섯 쓰기가 전부 그 함수 안). 목적지는 `controls/Pressable.tsx`가 자기 주석에 이미 예약해 뒀습니다 — 백로그 9번(눌림 피드백)과 같은 라운드가 맞습니다.<br>클립보드는 **절반만** 나갔습니다 — 브라우저 접근은 바인딩 0이라 `browser/clipboard.ts`로 갔고, 남은 의미 절반은 `value`·`model`·`fields`·`clampToRange`·`flushTyping`·`clearedRef`·`undo`·`onChange` 등을 집습니다. **그건 단축키 계약이라 컨트롤에 있는 것이 맞습니다.**<br>나간 여섯: 이동 계산 → `controls/wheelShift.ts` · 되돌리기 → `controls/undoStack.ts` · 열 모션 → `controls/columnMotion.ts` · 클립보드 접근 → `browser/clipboard.ts` · 홀드 → `controls/columnHold.ts` · 스와이프 → `controls/columnSwipe.ts` |
-| `model/instant.ts` (1004줄) | 규칙 4. 최상위 선언 **53개**(export 35) | 📌 **오너 결정 2026-08-19: 안 가릅니다 — 알면서 남겨 둡니다.** 결함이 아니라 위생이고, 지금은 값이 파일 일곱 개의 대가보다 크지 않습니다. 마음이 바뀌면 아래 측정으로 그날 바로 시작할 수 있습니다.<br>🟢 **가를 수 있습니다 — 순환 0**(2026-08-19 실측, Tarjan). 위상은 **4층**입니다(§15가 한동안 "3층"이라 적고 있었습니다): 0층 27 · 1층 10 · 2층 14 · 3층 2(`clampToRange`·`outOfRange`). 화살표 75개.<br>⚠️ **남은 것은 측정이 아니라 결정입니다** — 0층 스물일곱이 거의 전부에게 쓰이므로 자연스러운 모양은 *공용 아래층 하나 + 그 위 여섯*(일곱 파일)입니다. 여섯의 **소속 목록**은 아직 아무 데도 안 적혀 있습니다.<br>계약 타입은 이미 `model/wheelModel.ts`로 나갔습니다. `model/instant/` 하위 폴더가 필요합니다(`model/`은 배럴 묶음이 아니라 예외 자리입니다) |
 | `surfaces/PageChrome.tsx` (약 209줄) | 규칙 4. **파일 이름이 아무것도 안 내보냅니다** — `PageChrome`이라는 심볼이 없습니다 | 공개 아홉(컴포넌트 여덟 + `GridJustify`). **여덟 사이의 상호참조 0.** 유일한 묶음은 격자 셋(`SummaryGrid` 21줄 · `FieldGrid` 35 · `PanelGrid` 17)이 비공개 `trackStyle`(16줄)과 `GridJustify`를 함께 쓰는 것입니다. 나머지 다섯(`PageHeader` 13 · `SectionHeading` 12 · `SummaryCard` 28 · `Panel` 11 · `DismissibleDetails` 22)은 서로도, 격자와도 무관합니다.<br>📌 `DismissibleDetails`는 **저장소 안에서 아무도 안 씁니다**(`demo/`·`src/` 0건, 배럴만) — 지우는 것은 breaking이라 오너 판단 항목입니다 |
+
+✅ **`model/instant.ts`는 2026-08-19에 갈랐습니다** — 1004줄 · 선언 53(export 35)이
+**여덟 조각과 배럴 하나**가 됐습니다:
+
+```
+units      사다리와 그 위에서만 뜻이 서는 것들 — 형제 import 0
+serialize  값 문자열 ↔ 필드 (정규 형식만)
+range      경계 — 비교 정밀도 둘을 함께 데려갔습니다
+typing     숫자 입력 버퍼
+meridiem   오전/오후
+dateMath   값을 옮기기
+display    화면에 나가는 글자
+paste      붙여넣은 글자 해석
+instant.ts 배럴 + instantModel
+```
+
+🔴 **여기 조각별 줄 수를 적었다가 걷어냈습니다.** 세는 법까지 붙여 심었는데도 **같은
+세션의 다음 커밋이 두 칸을 낡게 만들었습니다**(주석 두 줄을 더했을 뿐인데). 세는 법은
+숫자가 **틀렸을 때 반증을 쉽게** 할 뿐, 낡는 것을 막지 못합니다. 줄 수는 검사를 걸 수
+있는 종류이므로(§15의 `(약 N줄)` 행이 그렇습니다) **검사가 없으면 아예 적지 마세요.**
+제일 큰 조각은 `controls/WheelPicker.tsx`와 달리 표에 안 올립니다 — 이 폴더는 "안 지키는
+자리"가 아니라 지킨 자리라서입니다.
+
+**부르는 쪽은 한 줄도 안 바뀌었습니다** — `model/instant.ts`가 배럴로 남습니다.
+
+```
+배럴을 import/export 하는 **구문 아홉**, **파일 여덟** — 파일로 세면 src 셋 · tests 다섯 ·
+demo 0입니다(`WheelPicker.tsx`가 두 구문). 단위가 섞이지 않게 둘 다 적습니다.
+세는 법: grep -rn 'from "…model/instant"' src tests demo --include=*.ts --include=*.tsx
+⚠️ demo는 주석에서 이름만 언급합니다. `model/instant` 문자열이 든 파일을 세면
+   주석까지 딸려 들어옵니다 — 그래서 import 구문으로 셉니다.
+```
+
+⚠️ **파일 경계를 넘는 비공개 이름 넷**(`DEFAULT_FIELDS` · `DEFAULT_HOUR_DISPLAY` · `pad` ·
+`deepestIndex`)은 자기 파일에서는 `export`이지만 **배럴에는 안 올립니다.** 공개 이름은
+갈라도 서른다섯 그대로이고, `tests/publicApi.test.ts`의 *"model/instant 배럴의 공개
+이름"* 묶음이 그것을 지킵니다 — **갈라짐을 값싸게 만든 조건이 바로 그 배럴이라, 그것을
+재는 검사를 같은 라운드에 세웠습니다.**
+
+🔴 **배정을 고르는 기준은 호출 수가 아니라 "구역 주석이 따라갈 수 있는가"였습니다.**
+`precisionThrough`을 쓰는 곳은 `range`뿐인데 처음엔 `units`에 뒀고, 그러자 *"경계 비교"*
+구역 주석이 `range`로 간 다섯 함수를 자기 섹션으로 선언하는 **고아**가 됐습니다.
+`meridiemInText`도 같은 모양이었습니다(*"붙여넣기"* 배너). 둘을 옮기니 배너가 따라갔습니다.
+
+⚠️ **바이트 대조로는 이 손상이 안 보입니다** — 선언 단위로만 보기 때문입니다. 구역 주석은
+**뒤따르는 것들 전체**에 붙는 글이라, 자기 구역의 절반만 데려가면 나머지가 앞 구역에
+삼켜지거나 배너가 남의 파일에 앉습니다. **파일을 가른 뒤에는 배너를 사람이 한 번 읽으세요.**
 
 ⚠️ **화살표를 셀 때는 주석을 먼저 걷으세요.** 안 걷으면 **다음 선언의 문서 주석이 앞
 선언의 본문으로** 세어집니다. 실제로 `pad`(한 줄짜리 자릿수 채우기)가 3층으로 올라가고
@@ -1311,6 +1359,10 @@ src/  controls/   surfaces/   theme/   shortcuts/   browser/   model/
 
 - **묶음에 파일이 하나면 폴더를 안 만듭니다** — `settings.ts`가 루트에 있는 이유입니다.
 - `model/`은 묶음이 아니라 **값 모델**이라 배럴 짝이 없습니다(배럴은 모델을 안 내보냅니다).
+- **한 모델이 커지면 그 모델 이름의 하위 폴더로 갈라집니다**(`model/instant/`) — 그리고
+  `model/instant.ts`가 **배럴로 남습니다.** 그래야 부르는 쪽의 import이 안 바뀝니다.
+  하위 폴더는 이름으로 허용 목록에 올립니다(`tests/moduleLayers.test.ts`) — 와일드카드로
+  열면 그 아래 아무거나 생겨도 조용해집니다.
 - 배럴이 안 내보내는 비공개 헬퍼도 자기 묶음 폴더에 둡니다(`controls/selectKeyboard.ts`).
 
 ⚠️ **폴더는 이름 바꾸기보다 훨씬 쌉니다 — 이 둘을 한 덩어리로 보지 마세요.** 실측:

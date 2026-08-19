@@ -3206,7 +3206,7 @@ describe("DateWheelPicker 리뷰 Finding 3 — shiftDateValue의 말일 계산�
   // shiftDateValue의 day/year/month 세 분기가 모두 new Date(Date.UTC(year, ...))로
   // 말일을 구했다. 이 API는 0~99년을 1900년대로 재매핑하므로(ECMA-262), 연도
   // 0(윤년)을 1900년(평년)으로 잘못 읽어 2/29를 2/28로 잘라낸다.
-  // src/model/instant.ts의 lastDayOf(setUTCFullYear 3-인자 호출)는 이 재매핑을
+  // src/model/instant/units.ts의 lastDayOf(setUTCFullYear 3-인자 호출)는 이 재매핑을
   // 하지 않는다 — withUnitValue는 이미 이걸 쓰고, shiftDateValue는 몰랐다.
   // 타이핑으로 연도 네 자리를 곧장 쳐 넣을 수 있게 되면서, 예전엔 화살표 수천
   // 번이 필요하던 이 값에 몇 키만으로 닿는다.
@@ -3490,7 +3490,7 @@ describe("DateWheelPicker 버퍼 확정과 폐기", () => {
 
   // Shift+Tab도 확정하고 떠난다(스펙 §3 — Tab과 완전히 대칭이다). 월에서 시작하는
   // 이유는 월의 첫 자리 "1"이 soloFloor(2) 미만이라 곧장 확정되지 않고 버퍼로 남기
-  // 때문이다(src/model/instant.ts의 typeDigit 참고) — 연도와 다른 버퍼 모양을 한 번 더
+  // 때문이다(src/model/instant/typing.ts의 typeDigit 참고) — 연도와 다른 버퍼 모양을 한 번 더
   // 지나간다. (초판이 월에서 시작한 이유였던 "첫 열에서는 이동이 실패해 닫힌다"는
   // 사라졌다. Shift+Tab은 이제 어느 세그먼트에서든 닫는다.)
   it("Shift+Tab이 치던 숫자를 확정한다", async () => {
@@ -7249,7 +7249,7 @@ describe("라벨 넷이 선택 필드다 — 폴백이 죽은 코드가 아니�
 
   /* 🔴 **이 검사가 가장 중요합니다 — 없으면 크래시가 한참 뒤에, 한 조합에서만 납니다.**
    * `weekdays`는 `model.label`로 넘어가 시점 모델의 **일 열에서만** 인덱싱됩니다
-   * (`src/model/instant.ts`의 `weekdays[weekdayIndex(…)]`). 즉 시각 픽커·기간 픽커는
+   * (`src/model/instant/display.ts`의 `weekdays[weekdayIndex(…)]`). 즉 시각 픽커·기간 픽커는
    * 멀쩡하고 날짜 픽커가 일 열을 그릴 때만 터집니다. */
   it("weekdays를 명시적으로 undefined로 override해도 일 열이 기본 요일로 그려진다", () => {
     render(<DateWheelPicker ariaLabel="거래 날짜" value="2026-08-12" onChange={() => undefined} labels={{ weekdays: undefined }} />);

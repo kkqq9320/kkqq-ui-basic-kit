@@ -81,9 +81,15 @@ describe("src/ 파일 이름 규칙과 의존 방향 (PRINCIPLES §15)", () => {
     expect(inFolders.length).toBeGreaterThan(5);
     const repeated = inFolders
       .filter((module) => {
-        const [folder, name] = [module.id.slice(0, module.id.indexOf("/")), module.id.slice(module.id.lastIndexOf("/") + 1)];
-        const singular = folder.endsWith("s") ? folder.slice(0, -1) : folder;
-        return name.toLowerCase().startsWith(folder.toLowerCase()) || name.toLowerCase().startsWith(singular.toLowerCase());
+        /* 🔴 **경로 조각을 전부 봅니다.** 처음엔 `indexOf("/")`로 **첫 조각만** 봤는데,
+         * 두 겹 폴더(`model/instant/`)가 생기자 안쪽 이름(`instant`)에는 아무것도 안
+         * 닿았습니다 — `model/instant/instantModel.ts` 같은 것을 통과시킵니다. */
+        const segments = module.id.split("/").slice(0, -1);
+        const name = module.id.slice(module.id.lastIndexOf("/") + 1);
+        return segments.some((folder) => {
+          const singular = folder.endsWith("s") ? folder.slice(0, -1) : folder;
+          return name.toLowerCase().startsWith(folder.toLowerCase()) || name.toLowerCase().startsWith(singular.toLowerCase());
+        });
       })
       .map((module) => module.file);
     expect(repeated).toEqual([]);
@@ -211,7 +217,10 @@ describe("src/ 파일 이름 규칙과 의존 방향 (PRINCIPLES §15)", () => {
   /* 폴더 쪽에서도 봅니다 — 배럴이 안 내보내는 파일이 엉뚱한 폴더에 있어도 위 검사는
    * 조용합니다(`selectKeyboard`처럼 비공개 헬퍼가 그렇습니다). */
   it("src의 모든 파일이 정해진 폴더 중 하나에 있다", () => {
-    const allowed = new Set([...Object.values(GROUP_FOLDER).filter(Boolean), "model"]);
+    /* `model/instant`은 묶음 폴더가 아니라 **한 모델의 조각들**입니다(2026-08-19에
+     * 1004줄을 여덟으로 갈랐습니다). 목록에 이름으로 적습니다 — 와일드카드로 열면
+     * `model/` 아래 아무거나 생겨도 조용해지고, 그러면 이 검사가 없는 것과 같습니다. */
+    const allowed = new Set([...Object.values(GROUP_FOLDER).filter(Boolean), "model", "model/instant"]);
     const rootAllowed = new Set(["index", "settings"]);
     const wrong = modules
       .filter((module) => (module.id.includes("/") ? !allowed.has(module.id.slice(0, module.id.lastIndexOf("/"))) : !rootAllowed.has(module.id)))
