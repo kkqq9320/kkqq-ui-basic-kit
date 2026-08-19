@@ -1440,6 +1440,47 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     expect(root.scrollTop).toBe(835);
   });
 
+  /* 🔴 **붙들려 있는 동안에는 재지 않습니다** — 그 가드가 0 red였습니다(2026-08-19 실측).
+   * 소스의 주석이 *"바로 이 고침이 없애려던 그 이동"* 이라고 적어 둔 자리인데 지키는
+   * 검사가 없었습니다.
+   *
+   * 무엇이 잘못되는가: 창구 동안 `clientHeight`는 우리가 못 박은 값이라 **브라우저의
+   * 실제 지오메트리가 아닙니다.** 닫은 직후 사용자가 스크롤하면 주소창이 접혀 실제
+   * 높이가 **커지는데**, 붙든 값(작은 쪽)으로 재면 `naturalMax`를 과대평가해 안전선보다
+   * 많이 걷어냅니다 → `scrollHeight`가 줄고 → 브라우저가 `scrollTop`을 clamp합니다.
+   *
+   * ⚠️ **가르려면 창구 도중 실제 높이가 붙든 값과 달라져야 합니다.** 같으면 붙들었든
+   * 아니든 산수가 같아 가드를 지워도 초록입니다 — 그래서 `setClientHeight`로 주소창이
+   * 접히는 순간을 만듭니다. */
+  it("붙들려 있는 동안의 스크롤은 예약 여백을 걷어내지 않는다 — 붙든 값으로 재면 안 된다", async () => {
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 1059 });
+    const viewport = installFakeVisualViewport(1060);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 50);
+    const scrollStub = installClampingScrollRoot(root, 1997, 1060);
+
+    textarea.focus();
+    viewport.openKeyboard(407);
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(true));
+    root.scrollTop = scrollStub.currentMax();   // 맨 아래 — 걷어낼 여백이 생기는 자리
+
+    viewport.closeKeyboard();
+    await waitFor(() => expect(shellHasKeyboardInsetOpenMarker(root)).toBe(false));
+
+    // 전제 둘 — 붙들려 있고, 걷어낼 여백이 실제로 있다. 아니면 아래가 공허합니다.
+    expect(root.style.height).not.toBe("");
+    const reserved = keyboardInsetOf(root);
+    expect(reserved).not.toBe("0px");
+
+    // 창구 도중 주소창이 접혀 **실제** 높이가 커집니다. 붙든 인라인 값이 아직 이기므로
+    // `clientHeight`는 여전히 작게 읽힙니다 — 지금 재면 과대평가입니다.
+    scrollStub.setClientHeight(1200);
+    root.dispatchEvent(new Event("scroll"));
+
+    expect(keyboardInsetOf(root)).toBe(reserved);
+  });
+
   it("붙들어 둔 #root 높이는 창구가 끝나기 전에 다시 열려도 남지 않는다 — 인라인 height 누수", async () => {
     // 리뷰가 커버리지 0으로 실증한 구멍: 이펙트 cleanup의 unpinHeight()를 통째로 지워도
     // 전체 스위트가 초록이었다. 그런데 그게 새면 #root에 인라인 height가 **영구히** 남고,
