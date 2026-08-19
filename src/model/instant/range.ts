@@ -1,8 +1,8 @@
 /* 경계(min·max) — 값이 안인지, 벗어났으면 어디로 끌어당길지.
  *
  * 경계 문자열은 값보다 짧을 수 있어(연만, 연월만 …) **비교 정밀도를 먼저 맞춥니다** —
- * 그래서 `precisionThrough`·`comparisonPrecision`이 여기 있습니다. 그 둘을 쓰는 곳은
- * 이 파일뿐입니다.
+ * 그래서 `precisionThrough`·`comparisonPrecision`이 여기 있습니다. 킷 안에서 그 둘을
+ * 쓰는 곳은 이 파일뿐이고, `comparisonPrecision`은 그 위에 **배럴이 내보내는 공개 이름**
  */
 
 import type { WheelUnit, UnitParts, ValueFamily } from "../wheelModel";
@@ -16,7 +16,7 @@ import { UNIT_LADDER, deepestIndex, familyOf, unitCeiling, unitFloor } from "./u
  * 시·분·초까지 다루는 여섯 단위로 넓혀 모델로 옮깁니다. **컴포넌트는 아직
  * 이 함수들을 부르지 않습니다** — 그건 다음 단계입니다.
  *
- * 비교 정밀도(§6)는 값 정밀도(계열이 정하는 고정폭, 위 parseValue/
+ * 비교 정밀도(§6)는 값 정밀도(계열이 정하는 고정폭, `serialize.ts`의 parseValue/
  * serializeValue의 개념)와 다릅니다 — 픽커가 가진 열 중 최소 단위(사다리에서
  * 가장 깊은 것)가 정합니다.
  */

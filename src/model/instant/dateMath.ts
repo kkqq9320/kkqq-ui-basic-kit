@@ -1,8 +1,8 @@
 /* 값 하나를 다른 값으로 — 한 칸 옮기기(`shiftDateValue`), 단위 하나만 바꾸기
  * (`withUnitValue`), 격자에 맞추기(`snapValue`), 오늘로(`todayIn`).
  *
- * 넷은 값 문자열을 받아 값 문자열을 돌려줍니다. `resetTarget`만 예외로 **숫자**를
- * 돌려줍니다 — 되돌릴 목표값이지 값 자체가 아니기 때문입니다.
+ * 전부 값 문자열을 돌려줍니다. 받는 것은 둘로 갈립니다 — 셋은 값 문자열을 받고,
+ * `todayIn`은 **시간대 이름**을 받습니다(옮길 값이 없으니까요).
  */
 
 import type { WheelUnit, WheelStep, UnitParts } from "../wheelModel";

@@ -2,7 +2,8 @@
  * 상한/하한·계열 판정·말일. 이 폴더의 바닥이라 형제를 하나도 import 하지 않습니다.
  *
  * `DEFAULT_FIELDS`와 `DEFAULT_HOUR_DISPLAY`도 여기 있습니다 — 어느 한 조각의 것이
- * 아니라 **여러 조각이 함께 쓰는 기본값**이라서입니다(display와 paste가 둘 다 씁니다).
+ * 아니라 **여러 조각이 함께 쓰는 기본값**이라서입니다:
+ * `DEFAULT_FIELDS`는 serialize·dateMath·display가, `DEFAULT_HOUR_DISPLAY`는 display·paste가.
  */
 
 import type { WheelUnit, HourDisplay, WheelStep, ValueFamily } from "../wheelModel";
@@ -89,9 +90,10 @@ export function unitCeiling(unit: WheelUnit, context: { year: number; month: num
  * 위 격자 구역은 여기서 끝납니다. 아래 셋은 **`fields` 배열 자체를 읽는** 것들이고,
  * 그 뒤 `lastDayOf`는 달력 원시입니다.
  *
- * ⚠️ main에서는 이 구역을 "값 형식" 배너가 닫고 있었는데 그 배너가 `serialize.ts`로
- * 갔습니다. 배너는 **뒤따르는 것**에 붙는 글이라, 파일을 가를 때 자기 구역의 절반만
+ * ⚠️ 가르기 전에는 이 구역을 "값 형식" 배너가 닫고 있었고, 그 배너는 `serialize.ts`로
+ * 갔습니다. 배너는 **뒤따르는 것 전체**에 붙는 글이라, 파일을 가를 때 자기 구역의 절반만
  * 데려가면 남은 절반이 앞 구역에 삼켜집니다. */
+
 /** `fields` 중 사다리에서 가장 아래(깊은) 단위의 인덱스. 이보다 아래인 단위는
  *  값 문자열에도 없고 바닥값으로 눌립니다.
  *

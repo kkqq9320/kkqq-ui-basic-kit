@@ -46,7 +46,7 @@ prop은 **이미 있어서** `["year", "month"]`로 연·월 픽커를 만들 �
 나머지 1,500줄(팝오버 자리잡기·스와이프·모션·키 라우팅·포커스·열 렌더)은 `fields`
 인덱스와 `unit` 문자열로만 돌아서 **단위가 무엇인지 모릅니다.**
 
-> 📌 **2026-08-13 기준 위치:** `src/dateWheelTyping.ts`는 **없어졌습니다.** 세 함수
+> 📌 **기준 위치(2026-08-13 · 2026-08-19 갱신):** `src/dateWheelTyping.ts`는 **없어졌습니다.** 세 함수
 > (`shiftDateValue`, `dateWheelLabel`, `withUnitValue`) 모두 PR #42(휠 피커 1단계)에서
 > `src/model/instant.ts`로 옮겼습니다. **2026-08-19에 그 파일이 `src/model/instant/`
 > 여덟 조각으로 갈라졌습니다** — 지금 셋은 각각 `dateMath.ts` · `display.ts` ·

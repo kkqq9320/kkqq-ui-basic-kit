@@ -1,7 +1,8 @@
 /* 휠 라벨과 트리거 조각 — **값을 화면 글자로** 옮깁니다. 값은 안 바꿉니다.
  *
- * 12시간제 시 라벨은 여기가 아니라 `meridiem.ts`의 `twelveHourText`가 만듭니다(오전/오후
- * 계약과 한 덩어리라서입니다). 여기는 그 결과를 받아 씁니다.
+ * 12시간제 시 라벨은 여기가 **아니라** `meridiem.ts`의 `twelveHourText`가 만듭니다(오전/오후
+ * 계약과 한 덩어리라서입니다) — 이 파일은 그 함수를 부르지도 않습니다. 기계(`WheelPicker`)가
+ * 둘 중 어느 쪽을 부를지 고릅니다.
  */
 
 import type { WheelUnit, HourDisplay, UnitParts, DateTriggerPart } from "../wheelModel";

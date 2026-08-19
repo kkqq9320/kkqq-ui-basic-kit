@@ -381,9 +381,8 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
   const rowsPerSide = useSyncExternalStore(subscribeWheelRowsPerSide, getWheelRowsPerSide, getWheelRowsPerSideServerSnapshot);
   const offsets = useMemo(() => wheelOffsets(rowsPerSide), [rowsPerSide]);
   // 모델은 전역 설정을 안 읽습니다(`src/model/instant/`는 DOM도 React도 설정 모듈도
-  // import 하지 않는 것이 계약입니다 — 자기 조각끼리는 씁니다) — 기계가 읽어서 인자로
-  // 내려보냅니다. 매 렌더 새 객체를
-  // 만들면 모델 호출이 달라 보이므로 묶습니다.
+  // import 하지 않는 것이 계약입니다 — 자기 조각끼리는 씁니다). 기계가 읽어서 인자로
+  // 내려보냅니다. 매 렌더 새 객체를 만들면 모델 호출이 달라 보이므로 묶습니다.
   /* 🔴 `?? DEFAULT`가 필요한 이유 — `hintNow`가 이미 같은 자리에 검사를 갖고 있습니다.
    * 병합이 `{ ...DEFAULT, ...labelOverrides }`라, override가 이 키를 **명시적으로**
    * `undefined`로 주면 기본값으로 떨어지는 게 아니라 **덮어씁니다**(`Partial<…>`가
@@ -401,7 +400,7 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
   /* 요일도 같은 이유로 같은 모양입니다(위 `meridiemLabels`). 다만 **터지는 방식이**
    * **다릅니다** — `meridiem`은 의존성 배열이라 어느 픽커든 매 렌더 크래시인데, 요일은
    * `model.label`에 넘어가 시점 모델의 **일 열에서만** `weekdays[…]`로 인덱싱됩니다
-   * (`src/model/instant.ts`). 즉 날짜 픽커에서 일 열을 그릴 때만 터지고, 시각·기간
+   * (`src/model/instant/display.ts`). 즉 날짜 픽커에서 일 열을 그릴 때만 터지고, 시각·기간
    * 픽커는 아무 일도 없습니다. **그래서 더 나쁩니다: 한참 뒤에, 한 조합에서만 납니다.**
    * 여기서 한 번 떨어뜨려 두 호출부가 같은 값을 보게 합니다. */
   const weekdayLabels = labels.weekdays ?? DEFAULT_WHEEL_LABELS.weekdays;

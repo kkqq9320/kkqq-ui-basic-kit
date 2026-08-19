@@ -98,16 +98,23 @@ describe("공개 API — 배럴이 내보내는 이름", () => {
  *
  * 2026-08-19에 그 파일(1004줄)을 `src/model/instant/` 여덟 조각으로 갈랐습니다. 그
  * 이동을 값싸게 만든 것은 **배럴이 남아 부르는 쪽이 조각을 모른다**는 것 하나였습니다 —
- * `src` 넷 · `tests` 넷이 전부 `model/instant`만 부릅니다.
+ * 배럴을 import 하는 구문이 아홉(파일 여덟)이고 전부 `model/instant`만 부릅니다 —
+ * `src` 셋 · `tests` 다섯 · `demo` 0.
+ * 세는 법: `grep -rn 'from "…model/instant"' src tests demo --include=*.ts --include=*.tsx`
  *
  * 그런데 그 조건을 **아무도 재고 있지 않았습니다.** `PRINCIPLES.md` §15는 이 파일이
  * 지킨다고 적고 있었는데, 위의 것들은 전부 `src/index.ts`만 봅니다(`model/instant`가
- * 이 파일에 **0건**이었습니다). 이름 하나가 조용히 빠져도 지금 검사 1729개가 전부
- * 초록입니다 — 이 저장소가 `src/index.ts`에서 이미 겪은 그 구멍과 **같은 모양**입니다.
+ * 이 파일에 **0건**이었습니다). 이름 하나가 조용히 빠져도 나머지 검사가 전부 초록입니다 —
+ * 이 저장소가 `src/index.ts`에서 이미 겪은 그 구멍과 **같은 모양**입니다.
  *
  * 값과 타입을 나누지 않습니다 — 이 배럴은 값만 내보냅니다(타입 계약은
  * `model/wheelModel.ts`가 따로 갖고 있습니다). 그래서 런타임 키 하나로 충분합니다.
  */
+/** 정적 `from "…/model/instant/x"`와 동적 `import("…/model/instant/x")` 둘 다.
+ *  ⚠️ `g` 플래그를 쓰지 마세요 — `RegExp.test`가 `lastIndex`를 들고 다녀 같은 정규식을
+ *  두 번 쓰면 두 번째가 조용히 false를 냅니다. */
+const DEEP_IMPORT = /(?:from|import)\s*\(?\s*"[^"]*model\/instant\/[^"]+"/;
+
 describe("model/instant 배럴의 공개 이름", () => {
   const INSTANT_PUBLIC = [
     "MERIDIEM_NOTCHES", "MERIDIEM_UNIT", "UNIT_LADDER", "WHEEL_FILL",
@@ -125,20 +132,36 @@ describe("model/instant 배럴의 공개 이름", () => {
     expect(Object.keys(instantBarrel).sort()).toEqual([...INSTANT_PUBLIC].sort());
   });
 
-  /* 전제 — 목록이 비거나 배럴을 못 읽으면 위 검사가 공허하게 통과할 수 있습니다.
-   * 그리고 개수를 따로 못 박아, 목록에 이름을 **더하면서** 지우는 실수를 잡습니다. */
-  it("목록을 실제로 읽어냈고 개수가 서른다섯이다", () => {
-    expect(INSTANT_PUBLIC.length).toBe(35);
-    expect(new Set(INSTANT_PUBLIC).size).toBe(35);   // 중복 없음
-    expect(Object.keys(instantBarrel).length).toBeGreaterThan(30);
+  /* ⚠️ **위 `toEqual` 하나로 개수까지 다 잡힙니다** — 여기서 개수를 또 못 박으면
+   * 단독으로는 절대 못 빨개지는 문장이 됩니다(둘을 같이 고치지 않는 한). 남길 값이
+   * 있는 것은 **`toEqual`이 못 보는 것** 하나뿐입니다: 목록 안의 중복입니다.
+   * `toEqual`은 양쪽을 `sort()`해서 비교하므로 목록에 같은 이름이 두 번 있고 다른
+   * 이름이 하나 빠지면 길이가 맞아 조용히 통과합니다. */
+  it("목록에 같은 이름이 두 번 있지 않다", () => {
+    expect(new Set(INSTANT_PUBLIC).size).toBe(INSTANT_PUBLIC.length);
   });
 
   /* 🔴 **조각을 직접 부르는 곳이 생기면 이 배럴은 더 이상 안전망이 아닙니다.**
-   * 갈라짐이 값쌌던 이유가 "부르는 쪽이 조각을 모른다"였으니, 그 전제를 지킵니다. */
+   * 갈라짐이 값쌌던 이유가 "부르는 쪽이 조각을 모른다"였으니, 그 전제를 지킵니다.
+   *
+   * ⚠️ **정적 `from "…"`만 보면 안 됩니다** — 이 저장소는 `await import("…")`도 씁니다.
+   * 둘 다 봅니다. 그리고 **소스를 실제로 읽었는지**를 먼저 단언합니다: glob이 0건이면
+   * 아래가 빈 배열끼리 비교하는 공허한 초록이 됩니다(이 저장소가 기록한 형태입니다 —
+   * "빈 입력으로 만족되는 단언은 검사가 아니다"). */
+  it("소스를 실제로 읽어냈고 정규식이 실제로 문다 — 아래 검사의 전제", () => {
+    expect(Object.keys(allSources).length).toBeGreaterThan(80);
+    /* 🔴 **양성 대조를 저장소에서 찾을 수는 없습니다** — 지금 조각을 직접 부르는 곳이
+     * 0인 것이 곧 아래 검사가 지키려는 상태니까요. 그래서 정규식 자체를 겁니다:
+     * 물어야 하는 두 모양은 물고, 배럴을 부르는 정상 import은 안 물어야 합니다. */
+    expect(DEEP_IMPORT.test('import { pad } from "../src/model/instant/serialize";')).toBe(true);
+    expect(DEEP_IMPORT.test('const m = await import("../src/model/instant/units");')).toBe(true);
+    expect(DEEP_IMPORT.test('import { instantModel } from "../src/model/instant";')).toBe(false);
+  });
+
   it("배럴 밖에서 조각을 직접 import 하지 않는다", () => {
     const deep = Object.entries(allSources)
       .filter(([path]) => !path.includes("/model/instant"))
-      .filter(([, source]) => /from\s+"[^"]*model\/instant\/[^"]+"/.test(source))
+      .filter(([, source]) => DEEP_IMPORT.test(source))
       .map(([path]) => path);
     expect(deep).toEqual([]);
   });
