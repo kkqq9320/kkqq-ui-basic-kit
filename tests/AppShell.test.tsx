@@ -1798,3 +1798,101 @@ describe("라벨은 컨트롤을 칸 바닥에 맞춘다 (오너 리포트)", ()
     expect(controlsCssSource).toContain("label { display: grid; gap: 6px; align-content: space-between;");
   });
 });
+
+/* ── 관찰과 타이머의 뒷정리 ─────────────────────────────────────────────────
+ *
+ * 🔴 **이 파일의 검사가 이 훅을 아주 촘촘히 재는데도 뒷정리는 뚫려 있었습니다**
+ * (2026-08-19 실측). `keyboardCompensation.ts`의 정리 동사 **열 중 일곱**이 0 red였고,
+ * 아래 셋이 그중 관찰점이 분명한 것들입니다.
+ *
+ * 위쪽 검사들은 *"키보드가 열렸을 때 무엇이 일어나는가"* 를 재고, 이 셋은 **"안 쓰게
+ * 된 뒤에 아무 일도 안 일어나는가"** 를 잽니다 — 축이 다릅니다. 남은 관찰과 타이머는
+ * 화면에 한동안 안 보이다가, 필드를 여러 번 옮겨 다닌 뒤 **엉뚱한 요소 크기에 반응해**
+ * 스크롤이 튀는 모습으로 나옵니다.
+ */
+describe("AppShell: 안 쓰게 된 관찰과 타이머는 남지 않는다", () => {
+  function TwoFields() {
+    return <AppShell sidebar={<div />}>
+      <textarea aria-label="메모" />
+      <textarea aria-label="비고" />
+    </AppShell>;
+  }
+
+  /* ⚠️ **`AppShell` 자신도 workspace(`main`)를 관찰합니다**(AppShell.tsx:97) — 다른 관찰자,
+   * 다른 콜백입니다. 그래서 **포커스 대상 관찰만** 골라 봅니다. 전부 세면 이 검사가
+   * 남의 관찰까지 재게 되고, 실제로 처음에 그래서 빨갰습니다. */
+  const focusObservations = () => fakeResizeObserverEntries.map((entry) => entry.target).filter((target) => target.tagName === "TEXTAREA");
+
+  /* 초점이 옮겨 가면 **옛 대상 관찰을 끊어야** 합니다. 안 끊으면 관찰이 쌓여, 더는
+   * 보고 있지 않은 필드의 크기 변화가 계속 재조준을 부릅니다(자동 확장 textarea가
+   * 여럿인 화면에서 실제로 일어납니다). */
+  it("초점이 옮겨 가면 옛 필드 관찰이 남지 않는다", async () => {
+    installFakeResizeObserver();
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<TwoFields />);
+    const first = screen.getByLabelText("메모");
+    const second = screen.getByLabelText("비고");
+    stubRectBottom(first, 50);
+    stubRectBottom(second, 50);
+
+    first.focus();
+    viewport.openKeyboard(350);
+    await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));
+    await waitFor(() => expect(focusObservations()).toEqual([first]));   // 전제 — 첫 필드를 실제로 관찰 중
+
+    second.focus();
+    await waitFor(() => expect(focusObservations()).toEqual([second]));
+  });
+
+  /* 키보드가 닫히면 그 효과의 정리가 돌며 관찰을 끊습니다. 안 끊으면 **키보드가 닫힌
+   * 뒤에도** 필드 크기 변화가 재조준을 부릅니다. */
+  it("키보드가 닫히면 관찰이 남지 않는다", async () => {
+    installFakeResizeObserver();
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 50);
+
+    textarea.focus();
+    viewport.openKeyboard(350);
+    await waitFor(() => expect(keyboardInsetOf(root)).not.toBe("0px"));
+    await waitFor(() => expect(focusObservations()).toEqual([textarea]));   // 전제
+
+    viewport.closeKeyboard();
+    await waitFor(() => expect(focusObservations()).toEqual([]));
+  });
+
+  /* `focusin`은 뷰포트가 정착할 때까지 기다렸다 재조준합니다. 그 타이머가 예약된 채
+   * 언마운트되면 **죽은 훅이 스크롤을 옮깁니다** — 사용자에게는 화면을 떠난 뒤 스크롤이
+   * 한 번 튀는 모습입니다. */
+  it("언마운트 뒤에는 예약된 재조준이 스크롤을 못 옮긴다", async () => {
+    const viewport = installFakeVisualViewport(844);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 900);   // 한참 아래 — 재조준이 돌면 스크롤이 반드시 움직입니다
+    root.scrollTop = 0;
+
+    textarea.focus();
+    viewport.openKeyboard(350);
+    await waitFor(() => expect(root.scrollTop).toBeGreaterThan(0));   // 전제 — 살아 있을 때는 실제로 옮깁니다
+
+    const settled = root.scrollTop;
+
+    /* 📌 **이 검사는 계약을 지키지만 `clearTimeout` 한 줄을 죽이지는 못합니다**(2026-08-19
+     * 실측). 재서 알아낸 이유: 언마운트 뒤 `document.activeElement`가 `body`로 떨어지는데
+     * **jsdom에서 `body`의 rect는 전부 0**이라, 타이머가 살아 있어 `reposition`이 돌아도
+     * 계산 결과가 "움직일 필요 없음"입니다. `reposition` 안의 `contains` 가드를 지우는
+     * 변이도 같은 이유로 0 red입니다 — **환경이 그 경로를 통째로 안 보이게** 합니다.
+     *
+     * 그래도 남깁니다: 실제 브라우저에서는 그 rect가 0이 아니고, 이 검사는 **사용자가 겪는
+     * 계약**(화면을 떠난 뒤 스크롤이 튀지 않는다)을 이름으로 말합니다. 억지로 갈리게
+     * 만들려고 바깥 요소에 초점을 옮기는 픽스처를 세우면, 그건 실제로 일어나는 일과
+     * 멀어집니다. 아래 한 줄은 기하를 더 아래로 옮겨 두는 것이고, 살아 있는 훅이었다면
+     * 반드시 한 번 더 움직였을 상태를 만듭니다. */
+    stubRectBottom(textarea, 1500);
+    textarea.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));   // 정착 타이머를 예약합니다
+    cleanup();                     // 그 타이머가 살아 있는 채로 언마운트
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(root.scrollTop).toBe(settled);
+  });
+});
