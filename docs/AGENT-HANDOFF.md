@@ -26,9 +26,14 @@ main    94655a1     PR #21~#165. 열린 PR 없음. 워크트리 하나
 **소비자 둘**(둘 다 오너의 앱):
 
 ```
-budget          kkqq-ui-basic-kit#baf5b22…   SHA 핀(태그 아님)
-homa_gwangju    file:vendor/kkqq-ui-basic-kit  🔴 벤더링 — 저장소 안에 사본, 핀이 없습니다
+budget          #baf5b22…                      SHA 핀
+homa_gwangju    file:vendor/kkqq-ui-basic-kit   벤더링(같은 커밋의 사본)
 ```
+
+🔴 **둘 다 같은 커밋에 멈춰 있고, 그것은 `v0.2.0`보다 앞입니다** — `git tag --contains`가
+열여섯을 돌려줍니다. 🔴 **오너 결정 2026-08-20: 둘 다 태그로 갑니다**(벤더링 종료).
+🟢 그런데 둘이 쓰는 공개 이름 서른둘이 **전부 지금 배럴에 그대로 있고 deep import도 0**
+입니다 — 깨지는 것은 이름이 아니라 **CSS 모양**과 `MobileQuickBar`의 `kind` 하나입니다.
 
 ---
 
@@ -45,7 +50,7 @@ homa_gwangju    file:vendor/kkqq-ui-basic-kit  🔴 벤더링 — 저장소 안�
 | 5 | **백로그 C — 토스트 · 텍스트 입력** | 🔴 오너 결정(프로바이더 원칙) | 설계 라운드 |
 | 6 | **백로그 D — 오전/오후 세그먼트 · 사이드바 머리말** | 없음 | 작음 |
 | 7 | **백로그 E — 제목→설명→카드 규칙 재검토** | 🔴 오너 판단 | 문서 라운드 |
-| 8 | 소비자 핀 올리기 | 🔴 오너가 "킷 개발 일단락될 때"로 미룸 | 반나절 ×2 |
+| 8 | 소비자 핀 올리기 — **태그로**(오너 결정 2026-08-20) | 🔴 시점만 미룸("킷 개발 일단락될 때") | 반나절 ×2 |
 
 🔴 **1·2번 말고는 전부 오너의 답이 먼저입니다.** 코드부터 쓰지 마세요 — 이 저장소는
 *"새벽에 혼자 정하면 아침에 되돌리는 일이 된다"* 를 실제로 겪었습니다.
@@ -130,18 +135,27 @@ meridiem.ts  twelveHourText      🔴 src에서 부르는 곳이 0
 
 ### 8. 소비자 핀 — 두 앱이 서로 다른 일입니다
 
-```
-budget    SHA → 태그로 바꾸고, frontend/src/styles.css의 킷 클래스 여덟 줄을 고침
-          .app-select.open ×3 · .mobile-quick-bar > button.active ·
-          .settings-tabs.mobile-open ×3 · .app-select-menu button.selected
-          ⚠️ .date-wheel-* 로 시작하는 것은 budget 자기 사본이라 안 건드려도 됩니다
+🔴 **절차와 실측은 저장소 밖 문서 하나에 모아 뒀습니다** — 소비 앱은 오너의 사적
+저장소라 여기 세부를 안 적습니다:
 
-homa      vendor/ 를 다시 채우고, src/app/AppLayout.tsx의 MobileQuickBar에 kind 추가
-          🔴 계속 사본으로 갈지 태그 핀으로 바꿀지는 **아직 안 정한 결정**입니다
+```
+AI-Design-Kit/docs/superpowers/plans/CONSUMERS.md
+AI-Design-Kit/docs/superpowers/tools/measure-consumers.mjs   ← 다시 재는 스크립트
 ```
 
-쌓인 BREAKING: `v0.15.0`(상태 클래스 → 속성, `MobileQuickBarItem.kind` 필수),
-`v0.16.0`(상태 속성이 값을 싣습니다). 자세한 것은 `CHANGELOG.md`.
+요약만 적으면:
+
+```
+둘 다 v0.2.0 이전 커밋 · 오너 결정으로 **둘 다 태그**(#v0.16.0)로 갑니다
+쓰는 공개 이름 서른둘 전부 살아 있음 · deep import 0  → tsc가 잡을 API 파손은 거의 없음
+budget  CSS 아홉 줄(다섯 모양). API는 손댈 것 없음
+homa    vendor/ 삭제 + MobileQuickBar 항목 셋에 kind: "action"
+         🟢 지금 active를 안 넘기므로 화면 변화 0(실측)
+```
+
+⚠️ **CHANGELOG를 손으로 훑지 마세요** — 열여섯 릴리스입니다. 태그로 올리고 `tsc`가
+찾게 하세요. `tsc`가 **못 보는 것은 CSS 하나**이고, 그건 앱의 `*.css`에서 킷 상태
+클래스를 grep한 뒤 **화면에서** 확인해야 합니다.
 
 ---
 
@@ -151,8 +165,8 @@ homa      vendor/ 를 다시 채우고, src/app/AppLayout.tsx의 MobileQuickBar�
 백로그 B의 셋      pointerup 확정 범위 · 눌림 표시 · tap-highlight 끄는 시점
 백로그 C의 하나    토스트를 위해 프로바이더 원칙을 깰 것인가
 백로그 E           제목→설명→카드 규칙을 바꿀 것인가, 문서만 고칠 것인가
-homa 벤더링        사본을 유지할 것인가 태그 핀으로 갈 것인가
 소비자 핀 시점     "킷 개발이 일단락될 때"로 미뤄져 있습니다
+                  (✅ 방법은 정해졌습니다 — 둘 다 태그. 남은 것은 **언제**뿐입니다)
 태그·릴리스        매번 확인이 필요합니다
 ```
 
