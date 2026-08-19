@@ -40,13 +40,17 @@
 
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "../src/surfaces/AppShell";
 import tokensCssSource from "../css/tokens.css?raw";
 import controlsCssSource from "../css/controls.css?raw";
 
 afterEach(() => {
+  // 이 파일에서 가짜 타이머를 쓰는 것은 핀 가드 검사 하나뿐이지만, 안 되돌리면
+  // 뒤따르는 검사의 waitFor가 영영 안 돌아 파일 전체가 멈춥니다. cleanup()보다
+  // 먼저 부릅니다 — 언마운트가 예약하는 정리도 진짜 타이머 위에서 돌아야 합니다.
+  vi.useRealTimers();
   cleanup();
   delete (window as { visualViewport?: unknown }).visualViewport;
   delete (window as { matchMedia?: unknown }).matchMedia;
@@ -1440,30 +1444,241 @@ describe("AppShell: 가상 키보드가 열리면 포커스된 필드가 가려�
     expect(root.scrollTop).toBe(835);
   });
 
-  /* 🔴 **여기 감시자가 있어야 하는데 못 세웠습니다**(2026-08-19, 네 번 시도).
+  /* 붙든 값으로 재는 순간을 만드는 준비 — 아래 두 검사가 **같은 상황의 서로 다른
+   * 사실**을 봅니다(여백이 깎이는가 · scrollTop이 움직이는가). 한 `it`에 몰면 앞의
+   * 단언이 먼저 터질 때 뒤가 **실행조차 안 됩니다** — 그러면 뒤의 것은 지켜지는 척만
+   * 하는 문장입니다. 그래서 나눕니다.
    *
-   * 지키려던 것: `recompute`의 `if (heightPinned) return;`. 소스 주석이 *"바로 이 고침이
-   * 없애려던 그 이동"* 이라고 적어 둔 자리이고, 그 줄을 지우면 예약 여백이 **406px →
-   * 368px**로 깎입니다(프로브로 실측). 그런데 **검사로는 못 잡았습니다.**
+   * 산수(`naturalMax = scrollHeight - current - clientHeight`에서 `current`가 상쇄되므로
+   * 그냥 `BASE_CONTENT - clientHeight`입니다):
+   *
+   * ```
+   * 붙든 값으로 재면    naturalMax = 1997 - 1060 = 937 → 남길 여백 1100 - 937 = 163
+   * 진짜 값으로 재면    naturalMax = 1997 - 1200 = 797 → 남길 여백 1100 - 797 = 303
+   * ```
+   *
+   * 붙든 값은 실제보다 **작으므로** naturalMax를 과대평가하고 그만큼 **더 걷어냅니다.** */
+  const PIN = { BASE_CONTENT: 1997, PINNED_HEIGHT: 1060, REAL_HEIGHT: 1200, SCROLL_TOP: 1100 };
+  const KEPT_IF_MEASURED_RIGHT = PIN.SCROLL_TOP - (PIN.BASE_CONTENT - PIN.REAL_HEIGHT);        // 303
+  const STRIPPED_IF_MEASURED_PINNED = PIN.SCROLL_TOP - (PIN.BASE_CONTENT - PIN.PINNED_HEIGHT); // 163
+
+  /** 창구가 열린 채(핀이 걸린 채) 사용자가 위로 스크롤한 **직후 정착까지 끝난** 상태를
+   * 만들고 `#root`를 돌려준다. 두 검사가 공유한다. */
+  async function scrollDuringPinnedWindow({ reopenOnce = false } = {}) {
+    // 🔴 **reduced motion으로 rAF를 통째로 없앱니다.** animateFloorTo가 즉시 대입하므로
+    // 관측이 프레임 속도에 안 걸립니다 — 앞선 네 번의 시도가 전부 여기서 흔들렸습니다.
+    // 남는 시간축은 정착 타이머 하나뿐이고 그건 가짜 타이머로 잡습니다.
+    vi.useFakeTimers();
+    installReducedMotionPreference();
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: PIN.PINNED_HEIGHT - 1 });
+    const viewport = installFakeVisualViewport(PIN.PINNED_HEIGHT);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 50);
+    const scrollStub = installClampingScrollRoot(root, PIN.BASE_CONTENT, PIN.PINNED_HEIGHT);
+
+    act(() => { textarea.focus(); viewport.openKeyboard(407); });
+    act(() => { vi.advanceTimersByTime(200); });
+    expect(shellHasKeyboardInsetOpenMarker(root)).toBe(true);
+    const insetWhileOpen = parseFloat(keyboardInsetOf(root));
+    root.scrollTop = scrollStub.currentMax();   // 맨 아래 — 걷어낼 여백이 생기는 자리
+
+    act(() => { viewport.closeKeyboard(); });
+
+    /* 첫 창구가 끝나기 전에 다시 열었다 닫습니다 — 첫 창구의 **정리가 실제로 도는**
+     * 자리입니다. 정리가 스크롤 리스너를 안 떼면 그 리스너는 `heightPinned`가 이미
+     * `false`인 클로저를 물고 살아남아, **두 번째 창구가 붙들고 있는 동안에도** 잽니다.
+     * 새 리스너는 가드에 막히는데 옛 리스너는 안 막히므로, 가드가 우회됩니다. */
+    if (reopenOnce) {
+      act(() => { viewport.openKeyboard(407); });
+      expect(root.style.height).toBe("");   // 전제: 정리가 돌아 핀이 풀렸다
+      act(() => { viewport.closeKeyboard(); });
+    }
+
+    // 전제 넷 — 하나라도 어긋나면 아래 두 검사가 공허합니다.
+    expect(shellHasKeyboardInsetOpenMarker(root)).toBe(false);
+    expect(root.style.height).toBe(`${PIN.PINNED_HEIGHT}px`);                    // 붙들려 있다
+    expect(parseFloat(keyboardInsetOf(root))).toBe(insetWhileOpen);              // 아직 통째로 남아 있다
+    expect(insetWhileOpen).toBeGreaterThan(KEPT_IF_MEASURED_RIGHT);              // 걷어낼 여백이 실제로 있다
+    expect(STRIPPED_IF_MEASURED_PINNED).toBeLessThan(KEPT_IF_MEASURED_RIGHT);    // 두 산수가 실제로 갈린다
+
+    // 창구 도중 주소창이 접혀 **실제** 높이가 커집니다. 붙든 인라인 값이 아직 이기므로
+    // clientHeight는 여전히 작게 읽힙니다 — 지금 재면 과대평가입니다.
+    scrollStub.setClientHeight(PIN.REAL_HEIGHT);
+    const writes = trackKeyboardInsetWrites(root);
+
+    /* 사용자가 위로 스크롤합니다. ⚠️ **이벤트만 쏘면 안 됩니다** — 목표가 그대로면
+     * recompute가 `next === current`로 즉시 빠져나가 가드를 지워도 초록입니다(실측). */
+    act(() => {
+      root.scrollTop = PIN.SCROLL_TOP;
+      root.dispatchEvent(new Event("scroll"));
+    });
+
+    // 정착 타이머(KEYBOARD_INSET_SETTLE_MS = 120ms)가 풀고 **진짜** 지오메트리로 한 번 잽니다.
+    act(() => { vi.advanceTimersByTime(200); });
+    expect(root.style.height).toBe("");   // 창구가 끝났다
+
+    // MutationObserver의 콜백은 마이크로태스크로 옵니다 — 동기 검사에서는 영영 안
+    // 돕니다(처음에 writes가 빈 배열이었습니다). 가짜 타이머는 마이크로태스크를 안
+    // 가리므로 await 한 번이면 흘러갑니다.
+    await Promise.resolve();
+    return { root, writes };
+  }
+
+  /* 🔴 **붙들려 있는 동안에는 재지 않습니다** — `recompute`의 `if (heightPinned) return;`.
+   * 소스 주석이 *"바로 이 고침이 없애려던 그 이동"* 이라고 적어 둔 자리인데, 그 줄을
+   * 지우면 남는 여백이 **303px → 163px**로 깎입니다(변이로 확인).
+   *
+   * ⚠️ **네 번 실패한 뒤의 다섯 번째입니다**(2026-08-19). 앞의 넷은 전부 *"창구가 도는
+   * 동안"* 을 보려 해서 정상 해제(120ms 정착 타이머)와 경합했습니다:
    *
    * ```
    * setTimeout(60)      판별됨 — 그러나 흔들림(rAF가 한 번도 안 도는 실행이 있음)
-   * rAF 6프레임 세기     흔들림 방향이 뒤집힘 — 프레임이 느리면 120ms 정착 타이머가
-   *                     먼저 터져 **안 바뀐 코드에서 빨개짐**(전체 스위트 부하에서 발생)
-   * rAF를 직접 돌리기    안정적 — 그러나 판별력 0
+   * rAF 6프레임 세기     흔들림이 뒤집힘 — 프레임이 느리면 정착 타이머가 먼저 터짐
+   * rAF를 직접 돌리기    안정적 — 판별력 0
    * + act()로 감싸기     여전히 판별력 0
    * ```
    *
-   * 🔴 **왜 어려운가:** 정상 해제(정착 타이머)와 변이가 **같은 관찰값**을 냅니다 — 둘 다
-   * 여백을 깎습니다. 다른 것은 **오직 시점**뿐이라, 시간을 흘리면 판별되지만 창구(120ms)와
-   * 경합하고, 안 흘리면 결정론적이지만 아무것도 안 보입니다.
+   * 🟢 **바뀐 것은 관측 시점입니다 — 중간이 아니라 끝을 봅니다.** floor는 절대 다시 안
+   * 늘어나므로(`Math.min(current, candidate)`), 창구 안에서 잘못 깎은 몫은 **영구히**
+   * 남습니다. 그래서 "언제 보는가"가 결과를 안 바꿉니다. 정상 해제와 변이가 같은
+   * 관찰값을 낸다고 적었던 것은 앞선 검사가 `scrollTop = 0`으로 밀어 **양쪽 다 0으로
+   * 무너지는 자리**를 골랐기 때문이었습니다 — 중간값에서는 둘이 140px 갈립니다. */
+  it("붙들려 있는 동안의 스크롤은 예약 여백을 걷어내지 않는다 — 붙든 값으로 재면 안 된다", async () => {
+    const { root, writes } = await scrollDuringPinnedWindow();
+
+    expect(parseFloat(keyboardInsetOf(root))).toBe(KEPT_IF_MEASURED_RIGHT);
+    // reduced motion이므로 중간값 없이 딱 한 번 — 1667의 해제 검사와 같은 idiom.
+    expect(writes).toEqual([KEPT_IF_MEASURED_RIGHT]);
+  });
+
+  /* 위 검사와 **같은 상황의 다른 사실**입니다. 여백을 잘못 깎으면 scrollHeight가 줄고,
+   * 그러면 브라우저가 scrollTop을 clamp합니다 — 사용자가 요청한 적 없는 이동(§16.2
+   * Agency). 소스 주석이 말하는 *"바로 이 고침이 없애려던 그 이동"* 이 이것입니다.
+   * 변이를 심으면 1100 → 960으로 내려갑니다(= 797 + 163, 깎인 floor 기준의 새 상한). */
+  it("붙들려 있는 동안의 스크롤이 사용자가 요청하지 않은 이동을 만들지 않는다 — §16.2", async () => {
+    const { root } = await scrollDuringPinnedWindow();
+
+    expect(root.scrollTop).toBe(PIN.SCROLL_TOP);
+  });
+
+  /* 🔴 **정리가 스크롤 리스너를 안 떼면 위 가드가 우회됩니다**(2026-08-19).
+   * 리뷰 배터리가 이 자리(`return () => { scrollRoot.removeEventListener(...) }`)를
+   * 0 red로 보고했고 원장은 *"등가로 보임 — 확인 필요"* 로 남겨 두고 있었습니다.
+   * **등가가 아닙니다.**
    *
-   * 🔜 **제대로 하려면 가짜 타이머**로 시간 자체를 잡아야 합니다(`vi.useFakeTimers`에
-   * rAF까지 포함). 이 파일은 전부 진짜 타이머로 돌고 `viewport.openKeyboard`·`waitFor`가
-   * 거기 얹혀 있어, 한 검사만 바꿔 끼우는 것이 이 라운드의 범위를 넘습니다.
+   * 왜: 창구가 끝나기 전에 다시 열면 정리가 돌면서 `unpinHeight()`로 그 클로저의
+   * `heightPinned`를 `false`로 만듭니다. 리스너를 안 떼면 그 클로저가 **다음 창구까지**
+   * 살아남아, 새 창구가 붙들고 있는 동안에도 **가드에 안 걸린 채** 잽니다. 새 리스너는
+   * `heightPinned === true`라 얌전히 빠져나가는데 옛 리스너가 대신 깎습니다.
    *
-   * ⚠️ **흔들리는 감시자는 없는 것보다 나쁘고, 못 실패하는 초록은 검사가 아닙니다.**
-   * 그래서 넣지 않고 자리를 비워 둡니다 — 원장에 네 번의 시도를 다 적었습니다. */
+   * 열고 닫기를 반복할수록 리스너가 쌓입니다 — `recompute`는 이펙트가 돌 때마다 새
+   * 클로저라 `addEventListener`의 중복 제거가 안 걸립니다.
+   *
+   * 🔴 **위 두 검사도 이 변이에 빨개집니다 — 그래도 이 검사를 둡니다.** 재 보니 이유가
+   * 있었습니다: 이 이펙트는 `!keyboard.open`이면 도는데 거기엔 **첫 마운트**도 들어갑니다.
+   * 그때 붙은 리스너는 `heightPinned`가 처음부터 `false`라, 정리가 안 떼면 첫 창구부터
+   * 이미 가드를 우회합니다(위 검사는 다시 열지도 않는데 빨개졌습니다 — 그게 그 증거입니다).
+   *
+   * 그러면 이 검사는 왜 남기나: 저 경로는 **첫 마운트 리스너에 의존**합니다. 언젠가
+   * *"열린 적 없으면 리스너도 안 단다"* 같은 최적화가 들어오면 위 둘은 조용히 이 변이를
+   * 놓치고, 이 검사만 남습니다. 같은 결함의 **다른 경로**이지 같은 검사가 아닙니다. */
+  it("창구가 다시 열렸다 닫혀도 옛 스크롤 리스너가 남아 가드를 우회하지 않는다", async () => {
+    const { root } = await scrollDuringPinnedWindow({ reopenOnce: true });
+
+    expect(parseFloat(keyboardInsetOf(root))).toBe(KEPT_IF_MEASURED_RIGHT);
+    expect(root.scrollTop).toBe(PIN.SCROLL_TOP);
+  });
+  /* 🔴 **정리가 정착 타이머를 안 지우면 옛 타이머가 새 창구의 핀을 먼저 풉니다**
+   * (2026-08-19). 배터리가 0 red로 보고했고 원장이 *"해제 창구 한 덩어리로 볼 것"* 으로
+   * 미뤄 둔 자리입니다.
+   *
+   * 창구는 120ms입니다. 그 안에 다시 열었다 닫으면(잘못 닫고 곧장 다시 탭 — 흔한 조작)
+   * 창구가 **겹칩니다**. 옛 타이머가 살아 있으면 그것이 먼저 터져 `unpinHeight()`로
+   * **새 창구가 붙든 높이를 풀어 버립니다** — 남은 시간 동안 그 창구는 보호 없이
+   * 놓입니다. 그 상태에서 스크롤이 오면 바로 위 두 검사가 막는 그 사고가 납니다.
+   *
+   * 🟢 시간은 전부 가짜 타이머로 잡습니다 — 벽시계가 안 끼어들므로 부하와 무관합니다. */
+  it("창구가 다시 열렸다 닫히면 옛 정착 타이머가 새 창구의 핀을 먼저 풀지 않는다", () => {
+    vi.useFakeTimers();
+    installReducedMotionPreference();
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: PIN.PINNED_HEIGHT - 1 });
+    const viewport = installFakeVisualViewport(PIN.PINNED_HEIGHT);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 50);
+    const scrollStub = installClampingScrollRoot(root, PIN.BASE_CONTENT, PIN.PINNED_HEIGHT);
+
+    act(() => { textarea.focus(); viewport.openKeyboard(407); });
+    act(() => { vi.advanceTimersByTime(200); });
+    root.scrollTop = scrollStub.currentMax();
+
+    act(() => { viewport.closeKeyboard(); });                      // 창구 1 — 옛 타이머는 T=120
+    expect(root.style.height).toBe(`${PIN.PINNED_HEIGHT}px`);      // 전제: 붙들렸다
+
+    act(() => { vi.advanceTimersByTime(20); });                    // T = 20
+    act(() => { viewport.openKeyboard(407); });                    // 정리 — 옛 타이머를 지워야 한다
+    act(() => { viewport.closeKeyboard(); });                      // 창구 2 — 새 타이머는 T=140
+    expect(root.style.height).toBe(`${PIN.PINNED_HEIGHT}px`);      // 전제: 다시 붙들렸다
+
+    act(() => { vi.advanceTimersByTime(110); });                   // T = 130 — 옛 타이머가 살아 있으면 여기서 터진다
+    expect(root.style.height).toBe(`${PIN.PINNED_HEIGHT}px`);      // 🔴 아직 창구 2의 것이다
+
+    // 공허 대조 — 새 타이머는 제때 실제로 풉니다. 이게 없으면 위 단언은 "아무 타이머도
+    // 안 도는 상태"에서도 통과합니다.
+    act(() => { vi.advanceTimersByTime(20); });                    // T = 150 > 140
+    expect(root.style.height).toBe("");
+  });
+
+  /* 🔴 **정리가 rAF를 안 끊으면 옛 해제 애니메이션이 새 여백을 덮어씁니다**(2026-08-19).
+   * 이것도 배터리가 0 red로 보고한 자리입니다.
+   *
+   * 해제는 400ms에 걸친 rAF 애니메이션입니다(`animateFloorTo`). 그 도중에 키보드가
+   * 다시 열리면 이 사이클은 끝난 것이고, 다시 닫힐 때 여백은 **마지막 열림 인셋으로
+   * 통째로** 복원됩니다(렌더 단계 보정). 그런데 옛 프레임 루프가 살아 있으면 그것이
+   * 자기 옛 목표를 향해 계속 `setReleaseFloor`를 부릅니다 — 방금 복원한 여백을
+   * 프레임마다 깎아 내립니다. 사용자에게는 다시 닫자마자 여백이 스르륵 사라지는 것으로
+   * 보이고, 그 자리는 §16.2가 막으려는 "요청하지 않은 이동"입니다.
+   *
+   * ⚠️ **여기서는 reduced motion을 켜지 않습니다** — 이 검사가 보는 것이 rAF 자체입니다.
+   * vitest의 가짜 타이머는 `requestAnimationFrame`도 가립니다(실측). 위 핀 가드 검사들이
+   * reduced motion을 쓰는 것과 이유가 반대입니다. */
+  it("창구가 다시 열렸다 닫혀도 옛 해제 애니메이션이 복원된 여백을 덮어쓰지 않는다", () => {
+    vi.useFakeTimers();
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: PIN.PINNED_HEIGHT - 1 });
+    const viewport = installFakeVisualViewport(PIN.PINNED_HEIGHT);
+    const root = renderIntoScrollRoot(<Page />);
+    const textarea = screen.getByLabelText("메모");
+    stubRectBottom(textarea, 50);
+    const scrollStub = installClampingScrollRoot(root, PIN.BASE_CONTENT, PIN.PINNED_HEIGHT);
+
+    act(() => { textarea.focus(); viewport.openKeyboard(407); });
+    act(() => { vi.advanceTimersByTime(600); });   // 열림 보정 애니메이션까지 끝냅니다
+    const insetWhileOpen = parseFloat(keyboardInsetOf(root));
+    root.scrollTop = scrollStub.currentMax();
+
+    act(() => { viewport.closeKeyboard(); });
+    // 위로 스크롤해 둡니다 — 정착 타이머의 recompute가 걷어낼 몫을 찾아 애니메이션을
+    // 시작합니다. 스크롤 이벤트는 필요 없습니다(정착이 그 순간의 scrollTop을 읽습니다).
+    root.scrollTop = PIN.SCROLL_TOP;
+    act(() => { vi.advanceTimersByTime(130); });   // 정착(120ms) — 여기서 해제 애니메이션 시작
+    act(() => { vi.advanceTimersByTime(100); });   // 애니메이션(400ms)의 한복판
+
+    // 전제 둘 — 애니메이션이 실제로 돌고 있어야 아래가 공허하지 않습니다.
+    const midFlight = parseFloat(keyboardInsetOf(root));
+    expect(midFlight).toBeLessThan(insetWhileOpen);
+    expect(midFlight).toBeGreaterThan(STRIPPED_IF_MEASURED_PINNED);   // 아직 목표에 도착 전
+
+    act(() => { viewport.openKeyboard(407); });    // 정리 — 프레임 루프를 끊어야 한다
+    act(() => { viewport.closeKeyboard(); });      // 여백이 마지막 열림 인셋으로 복원된다
+    expect(parseFloat(keyboardInsetOf(root))).toBe(insetWhileOpen);   // 전제: 복원됐다
+
+    // 🔴 옛 루프가 살아 있으면 여기서 다시 깎입니다. 새 창구의 정착(120ms) 전이므로
+    // 정상 경로에서는 아무것도 안 움직여야 합니다.
+    act(() => { vi.advanceTimersByTime(60); });
+    expect(parseFloat(keyboardInsetOf(root))).toBe(insetWhileOpen);
+  });
+
   it("붙들어 둔 #root 높이는 창구가 끝나기 전에 다시 열려도 남지 않는다 — 인라인 height 누수", async () => {
     // 리뷰가 커버리지 0으로 실증한 구멍: 이펙트 cleanup의 unpinHeight()를 통째로 지워도
     // 전체 스위트가 초록이었다. 그런데 그게 새면 #root에 인라인 height가 **영구히** 남고,
