@@ -1,13 +1,9 @@
 /* 휠 라벨과 트리거 조각 — **값을 화면 글자로** 옮깁니다. 값은 안 바꿉니다.
- *
- * 🔴 **12시간 읽기(`0 → 12`)가 이 파일에 두 벌 있습니다** — `dateWheelLabel`(열 라벨)과
- * `dateTriggerParts`(트리거 숫자).
- * `meridiem.ts`의 `twelveHourText`가 같은 규칙의 **세 번째 벌**인데, 재 보니 `src`에서
- * 그 함수를 부르는 곳이 **0**입니다(배럴이 내보내기만 합니다). 갈라짐이 만든 것이 아니라
- * 갈라짐이 드러낸 것이고, 여기서 고치지 않습니다 — 어느 벌을 남길지는 별개 라운드입니다.
- */
+ * 12시간 읽기 숫자는 `meridiem.ts`가 정하고, 이 파일은 열·트리거 문맥에 맞게 표시만
+ * 조립합니다. */
 
 import type { WheelUnit, HourDisplay, UnitParts, DateTriggerPart } from "../wheelModel";
+import { twelveHourReading } from "./meridiem";
 import { pad, parseValue } from "./serialize";
 import { DEFAULT_FIELDS, DEFAULT_HOUR_DISPLAY, unitDigits } from "./units";
 /** year(넉넉한 범위)·month(1~12)·day로 요일 인덱스(0=일요일)를 구합니다.
@@ -39,7 +35,7 @@ export function dateWheelLabel(value: string, unit: WheelUnit, weekdays: string[
   // 기입하지 마라"**로 정해졌습니다 — 상단 버튼이 이미 어느 절반인지 말합니다. 그래서 열은
   // **12시간 읽기 숫자만** 그립니다. 트리거는 그대로 `오후 03`이고(거기는 값 전체를 한 줄로
   // 읽는 자리라 절반을 빼면 뜻이 사라집니다), 열의 `aria-label`도 기계가 절반을 붙입니다.
-  if (unit === "hour" && hour.format === "12") return pad(parts.hour % 12 === 0 ? 12 : parts.hour % 12, 2);
+  if (unit === "hour" && hour.format === "12") return pad(twelveHourReading(parts.hour), 2);
   return pad(parts[unit], 2);   // hour(24시간제), minute, second
 }
 
@@ -129,7 +125,7 @@ export function dateTriggerParts(source: string, fields: WheelUnit[], typing: { 
     // 자릿수는 unitDigits(unit)에서 읽습니다 — 연도만 4, 나머지(월·일·시·분·초)는
     // 전부 2입니다.
     const digits = unit === "hour" && hour.format === "12"
-      ? pad(values.hour % 12 === 0 ? 12 : values.hour % 12, 2)
+      ? pad(twelveHourReading(values.hour), 2)
       : pad(values[unit], unitDigits(unit));
     const shown = typing?.unit === unit && typing.digits ? typing.digits.padEnd(unitDigits(unit), WHEEL_FILL) : digits;
     return { unit, text: `${meridiemPrefix(unit)}${shown}` };

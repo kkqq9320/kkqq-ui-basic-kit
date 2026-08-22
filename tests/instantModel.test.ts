@@ -563,6 +563,19 @@ describe("빈 fields (F-3)", () => {
 const KO_HOUR = { format: "12", am: "오전", pm: "오후" } as const;
 const EN_HOUR = { format: "12", am: "AM", pm: "PM" } as const;
 
+describe("twelveHourText — 24시간 값을 12시간 읽기로 바꾼다", () => {
+  it.each([
+    [0, "AM 12"],
+    [1, "AM 01"],
+    [11, "AM 11"],
+    [12, "PM 12"],
+    [13, "PM 01"],
+    [23, "PM 11"],
+  ])("%i시를 %s로 표시한다", (hour24, text) => {
+    expect(twelveHourText(hour24, EN_HOUR)).toBe(text);
+  });
+});
+
 describe("dateWheelLabel — 12시간제 (3단계, 오너 결정으로 개정)", () => {
   const F: WheelUnit[] = ["year", "month", "day", "hour", "minute"];
 
@@ -601,14 +614,6 @@ describe("dateWheelLabel — 12시간제 (3단계, 오너 결정으로 개정)",
     expect(dateWheelLabel("2026-08-12T15:07:05", "day", WEEKDAYS_KO, G, KO_HOUR)).toBe("12 수");
   });
 
-  /* `twelveHourText`는 **트리거가** 씁니다(그리고 열의 접근성 이름을 기계가 조립할 때
-   * 같은 규칙을 씁니다). 열에서 빠졌다고 죽은 코드가 아니라는 것을 여기서 못 박습니다 —
-   * 안 그러면 다음 사람이 "안 쓰는 함수"로 읽고 지웁니다. */
-  it("twelveHourText는 살아 있다 — 트리거가 쓰는 규칙이다", () => {
-    expect(twelveHourText(15, KO_HOUR)).toBe("오후 03");
-    expect(twelveHourText(0, KO_HOUR)).toBe("오전 12");
-    expect(twelveHourText(12, EN_HOUR)).toBe("PM 12");
-  });
 });
 
 describe("dateTriggerParts — 12시간제 (3단계)", () => {

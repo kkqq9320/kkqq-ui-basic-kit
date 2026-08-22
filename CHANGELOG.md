@@ -15,6 +15,10 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.16.0
 
 ## 미출시
 
+12시간제 시각의 `0 → 12` 읽기 규칙을 `model/instant/meridiem.ts`의 순수 숫자 변환
+하나로 모았습니다. 휠 열 라벨, 트리거 세그먼트, 기존 공개 `twelveHourText`가 같은 변환을
+쓰며 표시 문자열과 패키지 루트 공개 이름은 바뀌지 않습니다.
+
 `surfaces/PageChrome.tsx`에 함께 있던 페이지 표면을 각 공개 이름의 파일로 갈랐습니다.
 패키지 루트에서 가져오는 공개 값과 `GridJustify` 타입, 렌더 결과와 CSS 계약은 그대로입니다.
 격자 셋만 루트 배럴에는 넣지 않은 내부 helper `trackStyle`과 공개 타입 `GridJustify`를

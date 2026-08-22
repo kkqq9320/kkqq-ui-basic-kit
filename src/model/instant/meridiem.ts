@@ -6,16 +6,19 @@
 
 import type { WheelUnit, HourDisplay } from "../wheelModel";
 import { pad, parseValue } from "./serialize";
+
 /**
- * 24시간 값 하나를 **12시간제로 읽은 글자**로. 값은 안 바뀝니다 — 스펙 §7의 핵심이
- * "시 열은 24칸 그대로이고 라벨만 바뀐다"입니다.
- *
- * `0 → 12`, `12 → 12`가 이 함수의 전부입니다. `h % 12`만 쓰면 자정과 정오가 둘 다
- * `00`이 되어, 12시간제에 존재하지 않는 시각이 화면에 나옵니다.
+ * 24시간 값 하나를 **12시간 읽기 숫자**로. 값은 안 바뀝니다 — 스펙 §7의 핵심이
+ * "시 열은 24칸 그대로이고 라벨만 바뀐다"입니다. `h % 12`만 쓰면 자정과 정오가
+ * 둘 다 0이 되므로, 그 두 경계를 12로 읽습니다.
  */
+export function twelveHourReading(hour24: number): number {
+  return hour24 % 12 === 0 ? 12 : hour24 % 12;
+}
+
+/** 오전/오후와 두 자리 읽기를 합친 기존 공개 표시 함수. */
 export function twelveHourText(hour24: number, display: HourDisplay): string {
-  const reading = hour24 % 12 === 0 ? 12 : hour24 % 12;
-  return `${hour24 < 12 ? display.am : display.pm} ${pad(reading, 2)}`;
+  return `${hour24 < 12 ? display.am : display.pm} ${pad(twelveHourReading(hour24), 2)}`;
 }
 
 /** 오전/오후 조작이 **존재하는가**, 그리고 지금 값은 어느 절반인가(3단계, 스펙 §7).
@@ -51,7 +54,7 @@ export const MERIDIEM_UNIT: WheelUnit = "hour";
 
 /** 친 숫자를 값으로. **친 것은 12시간 읽기이지 값이 아닙니다**(3단계, 스펙 §7) —
  *  어느 절반인지는 지금 값이 정합니다(오후에 `3`을 치면 15시). `12`가 특별한 이유는
- *  `twelveHourText`의 `0 → 12`와 같습니다: 12시간 읽기에 0이 없어 12가 그 자리를
+ *  `twelveHourReading`의 `0 → 12`와 같습니다: 12시간 읽기에 0이 없어 12가 그 자리를
  *  대신하므로, 되돌릴 때 오전 12는 0시입니다. */
 export function hourFromTwelve(reading: number, half: "am" | "pm"): number {
   const base = reading % 12;   // 12 → 0
