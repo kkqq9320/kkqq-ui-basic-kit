@@ -585,6 +585,27 @@ eyebrow → 페이지 제목 → 설명 → (탭) → 섹션 제목 → 섹션 �
   지원되지 않아 `role="combobox"` 이관이 필요한데, 그 이관은 아래에서 `Select`가
   **실기기 측정 후 기각한** 경로입니다. **알면서 남기는 구멍**이고 별건입니다.
 
+### 브라우저 자동화와 AI 도구
+
+🟢 **오너 결정 2026-08-23:** 사람·보조기술·브라우저 자동화가 같은 의미 DOM을 씁니다.
+자동화는 구현 클래스보다 role과 접근성 이름으로 컨트롤을 찾고, 네이티브 `click`·tap·
+Enter·Space로 조작합니다. `HTMLElement.click()`처럼 pointer 이벤트 없이 오는 프로그램
+`click`도 동작해야 합니다. 실기기에서 합성 `click` 누락이 확인된 WheelPicker 팝오버
+액션의 `tapActivation`은 이 계약에 **더하는 fallback**이지, 모든 버튼의 기본 activation이
+아닙니다.
+
+구조화된 AI 도구(WebMCP·MCP·HTTP API)는 **소비자 앱의 adapter**입니다. 킷은 controlled
+`value`/`onChange`, 순수한 값 모델·직렬화, 의미 있는 DOM을 제공하고, 소비자 adapter가
+UI와 같은 도메인 명령·검증·상태 변경을 호출합니다. 어느 거래·예약·필터를 바꾸는지는
+소비자만 알기 때문에 킷이 업무 도구를 등록하지 않습니다. 인증·권한·사용자 확인·저장도
+그 adapter와 앱의 책임입니다. 아직 draft인 WebMCP는 기능 검출 뒤 점진적으로 붙이며 킷의
+런타임 의존성·필수 프로바이더·전역 등록으로 만들지 않습니다.
+
+**검증도 둘입니다.** role/name으로 실제 화면을 조작하고 최종 표시를 읽는 UI E2E와,
+스키마·권한·검증·적용값을 재는 tool/API 계약을 각각 통과시킵니다. API가 상태를 바꿨다는
+사실만으로 포커스·팝오버·키보드가 맞다고 간주하지 않고, UI 클릭이 됐다는 사실만으로
+구조화 도구의 검증과 권한이 맞다고 간주하지 않습니다.
+
 ### 커스텀 컨트롤의 키보드 조작
 
 `Select`는 WAI-ARIA listbox 패턴을 따릅니다. 옵션은 **tab 순서에 개별로 들어가지
@@ -935,7 +956,7 @@ model/instant/    한 모델이 커지면 그 모델 이름의 폴더로 갈라�
 
 | 자리 | 무엇이 어긋나는가 | 잰 이음매 |
 |---|---|---|
-| `controls/WheelPicker.tsx` (약 2100줄) | 규칙 4. 컴포넌트 안 최상위 선언 **80개**(들여쓰기 두 칸의 `const`·`function`·`let`) | ✅ **제스처 조각은 다 나갔습니다.** 남은 것은 `tapActivation`(브라우저가 click을 안 만들 때 pointerup에서 대신 확정 + 뒤따르는 click 삼키기) 하나이고, **밖에서 그 상태에 써 넣는 곳 0**입니다(실측: 다섯 쓰기가 전부 그 함수 안). 목적지는 `controls/Pressable.tsx`가 자기 주석에 이미 예약해 뒀습니다 — 백로그 9번(눌림 피드백)과 같은 라운드가 맞습니다.<br>클립보드는 **절반만** 나갔습니다 — 브라우저 접근은 바인딩 0이라 `browser/clipboard.ts`로 갔고, 남은 의미 절반은 `value`·`model`·`fields`·`clampToRange`·`flushTyping`·`clearedRef`·`undo`·`onChange` 등을 집습니다. **그건 단축키 계약이라 컨트롤에 있는 것이 맞습니다.**<br>나간 여섯: 이동 계산 → `controls/wheelShift.ts` · 되돌리기 → `controls/undoStack.ts` · 열 모션 → `controls/columnMotion.ts` · 클립보드 접근 → `browser/clipboard.ts` · 홀드 → `controls/columnHold.ts` · 스와이프 → `controls/columnSwipe.ts` |
+| `controls/WheelPicker.tsx` (약 2100줄) | 규칙 4. 컴포넌트 안 최상위 선언 **80개**(들여쓰기 두 칸의 `const`·`function`·`let`) | ✅ **제스처 조각은 다 나갔습니다.** 남은 `tapActivation`은 브라우저가 click을 안 만들 때 pointerup에서 대신 확정하고 뒤따르는 click을 삼킵니다. **오너 결정 2026-08-23: 삼성 인터넷 실측 범위인 팝오버 액션에 둡니다.** 밖에서 상태에 쓰는 곳은 0이지만, `Pressable`로 옮기면 모든 버튼의 실행 시점·native submit·프로그램 click 계약까지 넓어져 순수 이동이 아닙니다. 같은 click 누락이 두 번째 컨트롤에서 실측되면 기본값 native인 opt-in 정책을 검토합니다. 따라서 지금은 예정된 추출이 아니라 의도한 컴포넌트 로컬 예외입니다.<br>클립보드는 **절반만** 나갔습니다 — 브라우저 접근은 바인딩 0이라 `browser/clipboard.ts`로 갔고, 남은 의미 절반은 `value`·`model`·`fields`·`clampToRange`·`flushTyping`·`clearedRef`·`undo`·`onChange` 등을 집습니다. **그건 단축키 계약이라 컨트롤에 있는 것이 맞습니다.**<br>나간 여섯: 이동 계산 → `controls/wheelShift.ts` · 되돌리기 → `controls/undoStack.ts` · 열 모션 → `controls/columnMotion.ts` · 클립보드 접근 → `browser/clipboard.ts` · 홀드 → `controls/columnHold.ts` · 스와이프 → `controls/columnSwipe.ts` |
 
 ✅ **`surfaces/PageChrome.tsx`는 2026-08-21에 갈랐습니다.** 컴포넌트는 각각 자기 공개
 이름의 파일로 옮겼고, 격자 셋만 `surfaces/gridTracks.ts`의 `trackStyle`과
