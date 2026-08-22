@@ -230,7 +230,7 @@ function isTypingTarget(element: Element | null): boolean {
  * (jsdom으로 확인 — 캡처 리스너가 `stopPropagation()`을 부르면 같은 document의 버블
  * 리스너는 안 돌고, 안 부르면 둘 다 돕니다). 문제는 디스패처만 막는 게 아니라
  * `document`의 버블 리스너 **전부**를 막는다는 것입니다 — `useEscapeToClose`
- * (`src/browser/popupDismiss.ts`)·`Dialog`·`SectionTabs`·`PageChrome`도 같이 죽어서, 녹음 중 `Escape`로
+ * (`src/browser/popupDismiss.ts`)·`Dialog`·`SectionTabs`·`DismissibleDetails`도 같이 죽어서, 녹음 중 `Escape`로
  * 뒤에 있는 다이얼로그를 못 닫게 됩니다. 게다가 이게 실제로 막는지는 디스패처가
  * `ShortcutProvider.tsx`에서 어느 페이즈에 걸리는가라는, 다른 파일의 선택에 조용히
  * 묶입니다 — 그 파일이 나중에 캡처로 바뀌면 이 설계는 소리 없이 깨집니다.

@@ -15,6 +15,24 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.16.0
 
 ## 미출시
 
+`surfaces/PageChrome.tsx`에 함께 있던 페이지 표면을 각 공개 이름의 파일로 갈랐습니다.
+패키지 루트에서 가져오는 공개 값과 `GridJustify` 타입, 렌더 결과와 CSS 계약은 그대로입니다.
+격자 셋만 루트 배럴에는 넣지 않은 내부 helper `trackStyle`과 공개 타입 `GridJustify`를
+`surfaces/gridTracks.ts`에서 공유합니다.
+
+### 🔴 BREAKING — `src/surfaces/PageChrome` 직접 import 경로를 없앴습니다
+
+`package.json`의 `./src/*` export를 이용해 아래처럼 직접 가져왔다면 패키지 루트에서
+가져오도록 바꾸세요.
+
+```diff
+- import { PanelGrid, PageHeader } from "kkqq-ui-basic-kit/src/surfaces/PageChrome";
++ import { PanelGrid, PageHeader } from "kkqq-ui-basic-kit";
+```
+
+오너의 두 소비자는 deep import가 없다는 실측을 마쳤으므로 핀을 올릴 때 이 변경으로
+고칠 코드는 없습니다. 옛 경로를 위한 shim은 두지 않습니다.
+
 ---
 
 ## v0.16.0 — 2026-08-19

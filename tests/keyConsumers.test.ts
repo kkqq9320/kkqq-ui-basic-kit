@@ -34,7 +34,7 @@ const KNOWN_CONSUMERS: Record<string, number> = {
   "../src/surfaces/Dialog.tsx": 1,
   "../src/browser/popupDismiss.ts": 1,
   "../src/surfaces/SectionTabs.tsx": 2,
-  "../src/surfaces/PageChrome.tsx": 1,
+  "../src/surfaces/DismissibleDetails.tsx": 1,
   "../src/shortcuts/ShortcutProvider.tsx": 1,
   "../src/shortcuts/ShortcutSettings.tsx": 1,
   /* 2026-08-13 추가. **숫자만 맞춘 것이 아니라 §2.1 표를 다시 쟀습니다**(이 파일 위

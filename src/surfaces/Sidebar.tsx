@@ -53,7 +53,7 @@ export const DEFAULT_SIDEBAR_LABELS: SidebarLabels = {
 
 export type SidebarProps = {
   /** 앱이 이 컴포넌트를 겨눌 때의 출구. **내보내는 컴포넌트는 전부 이걸 받습니다** —
-   *  자주 쓰는 것만 prop으로 열고 나머지는 이걸로 겁니다(PageChrome.tsx의 GridJustify 옆 주석). */
+   *  자주 쓰는 것만 prop으로 열고 나머지는 이걸로 겁니다(`surfaces/gridTracks.ts`의 GridJustify 옆 주석). */
   className?: string;
 
   brand: { icon?: ReactNode; title: ReactNode };
