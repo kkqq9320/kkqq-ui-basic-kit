@@ -11,7 +11,7 @@
  * 지킵니다** — 새 `<button>`이 생기면 이름을 짚어 실패합니다.
  */
 import { cleanup, render } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Pressable } from "../src/controls/Pressable";
 
@@ -57,6 +57,16 @@ describe("Pressable: 보장", () => {
   it("정말 제출 버튼이 필요하면 넘길 수 있다", () => {
     const { container } = render(<Pressable type="submit">보내기</Pressable>);
     expect((container.firstElementChild as HTMLButtonElement).getAttribute("type")).toBe("submit");
+  });
+
+  /* 브라우저 자동화·보조기술·스크립트는 pointerdown/up 없이 `HTMLElement.click()`만
+   * 보낼 수 있습니다. WheelPicker의 실기기 fallback을 이 경계의 기본값으로 올리지 않은
+   * 오너 결정(2026-08-23)이 지키려는 출구를 직접 고정합니다. */
+  it("프로그램 click도 onClick을 정확히 한 번 부른다", () => {
+    const onClick = vi.fn();
+    const { container } = render(<Pressable onClick={onClick}>자동화</Pressable>);
+    (container.firstElementChild as HTMLButtonElement).click();
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 
   /* 🔴 **옷이 없는 것이 계약입니다.** 여기에 클래스를 하나라도 붙이면 킷의 모든 버튼

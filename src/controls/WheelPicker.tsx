@@ -1174,7 +1174,13 @@ export function WheelPicker({ model, value, onChange, min, max, fields, allowCle
    * (데스크톱에서는 click이 반드시 오므로 이 억제가 없으면 모든 클릭이 두 번 돕니다).
    *
    * ⚠️ 억제 표식은 **다음 pointerdown에서도** 지웁니다 — 터치에서는 click이 아예 안 와서
-   * 표식이 남고, 그러면 그 버튼의 **다음** 진짜 클릭이 삼켜집니다. */
+   * 표식이 남고, 그러면 그 버튼의 **다음** 진짜 클릭이 삼켜집니다.
+   *
+   * 🟢 **오너 결정 2026-08-23:** 증거가 있는 이 팝오버 액션에 둡니다. `Pressable`로
+   * 올리면 Select·탭·사이드바·폼 버튼까지 실행 시점이 `click`에서 `pointerup`으로 바뀌어
+   * 순수 이동이 아닙니다. 같은 click 누락이 두 번째 컨트롤에서 실측되면 그때 명시적
+   * opt-in 공용 정책을 검토합니다. `onClick` 갈래는 키보드·보조기술·브라우저 자동화의
+   * 프로그램 click을 계속 받는 계약입니다. */
   const tapStartRef = useRef<{ id: number; x: number; y: number; target: Element } | null>(null);
   const swallowClickRef = useRef<Element | null>(null);
 

@@ -19,6 +19,13 @@ npm i github:kkqq9320/kkqq-ui-basic-kit#v0.16.0
 하나로 모았습니다. 휠 열 라벨, 트리거 세그먼트, 기존 공개 `twelveHourText`가 같은 변환을
 쓰며 표시 문자열과 패키지 루트 공개 이름은 바뀌지 않습니다.
 
+오너 결정(2026-08-23)으로 삼성 인터넷의 합성 `click` 누락을 보완하는 `tapActivation`은
+증거가 있는 WheelPicker 팝오버 액션에 유지합니다. `Pressable`의 기본 native `click`·
+키보드·프로그램 `click()` 계약은 바꾸지 않으며, 같은 결함이 두 번째 컨트롤에서 실측되면
+명시적 opt-in 정책을 재검토합니다. AI 브라우저 자동화는 의미 DOM을 조작하고,
+WebMCP·API는 소비자 adapter가 UI와 같은 도메인 명령을 호출한다는 경계도 문서화했습니다.
+런타임 동작과 공개 API 변화는 없습니다.
+
 `surfaces/PageChrome.tsx`에 함께 있던 페이지 표면을 각 공개 이름의 파일로 갈랐습니다.
 패키지 루트에서 가져오는 공개 값과 `GridJustify` 타입, 렌더 결과와 CSS 계약은 그대로입니다.
 격자 셋만 루트 배럴에는 넣지 않은 내부 helper `trackStyle`과 공개 타입 `GridJustify`를
@@ -231,8 +238,9 @@ WheelPicker.tsx   2444 → 2102줄   (컴포넌트 안 최상위 선언 98 → 8
 킬 행렬이 **한 칸도 안 바뀌는 것**을 확인했습니다. 새로 생긴 경계 메서드
 (`begin`·`abort`·`preempt`·`onGesture`)도 전부 감시자가 있습니다.
 
-⚠️ `WheelPicker`에 남은 조각은 `tapActivation` 하나이고 목적지는 `controls/Pressable.tsx`가
-자기 주석에 이미 예약해 뒀습니다 — 백로그 9번(눌림 피드백)과 같은 라운드입니다.
+⚠️ 이때 `WheelPicker`에 남은 조각은 `tapActivation` 하나였고 `controls/Pressable.tsx`를
+다음 후보로 적었습니다. 후속 실측·오너 결정(2026-08-23)에서는 전역 pointerup이 순수
+이동이 아니라고 확정해 WheelPicker 팝오버 액션에 유지했습니다(위 미출시 기록).
 
 ### 🔴 고친 것 — 열 밖에서 손을 떼면 다음 조작이 엉뚱하게 돕니다 (휠 스와이프)
 
