@@ -12,7 +12,7 @@
 `files`). 그래서 소비자의 `tsc`가 실제로 보는 것은 `src`뿐입니다.
 
 ```
-main    fe8d2dc     PR #21~#166 병합. #167(PageChrome 이관) 열림. 워크트리 둘
+main    3b5e733     PR #21~#167. 열린 PR 없음. 워크트리 둘
 태그    v0.16.0     GitHub 릴리스 · 빈 디렉터리 설치 · 배포본 컴파일(39파일) 검증
 검사    1740 통과 / 59 파일 · TZ=UTC · tsc · tsc:src · CI React 18·19
 미출시  PageChrome 묶음 파일 분할 · 루트 API 무변경 · 옛 deep import 경로 제거
