@@ -18,6 +18,7 @@ import { describe, expect, it } from "vitest";
 import principles from "../PRINCIPLES.md?raw";
 
 const sources = import.meta.glob("../src/**/*.{ts,tsx}", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+const componentModules = import.meta.glob("../src/**/*.tsx", { eager: true }) as Record<string, Record<string, unknown>>;
 
 type Module = { id: string; file: string; isComponentFile: boolean; source: string; deps: string[] };
 
@@ -66,6 +67,21 @@ describe("src/ 파일 이름 규칙과 의존 방향 (PRINCIPLES §15)", () => {
       .filter((module) => module.isComponentFile !== module.file.endsWith(".tsx"))
       .map((module) => module.file);
     expect(wrong).toEqual([]);
+  });
+
+  /* §15 규칙 4 — 컴포넌트 파일 이름은 그 파일의 대표 컴포넌트를 말합니다. 소스 문자열을
+   * 흉내 내지 않고 실제 모듈을 불러, 파일 이름과 같은 런타임 export가 있는지 봅니다.
+   * 이름에 해당하는 심볼 없이 서로 무관한 컴포넌트만 모으면 이 검사가 그 파일 이름을
+   * 그대로 보고합니다. */
+  it("컴포넌트 파일은 파일 이름과 같은 컴포넌트를 내보낸다", () => {
+    const entries = Object.entries(componentModules);
+    // 전제 — glob이 빈 목록이면 아래 검사가 공허하게 통과합니다.
+    expect(entries.length).toBeGreaterThan(10);
+    const missing = entries
+      .map(([path, exports]) => ({ file: path.replace("../src/", ""), name: /([^/]+)\.tsx$/.exec(path)?.[1], exports }))
+      .filter((entry) => !entry.name || !(entry.name in entry.exports))
+      .map((entry) => entry.file);
+    expect(missing).toEqual([]);
   });
 
   /* §15 — **폴더 안에서는 접두사를 되풀이하지 않습니다.** 폴더가 이미 말한 것을 파일

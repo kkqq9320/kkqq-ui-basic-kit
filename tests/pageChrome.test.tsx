@@ -11,7 +11,12 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import pageCss from "../css/page.css?raw";
 import tabsCss from "../css/tabs.css?raw";
-import { Panel, PanelGrid, FieldGrid, SectionHeading, SummaryGrid, SummaryCard } from "../src/surfaces/PageChrome";
+import { FieldGrid } from "../src/surfaces/FieldGrid";
+import { Panel } from "../src/surfaces/Panel";
+import { PanelGrid } from "../src/surfaces/PanelGrid";
+import { SectionHeading } from "../src/surfaces/SectionHeading";
+import { SummaryCard } from "../src/surfaces/SummaryCard";
+import { SummaryGrid } from "../src/surfaces/SummaryGrid";
 import { ThemeColorEditor } from "../src/theme/ThemeColorEditor";
 
 afterEach(cleanup);

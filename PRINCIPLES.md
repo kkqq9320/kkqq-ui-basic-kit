@@ -883,7 +883,7 @@ Enter (완료)         →  확정값 == 기준값  →  신호 없음
 
 이 규칙들은 **처음부터 지켜지고 있던 관습**이었는데 어디에도 적혀 있지 않았습니다.
 그동안 위반이 하나 생겼고(아래 규칙 3) 눈으로는 몇 달 동안 안 보였습니다.
-`tests/moduleLayers.test.ts`가 규칙 1~3을, `tests/publicApi.test.ts`가 배럴의 공개
+`tests/moduleLayers.test.ts`가 규칙 1~4를, `tests/publicApi.test.ts`가 배럴의 공개
 이름을 잽니다.
 
 ### 규칙 1 — 확장자와 첫 글자가 같은 것을 말합니다
@@ -936,7 +936,16 @@ model/instant/    한 모델이 커지면 그 모델 이름의 폴더로 갈라�
 | 자리 | 무엇이 어긋나는가 | 잰 이음매 |
 |---|---|---|
 | `controls/WheelPicker.tsx` (약 2100줄) | 규칙 4. 컴포넌트 안 최상위 선언 **80개**(들여쓰기 두 칸의 `const`·`function`·`let`) | ✅ **제스처 조각은 다 나갔습니다.** 남은 것은 `tapActivation`(브라우저가 click을 안 만들 때 pointerup에서 대신 확정 + 뒤따르는 click 삼키기) 하나이고, **밖에서 그 상태에 써 넣는 곳 0**입니다(실측: 다섯 쓰기가 전부 그 함수 안). 목적지는 `controls/Pressable.tsx`가 자기 주석에 이미 예약해 뒀습니다 — 백로그 9번(눌림 피드백)과 같은 라운드가 맞습니다.<br>클립보드는 **절반만** 나갔습니다 — 브라우저 접근은 바인딩 0이라 `browser/clipboard.ts`로 갔고, 남은 의미 절반은 `value`·`model`·`fields`·`clampToRange`·`flushTyping`·`clearedRef`·`undo`·`onChange` 등을 집습니다. **그건 단축키 계약이라 컨트롤에 있는 것이 맞습니다.**<br>나간 여섯: 이동 계산 → `controls/wheelShift.ts` · 되돌리기 → `controls/undoStack.ts` · 열 모션 → `controls/columnMotion.ts` · 클립보드 접근 → `browser/clipboard.ts` · 홀드 → `controls/columnHold.ts` · 스와이프 → `controls/columnSwipe.ts` |
-| `surfaces/PageChrome.tsx` (약 209줄) | 규칙 4. **파일 이름이 아무것도 안 내보냅니다** — `PageChrome`이라는 심볼이 없습니다 | 공개 아홉(컴포넌트 여덟 + `GridJustify`). **여덟 사이의 상호참조 0.** 유일한 묶음은 격자 셋(`SummaryGrid` 21줄 · `FieldGrid` 35 · `PanelGrid` 17)이 비공개 `trackStyle`(16줄)과 `GridJustify`를 함께 쓰는 것입니다. 나머지 다섯(`PageHeader` 13 · `SectionHeading` 12 · `SummaryCard` 28 · `Panel` 11 · `DismissibleDetails` 22)은 서로도, 격자와도 무관합니다.<br>📌 `DismissibleDetails`는 **저장소 안에서 아무도 안 씁니다**(`demo/`·`src/` 0건, 배럴만) — 지우는 것은 breaking이라 오너 판단 항목입니다 |
+
+✅ **`surfaces/PageChrome.tsx`는 2026-08-21에 갈랐습니다.** 컴포넌트는 각각 자기 공개
+이름의 파일로 옮겼고, 격자 셋만 `surfaces/gridTracks.ts`의 `trackStyle`과
+`GridJustify`에 의존합니다. 패키지 루트 배럴의 공개 이름은 그대로이며
+`tests/publicApi.test.ts`가 값과 타입을 따로 지킵니다. `DismissibleDetails`는 킷 안에서
+부르는 곳이 없어도 공개 이름이므로 지우지 않았습니다.
+
+`tests/moduleLayers.test.ts`는 이제 모든 컴포넌트 파일을 실제로 import해 **파일 이름과
+같은 런타임 export**가 있는지 잽니다. 이름에 해당하는 심볼 없이 다시 묶음 파일을 만들면
+그 파일 이름을 보고합니다.
 
 ✅ **`model/instant.ts`는 2026-08-19에 갈랐습니다** — 1004줄 · 선언 53(export 35)이
 **여덟 조각과 배럴 하나**가 됐습니다:

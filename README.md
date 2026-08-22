@@ -702,7 +702,7 @@ quickBar={<MobileQuickBar items={[
 ```
 
 ⚠️ **`SectionHeading`은 탭의 일부가 아닙니다.** 여기 같이 적은 것은 화면에서 바로
-아래에 서기 때문이고, 컴포넌트는 `PageChrome`에서 나오며 스타일은 `page.css`에
+아래에 서기 때문이고, 컴포넌트는 패키지 루트 배럴에서 나오며 스타일은 `page.css`에
 있습니다. 탭이 없는 페이지에서도 그대로 씁니다 — §7 배치 스택
 (`PageHeader` → (탭) → `SectionHeading` → `Panel`)의 한 칸입니다.
 
@@ -1021,7 +1021,7 @@ CSS 클래스는 이전 이름을 대체로 유지했습니다. 헷갈릴 만한
 |---|---|---|
 | `Select` | `.app-select` | |
 | `SectionTabs` | `.settings-tabs` | 이름은 `settings`지만 범용 섹션 탭입니다 |
-| `SectionHeading` | `.settings-section-heading` | 같은 이유로 `settings`. 컴포넌트는 `PageChrome`, 스타일은 `page.css` |
+| `SectionHeading` | `.settings-section-heading` | 같은 이유로 `settings`. 컴포넌트는 패키지 루트 배럴, 스타일은 `page.css` |
 | `Button` | `.action-button` + `data-variant` | 옛 `.primary`·`.secondary-button`·`.danger-button`·`.text-button`을 대체합니다 |
 | 액션 줄 | `.action-row` | 옛 `.button-row` |
 | `Sidebar` 브랜드 | `.sidebar-brand` | 원본 `.brand`에서 개명 |

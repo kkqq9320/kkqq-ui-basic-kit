@@ -150,7 +150,7 @@
 | `Dialog` `handleKeyDown` (`:69`) | 1 | 열림, document. **`Tab` 포커스 트랩** | — | **조건부** — 트랩이 감쌀 때만(`:72`·`:75`·`:76`) |
 | `useEscapeToClose` (`src/hooks.ts:25`) | 1 | 열린 팝업, document | — | **안 부름** |
 | `SectionTabs` `closeOnEscape` ×2 (`:70`·`:145`) | 2 | 모바일 메뉴, document | — | **안 부름** |
-| `PageChrome` `closeOnEscape` (`:183`) | 1 | `<details>`, document | — | **안 부름** |
+| `DismissibleDetails` `closeOnEscape` (`surfaces/DismissibleDetails.tsx`) | 1 | `<details>`, document | — | **안 부름** |
 | `ShortcutProvider` `handleKeyDown` (`:67`) | 1 | 마운트 내내, document, **버블** | 바인딩되면 소비, 그 외엔 무시 — `Escape`·`Tab`(`Shift+Tab` 포함)은 `bindingOf`가 드롭해 애초에 바인딩 자체가 안 됨(§6.2, 전체 리뷰 Important 2) | 트리거된 것만 부름(규칙 6) — 소비하면서 안 부르는 경우 없음 |
 | `ShortcutSettings` 녹음기 `handleKeyDown` (`:40`) | 1 | 녹음 중만, document, **캡처** | 전부 소비(녹음 대상) | **조건부** — `Escape`·`Tab`만 의도적으로 안 부름(§6.2), 그 외엔 부름 |
 | `SegmentedControl` `onKeyDown` | 1 | 포커스(묶음 안) | **전부 양보** — Ctrl·Meta·Alt가 눌리면 즉시 반환 | 처리한 분기(`←`·`→`·`↑`·`↓`·`Home`·`End`)마다 부름 |
@@ -180,7 +180,7 @@ Important 3-나).
 갱신됐고 `tests/shortcutConflicts.test.ts`가 소스와 대조합니다.
 
 **(나) `defaultPrevented`의 구멍은 ~~다섯~~ **여덟**이고, 걸린 키는 여전히 `Escape`와
-`Tab` 둘뿐입니다.** 셋(`useEscapeToClose`·`SectionTabs`·`PageChrome`)은 `Escape`를 먹으면서
+`Tab` 둘뿐입니다.** 셋(`useEscapeToClose`·`SectionTabs`·`DismissibleDetails`)은 `Escape`를 먹으면서
 `preventDefault`를 안 부르고, `Dialog`의 포커스 트랩은 **감싸지 않는 평범한 `Tab`
 이동에서** 안 부르고, `ShortcutSettings`의 녹음기는 **녹음 중** `Escape`·`Tab` 양쪽에서
 **의도적으로** 안 부릅니다(§6.2 — 포커스가 그대로 나가야 하고, `Escape`가 다른
@@ -647,7 +647,7 @@ code=KeyE  key="é"     alt=N  isComposing=N  keyCode=229   ← keyCode가 잡�
 
 **그런데도 기각한 이유는 그 설계가 디스패처만 막는 게 아니기 때문입니다.** `document`의
 버블 리스너는 디스패처 하나가 아닙니다 — `useEscapeToClose`(`src/hooks.ts`)·`Dialog`·
-`SectionTabs`·`PageChrome`도 전부 `document`에 버블로 걸려 있고, **§6.2가 바로 이 리스너들이
+`SectionTabs`·`DismissibleDetails`도 전부 `document`에 버블로 걸려 있고, **§6.2가 바로 이 리스너들이
 `Escape`를 계속 받는다는 사실 위에 서 있습니다**(다이얼로그가 닫히는 것은 §6.2가 이미
 인정한 동작입니다). 캡처+`stopPropagation()` 설계는 녹음 중 이 넷을 전부 함께 죽여서,
 `Escape`로 녹음을 취소하는 동시에 뒤에 있는 다이얼로그도 못 닫게 됩니다. 게다가 이 설계가
