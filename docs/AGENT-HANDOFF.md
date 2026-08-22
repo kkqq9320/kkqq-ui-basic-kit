@@ -12,7 +12,7 @@
 `files`). 그래서 소비자의 `tsc`가 실제로 보는 것은 `src`뿐입니다.
 
 ```
-main    3b5e733     PR #21~#167. 열린 PR 없음. 워크트리 둘
+통합    6b49f49     PR #21~#168. 열린 PR 없음. 워크트리 셋
 태그    v0.16.0     GitHub 릴리스 · 빈 디렉터리 설치 · 배포본 컴파일(39파일) 검증
 검사    1745 통과 / 59 파일 · TZ=UTC · tsc · tsc:src · CI React 18·19
 미출시  PageChrome 분할 · 12시간 읽기 통합 · 루트 API 무변경
@@ -72,9 +72,9 @@ homa_gwangju    file:vendor/kkqq-ui-basic-kit   벤더링(같은 커밋의 사�
 
 ### ✅ 2. 12시간 읽기 세 벌 — 완료
 
-2026-08-23에 `0 → 12` 숫자 변환을 `meridiem.ts`의 순수 `twelveHourReading` 하나로
-모았습니다. `display.ts`의 `dateWheelLabel`과 `dateTriggerParts`, 기존 공개
-`twelveHourText`가 모두 이 seam을 씁니다.
+2026-08-23 PR #168에서 `0 → 12` 숫자 변환을 `meridiem.ts`의 순수
+`twelveHourReading` 하나로 모았습니다. `display.ts`의 `dateWheelLabel`과
+`dateTriggerParts`, 기존 공개 `twelveHourText`가 모두 이 seam을 씁니다.
 
 문자열 조립은 일부러 합치지 않았습니다. 휠 열은 숫자만, 트리거는 오전/오후 접두사와
 타이핑 버퍼를 같은 `DateTriggerPart` 안에, `twelveHourText`는 완성 문자열을 돌려주므로
